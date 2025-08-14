@@ -1,0 +1,115 @@
+<%- include('partials/header') %>
+
+<div class="product">
+  <form action="/cart/add/<%= product.id %>" method="POST">
+    <button type="submit">Tambah ke Keranjang</button>
+  </form>
+</div>
+
+<div class="flex justify-between items-center mb-6">
+  <h1 class="text-3xl font-bold text-gray-800">Daftar Produk Kami</h1>
+  <% if (locals.userRole === 'admin' || locals.userRole === 'penjual') { %>
+  <a
+    href="/products/add"
+    class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm"
+  >
+    + Tambah Produk Baru
+  </a>
+  <% } %>
+</div>
+
+<form action="/products" method="GET" class="mb-8">
+  <div class="flex">
+    <input
+      type="text"
+      name="search"
+      class="w-full px-4 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      placeholder="Cari produk berdasarkan nama..."
+      value="<%= typeof search !== 'undefined' ? search : '' %>"
+    />
+    <button
+      class="bg-gray-700 hover:bg-gray-800 text-white font-semibold py-2 px-4 rounded-r-md"
+      type="submit"
+    >
+      Cari
+    </button>
+  </div>
+</form>
+<% if (products.length > 0) { %>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+  <% products.forEach(product => { %>
+  <div class="bg-white rounded-lg shadow-md overflow-hidden flex flex-col">
+    <div class="p-6 flex-grow">
+      <h2 class="font-bold text-xl mb-2">
+        <a
+          href="/products/<%= product.id %>"
+          class="text-gray-900 hover:text-indigo-600 no-underline"
+          ><%= product.name %></a
+        >
+      </h2>
+      <p class="text-gray-600 text-base mb-4"><%= product.description %></p>
+      <div class="text-lg font-semibold text-gray-800 mb-2">
+        <strong>Harga:</strong> Rp <%= product.price.toLocaleString('id-ID') %>
+      </div>
+      <div class="text-sm text-gray-600">
+        <strong>Stok:</strong> <%= product.stock %>
+      </div>
+      <div class="mt-4">
+        <form action="/cart/add/<%= product.id %>" method="POST">
+          <button
+            type="submit"
+            class="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm"
+          >
+            Tambah ke Keranjang
+          </button>
+        </form>
+      </div>
+    </div>
+    <% if (locals.userRole === 'admin' || locals.userRole === 'penjual') { %>
+    <div class="p-6 bg-gray-50 border-t border-gray-200">
+      <div class="flex items-center justify-start space-x-4">
+        <a
+          href="/products/edit/<%= product.id %>"
+          class="bg-gray-500 hover:bg-gray-600 text-white text-sm font-semibold py-1 px-3 rounded-md"
+          >Edit</a
+        >
+        <form
+          action="/products/<%= product.id %>?_method=DELETE"
+          method="POST"
+          class="inline"
+        >
+          <button
+            type="submit"
+            class="bg-red-500 hover:bg-red-600 text-white text-sm font-semibold py-1 px-3 rounded-md"
+            onclick="return confirm('Apakah Anda yakin ingin menghapus produk ini?');"
+          >
+            Hapus
+          </button>
+        </form>
+      </div>
+    </div>
+    <% } %>
+  </div>
+  <% }) %>
+</div>
+<% } else { %> <% if (typeof search !== 'undefined' && search) { %>
+<div
+  class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4"
+  role="alert"
+>
+  <p class="font-bold">Tidak Ditemukan</p>
+  <p>
+    Tidak ada produk yang cocok dengan pencarian untuk "<strong
+      ><%= search %></strong
+    >".
+  </p>
+</div>
+<% } else { %>
+<div
+  class="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4"
+  role="alert"
+>
+  <p class="font-bold">Informasi</p>
+  <p>Tidak ada produk untuk ditampilkan saat ini.</p>
+</div>
+<% } %> <% } %> <%- include('partials/footer') %>

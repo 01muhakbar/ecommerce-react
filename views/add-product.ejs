@@ -1,0 +1,29 @@
+<%- include('partials/header') %>
+
+<h1>Tambah Produk Baru</h1>
+
+<form action="/products" method="POST">
+    <div>
+        <label for="name">Nama Produk:</label>
+        <input type="text" id="name" name="name" required>
+    </div>
+    <br>
+    <div>
+        <label for="description">Deskripsi:</label>
+        <textarea id="description" name="description" rows="4"></textarea>
+    </div>
+    <br>
+    <div>
+        <label for="price">Harga:</label>
+        <input type="number" id="price" name="price" required>
+    </div>
+    <br>
+    <div>
+        <label for="stock">Stok:</label>
+        <input type="number" id="stock" name="stock" required>
+    </div>
+    <br>
+    <button type="submit">Simpan Produk</button>
+</form>
+
+<%- include('partials/footer') %>

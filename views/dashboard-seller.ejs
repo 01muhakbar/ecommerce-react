@@ -1,0 +1,56 @@
+<%- include('partials/header') %>
+
+<div class="container">
+  <h1 class="text-3xl font-bold text-gray-800">Dashboard Penjual</h1>
+
+  <% if (messages.success) { %>
+  <div class="alert alert-success"><%= messages.success %></div>
+  <% } %>
+
+  <p class="mt-4 text-lg">
+    Selamat datang kembali, <strong><%= locals.userName %></strong>!
+  </p>
+
+  <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+    <a href="/products/add" class="action-card">
+      <h2 class="font-bold text-xl">Tambah Produk Baru</h2>
+      <p>Tambahkan produk baru ke dalam katalog toko Anda.</p>
+    </a>
+
+    <a href="/products" class="action-card">
+      <h2 class="font-bold text-xl">Kelola Produk Saya</h2>
+      <p>Lihat, edit, atau hapus produk yang sudah Anda jual.</p>
+    </a>
+  </div>
+</div>
+
+<style>
+  /* (Opsional) Style sederhana untuk dashboard */
+  .container {
+    max-width: 800px;
+    margin: 2rem auto;
+  }
+  .alert {
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 4px;
+  }
+  .alert-success {
+    background-color: #d4edda;
+    color: #155724;
+  }
+  .action-card {
+    display: block;
+    padding: 1.5rem;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    transition: box-shadow 0.2s;
+    text-decoration: none;
+    color: inherit;
+  }
+  .action-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+</style>
+
+<%- include('partials/footer') %>
