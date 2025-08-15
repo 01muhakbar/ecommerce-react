@@ -1,28 +1,22 @@
 {
   "name": "project-ecommerce",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "A simple e-commerce project",
+  "main": "app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon index.js"
+    "start": "nodemon app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "bcrypt": "^6.0.0",
-    "dotenv": "^16.6.1",
-    "ejs": "^3.1.10",
-    "express": "^4.21.2",
-    "express-flash": "^0.0.2",
-    "express-session": "^1.18.2",
-    "method-override": "^3.0.0",
-    "mysql": "^2.18.1",
-    "mysql2": "^3.14.3",
-    "sequelize": "^6.37.7"
-  },
-  "devDependencies": {
-    "nodemon": "^2.0.22"
+    "bcrypt": "^5.1.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.10.0",
+    "nodemon": "^3.1.1",
+    "sequelize": "^6.37.3"
   }
 }

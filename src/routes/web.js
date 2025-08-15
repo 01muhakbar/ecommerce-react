@@ -46,6 +46,9 @@ router.get(
 // Rute untuk melihat semua produk (hanya perlu login)
 router.get("/products", isAuth, productController.getAllProducts);
 
+// Rute baru untuk keranjang
+router.post("/cart/add/:productId", cartController.addToCart); // :productId adalah parameter dinamis
+
 // Rute untuk menampilkan form tambah produk (hanya penjual/admin)
 // PENTING: Rute '/add' harus sebelum '/:id'
 router.get(

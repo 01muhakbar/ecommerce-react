@@ -1,102 +1,62 @@
 // src/controllers/productController.js
-const Product = require("../models/Product");
 
-// CREATE: Membuat produk baru dari form
-const createProduct = async (req, res) => {
-  try {
-    await Product.create(req.body);
-    // Alihkan pengguna kembali ke halaman daftar produk setelah berhasil
-    return res.redirect("/products");
-  } catch (error) {
-    console.error("TERJADI ERROR SAAT MEMBUAT PRODUK:", error);
-    return res.status(500).send("Terjadi kesalahan saat menyimpan produk.");
-  }
-};
+const db = require("../models");
 
-// READ: Menampilkan semua produk ke halaman web
-const getAllProducts = async (req, res) => {
+exports.createProduct = async (req, res) => {
   try {
-    const products = await Product.findAll();
-    return res.render("products", {
-      products: products,
+    const { name, description, price, stock } = req.body;
+
+    // Validasi dasar
+    if (!name || !price || stock === undefined) {
+      return res
+        .status(400)
+        .json({ message: "Name, price, and stock are required." });
+    }
+
+    const newProduct = await db.Product.create({
+      name,
+      description,
+      price,
+      stock,
     });
+
+    res
+      .status(201)
+      .json({ message: "Product created successfully", product: newProduct });
   } catch (error) {
-    console.error("Error saat mengambil produk:", error);
-    return res.status(500).send("Gagal memuat halaman produk.");
+    res
+      .status(500)
+      .json({ message: "Failed to create product", error: error.message });
   }
 };
 
-// READ: Menampilkan detail satu produk ke halaman web
-const getProductById = async (req, res) => {
+// Fungsi untuk mengambil semua produk
+exports.getAllProducts = async (req, res) => {
   try {
-    const product = await Product.findByPk(req.params.id);
+    const products = await db.Product.findAll();
+    res.status(200).json(products);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Failed to fetch products", error: error.message });
+  }
+};
+
+// Fungsi untuk mengambil detail satu produk berdasarkan ID
+exports.getProductById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const product = await db.Product.findByPk(id);
+
     if (!product) {
-      return res.status(404).send("Produk tidak ditemukan");
+      return res.status(404).json({ message: "Product not found." });
     }
-    return res.render("product-detail", {
-      product: product,
+
+    res.status(200).json(product);
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to fetch product details",
+      error: error.message,
     });
-  } catch (error) {
-    console.error("Error saat mengambil detail produk:", error);
-    return res.status(500).send("Gagal memuat halaman detail produk.");
   }
-};
-
-// UPDATE: Memperbarui produk (Form handler)
-const updateProduct = async (req, res) => {
-  try {
-    const product = await Product.findByPk(req.params.id);
-    if (!product) {
-      return res.status(404).send("Produk tidak ditemukan");
-    }
-    await product.update(req.body);
-    return res.redirect(`/products/${req.params.id}`);
-  } catch (error) {
-    return res.status(500).send("Gagal memperbarui produk.");
-  }
-};
-
-// DELETE: Menghapus produk (Form handler)
-const deleteProduct = async (req, res) => {
-  try {
-    const product = await Product.findByPk(req.params.id);
-    if (!product) {
-      return res.status(404).send("Produk tidak ditemukan");
-    }
-    await product.destroy();
-    return res.redirect("/products");
-  } catch (error) {
-    return res.status(500).send("Gagal menghapus produk.");
-  }
-};
-
-// RENDER FORM: Menampilkan form tambah produk
-const showAddForm = (req, res) => {
-  return res.render("add-product");
-};
-
-// RENDER FORM: Menampilkan form edit produk
-const showEditForm = async (req, res) => {
-  try {
-    const product = await Product.findByPk(req.params.id);
-    if (!product) {
-      return res.status(404).send("Produk tidak ditemukan");
-    }
-    return res.render("edit-product", {
-      product: product,
-    });
-  } catch (error) {
-    return res.status(500).send("Gagal memuat form edit.");
-  }
-};
-
-// Ekspor semua fungsi yang akan digunakan oleh rute
-module.exports = {
-  createProduct,
-  getAllProducts,
-  getProductById,
-  updateProduct,
-  deleteProduct,
-  showAddForm,
-  showEditForm, // Pastikan semua fungsi yang Anda gunakan ada di sini
 };

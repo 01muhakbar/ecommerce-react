@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Keranjang Belanja - E-Commerce</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-100">
+    <div class="container mx-auto p-8">
+      <a
+        href="/dashboard"
+        class="mb-4 inline-block text-blue-600 hover:underline"
+        >&larr; Kembali ke Dasbor</a
+      >
+
+      <!-- Shopping Cart Section -->
+      <div class="bg-white p-8 rounded-lg shadow-lg">
+        <h1 class="text-3xl font-bold text-gray-800 mb-4">
+          Keranjang Belanja Anda
+        </h1>
+        <div id="cartContent">
+          <!-- Konten keranjang akan dimuat di sini oleh JavaScript -->
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const cartContentDiv = document.getElementById("cartContent");
+
+      // Fungsi ini akan berjalan saat halaman dimuat
+      (async function () {
+        const token = localStorage.getItem("authToken");
+
+        if (!token) {
+          // Jika tidak ada token, paksa kembali ke halaman login
+          window.location.href = "/login";
+          return;
+        }
+        // Langsung muat isi keranjang belanja
+        await fetchAndDisplayCart();
+      })();
+
+      // Fungsi untuk mengambil dan menampilkan isi keranjang
+      async function fetchAndDisplayCart() {
+        const token = localStorage.getItem("authToken");
+        if (!token) return;
+
+        try {
+          cartContentDiv.innerHTML = `<p class="text-gray-500">Memuat keranjang...</p>`;
+          const response = await fetch("http://localhost:3000/api/cart", {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+
+          if (!response.ok) {
+            throw new Error("Gagal mengambil data keranjang dari API.");
+          }
+
+          const cart = await response.json();
+          cartContentDiv.innerHTML = ""; // Hapus pesan loading
+
+          if (!cart || cart.Products.length === 0) {
+            cartContentDiv.innerHTML = `<p class="text-gray-500">Keranjang Anda kosong.</p>`;
+            return;
+          }
+
+          let total = 0;
+          const cartItemsHtml = cart.Products.map((product) => {
+            const subtotal = product.price * product.CartItem.quantity;
+            total += subtotal;
+            return `
+              <div class="flex justify-between items-center border-b py-2">
+                <div>
+                  <p class="font-semibold">${
+                    product.name
+                  } <button class="remove-from-cart-btn text-red-500 hover:text-red-700 text-xs ml-2" data-product-id="${
+              product.id
+            }">(Hapus)</button></p>
+                  <div class="text-sm text-gray-600 flex items-center">
+                    Qty:
+                    <input
+                      type="number"
+                      class="cart-item-quantity-input w-16 text-center border rounded ml-2"
+                      value="${product.CartItem.quantity}"
+                      min="0"
+                      max="${product.stock}"
+                      data-product-id="${product.id}"
+                    />
+                  </div>
+                </div>
+                <p class="font-semibold">Rp ${new Intl.NumberFormat(
+                  "id-ID"
+                ).format(subtotal)}</p>
+              </div>
+            `;
+          }).join("");
+
+          const cartTotalHtml = `
+            <div class="flex justify-between items-center border-t mt-4 pt-2 font-bold text-lg">
+              <p>Total:</p>
+              <p>Rp ${new Intl.NumberFormat("id-ID").format(total)}</p>
+            </div>
+          `;
+
+          cartContentDiv.innerHTML = cartItemsHtml + cartTotalHtml;
+        } catch (error) {
+          console.error("Failed to display cart:", error);
+          cartContentDiv.innerHTML = `<p class="text-red-500">Gagal memuat keranjang.</p>`;
+        }
+      }
+
+      // Fungsi untuk menangani penghapusan item dari keranjang
+      async function handleRemoveFromCart(productId) {
+        const token = localStorage.getItem("authToken");
+        if (!token) return;
+
+        try {
+          const response = await fetch(
+            `http://localhost:3000/api/cart/remove/${productId}`,
+            {
+              method: "DELETE",
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          );
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || "Gagal menghapus item.");
+          }
+          await fetchAndDisplayCart();
+        } catch (error) {
+          console.error("Remove from cart error:", error);
+          alert(error.message);
+        }
+      }
+
+      // Fungsi untuk menangani pembaruan kuantitas item
+      async function handleUpdateCartQuantity(productId, quantity) {
+        const token = localStorage.getItem("authToken");
+        if (!token) return;
+
+        try {
+          const response = await fetch(
+            `http://localhost:3000/api/cart/update/${productId}`,
+            {
+              method: "PUT",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({ quantity: parseInt(quantity, 10) }),
+            }
+          );
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(
+              errorData.message || "Gagal memperbarui kuantitas."
+            );
+          }
+          await fetchAndDisplayCart();
+        } catch (error) {
+          console.error("Update cart quantity error:", error);
+          alert(error.message);
+          await fetchAndDisplayCart();
+        }
+      }
+
+      // Event listener untuk interaksi di dalam keranjang
+      cartContentDiv.addEventListener("click", (event) => {
+        if (event.target.classList.contains("remove-from-cart-btn")) {
+          const productId = event.target.dataset.productId;
+          if (confirm("Apakah Anda yakin ingin menghapus item ini?")) {
+            handleRemoveFromCart(productId);
+          }
+        }
+      });
+
+      cartContentDiv.addEventListener("change", (event) => {
+        if (event.target.classList.contains("cart-item-quantity-input")) {
+          const productId = event.target.dataset.productId;
+          const newQuantity = event.target.value;
+          handleUpdateCartQuantity(productId, newQuantity);
+        }
+      });
+    </script>
+  </body>
+</html>

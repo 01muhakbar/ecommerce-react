@@ -1,116 +1,87 @@
 // src/controllers/userController.js
-const User = require("../models/User");
+
+const db = require("../models");
 const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
 
-// Menampilkan form registrasi pembeli
-exports.showRegisterForm = (req, res) => {
-  res.render("register");
-};
-
-// Memproses data registrasi pembeli
+// Fungsi untuk registrasi user baru
 exports.registerUser = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const { name, email, password, role, storeName } = req.body;
 
-    await User.create({
+    // Buat user baru (password akan di-hash oleh hook di model User)
+    const newUser = await db.User.create({
       name,
       email,
-      password: hashedPassword,
-    });
-
-    req.flash("success", "Registrasi berhasil! Silakan login.");
-    return res.redirect("/login");
-  } catch (error) {
-    console.error("ERROR REGISTRASI PEMBELI:", error);
-    req.flash("error", "Email sudah digunakan atau terjadi kesalahan.");
-    return res.redirect("/register");
-  }
-};
-
-// Menampilkan form registrasi penjual
-exports.showSellerRegisterForm = (req, res) => {
-  res.render("register-seller");
-};
-
-// Memproses data registrasi penjual
-exports.registerSeller = async (req, res) => {
-  try {
-    const { name, email, password, storeName } = req.body;
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    await User.create({
-      name,
-      email,
-      password: hashedPassword,
+      password,
+      role,
       storeName,
-      role: "penjual",
     });
 
-    req.flash("success", "Registrasi penjual berhasil! Silakan login.");
-    return res.redirect("/login");
+    res.status(201).json({
+      message: "User registered successfully",
+      user: { id: newUser.id, name: newUser.name, email: newUser.email },
+    });
   } catch (error) {
-    console.error("ERROR REGISTRASI PENJUAL:", error);
-    req.flash("error", "Email sudah digunakan atau terjadi kesalahan.");
-    return res.redirect("/register-seller");
+    res
+      .status(500)
+      .json({ message: "Failed to register user", error: error.message });
   }
 };
 
-// Menampilkan form login
-exports.showLoginForm = (req, res) => {
-  res.render("login");
-};
-
-// Memproses data login
+// Fungsi untuk login user
 exports.loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ where: { email } });
 
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      req.flash("error", "Email atau password salah.");
-      return res.redirect("/login");
+    // 1. Cari user berdasarkan email
+    const user = await db.User.findOne({ where: { email } });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
     }
 
-    // Simpan informasi sesi
-    req.session.userId = user.id;
-    req.session.userName = user.name;
-    req.session.userRole = user.role;
-
-    req.flash("success", `Selamat datang kembali, ${user.name}!`);
-
-    // ==========================================
-    // ARAHKAN PENGGUNA BERDASARKAN PERAN (ROLE)
-    // ==========================================
-    if (user.role === "penjual" || user.role === "admin") {
-      // Jika penjual atau admin, arahkan ke dashboard penjual
-      return res.redirect("/dashboard/seller");
-    } else {
-      // Jika pembeli (atau peran lain), arahkan ke halaman produk
-      return res.redirect("/products");
+    // 2. Bandingkan password yang diinput dengan yang ada di database
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid credentials" });
     }
+
+    // 3. Jika cocok, buat JWT token
+    const token = jwt.sign(
+      { id: user.id, role: user.role },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "1h", // Token berlaku selama 1 jam
+      }
+    );
+
+    res.status(200).json({ message: "Login successful", token });
   } catch (error) {
-    console.error("ERROR LOGIN:", error);
-    req.flash("error", "Terjadi kesalahan, silakan coba lagi.");
-    return res.redirect("/login");
+    console.error("LOGIN ERROR:", error); // Tambahkan log untuk debugging
+    res.status(500).json({
+      message: "An internal server error occurred.",
+      error: error.message,
+    });
   }
 };
 
-// Memproses logout
-exports.logoutUser = (req, res) => {
-  req.session.destroy((err) => {
-    if (err) {
-      console.error("ERROR LOGOUT:", err);
-      return res.redirect("/products");
-    }
-    res.clearCookie("connect.sid");
-    return res.redirect("/login");
-  });
-};
+// Fungsi untuk mendapatkan profil user yang sedang login
+exports.getUserProfile = async (req, res) => {
+  try {
+    // ID user didapatkan dari middleware isAuth (req.user.id)
+    const user = await db.User.findByPk(req.user.id, {
+      // Jangan sertakan password dalam respons
+      attributes: { exclude: ["password"] },
+    });
 
-// Menampilkan dashboard khusus penjual
-exports.showSellerDashboard = (req, res) => {
-  // Mengambil pesan flash yang mungkin ada (misal: dari login)
-  const messages = req.flash();
-  res.render("dashboard-seller", { messages });
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    res.status(200).json(user);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Failed to fetch user profile.", error: error.message });
+  }
 };

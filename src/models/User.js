@@ -1,37 +1,48 @@
-// src/models/User.js
-const { DataTypes } = require("sequelize");
-const sequelize = require("../../config/database");
+// Lokasi File: src/models/User.js
+const bcrypt = require("bcrypt");
 
-const User = sequelize.define("User", {
-  name: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  email: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    unique: true, // Setiap email harus unik
-    validate: {
-      isEmail: true, // Validasi format email
+module.exports = (sequelize, DataTypes) => {
+  const User = sequelize.define("User", {
+    name: {
+      type: DataTypes.STRING,
+      allowNull: false,
     },
-  },
-  password: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  role: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    defaultValue: "pembeli", // Role default saat registrasi biasa
-    validate: {
-      isIn: [["pembeli", "penjual", "admin"]], // Hanya menerima 3 nilai ini
+    email: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      unique: true,
+      validate: {
+        isEmail: true,
+      },
     },
-  },
+    password: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    role: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: "pembeli",
+      validate: {
+        isIn: [["pembeli", "penjual", "admin"]],
+      },
+    },
+    storeName: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+  });
 
-  storeName: {
-    type: DataTypes.STRING,
-    allowNull: true, // Izinkan kosong untuk pembeli
-  },
-});
+  User.associate = function (models) {
+    // Seorang User memiliki satu Cart
+    User.hasOne(models.Cart, { foreignKey: "userId", as: "cart" });
+  };
 
-module.exports = User;
+  // Hook untuk melakukan hashing password sebelum user dibuat
+  User.beforeCreate(async (user, options) => {
+    const hashedPassword = await bcrypt.hash(user.password, 10);
+    user.password = hashedPassword;
+  });
+
+  return User;
+};
