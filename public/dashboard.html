@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard - E-Commerce</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-100">
+    <nav class="bg-white shadow-md">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between h-16">
+          <div class="flex items-center">
+            <span class="font-bold text-xl text-gray-800">My Dashboard</span>
+          </div>
+          <div class="flex items-center">
+            <button
+              id="logoutButton"
+              class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition-colors duration-300"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <main class="p-8">
+      <div class="max-w-7xl mx-auto">
+        <h1 class="text-3xl font-bold text-gray-900">Selamat Datang!</h1>
+        <p class="mt-2 text-gray-600">
+          Anda berhasil login dan dapat mengakses halaman ini.
+        </p>
+      </div>
+    </main>
+
+    <!-- Memuat skrip otentikasi klien -->
+    <script src="/js/auth.js"></script>
+    <script>
+      // 1. Panggil fungsi requireAuth() untuk melindungi halaman ini
+      requireAuth();
+
+      // 2. Logika untuk tombol logout
+      const logoutButton = document.getElementById("logoutButton");
+      logoutButton.addEventListener("click", async () => {
+        // Panggil API logout di server
+        await fetch("/api/auth/logout", { method: "POST" });
+
+        // Hapus token dari localStorage
+        localStorage.removeItem("authToken");
+
+        // Arahkan kembali ke halaman login
+        window.location.replace("/login");
+      });
+    </script>
+  </body>
+</html>

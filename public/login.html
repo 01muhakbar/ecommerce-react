@@ -61,6 +61,19 @@
 
       <!-- Area untuk menampilkan pesan error atau sukses -->
       <div id="message" class="mt-4 text-center text-sm"></div>
+
+      <div class="text-center mt-4">
+        <a
+          href="/forgot-password"
+          class="inline-block align-baseline font-bold text-sm text-blue-500 hover:text-blue-800"
+        >
+          Lupa Password?
+        </a>
+      </div>
+
+      <p class="text-center text-gray-500 text-xs mt-4">
+        Belum punya akun? <a href="/register" class="text-blue-500 hover:text-blue-800">Daftar di sini</a>.
+      </p>
     </div>
 
     <script>
@@ -77,7 +90,7 @@
 
         try {
           const response = await fetch(
-            "http://localhost:3000/api/users/login",
+            "/api/auth/login", // PERBAIKI: Sesuaikan dengan rute di app.js
             {
               method: "POST",
               headers: {
@@ -93,10 +106,10 @@
             messageDiv.textContent = "Login berhasil! Mengalihkan...";
             messageDiv.className = "mt-4 text-center text-sm text-green-600";
             // Simpan token ke localStorage untuk digunakan di halaman lain
-            localStorage.setItem("authToken", data.token);
+            localStorage.setItem("authToken", data.accessToken);
             // Arahkan ke halaman dashboard setelah 2 detik
             setTimeout(() => {
-              window.location.href = "/dashboard"; // Arahkan ke rute, bukan file langsung
+              window.location.href = "/dashboard"; // Arahkan ke rute bersih
             }, 2000);
           } else {
             // Tampilkan pesan error dari API
@@ -111,6 +124,7 @@
           console.error("Login Error:", error);
         }
       });
-    </script>
+
+        </script>
   </body>
 </html>

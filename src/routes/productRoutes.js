@@ -1,23 +1,22 @@
-// src/routes/productRoutes.js
-
 const express = require("express");
 const router = express.Router();
-const productController = require("../controllers/productController");
-const { isAuth, hasRole } = require("../middleware/auth");
+const { protect, authorize } = require("../middleware/authMiddleware");
 
-// Rute untuk membuat produk baru
-// POST /api/products
-// 1. `isAuth` akan memverifikasi token.
-// 2. `hasRole('penjual')` akan memastikan hanya user dengan peran 'penjual' yang bisa lanjut.
-// 3. Jika keduanya lolos, `productController.createProduct` akan dijalankan.
-router.post("/", isAuth, hasRole("penjual"), productController.createProduct);
+// Placeholder untuk controller produk
+const getProducts = (req, res) => res.json({ message: "Menampilkan semua produk (Akses Publik)" });
+const addProduct = (req, res) => res.status(201).json({ message: `Produk '${req.body.name}' berhasil ditambahkan (Akses Penjual)` });
+const deleteProduct = (req, res) => res.json({ message: `Produk dengan ID ${req.params.id} berhasil dihapus (Akses Admin)` });
 
-// Rute untuk melihat semua produk (Publik)
-// GET /api/products
-router.get("/", productController.getAllProducts);
+// Rute ini bisa diakses oleh siapa saja
+router.get("/", getProducts);
 
-// Rute untuk melihat detail satu produk berdasarkan ID (Publik)
-// GET /api/products/:id
-router.get("/:id", productController.getProductById);
+// Rute ini hanya bisa diakses oleh pengguna yang sudah login DAN memiliki peran 'penjual'.
+router.post("/", protect, authorize("penjual"), addProduct);
+
+// Rute ini hanya bisa diakses oleh pengguna yang sudah login DAN memiliki peran 'admin'.
+// Middleware dijalankan secara berurutan:
+// 1. `protect`: Memastikan ada token yang valid dan melampirkan data user (termasuk role) ke `req.user`.
+// 2. `authorize('admin')`: Memeriksa apakah `req.user.role` adalah 'admin'.
+router.delete("/:id", protect, authorize("admin"), deleteProduct);
 
 module.exports = router;

@@ -31,17 +31,42 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING,
       allowNull: true,
     },
+    refreshToken: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    passwordResetToken: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    passwordResetExpires: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
   });
 
   User.associate = function (models) {
     // Seorang User memiliki satu Cart
-    User.hasOne(models.Cart, { foreignKey: "userId", as: "cart" });
+    User.hasOne(models.Cart, {
+      foreignKey: "userId",
+      as: "cart",
+      onDelete: 'CASCADE' // Tambahkan baris ini
+    });
   };
 
   // Hook untuk melakukan hashing password sebelum user dibuat
   User.beforeCreate(async (user, options) => {
     const hashedPassword = await bcrypt.hash(user.password, 10);
     user.password = hashedPassword;
+  });
+
+  // Hook untuk melakukan hashing password sebelum user di-update
+  User.beforeUpdate(async (user, options) => {
+    // Hanya hash password jika field 'password' diubah
+    if (user.changed('password')) {
+      const hashedPassword = await bcrypt.hash(user.password, 10);
+      user.password = hashedPassword;
+    }
   });
 
   return User;
