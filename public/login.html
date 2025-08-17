@@ -3,128 +3,46 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Login - E-Commerce</title>
-    <!-- Menggunakan Tailwind CSS dari CDN untuk kemudahan -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Login</title>
   </head>
-  <body class="bg-gray-100 flex items-center justify-center min-h-screen">
-    <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
-      <h2 class="text-2xl font-bold mb-6 text-center text-gray-800">
-        Masuk ke Akun Anda
-      </h2>
-
-      <!-- Form Login -->
-      <form id="loginForm">
-        <!-- Input Email -->
-        <div class="mb-4">
-          <label for="email" class="block text-gray-700 text-sm font-bold mb-2"
-            >Alamat Email</label
-          >
-          <input
-            type="email"
-            id="email"
-            name="email"
-            placeholder="you@example.com"
-            required
-            class="shadow-sm appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        <!-- Input Password -->
-        <div class="mb-6">
-          <label
-            for="password"
-            class="block text-gray-700 text-sm font-bold mb-2"
-            >Kata Sandi</label
-          >
-          <input
-            type="password"
-            id="password"
-            name="password"
-            placeholder="••••••••"
-            required
-            class="shadow-sm appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        <!-- Tombol Submit -->
-        <div class="flex items-center justify-between">
-          <button
-            type="submit"
-            id="submitButton"
-            class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full transition-colors duration-300"
-          >
-            Masuk
-          </button>
-        </div>
-      </form>
-
-      <!-- Area untuk menampilkan pesan error atau sukses -->
-      <div id="message" class="mt-4 text-center text-sm"></div>
-
-      <div class="text-center mt-4">
-        <a
-          href="/forgot-password"
-          class="inline-block align-baseline font-bold text-sm text-blue-500 hover:text-blue-800"
-        >
-          Lupa Password?
-        </a>
-      </div>
-
-      <p class="text-center text-gray-500 text-xs mt-4">
-        Belum punya akun? <a href="/register" class="text-blue-500 hover:text-blue-800">Daftar di sini</a>.
-      </p>
-    </div>
+  <body>
+    <h1>Login</h1>
+    <form id="loginForm">
+      <label for="email">Email:</label><br />
+      <input type="email" id="email" name="email" required /><br /><br />
+      <label for="password">Password:</label><br />
+      <input
+        type="password"
+        id="password"
+        name="password"
+        required
+      /><br /><br />
+      <button type="submit">Login</button>
+    </form>
+    <p id="message"></p>
 
     <script>
-      const loginForm = document.getElementById("loginForm");
-      const emailInput = document.getElementById("email");
-      const passwordInput = document.getElementById("password");
-      const messageDiv = document.getElementById("message");
+      document
+        .getElementById("loginForm")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const email = document.getElementById("email").value;
+          const password = document.getElementById("password").value;
+          const messageEl = document.getElementById("message");
 
-      loginForm.addEventListener("submit", async (event) => {
-        event.preventDefault(); // Mencegah form mengirim data secara tradisional
-
-        const email = emailInput.value;
-        const password = passwordInput.value;
-
-        try {
-          const response = await fetch(
-            "/api/auth/login", // PERBAIKI: Sesuaikan dengan rute di app.js
-            {
+          try {
+            const response = await fetch("/api/users/login", {
               method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
+              headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ email, password }),
-            }
-          );
-
-          const data = await response.json();
-
-          if (response.ok) {
-            messageDiv.textContent = "Login berhasil! Mengalihkan...";
-            messageDiv.className = "mt-4 text-center text-sm text-green-600";
-            // Simpan token ke localStorage untuk digunakan di halaman lain
-            localStorage.setItem("authToken", data.accessToken);
-            // Arahkan ke halaman dashboard setelah 2 detik
-            setTimeout(() => {
-              window.location.href = "/dashboard"; // Arahkan ke rute bersih
-            }, 2000);
-          } else {
-            // Tampilkan pesan error dari API
-            messageDiv.textContent =
-              data.message || "Login gagal. Silakan coba lagi.";
-            messageDiv.className = "mt-4 text-center text-sm text-red-600";
+            });
+            const data = await response.json();
+            messageEl.textContent = data.message || "Processing...";
+            if (response.ok) window.location.href = "/dashboard.html";
+          } catch (error) {
+            messageEl.textContent = "An error occurred. Please try again.";
           }
-        } catch (error) {
-          messageDiv.textContent =
-            "Terjadi kesalahan. Silakan periksa koneksi Anda.";
-          messageDiv.className = "mt-4 text-center text-sm text-red-600";
-          console.error("Login Error:", error);
-        }
-      });
-
-        </script>
+        });
+    </script>
   </body>
 </html>
