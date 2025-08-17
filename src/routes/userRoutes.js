@@ -12,6 +12,7 @@ router.post("/register", userController.registerUser);
 router.post("/login", userController.loginUser);
 
 // Rute untuk mendapatkan profil user (dilindungi oleh middleware isAuth)
-router.get("/profile", isAuth, userController.getUserProfile);
+// Menggunakan '/me' adalah konvensi umum untuk mendapatkan data pengguna saat ini
+router.get("/me", isAuth, userController.getUserProfile);
 
 module.exports = router;

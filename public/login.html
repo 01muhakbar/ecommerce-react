@@ -38,7 +38,29 @@
             });
             const data = await response.json();
             messageEl.textContent = data.message || "Processing...";
-            if (response.ok) window.location.href = "/dashboard.html";
+            if (response.ok && data.token && data.user) {
+              // Simpan token ke localStorage untuk digunakan pada panggilan API selanjutnya
+              localStorage.setItem("authToken", data.token);
+
+              // --- Logika Pengalihan Berdasarkan Peran ---
+              switch (data.user.role) {
+                case "admin":
+                case "penjual":
+                  // Arahkan admin dan penjual ke dashboard utama
+                  window.location.href = "/dashboard";
+                  break;
+                case "pembeli":
+                  // Arahkan pembeli ke halaman utama (katalog produk)
+                  window.location.href = "/";
+                  break;
+                default:
+                  // Fallback jika peran tidak dikenali, arahkan ke halaman utama
+                  window.location.href = "/";
+              }
+            } else {
+              messageEl.textContent =
+                data.message || "Login gagal. Periksa kembali kredensial Anda.";
+            }
           } catch (error) {
             messageEl.textContent = "An error occurred. Please try again.";
           }

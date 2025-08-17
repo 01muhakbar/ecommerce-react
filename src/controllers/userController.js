@@ -55,7 +55,23 @@ exports.loginUser = async (req, res) => {
       }
     );
 
-    res.status(200).json({ message: "Login successful", token });
+    // 4. Set token sebagai httpOnly cookie untuk otentikasi halaman web
+    res.cookie("token", token, {
+      httpOnly: true, // Mencegah akses dari JavaScript sisi client
+      secure: process.env.NODE_ENV === "production", // Hanya kirim via HTTPS di production
+      maxAge: 60 * 60 * 1000, // 1 jam, harus cocok dengan expiresIn
+    });
+
+    // 5. Kirim respons yang berisi token DAN data pengguna (tanpa password)
+    res.status(200).json({
+      message: "Login successful",
+      token: token,
+      user: {
+        id: user.id,
+        name: user.name,
+        role: user.role,
+      },
+    });
   } catch (error) {
     console.error("LOGIN ERROR:", error); // Tambahkan log untuk debugging
     res.status(500).json({

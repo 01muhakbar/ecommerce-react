@@ -26,31 +26,65 @@
     </nav>
 
     <main class="p-8">
-      <div class="max-w-7xl mx-auto">
-        <h1 class="text-3xl font-bold text-gray-900">Selamat Datang!</h1>
+      <div id="dashboard-content" class="max-w-7xl mx-auto">
+        <h1 id="welcomeMessage" class="text-3xl font-bold text-gray-900">
+          Selamat Datang!
+        </h1>
         <p class="mt-2 text-gray-600">
           Anda berhasil login dan dapat mengakses halaman ini.
         </p>
+        <div id="role-specific-links" class="mt-6 space-x-4">
+          <!-- Tautan spesifik peran akan ditambahkan di sini -->
+        </div>
       </div>
     </main>
 
-    <!-- Memuat skrip otentikasi klien -->
-    <script src="/js/auth.js"></script>
     <script>
-      // 1. Panggil fungsi requireAuth() untuk melindungi halaman ini
-      requireAuth();
+      // Fungsi ini akan berjalan saat halaman dimuat
+      (async function () {
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+          window.location.href = "/login";
+          return;
+        }
+
+        try {
+          const response = await fetch("/api/users/me", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+
+          if (!response.ok) {
+            throw new Error("Sesi tidak valid atau telah berakhir.");
+          }
+
+          const user = await response.json();
+          document.getElementById(
+            "welcomeMessage"
+          ).textContent = `Selamat Datang, ${user.name}!`;
+
+          // Tampilkan menu berdasarkan peran
+          const linksContainer = document.getElementById("role-specific-links");
+          if (user.role === "penjual" || user.role === "admin") {
+            linksContainer.innerHTML += `<a href="/add-product" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">Tambah Produk</a>`;
+          }
+        } catch (error) {
+          console.error("Auth Error:", error.message);
+          localStorage.removeItem("authToken");
+          window.location.href = "/login";
+        }
+      })();
 
       // 2. Logika untuk tombol logout
       const logoutButton = document.getElementById("logoutButton");
       logoutButton.addEventListener("click", async () => {
-        // Panggil API logout di server
-        await fetch("/api/auth/logout", { method: "POST" });
+        // Panggil API logout di server (jika ada)
+        // await fetch("/api/users/logout", { method: "POST" });
 
         // Hapus token dari localStorage
         localStorage.removeItem("authToken");
 
         // Arahkan kembali ke halaman login
-        window.location.replace("/login");
+        window.location.href = "/login";
       });
     </script>
   </body>
