@@ -37,6 +37,15 @@ exports.protect = async (req, res, next) => {
       return res.redirect("/login");
     }
 
+    // 4a. Periksa apakah pengguna aktif
+    if (!currentUser.isActive) {
+      if (isApiRequest) {
+        return res.status(403).json({ status: 'fail', message: 'Your account has been deactivated. Please contact support.' });
+      }
+      res.clearCookie("jwt"); // Clear cookie to force re-login
+      return res.redirect("/login?message=account_deactivated"); // Redirect with a message
+    }
+
     // 5. Berikan akses ke rute yang dilindungi
     // Lampirkan data pengguna ke objek request untuk digunakan nanti
     req.user = currentUser;

@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { isAuth, hasRole } = require("../middleware/auth");
+const { protect, restrictTo } = require("../middleware/authMiddleware");
 const productController = require("../controllers/productController");
 
 const path = require("path");
@@ -9,7 +9,7 @@ const path = require("path");
 router.get("/", productController.getAllProducts);
 
 // Rute untuk menampilkan halaman tambah produk (Hanya Penjual/Admin)
-router.get("/add", isAuth, hasRole("penjual", "admin"), (req, res) => {
+router.get("/add", protect, restrictTo("penjual", "admin"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "..", "public", "add-product.html"));
 });
 
@@ -19,8 +19,8 @@ router.get("/:id", productController.getProductById);
 // Rute untuk membuat produk baru (Hanya Penjual/Admin)
 router.post(
   "/",
-  isAuth,
-  hasRole("penjual", "admin"),
+  protect,
+  restrictTo("penjual", "admin"),
   productController.createProduct
 );
 

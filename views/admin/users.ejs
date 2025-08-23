@@ -18,7 +18,12 @@
           Kembali
         </button>
       </div>
-      <h1 class="text-3xl font-bold text-gray-800 mb-6">Manajemen Pengguna</h1>
+      <div class="flex justify-between items-center mb-6">
+        <h1 class="text-3xl font-bold text-gray-800">Manajemen Pengguna</h1>
+        <a href="/dashboard/admin/users/add" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+          Tambah Akun
+        </a>
+      </div>
 
       <div id="users-list" class="overflow-x-auto">
         <table class="min-w-full bg-white border border-gray-200">
@@ -29,6 +34,8 @@
               <th class="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Email</th>
               <th class="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Role</th>
               <th class="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Nama Toko</th>
+              <th class="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Status</th>
+              <th class="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Status</th>
               <th class="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Aksi</th>
             </tr>
           </thead>
@@ -64,7 +71,7 @@
           loadingMessage.style.display = "none";
 
           if (data.data.users.length === 0) {
-            usersTableBody.innerHTML = `<tr><td colspan="6" class="py-2 px-4 text-center text-gray-500">Tidak ada pengguna ditemukan.</td></tr>`;
+            usersTableBody.innerHTML = `<tr><td colspan="7" class="py-2 px-4 text-center text-gray-500">Tidak ada pengguna ditemukan.</td></tr>`;
             return;
           }
 
@@ -87,15 +94,17 @@
                   user.storeName || "-"
                 }</td>
                 <td class="py-2 px-4 border-b text-sm text-gray-700">
-                  <button onclick="viewUser(${
-                    user.id
-                  })" class="bg-blue-500 hover:bg-blue-700 text-white py-1 px-2 rounded text-xs mr-2">Lihat</button>
-                  <button onclick="editUser(${
-                    user.id
-                  })" class="bg-yellow-500 hover:bg-yellow-700 text-white py-1 px-2 rounded text-xs mr-2">Edit</button>
-                  <button onclick="deleteUser(${
-                    user.id
-                  })" class="bg-red-500 hover:bg-red-700 text-white py-1 px-2 rounded text-xs">Hapus</button>
+                  <span class="${user.isActive ? 'text-green-600' : 'text-red-600'} font-semibold">
+                    ${user.isActive ? 'Aktif' : 'Tidak Aktif'}
+                  </span>
+                </td>
+                <td class="py-2 px-4 border-b text-sm text-gray-700">
+                  <button onclick="viewUser(${user.id})" class="bg-blue-500 hover:bg-blue-700 text-white py-1 px-2 rounded text-xs mr-2">Lihat</button>
+                  <button onclick="editUser(${user.id})" class="bg-yellow-500 hover:bg-yellow-700 text-white py-1 px-2 rounded text-xs mr-2">Edit</button>
+                  <button onclick="toggleUserStatus(${user.id}, ${user.isActive})" class="${user.isActive ? 'bg-red-500 hover:bg-red-700' : 'bg-green-500 hover:bg-green-700'} text-white py-1 px-2 rounded text-xs mr-2">
+                    ${user.isActive ? 'Nonaktifkan' : 'Aktifkan'}
+                  </button>
+                  <button onclick="deleteUser(${user.id})" class="bg-red-500 hover:bg-red-700 text-white py-1 px-2 rounded text-xs">Hapus</button>
                 </td>
               </tr>
             `;
@@ -161,6 +170,65 @@
         document.getElementById("confirm-delete-modal").classList.remove("hidden");
         document.getElementById("confirm-delete-modal").dataset.userId = id; // Store ID
       }
+
+      async function toggleUserStatus(id, currentStatus) {
+        const newStatus = !currentStatus;
+        const action = newStatus ? 'mengaktifkan' : 'menonaktifkan';
+
+        const toggleStatusModal = document.getElementById('confirm-toggle-status-modal');
+        const toggleStatusModalTitle = document.getElementById('toggle-status-modal-title');
+        const toggleStatusModalMessage = document.getElementById('toggle-status-modal-message');
+        const confirmToggleStatusButton = document.getElementById('confirm-toggle-status');
+        const cancelToggleStatusButton = document.getElementById('cancel-toggle-status');
+
+        toggleStatusModalTitle.textContent = `Konfirmasi ${action === 'mengaktifkan' ? 'Aktivasi' : 'Deaktivasi'} Pengguna`;
+        toggleStatusModalMessage.textContent = `Apakah Anda yakin ingin ${action} pengguna ini?`;
+        toggleStatusModal.dataset.userId = id;
+        toggleStatusModal.dataset.newStatus = newStatus;
+        toggleStatusModal.classList.remove('hidden');
+
+        // Remove previous event listeners to prevent multiple bindings
+        confirmToggleStatusButton.replaceWith(confirmToggleStatusButton.cloneNode(true));
+        cancelToggleStatusButton.replaceWith(cancelToggleStatusButton.cloneNode(true));
+
+        document.getElementById('confirm-toggle-status').addEventListener('click', async function handler() {
+          toggleStatusModal.classList.add('hidden');
+          const userId = toggleStatusModal.dataset.userId;
+          const statusToSet = toggleStatusModal.dataset.newStatus === 'true'; // Convert string to boolean
+
+          try {
+            const response = await fetch(`/api/v1/admin/users/${userId}/toggle-status`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ isActive: statusToSet }),
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.message || `Gagal ${action} pengguna.`);
+            }
+
+            const successNotification = document.getElementById('success-notification');
+            successNotification.textContent = `Pengguna berhasil di${action}kan!`;
+            successNotification.classList.remove('hidden');
+            setTimeout(() => {
+              successNotification.classList.add('hidden');
+              window.location.reload(); // Reload to reflect changes
+            }, 3000); // Hide after 3 seconds
+          } catch (error) {
+            console.error(`Error toggling user status:`, error);
+            alert(`Terjadi kesalahan: ${error.message}`);
+          }
+          this.removeEventListener('click', handler); // Remove listener after execution
+        });
+
+        document.getElementById('cancel-toggle-status').addEventListener('click', function handler() {
+          toggleStatusModal.classList.add('hidden');
+          this.removeEventListener('click', handler); // Remove listener after execution
+        });
+      }
     </script>
 
     <!-- Custom Confirmation Modal -->
@@ -176,6 +244,26 @@
               Hapus
             </button>
             <button id="cancel-delete" class="mt-3 px-4 py-2 bg-gray-300 text-gray-800 text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 sm:mt-0 sm:w-auto sm:text-sm">
+              Batal
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Custom Confirmation Modal for Toggle Status -->
+    <div id="confirm-toggle-status-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden">
+      <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+        <div class="mt-3 text-center">
+          <h3 id="toggle-status-modal-title" class="text-lg leading-6 font-medium text-gray-900">Konfirmasi Aksi Pengguna</h3>
+          <div class="mt-2 px-7 py-3">
+            <p id="toggle-status-modal-message" class="text-sm text-gray-500">Apakah Anda yakin ingin melakukan aksi ini?</p>
+          </div>
+          <div class="items-center px-4 py-3">
+            <button id="confirm-toggle-status" class="px-4 py-2 bg-blue-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 sm:ml-3 sm:w-auto sm:text-sm">
+              Konfirmasi
+            </button>
+            <button id="cancel-toggle-status" class="mt-3 px-4 py-2 bg-gray-300 text-gray-800 text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 sm:mt-0 sm:w-auto sm:text-sm">
               Batal
             </button>
           </div>

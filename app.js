@@ -52,7 +52,7 @@ app.get("/dashboard", protect, userController.renderDashboard);
 app.get("/cart", protect, (req, res) =>
   res.sendFile(path.join(__dirname, "public", "cart.html"))
 );
-app.get("/add-product", protect, (req, res) =>
+app.get("/dashboard/add-product", protect, (req, res) =>
   res.sendFile(path.join(__dirname, "public", "add-product.html"))
 );
 
@@ -69,17 +69,30 @@ app.get("/", (req, res) => {
 });
 
 // Rute untuk halaman produk
-app.get("/products", productController.renderAllProducts);
+app.get("/dashboard/products", productController.renderAllProducts);
 
 // Rute untuk halaman manajemen pengguna admin
 app.get("/dashboard/admin/users", protect, restrictTo("admin"), (req, res) => {
   res.render("admin/users"); // Render the EJS file
 });
 
+// Rute untuk halaman manajemen produk admin
+app.get("/dashboard/admin/products", protect, restrictTo("admin"), (req, res) => {
+  res.render("admin/products"); // Render the EJS file
+});
+
+// Rute untuk halaman tambah pengguna admin
+app.get("/dashboard/admin/users/add", protect, restrictTo("admin"), (req, res) => {
+  res.render("admin/add-user"); // Render the EJS file
+});
+
 // Rute untuk halaman edit pengguna admin
 app.get("/dashboard/admin/users/:id/edit", protect, restrictTo("admin"), (req, res) => {
   res.render("admin/edit-user"); // Render the EJS file
 });
+
+// Rute untuk mengaktifkan/menonaktifkan pengguna oleh admin
+app.put("/api/v1/admin/users/:id/toggle-status", protect, restrictTo("admin"), userController.updateUserStatus);
 
 // --- SELLER ROUTES ---
 app.use('/dashboard/seller', sellerRoutes);

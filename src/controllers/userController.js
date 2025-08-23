@@ -220,3 +220,113 @@ exports.deleteUser = async (req, res) => {
     });
   }
 };
+
+// Update user active status (Admin only)
+exports.updateUserStatus = async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    const { isActive } = req.body; // Expecting true or false
+
+    console.log("--- updateUserStatus Debug ---");
+    console.log("Received userId:", userId);
+    console.log("Received isActive:", isActive);
+    console.log("Type of isActive:", typeof isActive);
+
+    if (typeof isActive !== 'boolean') {
+      console.log("Error: isActive is not a boolean.");
+      return res.status(400).json({
+        status: "fail",
+        message: "Invalid value for isActive. Must be a boolean.",
+      });
+    }
+
+    const user = await db.User.findByPk(userId);
+
+    if (!user) {
+      console.log("Error: User not found for userId:", userId);
+      return res.status(404).json({
+        status: "fail",
+        message: "Pengguna tidak ditemukan.",
+      });
+    }
+
+    console.log("User found:", user.name, "Current isActive:", user.isActive);
+
+    user.isActive = isActive;
+    await user.save();
+
+    console.log("User status updated to:", user.isActive);
+
+    res.status(200).json({
+      status: "success",
+      message: `Status pengguna berhasil diperbarui menjadi ${isActive ? 'aktif' : 'nonaktif'}.`,
+      data: {
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          isActive: user.isActive,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("UPDATE USER STATUS ERROR:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan saat memperbarui status pengguna.",
+      error: error.message,
+    });
+  }
+};
+
+// Create a new user (Admin only)
+exports.createUser = async (req, res) => {
+  try {
+    const { name, email, password, role, storeName } = req.body;
+
+    // 1. Basic input validation
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Nama, email, dan password harus diisi.",
+      });
+    }
+
+    // 2. Create new user
+    const newUser = await db.User.create({
+      name,
+      email,
+      password,
+      role: role || "pembeli", // Default to 'pembeli' if not provided
+      storeName: role === 'penjual' ? storeName : null, // Only set storeName if role is 'penjual'
+    });
+
+    res.status(201).json({
+      status: "success",
+      message: "Pengguna berhasil ditambahkan.",
+      data: {
+        user: {
+          id: newUser.id,
+          name: newUser.name,
+          email: newUser.email,
+          role: newUser.role,
+          storeName: newUser.storeName,
+        },
+      },
+    });
+  } catch (error) {
+    // Handle duplicate email error
+    if (error.name === "SequelizeUniqueConstraintError") {
+      return res.status(400).json({
+        status: "fail",
+        message: "Email sudah terdaftar.",
+      });
+    }
+    console.error("CREATE USER ERROR:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server saat membuat pengguna.",
+    });
+  }
+};

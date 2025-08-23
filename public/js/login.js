@@ -1,6 +1,15 @@
 document.addEventListener("DOMContentLoaded", () => {
   const loginForm = document.getElementById("login-form");
   const errorMessageDiv = document.getElementById("error-message");
+  const infoMessageDiv = document.getElementById("info-message"); // Get the info message div
+
+  // Check for URL query parameters
+  const urlParams = new URLSearchParams(window.location.search);
+  const message = urlParams.get('message');
+
+  if (message === 'account_deactivated' && infoMessageDiv) {
+    infoMessageDiv.classList.remove('hidden'); // Show the message
+  }
 
   const passwordInput = document.getElementById("password");
   const togglePassword = document.getElementById("togglePassword");
@@ -54,11 +63,16 @@ document.addEventListener("DOMContentLoaded", () => {
         // 2. Simpan data pengguna di localStorage untuk kemudahan akses di frontend
         // localStorage.setItem("user", JSON.stringify(data.data.user));
 
-        // 3. Arahkan ke halaman dashboard berdasarkan role
-        
+        // Tampilkan pesan sukses
+        const successMessageDiv = document.getElementById("success-message");
+        if (successMessageDiv) {
+          successMessageDiv.classList.remove("hidden");
+        }
 
-        // Arahkan ke halaman dashboard utama, server akan menangani sisanya
-        window.location.href = "/dashboard";
+        // 3. Arahkan ke halaman dashboard setelah jeda singkat
+        setTimeout(() => {
+          window.location.href = "/dashboard";
+        }, 1500); // Redirect after 1.5 seconds
       } catch (error) {
         // Menangani error jaringan atau jika server tidak merespons
         console.error("Login error:", error);
