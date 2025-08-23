@@ -14,12 +14,14 @@
             <span class="font-bold text-xl text-gray-800">My Dashboard</span>
           </div>
           <div class="flex items-center">
-            <button
-              id="logoutButton"
-              class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition-colors duration-300"
-            >
-              Logout
-            </button>
+            <form action="/api/v1/auth/logout" method="POST">
+              <button
+                type="submit"
+                class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition-colors duration-300"
+              >
+                Logout
+              </button>
+            </form>
           </div>
         </div>
       </div>
@@ -40,52 +42,71 @@
     </main>
 
     <script>
-      // Fungsi ini akan berjalan saat halaman dimuat
+      // Fungsi ini akan berjalan saat halaman dimuat untuk mengambil data pengguna
       (async function () {
-        const token = localStorage.getItem("authToken");
-        if (!token) {
-          window.location.href = "/login";
-          return;
-        }
-
         try {
-          const response = await fetch("/api/users/me", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
+          // Cookie akan dikirim secara otomatis oleh browser
+          const response = await fetch("/api/v1/users/me"); // No Authorization header needed
 
           if (!response.ok) {
+            // Jika server merespons dengan error (misalnya, sesi tidak valid),
+            // redirect ke halaman login.
             throw new Error("Sesi tidak valid atau telah berakhir.");
           }
 
           const user = await response.json();
           document.getElementById(
             "welcomeMessage"
-          ).textContent = `Selamat Datang, ${user.name}!`;
+          ).textContent = `Selamat Datang, ${user.name}! (Role: ${user.role})`;
 
           // Tampilkan menu berdasarkan peran
           const linksContainer = document.getElementById("role-specific-links");
           if (user.role === "penjual" || user.role === "admin") {
             linksContainer.innerHTML += `<a href="/add-product" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">Tambah Produk</a>`;
+          } else if (user.role === "pembeli") {
+            linksContainer.innerHTML += `<a href="/become-seller" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Daftar Sebagai Penjual</a>`;
+          }
+          // Anda bisa menambahkan link khusus admin di sini
+          if (user.role === "admin") {
+            linksContainer.innerHTML += `<a href="/dashboard/admin/users" class="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded">Admin User Management</a>`;
           }
         } catch (error) {
-          console.error("Auth Error:", error.message);
-          localStorage.removeItem("authToken");
+          console.error("Gagal mengambil data pengguna:", error.message);
+          // Jika terjadi error, kemungkinan besar cookie tidak valid atau tidak ada.
+          // Arahkan ke halaman login.
           window.location.href = "/login";
         }
       })();
 
-      // 2. Logika untuk tombol logout
-      const logoutButton = document.getElementById("logoutButton");
-      logoutButton.addEventListener("click", async () => {
-        // Panggil API logout di server (jika ada)
-        // await fetch("/api/users/logout", { method: "POST" });
-
-        // Hapus token dari localStorage
-        localStorage.removeItem("authToken");
-
-        // Arahkan kembali ke halaman login
-        window.location.href = "/login";
-      });
+      // JavaScript function to handle prompts for user ID (defined globally)
+      function promptForUserId(action) {
+        const userId = prompt("Masukkan User ID:");
+        if (userId) {
+          if (action === 'view') {
+            window.location.href = `/api/v1/users/${userId}`;
+          } else if (action === 'edit') {
+            alert("Untuk mengedit, Anda perlu menggunakan alat seperti Postman atau membuat form khusus. Endpoint: PATCH /api/v1/users/" + userId);
+          } else if (action === 'delete') {
+            if (confirm("Apakah Anda yakin ingin menghapus user ini?")) {
+              fetch(`/api/v1/users/${userId}`, {
+                method: 'DELETE',
+                // No Authorization header needed, relying on cookie
+              })
+              .then(response => {
+                if (response.ok) {
+                  alert("User berhasil dihapus!");
+                  window.location.reload(); // Refresh page to reflect changes
+                } else {
+                  response.json().then(data => alert("Gagal menghapus user: " + (data.message || response.statusText)));
+                }
+              })
+              .catch(error => {
+                alert("Terjadi kesalahan jaringan saat menghapus user: " + error.message);
+              });
+            }
+          }
+        }
+      }
     </script>
   </body>
 </html>

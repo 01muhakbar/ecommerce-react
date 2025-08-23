@@ -3,16 +3,21 @@
 const express = require("express");
 const router = express.Router();
 const userController = require("../controllers/userController");
-const { isAuth } = require("../middleware/auth");
-
-// Rute untuk registrasi: POST /api/users/register
-router.post("/register", userController.registerUser);
-
-// Rute untuk login: POST /api/users/login
-router.post("/login", userController.loginUser);
+const { protect, restrictTo } = require("../middleware/authMiddleware"); // Import restrictTo
 
 // Rute untuk mendapatkan profil user (dilindungi oleh middleware isAuth)
 // Menggunakan '/me' adalah konvensi umum untuk mendapatkan data pengguna saat ini
-router.get("/me", isAuth, userController.getUserProfile);
+router.get("/me", protect, userController.getUserProfile);
+
+// Rute untuk user menjadi penjual
+router.patch("/become-seller", protect, userController.becomeSeller);
+
+// --- Admin User Management Routes ---
+router.use(protect, restrictTo("admin")); // All routes below this will be protected and restricted to admin
+
+router.get("/", userController.getAllUsers); // Get all users
+router.get("/:id", userController.getUserById); // Get a single user by ID
+router.patch("/:id", userController.updateUser); // Update a user by ID
+router.delete("/:id", userController.deleteUser); // Delete a user by ID
 
 module.exports = router;

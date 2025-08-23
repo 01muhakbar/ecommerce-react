@@ -1,29 +1,30 @@
 const express = require("express");
 const router = express.Router();
 const { isAuth, hasRole } = require("../middleware/auth");
+const productController = require("../controllers/productController");
 
-// Placeholder untuk controller produk
-const getProducts = (req, res) =>
-  res.json({ message: "Menampilkan semua produk (Akses Publik)" });
-const addProduct = (req, res) =>
-  res.status(201).json({
-    message: `Produk '${req.body.name}' berhasil ditambahkan (Akses Penjual)`,
-  });
-const deleteProduct = (req, res) =>
-  res.json({
-    message: `Produk dengan ID ${req.params.id} berhasil dihapus (Akses Admin)`,
-  });
+const path = require("path");
 
-// Rute ini bisa diakses oleh siapa saja
-router.get("/", getProducts);
+// Rute untuk mendapatkan semua produk (Akses Publik)
+router.get("/", productController.getAllProducts);
 
-// Rute ini hanya bisa diakses oleh pengguna yang sudah login DAN memiliki peran 'penjual'.
-router.post("/", isAuth, hasRole("penjual"), addProduct);
+// Rute untuk menampilkan halaman tambah produk (Hanya Penjual/Admin)
+router.get("/add", isAuth, hasRole("penjual", "admin"), (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "..", "public", "add-product.html"));
+});
 
-// Rute ini hanya bisa diakses oleh pengguna yang sudah login DAN memiliki peran 'admin'.
-// Middleware dijalankan secara berurutan:
-// 1. `isAuth`: Memastikan ada token yang valid dan melampirkan data user (termasuk role) ke `req.user`.
-// 2. `hasRole('admin')`: Memeriksa apakah `req.user.role` adalah 'admin'.
-router.delete("/:id", isAuth, hasRole("admin"), deleteProduct);
+// Rute untuk mendapatkan detail satu produk (Akses Publik)
+router.get("/:id", productController.getProductById);
+
+// Rute untuk membuat produk baru (Hanya Penjual/Admin)
+router.post(
+  "/",
+  isAuth,
+  hasRole("penjual", "admin"),
+  productController.createProduct
+);
+
+// Catatan: Anda perlu membuat fungsi deleteProduct di dalam productController.js
+// router.delete("/:id", isAuth, hasRole("admin"), productController.deleteProduct);
 
 module.exports = router;

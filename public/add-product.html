@@ -100,19 +100,9 @@
       const addProductForm = document.getElementById("addProductForm");
       const addProductMessage = document.getElementById("addProductMessage");
 
-      // Cek token saat halaman dimuat
-      (function () {
-        const token = localStorage.getItem("authToken");
-        if (!token) {
-          window.location.href = "/login";
-        }
-      })();
-
       // Event listener untuk form tambah produk
       addProductForm.addEventListener("submit", async (event) => {
         event.preventDefault();
-        const token = localStorage.getItem("authToken");
-        if (!token) return;
 
         const formData = new FormData(addProductForm);
         const productData = {
@@ -123,11 +113,11 @@
         };
 
         try {
-          const response = await fetch("http://localhost:3000/api/products", {
+          const response = await fetch("http://localhost:3000/api/v1/products", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
+              // Authorization header removed, relying on cookie
             },
             body: JSON.stringify(productData),
           });
@@ -143,7 +133,15 @@
             setTimeout(() => {
               window.location.href = "/dashboard";
             }, 2000);
-          } else {
+          } else if (response.status === 401) { // Handle 401 Unauthorized
+            // localStorage.removeItem("authToken"); // No longer needed as token is in cookie
+            addProductMessage.textContent = "Sesi Anda telah berakhir atau tidak valid. Silakan login kembali.";
+            addProductMessage.className = "mt-4 text-center text-sm text-red-600";
+            setTimeout(() => {
+              window.location.href = "/login"; // Redirect to login
+            }, 2000);
+          }
+          else {
             addProductMessage.textContent =
               result.message || "Gagal menambahkan produk.";
             addProductMessage.className =
@@ -156,6 +154,7 @@
           addProductMessage.className = "mt-4 text-center text-sm text-red-600";
         }
       });
+    </script>
     </script>
   </body>
 </html>

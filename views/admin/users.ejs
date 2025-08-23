@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Manajemen Pengguna Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body {
+        font-family: "Poppins", sans-serif;
+      }
+    </style>
+  </head>
+  <body class="bg-gray-100 p-8">
+    <div class="max-w-7xl mx-auto bg-white p-6 rounded-lg shadow-md">
+      <div class="mb-4">
+        <button onclick="history.back()" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">
+          Kembali
+        </button>
+      </div>
+      <h1 class="text-3xl font-bold text-gray-800 mb-6">Manajemen Pengguna</h1>
+
+      <div id="users-list" class="overflow-x-auto">
+        <table class="min-w-full bg-white border border-gray-200">
+          <thead>
+            <tr>
+              <th class="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">ID</th>
+              <th class="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Nama</th>
+              <th class="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Email</th>
+              <th class="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Role</th>
+              <th class="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Nama Toko</th>
+              <th class="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="users-table-body">
+            <!-- User data will be loaded here -->
+          </tbody>
+        </table>
+      </div>
+
+      <div id="loading-message" class="text-center text-gray-500 mt-4">Memuat pengguna...</div>
+      <div id="error-message" class="text-center text-red-500 mt-4" style="display: none;"></div>
+    </div>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", async () => {
+        const usersTableBody = document.getElementById("users-table-body");
+        const loadingMessage = document.getElementById("loading-message");
+        const errorMessage = document.getElementById("error-message");
+
+        try {
+          const response = await fetch("/api/v1/users", {
+            cache: "no-store", // Bypass cache
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(
+              errorData.message || "Gagal mengambil data pengguna."
+            );
+          }
+
+          const data = await response.json();
+          loadingMessage.style.display = "none";
+
+          if (data.data.users.length === 0) {
+            usersTableBody.innerHTML = `<tr><td colspan="6" class="py-2 px-4 text-center text-gray-500">Tidak ada pengguna ditemukan.</td></tr>`;
+            return;
+          }
+
+          data.data.users.forEach((user) => {
+            const row = `
+              <tr>
+                <td class="py-2 px-4 border-b text-sm text-gray-700">${
+                  user.id
+                }</td>
+                <td class="py-2 px-4 border-b text-sm text-gray-700">${
+                  user.name
+                }</td>
+                <td class="py-2 px-4 border-b text-sm text-gray-700">${
+                  user.email
+                }</td>
+                <td class="py-2 px-4 border-b text-sm text-gray-700">${
+                  user.role
+                }</td>
+                <td class="py-2 px-4 border-b text-sm text-gray-700">${
+                  user.storeName || "-"
+                }</td>
+                <td class="py-2 px-4 border-b text-sm text-gray-700">
+                  <button onclick="viewUser(${
+                    user.id
+                  })" class="bg-blue-500 hover:bg-blue-700 text-white py-1 px-2 rounded text-xs mr-2">Lihat</button>
+                  <button onclick="editUser(${
+                    user.id
+                  })" class="bg-yellow-500 hover:bg-yellow-700 text-white py-1 px-2 rounded text-xs mr-2">Edit</button>
+                  <button onclick="deleteUser(${
+                    user.id
+                  })" class="bg-red-500 hover:bg-red-700 text-white py-1 px-2 rounded text-xs">Hapus</button>
+                </td>
+              </tr>
+            `;
+            usersTableBody.innerHTML += row;
+          });
+        } catch (error) {
+          console.error("Error fetching users:", error);
+          loadingMessage.style.display = "none";
+          errorMessage.textContent = `Error: ${error.message}. Pastikan Anda login sebagai admin.`;
+          errorMessage.style.display = "block";
+        }
+
+        // Handle modal actions
+        const confirmDeleteModal = document.getElementById('confirm-delete-modal');
+        const cancelDeleteButtonModal = confirmDeleteModal.querySelector('#cancel-delete');
+        const confirmDeleteButtonModal = confirmDeleteModal.querySelector('#confirm-delete');
+
+        cancelDeleteButtonModal.addEventListener('click', () => {
+          confirmDeleteModal.classList.add('hidden');
+        });
+
+        confirmDeleteButtonModal.addEventListener('click', async () => {
+          const userId = confirmDeleteModal.dataset.userId;
+          confirmDeleteModal.classList.add('hidden'); // Hide modal
+
+          try {
+            const response = await fetch(`/api/v1/users/${userId}`, {
+              method: 'DELETE',
+            });
+
+            if (response.ok) {
+              const successNotification = document.getElementById('success-notification');
+              successNotification.classList.remove('hidden');
+              setTimeout(() => {
+                successNotification.classList.add('hidden');
+                window.location.reload(); // Refresh the page after the notification is hidden
+              }, 3000); // Hide after 3 seconds
+            } else {
+              const errorData = await response.json();
+              alert(`Gagal menghapus user: ${errorData.message || response.statusText}`);
+            }
+          } catch (error) {
+            console.error('Error deleting user:', error);
+            alert(`Terjadi kesalahan jaringan saat menghapus user: ${error.message}`);
+          }
+        });
+      });
+
+      // Global functions for actions
+      function viewUser(id) {
+        alert(
+          `Melihat detail user dengan ID: ${id}. (Implementasi lebih lanjut diperlukan)`
+        );
+        // window.location.href = `/api/v1/users/${id}`;
+      }
+
+      function editUser(id) {
+        window.location.href = `/dashboard/admin/users/${id}/edit`;
+      }
+
+      async function deleteUser(id) {
+        // Show custom confirmation modal
+        document.getElementById("confirm-delete-modal").classList.remove("hidden");
+        document.getElementById("confirm-delete-modal").dataset.userId = id; // Store ID
+      }
+    </script>
+
+    <!-- Custom Confirmation Modal -->
+    <div id="confirm-delete-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden">
+      <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+        <div class="mt-3 text-center">
+          <h3 class="text-lg leading-6 font-medium text-gray-900">Konfirmasi Hapus Pengguna</h3>
+          <div class="mt-2 px-7 py-3">
+            <p class="text-sm text-gray-500">Apakah Anda yakin ingin menghapus pengguna ini? Tindakan ini tidak dapat dibatalkan.</p>
+          </div>
+          <div class="items-center px-4 py-3">
+            <button id="confirm-delete" class="px-4 py-2 bg-red-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 sm:ml-3 sm:w-auto sm:text-sm">
+              Hapus
+            </button>
+            <button id="cancel-delete" class="mt-3 px-4 py-2 bg-gray-300 text-gray-800 text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 sm:mt-0 sm:w-auto sm:text-sm">
+              Batal
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Success Notification Popup -->
+    <div id="success-notification" class="fixed bottom-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg hidden">
+      User berhasil dihapus!
+    </div>
+  </body>
+</html>

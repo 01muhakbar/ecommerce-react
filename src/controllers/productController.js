@@ -2,9 +2,28 @@
 
 const db = require("../models");
 
+// Fungsi baru untuk merender halaman produk
+exports.renderAllProducts = async (req, res) => {
+  try {
+    const products = await db.Product.findAll({
+      order: [['createdAt', 'DESC']], // Urutkan berdasarkan terbaru
+    });
+    // Render view EJS dan kirim data produk
+    res.render("products", {
+      products: products,
+      isLoggedIn: req.cookies.token ? true : false, // Cek jika pengguna login
+      messages: {}, // Untuk pesan flash (jika ada)
+    });
+  } catch (error) {
+    // Handle error, mungkin render halaman error
+    res.status(500).send("<h1>Error memuat halaman produk</h1><p>" + error.message + "</p>");
+  }
+};
+
 exports.createProduct = async (req, res) => {
   try {
     const { name, description, price, stock } = req.body;
+    const userId = req.user.id; // Get user ID from authenticated user
 
     // Validasi dasar
     if (!name || !price || stock === undefined) {
@@ -18,6 +37,7 @@ exports.createProduct = async (req, res) => {
       description,
       price,
       stock,
+      userId, // Associate product with the user
     });
 
     res
@@ -58,5 +78,79 @@ exports.getProductById = async (req, res) => {
       message: "Failed to fetch product details",
       error: error.message,
     });
+  }
+};
+
+// Get all products for the logged-in seller
+exports.getSellerProducts = async (req, res) => {
+  try {
+    const products = await db.Product.findAll({
+      where: { userId: req.user.id },
+      order: [['createdAt', 'DESC']],
+    });
+    res.render('seller/products', {
+      products,
+      isLoggedIn: true,
+      user: req.user, // Pass the user object
+      messages: {},
+    });
+  } catch (error) {
+    res.status(500).send("Error loading products: " + error.message);
+  }
+};
+
+// Show the edit product page
+exports.getEditProductPage = async (req, res) => {
+  try {
+    const product = await db.Product.findOne({
+      where: { id: req.params.id, userId: req.user.id },
+    });
+    if (!product) {
+      return res.status(404).send("Product not found or you don't have permission to edit it.");
+    }
+    res.render('seller/edit-product', {
+      product,
+      isLoggedIn: true,
+      messages: {},
+    });
+  } catch (error) {
+    res.status(500).send("Error loading product for editing: " + error.message);
+  }
+};
+
+// Update a product
+exports.updateProduct = async (req, res) => {
+  try {
+    const { name, description, price, stock } = req.body;
+    const product = await db.Product.findOne({
+      where: { id: req.params.id, userId: req.user.id },
+    });
+
+    if (!product) {
+      return res.status(404).send("Product not found or you don't have permission to edit it.");
+    }
+
+    await product.update({ name, description, price, stock });
+    res.redirect('/dashboard/seller/products');
+  } catch (error) {
+    res.status(500).send("Error updating product: " + error.message);
+  }
+};
+
+// Delete a product
+exports.deleteProduct = async (req, res) => {
+  try {
+    const product = await db.Product.findOne({
+      where: { id: req.params.id, userId: req.user.id },
+    });
+
+    if (!product) {
+      return res.status(404).send("Product not found or you don't have permission to delete it.");
+    }
+
+    await product.destroy();
+    res.redirect('/dashboard/seller/products');
+  } catch (error) {
+    res.status(500).send("Error deleting product: " + error.message);
   }
 };

@@ -1,15 +1,19 @@
 require("dotenv").config(); // Muat environment variables
 const express = require("express");
-const path = require("path"); // Impor modul path
-const cookieParser = require("cookie-parser"); // Impor cookie-parser
-// Impor objek `db` dari direktori models yang sudah kita perbaiki
-const db = require("./src/models");
+const path = require("path");
+const cookieParser = require("cookie-parser");
+const cors = require("cors"); // Impor CORS
 
-// Impor rute-rute Anda di sini
+// Impor dari modul lokal
+const db = require("./src/models");
 const userRoutes = require("./src/routes/userRoutes");
+const authRoutes = require("./src/routes/authRoutes");
 const productRoutes = require("./src/routes/productRoutes");
-const { protect } = require("./src/middleware/authMiddleware");
 const cartRoutes = require("./src/routes/cartRoutes");
+const sellerRoutes = require('./src/routes/sellerRoutes');
+const productController = require("./src/controllers/productController"); // Impor controller
+const userController = require("./src/controllers/userController"); // Impor user controller
+const { protect, restrictTo } = require("./src/middleware/authMiddleware");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -20,6 +24,13 @@ app.use(express.json());
 // Middleware untuk mem-parsing cookie dari request
 app.use(cookieParser());
 
+// Aktifkan CORS untuk semua rute
+app.use(cors());
+
+// Setup EJS view engine
+app.set("view engine", "ejs");
+app.set("views", path.join(__dirname, "views"));
+
 // Sajikan file statis dari direktori 'public'
 // Contoh: akses http://localhost:3000/login.html
 app.use(express.static(path.join(__dirname, "public")));
@@ -28,8 +39,6 @@ app.use(express.static(path.join(__dirname, "public")));
 
 // Daftar halaman yang ingin dibuatkan rute bersih
 const pages = ["forgot-password", "login", "register", "reset-password"];
-// Halaman yang tidak memerlukan login
-const publicPages = ["login", "register", "forgot-password", "reset-password"];
 
 // Loop untuk membuat rute secara otomatis
 pages.forEach((page) => {
@@ -39,9 +48,7 @@ pages.forEach((page) => {
 });
 
 // Rute yang dilindungi
-app.get("/dashboard", protect, (req, res) =>
-  res.sendFile(path.join(__dirname, "public", "dashboard.html"))
-);
+app.get("/dashboard", protect, userController.renderDashboard);
 app.get("/cart", protect, (req, res) =>
   res.sendFile(path.join(__dirname, "public", "cart.html"))
 );
@@ -49,17 +56,54 @@ app.get("/add-product", protect, (req, res) =>
   res.sendFile(path.join(__dirname, "public", "add-product.html"))
 );
 
+// New route for become-seller
+app.get("/become-seller", protect, (req, res) =>
+  res.sendFile(path.join(__dirname, "public", "become-seller.html"))
+);
+
+
+
 // Rute khusus untuk halaman utama (index.html)
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// Gunakan rute-rute Anda
-app.use("/api/users", userRoutes);
-app.use("/api/products", productRoutes);
-app.use("/api/cart", cartRoutes);
+// Rute untuk halaman produk
+app.get("/products", productController.renderAllProducts);
 
-// Sinkronisasi database lalu jalankan server
+// Rute untuk halaman manajemen pengguna admin
+app.get("/dashboard/admin/users", protect, restrictTo("admin"), (req, res) => {
+  res.render("admin/users"); // Render the EJS file
+});
+
+// Rute untuk halaman edit pengguna admin
+app.get("/dashboard/admin/users/:id/edit", protect, restrictTo("admin"), (req, res) => {
+  res.render("admin/edit-user"); // Render the EJS file
+});
+
+// --- SELLER ROUTES ---
+app.use('/dashboard/seller', sellerRoutes);
+
+// --- API ROUTES ---
+const apiV1Router = express.Router();
+apiV1Router.use("/users", userRoutes);
+apiV1Router.use("/auth", authRoutes);
+apiV1Router.use("/products", productRoutes);
+apiV1Router.use("/cart", cartRoutes);
+
+app.use("/api/v1", apiV1Router);
+
+// --- ERROR HANDLING ---
+
+// Handler untuk rute API yang tidak ditemukan (404)
+app.all("/api/*", (req, res) => {
+  res.status(404).json({
+    status: "fail",
+    message: `Rute ${req.method} ${req.originalUrl} tidak ditemukan.`,
+  });
+});
+
+// --- START SERVER ---
 db.sequelize
   .sync({ force: false }) // Gunakan { force: true } hanya saat development untuk reset database
   .then(() => {

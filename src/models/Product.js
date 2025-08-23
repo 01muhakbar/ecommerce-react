@@ -30,6 +30,13 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: "productId",
       otherKey: "cartId",
     });
+
+    // Sebuah Product dimiliki oleh satu User (Penjual)
+    Product.belongsTo(models.User, {
+      foreignKey: "userId",
+      as: "seller",
+      onDelete: "CASCADE",
+    });
   };
 
   // 3. Kembalikan model agar bisa digunakan oleh index.js

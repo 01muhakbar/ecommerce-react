@@ -1,83 +1,23 @@
 // src/controllers/userController.js
 
 const db = require("../models");
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
 
-// Fungsi untuk registrasi user baru
-exports.registerUser = async (req, res) => {
-  try {
-    const { name, email, password, role, storeName } = req.body;
+// Renders the correct dashboard based on user role
+exports.renderDashboard = (req, res) => {
+  const { user } = req; // User object from 'protect' middleware
 
-    // Buat user baru (password akan di-hash oleh hook di model User)
-    const newUser = await db.User.create({
-      name,
-      email,
-      password,
-      role,
-      storeName,
-    });
+  const viewData = {
+    user,
+    isLoggedIn: true,
+    messages: {}, // For any flash messages
+  };
 
-    res.status(201).json({
-      message: "User registered successfully",
-      user: { id: newUser.id, name: newUser.name, email: newUser.email },
-    });
-  } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Failed to register user", error: error.message });
-  }
-};
-
-// Fungsi untuk login user
-exports.loginUser = async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    // 1. Cari user berdasarkan email
-    const user = await db.User.findOne({ where: { email } });
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    // 2. Bandingkan password yang diinput dengan yang ada di database
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ message: "Invalid credentials" });
-    }
-
-    // 3. Jika cocok, buat JWT token
-    const token = jwt.sign(
-      { id: user.id, role: user.role },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: "1h", // Token berlaku selama 1 jam
-      }
-    );
-
-    // 4. Set token sebagai httpOnly cookie untuk otentikasi halaman web
-    res.cookie("token", token, {
-      httpOnly: true, // Mencegah akses dari JavaScript sisi client
-      secure: process.env.NODE_ENV === "production", // Hanya kirim via HTTPS di production
-      maxAge: 60 * 60 * 1000, // 1 jam, harus cocok dengan expiresIn
-    });
-
-    // 5. Kirim respons yang berisi token DAN data pengguna (tanpa password)
-    res.status(200).json({
-      message: "Login successful",
-      token: token,
-      user: {
-        id: user.id,
-        name: user.name,
-        role: user.role,
-      },
-    });
-  } catch (error) {
-    console.error("LOGIN ERROR:", error); // Tambahkan log untuk debugging
-    res.status(500).json({
-      message: "An internal server error occurred.",
-      error: error.message,
-    });
+  if (user.role === 'admin') {
+    res.render('admin/dashboard-admin', viewData);
+  } else if (user.role === 'penjual') {
+    res.render('dashboard-seller', viewData);
+  } else {
+    res.render('dashboard-pembeli', viewData);
   }
 };
 
@@ -99,5 +39,184 @@ exports.getUserProfile = async (req, res) => {
     res
       .status(500)
       .json({ message: "Failed to fetch user profile.", error: error.message });
+  }
+};
+
+// Fungsi untuk mengubah role user menjadi penjual
+exports.becomeSeller = async (req, res) => {
+  try {
+    const { storeName } = req.body; // Assuming description is not needed for now, or can be added later
+
+    // Dapatkan user dari req.user yang disuntikkan oleh middleware protect
+    const user = await db.User.findByPk(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({
+        status: "fail",
+        message: "User not found.",
+      });
+    }
+
+    // Pastikan user belum menjadi penjual atau admin
+    if (user.role === "penjual" || user.role === "admin") {
+      return res.status(400).json({
+        status: "fail",
+        message: "Anda sudah terdaftar sebagai penjual atau admin.",
+      });
+    }
+
+    // Update role menjadi 'penjual' dan simpan nama toko
+    user.role = "penjual";
+    user.storeName = storeName; // Assuming storeName is required for sellers
+    await user.save();
+
+    res.status(200).json({
+      status: "success",
+      message: "Selamat! Anda sekarang adalah penjual.",
+      data: {
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          storeName: user.storeName,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("BECOME SELLER ERROR:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan saat mendaftar sebagai penjual.",
+      error: error.message,
+    });
+  }
+};
+
+// --- Admin User Management Functions ---
+
+// Get all users (Admin only)
+exports.getAllUsers = async (req, res) => {
+  try {
+    const users = await db.User.findAll({
+      attributes: { exclude: ["password", "refreshToken", "passwordResetToken", "passwordResetExpires"] },
+    });
+    res.status(200).json({
+      status: "success",
+      results: users.length,
+      data: {
+        users,
+      },
+    });
+  } catch (error) {
+    console.error("GET ALL USERS ERROR:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan saat mengambil data pengguna.",
+      error: error.message,
+    });
+  }
+};
+
+// Get a single user by ID (Admin only)
+exports.getUserById = async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10); // Parse ID to integer
+    const user = await db.User.findByPk(userId, {
+      attributes: { exclude: ["password", "refreshToken", "passwordResetToken", "passwordResetExpires"] },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        status: "fail",
+        message: "Pengguna tidak ditemukan.",
+      });
+    }
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        user,
+      },
+    });
+  } catch (error) {
+    console.error("GET USER BY ID ERROR:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan saat mengambil data pengguna.",
+      error: error.message,
+    });
+  }
+};
+
+// Update a user by ID (Admin only)
+exports.updateUser = async (req, res) => {
+  try {
+    const { name, email, role, storeName } = req.body;
+    const user = await db.User.findByPk(req.params.id);
+
+    if (!user) {
+      return res.status(404).json({
+        status: "fail",
+        message: "Pengguna tidak ditemukan.",
+      });
+    }
+
+    // Update fields if provided
+    if (name) user.name = name;
+    if (email) user.email = email;
+    if (role) user.role = role;
+    if (storeName) user.storeName = storeName;
+
+    await user.save();
+
+    res.status(200).json({
+      status: "success",
+      message: "Data pengguna berhasil diperbarui.",
+      data: {
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          storeName: user.storeName,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("UPDATE USER ERROR:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan saat memperbarui pengguna.",
+      error: error.message,
+    });
+  }
+};
+
+// Delete a user by ID (Admin only)
+exports.deleteUser = async (req, res) => {
+  try {
+    const user = await db.User.findByPk(req.params.id);
+
+    if (!user) {
+      return res.status(404).json({
+        status: "fail",
+        message: "Pengguna tidak ditemukan.",
+      });
+    }
+
+    await user.destroy();
+
+    res.status(204).json({
+      status: "success",
+      data: null,
+    });
+  } catch (error) {
+    console.error("DELETE USER ERROR:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan saat menghapus pengguna.",
+      error: error.message,
+    });
   }
 };

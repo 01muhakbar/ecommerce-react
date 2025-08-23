@@ -1,0 +1,31 @@
+<%- include('../partials/header') %>
+
+<div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <h1 class="text-3xl font-bold text-gray-800 mb-4">Admin Dashboard</h1>
+
+    <p class="mt-4 text-lg text-gray-700">
+        Selamat datang, <strong class="font-semibold"><%= user.name %></strong>! Anda memiliki akses penuh ke sistem.
+    </p>
+
+    <div class="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- Card untuk Kelola Pengguna -->
+        <a href="/dashboard/admin/users" class="bg-white p-6 rounded-lg shadow-md hover:shadow-xl transition-shadow duration-300">
+            <h2 class="font-bold text-xl text-gray-800 mb-2">Kelola Pengguna</h2>
+            <p class="text-gray-600">Lihat, edit, atau hapus data pengguna.</p>
+        </a>
+
+        <!-- Card untuk Kelola Produk (Admin bisa lihat semua) -->
+        <a href="/products" class="bg-white p-6 rounded-lg shadow-md hover:shadow-xl transition-shadow duration-300">
+            <h2 class="font-bold text-xl text-gray-800 mb-2">Kelola Semua Produk</h2>
+            <p class="text-gray-600">Lihat dan kelola semua produk yang ada di platform.</p>
+        </a>
+        
+        <!-- Placeholder untuk fitur admin lainnya -->
+        <div class="bg-gray-100 p-6 rounded-lg border-2 border-dashed border-gray-300">
+            <h2 class="font-bold text-xl text-gray-500 mb-2">Fitur Lainnya</h2>
+            <p class="text-gray-500">Tempat untuk fitur-fitur admin selanjutnya.</p>
+        </div>
+    </div>
+</div>
+
+<%- include('../partials/footer') %>

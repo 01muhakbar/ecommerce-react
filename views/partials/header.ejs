@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Project E-Commerce</title>
-    <!-- Tailwind CSS via CDN -->
+        <!-- Tailwind CSS via CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
   </head>
   <body class="bg-gray-50">
@@ -33,14 +33,24 @@
             </div>
             <div class="hidden md:block">
               <% if (isLoggedIn) { %>
-              <form action="/logout" method="POST">
-                <button
-                  type="submit"
-                  class="bg-gray-200 text-gray-700 hover:bg-gray-300 px-4 py-2 rounded-md text-sm font-medium"
+              <div class="flex items-center space-x-4">
+                <% if (user.role === 'pembeli') { %>
+                <a
+                  href="/become-seller"
+                  class="bg-blue-500 text-white hover:bg-blue-600 px-4 py-2 rounded-md text-sm font-medium"
                 >
-                  Logout
-                </button>
-              </form>
+                  Daftar sebagai Penjual
+                </a>
+                <% } %>
+                <form action="/api/v1/auth/logout" method="POST">
+                  <button
+                    type="submit"
+                    class="bg-gray-200 text-gray-700 hover:bg-gray-300 px-4 py-2 rounded-md text-sm font-medium"
+                  >
+                    Logout
+                  </button>
+                </form>
+              </div>
               <% } else { %>
               <a
                 href="/login"
@@ -116,7 +126,15 @@
           <div class="pt-4 pb-3 border-t border-gray-200">
             <div class="px-2 space-y-1">
               <% if (isLoggedIn) { %>
-              <form action="/logout" method="POST" class="w-full">
+              <% if (user.role === 'pembeli') { %>
+              <a
+                href="/become-seller"
+                class="w-full text-left text-gray-600 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium"
+              >
+                Daftar sebagai Penjual
+              </a>
+              <% } %>
+              <form action="/api/v1/auth/logout" method="POST" class="w-full">
                 <button
                   type="submit"
                   class="w-full text-left text-gray-600 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium"

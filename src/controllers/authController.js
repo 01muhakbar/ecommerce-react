@@ -1,241 +1,240 @@
-const db = require("../models");
-const bcrypt = require("bcrypt");
+const { User } = require("../models");
+const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const crypto = require("crypto"); // Untuk membuat token acak
-const { Op } = require("sequelize"); // Untuk operator query
+const crypto = require("crypto");
+const sendEmail = require("../services/emailService");
 
-/**
- * Menampilkan halaman login.
- * Fungsi ini tidak lagi relevan karena halaman login disajikan secara statis
- * oleh app.js. Kita bisa menghapusnya atau membiarkannya jika ada rencana lain.
- */
-const showLoginPage = (req, res) => {
-  // app.js sudah menangani ini dengan res.sendFile, jadi fungsi ini bisa dikosongkan
-  // atau dihapus dari rute jika tidak diperlukan lagi.
-  res.status(200).send("API endpoint untuk GET /login. Halaman disajikan oleh Express Static.");
+// Helper function untuk menandatangani (sign) JWT
+const signToken = (id, role) => {
+  return jwt.sign({ id, role }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN || "90d",
+  });
+};
+
+// Helper function untuk membuat token, mengatur cookie, dan mengirim respons
+const createAndSendToken = (user, statusCode, res) => {
+  const token = signToken(user.id, user.role);
+
+  const cookieExpiresInDays = parseInt(
+    process.env.JWT_COOKIE_EXPIRES_IN || 90,
+    10
+  );
+  const cookieOptions = {
+    expires: new Date(Date.now() + cookieExpiresInDays * 24 * 60 * 60 * 1000),
+    httpOnly: true, // Mencegah serangan XSS
+    path: "/",
+    sameSite: "strict", // Mencegah serangan CSRF
+    secure: process.env.NODE_ENV === "production", // Hanya kirim melalui HTTPS di production
+  };
+
+  res.cookie("jwt", token, cookieOptions);
+
+  // Hapus password dari output
+  user.password = undefined;
+
+  res.status(statusCode).json({
+    status: "success",
+    // Token tidak dikirim di body untuk client web yang menggunakan cookie
+    data: {
+      user: {
+        // Kirim objek user yang sudah dikurasi
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    },
+  });
 };
 
 /**
- * Memproses data login dari user.
+ * Menangani registrasi user baru dan langsung login
  */
-const loginUser = async (req, res) => {
+exports.register = async (req, res) => {
   try {
-    const { email, password } = req.body;
-    // 1. Validasi input sekarang ditangani oleh express-validator middleware
+    const { name, email, password, role } = req.body;
 
-    // 2. Cari user di database
-    const user = await db.User.findOne({ where: { email } });
-    if (!user) {
-      return res.status(401).json({ message: "Email atau password salah." });
+    // 1. Validasi input dasar
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Nama, email, dan password harus diisi.",
+      });
     }
 
-    // 3. Bandingkan password yang diinput dengan hash di database
-    const isMatch = await bcrypt.compare(password, user.password);
-    // console.log(`Hasil perbandingan password untuk ${email}: ${isMatch}`); // Hapus atau komentari baris ini setelah selesai.
-    if (!isMatch) {
-      return res.status(401).json({ message: "Email atau password salah." });
-    }
-
-    // 4. Buat JWT Payload
-    const accessTokenPayload = { id: user.id, name: user.name, email: user.email, role: user.role };
-
-    // 5. Buat Access Token (berlaku singkat)
-    const accessToken = jwt.sign(accessTokenPayload, process.env.JWT_SECRET, {
-      expiresIn: "15m", // Contoh: 15 menit
-    });
-
-    // 6. Buat Refresh Token (berlaku lama)
-    const refreshToken = jwt.sign({ id: user.id }, process.env.JWT_REFRESH_SECRET, {
-      expiresIn: "7d", // Contoh: 7 hari
-    });
-
-    // 7. Simpan refresh token ke database
-    await user.update({ refreshToken: refreshToken });
-
-    // 8. Kirim refresh token sebagai httpOnly cookie
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true, // Mencegah akses dari JavaScript sisi client
-      secure: process.env.NODE_ENV === "production", // Hanya kirim via HTTPS di production
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 hari
-    });
-
-    // 9. Kirim access token sebagai JSON
-    res.status(200).json({ message: "Login berhasil", accessToken });
-  } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({ message: "Terjadi kesalahan pada server." });
-  }
-};
-
-/**
- * Mendaftarkan user baru.
- */
-const registerUser = async (req, res) => {
-  try {
-    const { name, email, password } = req.body;
-    // 1. Validasi input sekarang ditangani oleh express-validator middleware
-    // 2. Cek apakah email sudah terdaftar
-    const existingUser = await db.User.findOne({ where: { email } });
-    if (existingUser) {
-      return res.status(409).json({ message: "Email sudah terdaftar." }); // 409 Conflict
-    }
-
-    // 3. Biarkan hook 'beforeCreate' di model yang melakukan hashing.
-
-    // 4. Buat user baru di database
-    const newUser = await db.User.create({
+    // 2. Buat user baru (password di-hash oleh hook di model User)
+    const newUser = await User.create({
       name,
       email,
-      password: password, // Kirim password plain, hook akan menghash-nya
+      password,
+      role: role || "pembeli", // Default ke 'pembeli' jika tidak disediakan
     });
 
-    // 5. Buat token agar user bisa langsung login setelah registrasi
-    // Perbaikan: Sertakan role dalam payload agar konsisten
-    const payload = { id: newUser.id, email: newUser.email, role: newUser.role };
-    const accessToken = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "15m" });
-
-    // Untuk registrasi, kita bisa langsung login-kan user dengan memberikan refresh token juga
-    const refreshToken = jwt.sign({ id: newUser.id }, process.env.JWT_REFRESH_SECRET, { expiresIn: "7d" });
-    await newUser.update({ refreshToken: refreshToken });
-
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
-
-    res.status(201).json({ message: "Registrasi berhasil", accessToken });
+    // 3. Kirim token dan loginkan user
+    createAndSendToken(newUser, 201, res);
   } catch (error) {
-    console.error("Registration error:", error);
-    res.status(500).json({ message: "Terjadi kesalahan pada server." });
+    // Tangani error duplikat email
+    if (error.name === "SequelizeUniqueConstraintError") {
+      return res.status(400).json({
+        status: "fail",
+        message: "Email sudah terdaftar.",
+      });
+    }
+    console.error("REGISTER ERROR:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server saat registrasi.",
+    });
   }
 };
 
 /**
- * Membuat access token baru menggunakan refresh token.
+ * Menangani login user
  */
-const refreshToken = async (req, res) => {
+exports.login = async (req, res) => {
   try {
-    const refreshToken = req.cookies.refreshToken;
-    if (!refreshToken) return res.sendStatus(401); // Unauthorized
+    const { email, password } = req.body;
 
-    const user = await db.User.findOne({ where: { refreshToken } });
-    if (!user) return res.sendStatus(403); // Forbidden
+    // 1. Validasi input
+    if (!email || !password) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Email dan password harus diisi.",
+      });
+    }
 
-    jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, (err, decoded) => {
-      if (err || user.id !== decoded.id) return res.sendStatus(403);
+    // 2. Cari pengguna berdasarkan email
+    const user = await User.findOne({ where: { email } });
 
-      const accessTokenPayload = { id: user.id, name: user.name, email: user.email, role: user.role };
-      const accessToken = jwt.sign(accessTokenPayload, process.env.JWT_SECRET, {
-        expiresIn: "15m",
+    // 3. Verifikasi user dan password
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return res.status(401).json({
+        status: "fail",
+        message: "Email atau password salah.",
+      });
+    }
+
+    // 4. Jika semua benar, kirim token ke klien
+    createAndSendToken(user, 200, res);
+  } catch (error) {
+    console.error("LOGIN ERROR:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan pada server saat login.",
+    });
+  }
+};
+
+exports.logout = (req, res) => {
+  res.cookie("jwt", "loggedout", {
+    expires: new Date(Date.now() + 10 * 1000),
+    httpOnly: true,
+  });
+  res.status(200).redirect("/login");
+};
+
+exports.forgotPassword = async (req, res) => {
+  try {
+    // 1. Dapatkan user berdasarkan email dari body
+    const user = await User.findOne({ where: { email: req.body.email } });
+    if (!user) {
+      return res.status(404).json({
+        status: "fail",
+        message: "Tidak ada pengguna dengan alamat email tersebut.",
+      });
+    }
+
+    // 2. Buat token reset
+    const resetToken = user.createPasswordResetToken();
+    await user.save({ validate: false }); // Simpan token ke DB, nonaktifkan validasi sementara
+
+    // 3. Kirim token ke email user
+    const resetURL = `${req.protocol}://${req.get(
+      "host"
+    )}/api/v1/auth/reset-password/${resetToken}`;
+
+    const message = `
+          <p>Halo ${user.name},</p>
+          <p>Anda menerima email ini karena Anda (atau orang lain) telah meminta reset kata sandi untuk akun Anda.</p>
+          <p>Silakan klik tautan berikut, atau tempelkan ini ke browser Anda untuk menyelesaikan prosesnya:</p>
+          <p><a href="${resetURL}">${resetURL}</a></p>
+          <p>Jika Anda tidak meminta ini, abaikan email ini dan kata sandi Anda akan tetap sama.</p>
+          <p>Link ini akan kedaluwarsa dalam 10 menit.</p>
+        `;
+
+    try {
+      await sendEmail({
+        email: user.email,
+        subject: 'Reset Kata Sandi Anda',
+        message: message,
       });
 
-      res.json({ accessToken });
+      res.status(200).json({
+        status: "success",
+        message: "Token reset password telah dikirim ke email Anda.",
+      });
+    } catch (emailError) {
+      // Jika ada error saat mengirim email, hapus token dan expiry date untuk keamanan
+      user.passwordResetToken = undefined;
+      user.passwordResetExpires = undefined;
+      await user.save({ validate: false });
+
+      console.error("EMAIL SENDING ERROR:", emailError);
+      return res.status(500).json({
+        status: "error",
+        message: "Terjadi kesalahan saat mengirim email. Coba lagi nanti.",
+      });
+    }
+  } catch (error) {
+    // Jika ada error, hapus token dan expiry date untuk keamanan
+    // user.passwordResetToken = undefined;
+    // user.passwordResetExpires = undefined;
+    // await user.save({ validate: false });
+    console.error("FORGOT PASSWORD ERROR:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan saat mengirim email. Coba lagi nanti.",
     });
-  } catch (error) {
-    console.error("Refresh token error:", error);
-    res.sendStatus(500);
   }
 };
 
-/**
- * Logout user dengan menghapus refresh token.
- */
-const logoutUser = async (req, res) => {
+exports.resetPassword = async (req, res) => {
   try {
-    const refreshToken = req.cookies.refreshToken;
-    if (!refreshToken) return res.sendStatus(204); // No Content
-
-    const user = await db.User.findOne({ where: { refreshToken } });
-    if (user) {
-      await user.update({ refreshToken: null });
-    }
-
-    res.clearCookie("refreshToken");
-    return res.status(200).json({ message: "Logout berhasil" });
-  } catch (error) {
-    console.error("Logout error:", error);
-    res.status(500).json({ message: "Terjadi kesalahan pada server saat logout." });
-  }
-};
-
-/**
- * Menangani permintaan "Lupa Password".
- */
-const forgotPassword = async (req, res) => {
-  try {
-    const { email } = req.body;
-    const user = await db.User.findOne({ where: { email } });
-
-    // PENTING: Selalu kirim respons yang sama untuk mencegah penyerang mengetahui email mana yang terdaftar.
-    if (!user) {
-      return res.status(200).json({ message: "Jika email terdaftar, Anda akan menerima link reset password." });
-    }
-
-    // 1. Buat token reset yang acak
-    const resetToken = crypto.randomBytes(32).toString("hex");
-
-    // 2. Hash token tersebut dan simpan ke database
-    user.passwordResetToken = crypto
+    // 1. Dapatkan user berdasarkan token dari URL
+    const hashedToken = crypto
       .createHash("sha256")
-      .update(resetToken)
+      .update(req.params.token)
       .digest("hex");
 
-    // 3. Atur waktu kedaluwarsa (misalnya, 10 menit dari sekarang)
-    user.passwordResetExpires = Date.now() + 10 * 60 * 1000;
-
-    await user.save();
-
-    // 4. Buat URL reset dan simulasikan pengiriman email
-    const resetURL = `${req.protocol}://${req.get("host")}/reset-password?token=${resetToken}`;
-
-    // Di aplikasi production, Anda akan menggunakan library seperti Nodemailer untuk mengirim email.
-    // Untuk pengembangan, kita cukup menampilkannya di konsol.
-    console.log("====================================");
-    console.log("PASSWORD RESET LINK (UNTUK DEVELOPMENT):");
-    console.log(resetURL);
-    console.log("====================================");
-
-    res.status(200).json({ message: "Jika email terdaftar, Anda akan menerima link reset password." });
-  } catch (error) {
-    console.error("Forgot Password Error:", error);
-    res.status(500).json({ message: "Terjadi kesalahan pada server." });
-  }
-};
-
-/**
- * Menangani proses reset password dengan token.
- */
-const resetPassword = async (req, res) => {
-  try {
-    const { token, password } = req.body;
-
-    // 1. Hash token yang datang dari klien untuk dicocokkan dengan yang ada di DB
-    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
-
-    // 2. Cari user berdasarkan token yang sudah di-hash dan belum kedaluwarsa
-    const user = await db.User.findOne({
+    const user = await User.findOne({
       where: {
         passwordResetToken: hashedToken,
-        passwordResetExpires: { [Op.gt]: Date.now() }, // [Op.gt] = "greater than"
+        // Pastikan token belum kedaluwarsa
+        // passwordResetExpires: { [Op.gt]: Date.now() },
       },
     });
 
+    // 2. Jika token tidak valid atau sudah kedaluwarsa
     if (!user) {
-      return res.status(400).json({ message: "Token tidak valid atau sudah kedaluwarsa." });
+      return res.status(400).json({
+        status: "fail",
+        message: "Token tidak valid atau sudah kedaluwarsa.",
+      });
     }
 
-    // 3. Atur password baru dan hapus data token reset
-    user.password = password; // Serahkan hashing ke hook 'beforeUpdate' di model Anda
-    user.passwordResetToken = null;
+    // 3. Set password baru
+    user.password = req.body.password; // Hook `beforeSave` akan otomatis hash password ini
+    user.passwordResetToken = null; // Hapus token setelah digunakan
     user.passwordResetExpires = null;
-    await user.save(); // Hook 'beforeUpdate' akan terpicu secara otomatis di sini
+    await user.save();
 
-    res.status(200).json({ message: "Password berhasil direset. Silakan login." });
+    // 4. Login user dan kirim JWT baru
+    createAndSendToken(user, 200, res);
   } catch (error) {
-    console.error("Reset Password Error:", error);
-    res.status(500).json({ message: "Terjadi kesalahan pada server." });
+    console.error("RESET PASSWORD ERROR:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan saat mereset password.",
+    });
   }
 };
-
-module.exports = { showLoginPage, loginUser, registerUser, refreshToken, logoutUser, forgotPassword, resetPassword };

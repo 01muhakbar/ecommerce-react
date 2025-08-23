@@ -1,28 +1,31 @@
-const express = require('express');
+const express = require("express");
+const authController = require("../controllers/authController");
+
 const router = express.Router();
-const { showLoginPage, loginUser, registerUser, refreshToken, logoutUser, forgotPassword, resetPassword } = require('../controllers/authController');
-const { registerValidation, resetPasswordValidation, loginValidation } = require('../middleware/validators');
 
-// Rute untuk MENAMPILKAN halaman login
-// Ini adalah rute yang hilang dan menyebabkan error "Cannot GET /login"
-router.get('/login', showLoginPage);
+// Rute untuk registrasi user baru
+router.post("/register", authController.register);
 
-// Rute untuk MEMPROSES data login
-router.post('/login', loginValidation, loginUser);
+// Rute untuk login user
+router.post("/login", authController.login);
 
-// Rute untuk MEMPROSES data registrasi user baru
-router.post('/register', registerValidation, registerUser);
+// Rute untuk logout user
+router.post("/logout", authController.logout);
 
-// Rute untuk mendapatkan access token baru
-router.post('/refresh', refreshToken);
+// --- Rute untuk Manajemen Password ---
 
-// Rute untuk logout
-router.post('/logout', logoutUser);
+// Rute untuk meminta reset password (mengirim email ke pengguna)
+router.post("/forgot-password", authController.forgotPassword);
 
-// Rute untuk lupa password
-router.post('/forgot-password', forgotPassword);
+// Rute untuk melakukan reset password dengan token yang valid
+const path = require("path");
 
-// Rute untuk mereset password dengan token
-router.post('/reset-password', resetPasswordValidation, resetPassword);
+// Rute untuk melakukan reset password dengan token yang valid
+router.patch("/reset-password/:token", authController.resetPassword);
+
+// Rute untuk menampilkan halaman reset password
+router.get("/reset-password/:token", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "..", "public", "reset-password.html"));
+});
 
 module.exports = router;
