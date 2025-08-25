@@ -9,9 +9,7 @@ const path = require("path");
 router.get("/", productController.getAllProducts);
 
 // Rute untuk menampilkan halaman tambah produk (Hanya Penjual/Admin)
-router.get("/add", protect, restrictTo("penjual", "admin"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "..", "public", "add-product.html"));
-});
+
 
 // Rute untuk mendapatkan detail satu produk (Akses Publik)
 router.get("/:id", productController.getProductById);
@@ -24,7 +22,10 @@ router.post(
   productController.createProduct
 );
 
-// Catatan: Anda perlu membuat fungsi deleteProduct di dalam productController.js
-// router.delete("/:id", isAuth, hasRole("admin"), productController.deleteProduct);
+// Rute untuk menghapus produk (Hanya Admin)
+router.delete("/:id", protect, restrictTo("admin"), productController.deleteProduct);
+
+// Rute untuk memperbarui produk (Hanya Admin)
+router.put("/:id", protect, restrictTo("admin"), productController.updateProduct);
 
 module.exports = router;

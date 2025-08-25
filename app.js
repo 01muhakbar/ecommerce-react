@@ -3,6 +3,7 @@ const express = require("express");
 const path = require("path");
 const cookieParser = require("cookie-parser");
 const cors = require("cors"); // Impor CORS
+const methodOverride = require('method-override'); // Add this line
 
 // Impor dari modul lokal
 const db = require("./src/models");
@@ -11,6 +12,7 @@ const authRoutes = require("./src/routes/authRoutes");
 const productRoutes = require("./src/routes/productRoutes");
 const cartRoutes = require("./src/routes/cartRoutes");
 const sellerRoutes = require('./src/routes/sellerRoutes');
+const categoryRoutes = require("./src/routes/categoryRoutes");
 const productController = require("./src/controllers/productController"); // Impor controller
 const userController = require("./src/controllers/userController"); // Impor user controller
 const { protect, restrictTo } = require("./src/middleware/authMiddleware");
@@ -20,6 +22,10 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware untuk membaca body JSON dari request
 app.use(express.json());
+app.use(express.urlencoded({ extended: true })); // Untuk parsing application/x-www-form-urlencoded
+
+// Middleware for method-override
+app.use(methodOverride('_method')); // Add this line
 
 // Middleware untuk mem-parsing cookie dari request
 app.use(cookieParser());
@@ -49,12 +55,11 @@ pages.forEach((page) => {
 
 // Rute yang dilindungi
 app.get("/dashboard", protect, userController.renderDashboard);
+app.get("/dashboard/user/account/profile", protect, userController.renderProfilePage);
 app.get("/cart", protect, (req, res) =>
   res.sendFile(path.join(__dirname, "public", "cart.html"))
 );
-app.get("/dashboard/add-product", protect, (req, res) =>
-  res.sendFile(path.join(__dirname, "public", "add-product.html"))
-);
+
 
 // New route for become-seller
 app.get("/become-seller", protect, (req, res) =>
@@ -72,14 +77,16 @@ app.get("/", (req, res) => {
 app.get("/dashboard/products", productController.renderAllProducts);
 
 // Rute untuk halaman manajemen pengguna admin
-app.get("/dashboard/admin/users", protect, restrictTo("admin"), (req, res) => {
-  res.render("admin/users"); // Render the EJS file
-});
+app.get("/dashboard/admin/users", protect, restrictTo("admin"), userController.renderAdminUsersPage);
 
 // Rute untuk halaman manajemen produk admin
-app.get("/dashboard/admin/products", protect, restrictTo("admin"), (req, res) => {
-  res.render("admin/products"); // Render the EJS file
-});
+app.get("/dashboard/admin/products", protect, restrictTo("admin"), productController.renderAdminProductsPage);
+
+// Rute untuk halaman tambah produk admin
+app.get("/dashboard/products/add-product", protect, restrictTo("admin", "penjual"), productController.renderAddProductPageAdmin);
+
+// Rute untuk halaman edit produk admin
+app.get("/dashboard/admin/products/:id/edit", protect, restrictTo("admin"), productController.renderAdminEditProductPage);
 
 // Rute untuk halaman tambah pengguna admin
 app.get("/dashboard/admin/users/add", protect, restrictTo("admin"), (req, res) => {
@@ -97,12 +104,17 @@ app.put("/api/v1/admin/users/:id/toggle-status", protect, restrictTo("admin"), u
 // --- SELLER ROUTES ---
 app.use('/dashboard/seller', sellerRoutes);
 
+// --- ADMIN CATEGORY ROUTES ---
+const categoryAdminRoutes = require('./src/routes/categoryAdminRoutes');
+app.use('/dashboard/admin', categoryAdminRoutes);
+
 // --- API ROUTES ---
 const apiV1Router = express.Router();
 apiV1Router.use("/users", userRoutes);
 apiV1Router.use("/auth", authRoutes);
 apiV1Router.use("/products", productRoutes);
 apiV1Router.use("/cart", cartRoutes);
+apiV1Router.use("/categories", categoryRoutes);
 
 app.use("/api/v1", apiV1Router);
 

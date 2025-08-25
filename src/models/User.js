@@ -75,6 +75,18 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      phoneNumber: { // Added
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      gender: { // Added
+        type: DataTypes.ENUM('Laki-laki', 'Perempuan', 'Lainnya'),
+        allowNull: true,
+      },
+      dateOfBirth: { // Added
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+      },
       refreshToken: {
         type: DataTypes.STRING,
         allowNull: true,

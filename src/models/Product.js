@@ -20,6 +20,10 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
       defaultValue: 0, // Jika tidak diisi, stok akan bernilai 0
     },
+    categoryId: {
+      type: DataTypes.INTEGER,
+      allowNull: true, // Allow null values
+    },
   });
 
   // 2. Definisikan hubungan/asosiasi dengan model lain
@@ -36,6 +40,12 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: "userId",
       as: "seller",
       onDelete: "CASCADE",
+    });
+
+    // A Product belongs to a Category
+    Product.belongsTo(models.Category, {
+      foreignKey: 'categoryId',
+      as: 'category',
     });
   };
 

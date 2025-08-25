@@ -62,7 +62,7 @@
           // Tampilkan menu berdasarkan peran
           const linksContainer = document.getElementById("role-specific-links");
           if (user.role === "penjual" || user.role === "admin") {
-            linksContainer.innerHTML += `<a href="/add-product" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">Tambah Produk</a>`;
+            
           } else if (user.role === "pembeli") {
             linksContainer.innerHTML += `<a href="/become-seller" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Daftar Sebagai Penjual</a>`;
           }

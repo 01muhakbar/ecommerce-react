@@ -1,0 +1,246 @@
+<%- include('partials/header') %>
+
+<div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <h1 class="text-3xl font-bold text-gray-800 mb-4">Tambahkan Produk Baru</h1>
+
+    <div class="mb-6 border-b border-gray-200">
+        <ul class="flex flex-wrap -mb-px text-sm font-medium text-center" id="product-form-tabs" role="tablist">
+            <li class="mr-2" role="presentation">
+                <button class="inline-block p-4 border-b-2 rounded-t-lg active-tab" id="info-produk-tab" type="button" role="tab" aria-controls="info-produk" aria-selected="true">1. Informasi Produk</button>
+            </li>
+            <li class="mr-2" role="presentation">
+                <button class="inline-block p-4 border-b-2 border-transparent rounded-t-lg hover:text-gray-600 hover:border-gray-300" id="info-penjualan-tab" type="button" role="tab" aria-controls="info-penjualan" aria-selected="false">2. Informasi Penjualan</button>
+            </li>
+            <li class="mr-2" role="presentation">
+                <button class="inline-block p-4 border-b-2 border-transparent rounded-t-lg hover:text-gray-600 hover:border-gray-300" id="pengiriman-tab" type="button" role="tab" aria-controls="pengiriman" aria-selected="false">3. Pengiriman</button>
+            </li>
+            <li role="presentation">
+                <button class="inline-block p-4 border-b-2 border-transparent rounded-t-lg hover:text-gray-600 hover:border-gray-300" id="lainnya-tab" type="button" role="tab" aria-controls="lainnya" aria-selected="false">4. Lainnya</button>
+            </li>
+        </ul>
+    </div>
+
+    <form action="/api/v1/products" method="POST" class="bg-white p-6 rounded-lg shadow-md">
+        <!-- Informasi Produk -->
+        <section class="mb-6">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">1. Informasi Produk</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="product-name" class="block text-sm font-medium text-gray-700">Nama Produk</label>
+                    <input type="text" id="product-name" name="name" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
+                </div>
+                <div>
+                    <label for="description" class="block text-sm font-medium text-gray-700">Deskripsi</label>
+                    <textarea id="description" name="description" rows="4" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+                </div>
+                <div>
+                    <label for="category" class="block text-sm font-medium text-gray-700">Kategori</label>
+                    <select id="category" name="categoryId" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                        <% categories.forEach(category => { %>
+                            <option value="<%= category.id %>"><%= category.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+                <div class="col-span-full">
+                    <label class="block text-sm font-medium text-gray-700">Foto Produk <span class="text-red-500">*</span></label>
+                    <div class="mt-1 flex items-center space-x-4">
+                        <input type="file" id="product-images" name="productImages" accept="image/*" multiple class="hidden">
+                        <label for="product-images" class="cursor-pointer bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
+                            Tambahkan Foto (<span id="image-count">0</span>/9)
+                        </label>
+                        <div class="flex items-center space-x-2">
+                            <input type="radio" id="ratio-1-1" name="imageRatio" value="1:1" checked>
+                            <label for="ratio-1-1">Foto 1:1</label>
+                            <input type="radio" id="ratio-3-4" name="imageRatio" value="3:4">
+                            <label for="ratio-3-4">Foto 3:4</label>
+                        </div>
+                        <button type="button" id="view-example-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded">
+                            Lihat Contoh
+                        </button>
+                    </div>
+                    <div id="image-preview-container" class="mt-4 grid grid-cols-3 gap-4">
+                        <!-- Image previews will be inserted here -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Informasi Penjualan -->
+        <section class="mb-6" id="info-penjualan">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">2. Informasi Penjualan</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="price" class="block text-sm font-medium text-gray-700">Harga</label>
+                    <input type="number" id="price" name="price" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required min="0">
+                </div>
+                <div>
+                    <label for="stock" class="block text-sm font-medium text-gray-700">Stok</label>
+                    <input type="number" id="stock" name="stock" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required min="0">
+                </div>
+            </div>
+        </section>
+
+        <!-- Pengiriman -->
+        <section class="mb-6" id="pengiriman">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">3. Pengiriman</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="weight" class="block text-sm font-medium text-gray-700">Berat (gram)</label>
+                    <input type="number" id="weight" name="weight" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" min="0">
+                </div>
+                <div>
+                    <label for="dimensions" class="block text-sm font-medium text-gray-700">Dimensi (PxLxT cm)</label>
+                    <input type="text" id="dimensions" name="dimensions" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="Contoh: 10x5x2">
+                </div>
+            </div>
+        </section>
+
+        <!-- Lainnya -->
+        <section class="mb-6" id="lainnya">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">4. Lainnya</h2>
+            <div>
+                <label for="notes" class="block text-sm font-medium text-gray-700">Catatan Tambahan</label>
+                <textarea id="notes" name="notes" rows="3" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+            </div>
+        </section>
+
+        <!-- Tombol Aksi -->
+        <div class="flex justify-end space-x-4">
+            <button type="button" onclick="window.history.back()" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded">
+                Kembali
+            </button>
+            <button type="submit" name="action" value="archive" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded">
+                Simpan & Arsipkan
+            </button>
+            <button type="submit" name="action" value="publish" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
+                Simpan & Tampilkan
+            </button>
+        </div>
+    </form>
+</div>
+
+<%- include('partials/footer') %>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        console.log("DOM Content Loaded.");
+
+        const productImagesInput = document.getElementById("product-images");
+        const imageCountSpan = document.getElementById("image-count");
+        const imagePreviewContainer = document.getElementById("image-preview-container");
+        const viewExampleBtn = document.getElementById("view-example-btn");
+        const MAX_IMAGES = 9;
+
+        let uploadedFiles = [];
+
+        productImagesInput.addEventListener("change", (event) => {
+            const files = Array.from(event.target.files);
+            
+            // Filter out non-image files and limit to MAX_IMAGES
+            const newImageFiles = files.filter(file => file.type.startsWith('image/') && uploadedFiles.length < MAX_IMAGES);
+
+            if (newImageFiles.length === 0 && files.length > 0) {
+                alert("Hanya file gambar yang diizinkan atau batas maksimum 9 gambar telah tercapai.");
+                return;
+            }
+
+            newImageFiles.forEach(file => {
+                if (uploadedFiles.length < MAX_IMAGES) {
+                    uploadedFiles.push(file);
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const imgDiv = document.createElement("div");
+                        imgDiv.className = "relative group";
+                        imgDiv.innerHTML = `
+                            <img src="${e.target.result}" class="w-full h-32 object-cover rounded-md border border-gray-300">
+                            <button type="button" class="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity remove-image-btn" data-file-name="${file.name}">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        `;
+                        imagePreviewContainer.appendChild(imgDiv);
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+
+            updateImageCount();
+            // Clear the input so the same file can be selected again if needed
+            productImagesInput.value = '';
+        });
+
+        imagePreviewContainer.addEventListener("click", (event) => {
+            if (event.target.closest(".remove-image-btn")) {
+                const button = event.target.closest(".remove-image-btn");
+                const fileNameToRemove = button.dataset.fileName;
+                uploadedFiles = uploadedFiles.filter(file => file.name !== fileNameToRemove);
+                button.closest(".relative").remove();
+                updateImageCount();
+            }
+        });
+
+        viewExampleBtn.addEventListener("click", () => {
+            alert("Contoh tampilan foto produk akan ditampilkan di sini.");
+            // In a real application, you would open a modal or show a predefined image.
+        });
+
+        function updateImageCount() {
+            imageCountSpan.textContent = uploadedFiles.length;
+        }
+
+        // Tab functionality
+        const tabButtons = document.querySelectorAll('#product-form-tabs button');
+        const tabSections = document.querySelectorAll('form > section'); // Select direct child sections of the form
+
+        console.log("Tab Buttons found:", tabButtons.length);
+        console.log("Tab Sections found:", tabSections.length);
+
+        tabButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                console.log("Tab button clicked:", button.id);
+
+                // Deactivate current active tab
+                tabButtons.forEach(btn => {
+                    btn.classList.remove('active-tab');
+                    btn.classList.remove('border-b-2');
+                    btn.classList.remove('rounded-t-lg');
+                    btn.classList.add('border-transparent');
+                    btn.classList.add('hover:text-gray-600');
+                    btn.classList.add('hover:border-gray-300');
+                    btn.setAttribute('aria-selected', 'false');
+                });
+
+                // Activate clicked tab
+                button.classList.add('active-tab');
+                button.classList.add('border-b-2');
+                button.classList.add('rounded-t-lg');
+                button.classList.remove('border-transparent');
+                button.classList.remove('hover:text-gray-600');
+                button.classList.remove('hover:border-gray-300');
+                button.setAttribute('aria-selected', 'true');
+
+                // Hide all sections
+                tabSections.forEach(section => {
+                    section.style.display = 'none';
+                });
+
+                // Show the corresponding section
+                const targetId = button.getAttribute('aria-controls');
+                const targetSection = document.getElementById(targetId);
+                console.log("Target ID:", targetId);
+                console.log("Target Section:", targetSection);
+                if (targetSection) {
+                    targetSection.style.display = 'block';
+                }
+            });
+        });
+
+        // Initialize: show the first tab content
+        if (tabButtons.length > 0) {
+            console.log("Initializing first tab click.");
+            tabButtons[0].click(); // Simulate a click on the first tab to show its content
+        }
+    });
+
+<%- include('partials/footer') %>

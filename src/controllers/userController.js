@@ -1,6 +1,7 @@
 // src/controllers/userController.js
 
 const db = require("../models");
+const { Op } = require("sequelize");
 
 // Renders the correct dashboard based on user role
 exports.renderDashboard = (req, res) => {
@@ -12,12 +13,12 @@ exports.renderDashboard = (req, res) => {
     messages: {}, // For any flash messages
   };
 
-  if (user.role === 'admin') {
-    res.render('admin/dashboard-admin', viewData);
-  } else if (user.role === 'penjual') {
-    res.render('dashboard-seller', viewData);
+  if (user.role === "admin") {
+    res.render("admin/dashboard-admin", viewData);
+  } else if (user.role === "penjual") {
+    res.render("dashboard-seller", viewData);
   } else {
-    res.render('dashboard-pembeli', viewData);
+    res.render("dashboard-pembeli", viewData);
   }
 };
 
@@ -93,13 +94,143 @@ exports.becomeSeller = async (req, res) => {
   }
 };
 
+// --- User Profile Management Functions ---
+exports.renderProfilePage = async (req, res) => {
+  try {
+    const user = await db.User.findByPk(req.user.id, {
+      attributes: {
+        exclude: [
+          "password",
+          "refreshToken",
+          "passwordResetToken",
+          "passwordResetExpires",
+        ],
+      },
+    });
+
+    if (!user) {
+      return res.status(404).render("error", { message: "User not found." }); // Render an error page
+    }
+    console.log("RENDER PROFILE PAGE: User data retrieved:", user.toJSON()); // Log user data retrieved
+
+    res.render("user/profile", {
+      user,
+      isLoggedIn: true,
+      messages: {},
+    });
+  } catch (error) {
+    console.error("RENDER PROFILE PAGE ERROR:", error);
+    res
+      .status(500)
+      .render("error", {
+        message: "Failed to load profile page.",
+        error: error.message,
+      });
+  }
+};
+
+exports.updateMyProfile = async (req, res) => {
+  try {
+    const { name, email, phoneNumber, gender, dateOfBirth, storeName } =
+      req.body;
+    console.log("UPDATE MY PROFILE: Received body:", req.body); // Log received data
+
+    const user = await db.User.findByPk(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({
+        status: "fail",
+        message: "User not found.",
+      });
+    }
+
+    console.log("UPDATE MY PROFILE: User before update:", user.toJSON()); // Log user data before update
+
+    // Update fields if provided
+    if (name) user.name = name;
+    if (email) user.email = email;
+    if (phoneNumber) user.phoneNumber = phoneNumber;
+    if (gender) user.gender = gender;
+    if (dateOfBirth) user.dateOfBirth = dateOfBirth;
+    if (storeName) user.storeName = storeName; // Only update if user is a seller or becoming one
+
+    await user.save();
+    console.log("UPDATE MY PROFILE: User after save:", user.toJSON()); // Log user data after save
+
+    res.status(200).json({
+      status: "success",
+      message: "Profil berhasil diperbarui.",
+      data: {
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          phoneNumber: user.phoneNumber,
+          gender: user.gender,
+          dateOfBirth: user.dateOfBirth,
+          storeName: user.storeName,
+          role: user.role, // Include role for context
+        },
+      },
+    });
+  } catch (error) {
+    console.error("UPDATE MY PROFILE ERROR:", error);
+    // Handle duplicate email error
+    if (error.name === "SequelizeUniqueConstraintError") {
+      return res.status(400).json({
+        status: "fail",
+        message: "Email sudah terdaftar.",
+      });
+    }
+    res.status(500).json({
+      status: "error",
+      message: "Terjadi kesalahan saat memperbarui profil.",
+      error: error.message,
+    });
+  }
+};
+
 // --- Admin User Management Functions ---
 
 // Get all users (Admin only)
 exports.getAllUsers = async (req, res) => {
   try {
+    res.set(
+      "Cache-Control",
+      "no-store, no-cache, must-revalidate, proxy-revalidate"
+    );
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
+
+    let where = {};
+    const { role, isActive, gender, search } = req.query;
+
+    if (role) {
+      where.role = role;
+    }
+    if (isActive !== undefined) {
+      where.isActive = isActive === "true";
+    }
+    if (gender) {
+      where.gender = gender;
+    }
+    if (search) {
+      where[Op.or] = [
+        { name: { [Op.like]: `%${search}%` } },
+        { email: { [Op.like]: `%${search}%` } },
+      ];
+    }
+
     const users = await db.User.findAll({
-      attributes: { exclude: ["password", "refreshToken", "passwordResetToken", "passwordResetExpires"] },
+      where,
+      attributes: {
+        exclude: [
+          "password",
+          "refreshToken",
+          "passwordResetToken",
+          "passwordResetExpires",
+        ],
+      },
     });
     res.status(200).json({
       status: "success",
@@ -123,7 +254,14 @@ exports.getUserById = async (req, res) => {
   try {
     const userId = parseInt(req.params.id, 10); // Parse ID to integer
     const user = await db.User.findByPk(userId, {
-      attributes: { exclude: ["password", "refreshToken", "passwordResetToken", "passwordResetExpires"] },
+      attributes: {
+        exclude: [
+          "password",
+          "refreshToken",
+          "passwordResetToken",
+          "passwordResetExpires",
+        ],
+      },
     });
 
     if (!user) {
@@ -152,7 +290,8 @@ exports.getUserById = async (req, res) => {
 // Update a user by ID (Admin only)
 exports.updateUser = async (req, res) => {
   try {
-    const { name, email, role, storeName } = req.body;
+    const { name, email, role, storeName, phoneNumber, gender, dateOfBirth } =
+      req.body; // Added new fields
     const user = await db.User.findByPk(req.params.id);
 
     if (!user) {
@@ -167,6 +306,9 @@ exports.updateUser = async (req, res) => {
     if (email) user.email = email;
     if (role) user.role = role;
     if (storeName) user.storeName = storeName;
+    if (phoneNumber) user.phoneNumber = phoneNumber; // Added
+    if (gender) user.gender = gender; // Added
+    if (dateOfBirth) user.dateOfBirth = dateOfBirth; // Added
 
     await user.save();
 
@@ -178,6 +320,9 @@ exports.updateUser = async (req, res) => {
           id: user.id,
           name: user.name,
           email: user.email,
+          phoneNumber: user.phoneNumber, // Added
+          gender: user.gender, // Added
+          dateOfBirth: user.dateOfBirth, // Added
           role: user.role,
           storeName: user.storeName,
         },
@@ -232,7 +377,7 @@ exports.updateUserStatus = async (req, res) => {
     console.log("Received isActive:", isActive);
     console.log("Type of isActive:", typeof isActive);
 
-    if (typeof isActive !== 'boolean') {
+    if (typeof isActive !== "boolean") {
       console.log("Error: isActive is not a boolean.");
       return res.status(400).json({
         status: "fail",
@@ -259,7 +404,9 @@ exports.updateUserStatus = async (req, res) => {
 
     res.status(200).json({
       status: "success",
-      message: `Status pengguna berhasil diperbarui menjadi ${isActive ? 'aktif' : 'nonaktif'}.`,
+      message: `Status pengguna berhasil diperbarui menjadi ${
+        isActive ? "aktif" : "nonaktif"
+      }.`,
       data: {
         user: {
           id: user.id,
@@ -299,7 +446,7 @@ exports.createUser = async (req, res) => {
       email,
       password,
       role: role || "pembeli", // Default to 'pembeli' if not provided
-      storeName: role === 'penjual' ? storeName : null, // Only set storeName if role is 'penjual'
+      storeName: role === "penjual" ? storeName : null, // Only set storeName if role is 'penjual'
     });
 
     res.status(201).json({
@@ -328,5 +475,96 @@ exports.createUser = async (req, res) => {
       status: "error",
       message: "Terjadi kesalahan pada server saat membuat pengguna.",
     });
+  }
+};
+
+// Get all sellers (Admin only)
+exports.getAllSellers = async (req, res) => {
+  try {
+    const sellers = await db.User.findAll({
+      where: {
+        role: "penjual",
+      },
+      attributes: ["id", "name"], // Only get id and name
+    });
+    res.status(200).json({
+      status: "success",
+      results: sellers.length,
+      data: {
+        sellers,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: "error",
+      message: "Error fetching sellers.",
+      error: error.message,
+    });
+  }
+};
+
+exports.renderAdminUsersPage = async (req, res) => {
+  try {
+    const { role: selectedRole } = req.query; // Get selected role from query parameters
+
+    // Fetch initial users (can be filtered later by client-side JS)
+    const users = await db.User.findAll({
+      attributes: {
+        exclude: [
+          "password",
+          "refreshToken",
+          "passwordResetToken",
+          "passwordResetExpires",
+        ],
+      },
+    });
+
+    // Define filter options (roles, statuses, genders)
+    const roles = ["admin", "penjual", "pembeli"]; // Example roles
+    const statuses = [
+      { value: "true", label: "Active" },
+      { value: "false", label: "Inactive" },
+    ];
+    const genders = ["Laki-laki", "Perempuan"]; // Example genders
+
+    res.render("admin/users", {
+      users,
+      roles,
+      statuses,
+      genders,
+      selectedRole, // Pass the selected role to the template
+      isLoggedIn: true,
+      user: req.user,
+      messages: {},
+    });
+  } catch (error) {
+    console.error("RENDER ADMIN USERS PAGE ERROR:", error);
+    res.status(500).send("Error loading admin users page: " + error.message);
+  }
+};
+
+// Utility function to update user role by email
+exports.updateUserRoleByEmail = async (email, newRole) => {
+  try {
+    const user = await db.User.findOne({ where: { email: email } });
+
+    if (!user) {
+      return { success: false, message: "Pengguna tidak ditemukan." };
+    }
+
+    user.role = newRole;
+    await user.save();
+
+    return {
+      success: true,
+      message: `Role pengguna ${email} berhasil diperbarui menjadi ${newRole}.`,
+    };
+  } catch (error) {
+    console.error("UPDATE USER ROLE BY EMAIL ERROR:", error);
+    return {
+      success: false,
+      message: "Terjadi kesalahan saat memperbarui role pengguna.",
+      error: error.message,
+    };
   }
 };

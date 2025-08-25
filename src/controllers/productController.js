@@ -1,6 +1,7 @@
 // src/controllers/productController.js
 
 const db = require("../models");
+const { Op } = require('sequelize');
 
 // Fungsi baru untuk merender halaman produk
 exports.renderAllProducts = async (req, res) => {
@@ -20,13 +21,21 @@ exports.renderAllProducts = async (req, res) => {
   }
 };
 
+
+
 exports.createProduct = async (req, res) => {
   try {
-    const { name, description, price, stock } = req.body;
+    const { name, description, price, stock, categoryId } = req.body;
     const userId = req.user.id; // Get user ID from authenticated user
+
+    console.log("--- createProduct Debug ---");
+    console.log("Received req.body:", req.body);
+    console.log("Extracted userId:", userId);
+    console.log("Extracted categoryId:", categoryId);
 
     // Validasi dasar
     if (!name || !price || stock === undefined) {
+      console.log("Validation failed: Name, price, or stock missing.");
       return res
         .status(400)
         .json({ message: "Name, price, and stock are required." });
@@ -38,12 +47,16 @@ exports.createProduct = async (req, res) => {
       price,
       stock,
       userId, // Associate product with the user
+      categoryId,
     });
+
+    console.log("Product created successfully:", newProduct.toJSON());
 
     res
       .status(201)
       .json({ message: "Product created successfully", product: newProduct });
   } catch (error) {
+    console.error("CREATE PRODUCT ERROR:", error); // More detailed error logging
     res
       .status(500)
       .json({ message: "Failed to create product", error: error.message });
@@ -53,9 +66,42 @@ exports.createProduct = async (req, res) => {
 // Fungsi untuk mengambil semua produk
 exports.getAllProducts = async (req, res) => {
   try {
-    const products = await db.Product.findAll();
-    res.status(200).json(products);
+    let where = {};
+    const { categoryId, userId, search } = req.query; // Destructure search
+
+    if (categoryId) {
+      where.categoryId = categoryId;
+    }
+    if (userId) { // This is the seller filter
+      where.userId = userId;
+    }
+    if (search) { // New search condition
+      where.name = { [Op.like]: `%${search}%` };
+    }
+
+    console.log("--- getAllProducts Debug ---");
+    console.log("Received query parameters:", req.query);
+    console.log("Constructed where clause:", where);
+
+    const products = await db.Product.findAll({
+      where,
+      include: [
+        { model: db.User, as: 'seller', attributes: ['name'] },
+        { model: db.Category, as: 'category', attributes: ['name'] }
+      ],
+    });
+
+    console.log("Number of products found:", products.length);
+
+    res.status(200).json({
+      status: "success",
+      results: products.length,
+      data: {
+        products: products,
+      },
+    });
   } catch (error) {
+    console.error("GET ALL PRODUCTS ERROR:", error); // More detailed error logging
     res
       .status(500)
       .json({ message: "Failed to fetch products", error: error.message });
@@ -118,39 +164,94 @@ exports.getEditProductPage = async (req, res) => {
   }
 };
 
+// Show the admin edit product page
+exports.renderAdminEditProductPage = async (req, res) => {
+  try {
+    const product = await db.Product.findByPk(req.params.id, {
+      include: [{ model: db.Category, as: 'category' }]
+    });
+    const categories = await db.Category.findAll();
+    if (!product) {
+      return res.status(404).send("Product not found.");
+    }
+    res.render('admin/edit-product', {
+      product,
+      categories,
+      isLoggedIn: true, // Assuming admin is logged in
+      user: req.user, // Add this line
+      messages: {},
+    });
+  } catch (error) {
+    res.status(500).send("Error loading product for editing: " + error.message);
+  }
+};
+
 // Update a product
 exports.updateProduct = async (req, res) => {
   try {
-    const { name, description, price, stock } = req.body;
-    const product = await db.Product.findOne({
-      where: { id: req.params.id, userId: req.user.id },
-    });
+    const { id } = req.params;
+    const { name, description, price, stock, categoryId } = req.body;
+
+    const product = await db.Product.findByPk(id);
 
     if (!product) {
-      return res.status(404).send("Product not found or you don't have permission to edit it.");
+      return res.status(404).json({ message: "Product not found." });
     }
 
-    await product.update({ name, description, price, stock });
-    res.redirect('/dashboard/seller/products');
+    await product.update({ name, description, price, stock, categoryId });
+    res.status(200).json({ message: "Product updated successfully.", product });
   } catch (error) {
-    res.status(500).send("Error updating product: " + error.message);
+    res.status(500).json({ message: "Failed to update product", error: error.message });
   }
 };
+
 
 // Delete a product
 exports.deleteProduct = async (req, res) => {
   try {
-    const product = await db.Product.findOne({
-      where: { id: req.params.id, userId: req.user.id },
-    });
+    const { id } = req.params;
+    const product = await db.Product.findByPk(id);
 
     if (!product) {
-      return res.status(404).send("Product not found or you don't have permission to delete it.");
+      return res.status(404).json({ message: "Product not found." });
     }
 
     await product.destroy();
-    res.redirect('/dashboard/seller/products');
+    res.status(204).json({ message: "Product deleted successfully." });
   } catch (error) {
-    res.status(500).send("Error deleting product: " + error.message);
+    res.status(500).json({ message: "Failed to delete product", error: error.message });
+  }
+};
+
+exports.renderAdminProductsPage = async (req, res) => {
+  try {
+    const categories = await db.Category.findAll();
+    const sellers = await db.User.findAll({
+      where: { role: 'penjual' },
+      attributes: ['id', 'name']
+    });
+    res.render('admin/products', {
+      categories,
+      sellers,
+      isLoggedIn: true,
+      user: req.user,
+      messages: {},
+    });
+  } catch (error) {
+    res.status(500).send("Error loading page: " + error.message);
+  }
+};
+
+exports.renderAddProductPageAdmin = async (req, res) => {
+  try {
+    const categories = await db.Category.findAll();
+    res.render("add-new-product", {
+      user: req.user,
+      isLoggedIn: true,
+      categories: categories,
+      messages: {},
+    });
+  } catch (error) {
+    res.status(500).send("<h1>Error loading page</h1><p>" + error.message + "</p>");
   }
 };

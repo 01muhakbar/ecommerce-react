@@ -34,6 +34,23 @@
           <input type="email" id="email" name="email" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
         </div>
         <div>
+          <label for="phoneNumber" class="block text-sm font-medium text-gray-700">Nomor Telepon</label>
+          <input type="tel" id="phoneNumber" name="phoneNumber" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+        </div>
+        <div>
+          <label for="gender" class="block text-sm font-medium text-gray-700">Jenis Kelamin</label>
+          <select id="gender" name="gender" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+            <option value="">Pilih Jenis Kelamin</option>
+            <option value="Laki-laki">Laki-laki</option>
+            <option value="Perempuan">Perempuan</option>
+            <option value="Lainnya">Lainnya</option>
+          </select>
+        </div>
+        <div>
+          <label for="dateOfBirth" class="block text-sm font-medium text-gray-700">Tanggal Lahir</label>
+          <input type="date" id="dateOfBirth" name="dateOfBirth" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+        </div>
+        <div>
           <label for="role" class="block text-sm font-medium text-gray-700">Role</label>
           <select id="role" name="role" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
             <option value="pembeli">Pembeli</option>
@@ -83,6 +100,9 @@
           document.getElementById('userId').value = user.id;
           document.getElementById('name').value = user.name;
           document.getElementById('email').value = user.email;
+          document.getElementById('phoneNumber').value = user.phoneNumber || '';
+          document.getElementById('gender').value = user.gender || '';
+          document.getElementById('dateOfBirth').value = user.dateOfBirth ? new Date(user.dateOfBirth).toISOString().split('T')[0] : '';
           document.getElementById('role').value = user.role;
           document.getElementById('storeName').value = user.storeName || '';
 
@@ -98,6 +118,9 @@
           const updatedData = {
             name: document.getElementById('name').value,
             email: document.getElementById('email').value,
+            phoneNumber: document.getElementById('phoneNumber').value,
+            gender: document.getElementById('gender').value,
+            dateOfBirth: document.getElementById('dateOfBirth').value,
             role: document.getElementById('role').value,
             storeName: document.getElementById('storeName').value,
           };

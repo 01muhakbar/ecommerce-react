@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Manajemen Pengguna Admin</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       body {
@@ -25,21 +27,65 @@
         </a>
       </div>
 
+      <!-- Search and Filter Section -->
+      <div class="mb-6 flex items-end space-x-4">
+        <!-- Search Input -->
+        <div class="flex-1">
+          <label for="search-input" class="block text-sm font-medium text-gray-700">Cari Pengguna:</label>
+          <input type="text" id="search-input" placeholder="Nama atau Email" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+        </div>
+
+        <!-- Role Filter -->
+        <div class="flex-1">
+          <label for="role-filter" class="block text-sm font-medium text-gray-700">Filter berdasarkan Role:</label>
+          <select id="role-filter" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md shadow-sm">
+            <option value="" <%= selectedRole === '' ? 'selected' : '' %>>Semua Role</option>
+            <% roles.forEach(role => { %>
+              <option value="<%= role %>" <%= selectedRole === role ? 'selected' : '' %>><%= role %></option>
+            <% }); %>
+          </select>
+        </div>
+
+        <!-- Status Filter -->
+        <div class="flex-1">
+          <label for="status-filter" class="block text-sm font-medium text-gray-700">Filter berdasarkan Status:</label>
+          <select id="status-filter" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md shadow-sm">
+            <option value="">Semua Status</option>
+            <% statuses.forEach(status => { %>
+              <option value="<%= status.value %>"><%= status.label %></option>
+            <% }); %>
+          </select>
+        </div>
+
+        <!-- Gender Filter -->
+        <div class="flex-1">
+          <label for="gender-filter" class="block text-sm font-medium text-gray-700">Filter berdasarkan Jenis Kelamin:</label>
+          <select id="gender-filter" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md shadow-sm">
+            <option value="">Semua Jenis Kelamin</option>
+            <% genders.forEach(gender => { %>
+              <option value="<%= gender %>"><%= gender %></option>
+            <% }); %>
+          </select>
+        </div>
+      </div>
+
       <div id="users-list" class="overflow-x-auto">
-        <table class="min-w-full bg-white border border-gray-200">
+        <table class="min-w-full table-auto bg-white rounded-lg shadow-md">
           <thead>
-            <tr>
-              <th class="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">ID</th>
-              <th class="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Nama</th>
-              <th class="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Email</th>
-              <th class="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Role</th>
-              <th class="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Nama Toko</th>
-              <th class="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Status</th>
-              <th class="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Status</th>
-              <th class="py-2 px-4 border-b text-left text-sm font-semibold text-gray-600">Aksi</th>
+            <tr class="bg-gray-200 text-gray-700 uppercase text-sm leading-normal">
+              <th class="py-3 px-6 text-left">ID</th>
+              <th class="py-3 px-6 text-left">Nama</th>
+              <th class="py-3 px-6 text-left">Email</th>
+              <th class="py-3 px-6 text-left">Nomor Telepon</th>
+              <th class="py-3 px-6 text-left">Jenis Kelamin</th>
+              <th class="py-3 px-6 text-left">Tanggal Lahir</th>
+              <th class="py-3 px-6 text-left">Role</th>
+              <th class="py-3 px-6 text-left">Nama Toko</th>
+              <th class="py-3 px-6 text-left">Status</th>
+              <th class="py-3 px-6 text-center">Aksi</th>
             </tr>
           </thead>
-          <tbody id="users-table-body">
+          <tbody id="users-table-body" class="text-gray-600 text-sm font-light">
             <!-- User data will be loaded here -->
           </tbody>
         </table>
@@ -55,67 +101,142 @@
         const loadingMessage = document.getElementById("loading-message");
         const errorMessage = document.getElementById("error-message");
 
-        try {
-          const response = await fetch("/api/v1/users", {
-            cache: "no-store", // Bypass cache
-          });
+        const searchInput = document.getElementById("search-input");
+        const roleFilter = document.getElementById("role-filter");
+        const statusFilter = document.getElementById("status-filter");
+        const genderFilter = document.getElementById("gender-filter");
 
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(
-              errorData.message || "Gagal mengambil data pengguna."
-            );
+        const availableRoles = <%- JSON.stringify(roles) %>; // Make roles available in client-side JS
+
+        // Function to fetch and render users based on filters
+        const fetchAndRenderUsers = async () => {
+          loadingMessage.style.display = "block";
+          errorMessage.style.display = "none";
+          usersTableBody.innerHTML = ''; // Clear existing users
+
+          const urlParams = new URLSearchParams(window.location.search);
+          const initialRole = urlParams.get('role');
+          if (initialRole) {
+            roleFilter.value = initialRole;
           }
 
-          const data = await response.json();
-          loadingMessage.style.display = "none";
+          const searchTerm = searchInput.value;
+          const selectedRole = roleFilter.value;
+          const selectedStatus = statusFilter.value;
+          const selectedGender = genderFilter.value;
 
-          if (data.data.users.length === 0) {
-            usersTableBody.innerHTML = `<tr><td colspan="7" class="py-2 px-4 text-center text-gray-500">Tidak ada pengguna ditemukan.</td></tr>`;
-            return;
+          const queryParams = new URLSearchParams();
+          if (searchTerm) queryParams.append("search", searchTerm);
+          if (selectedRole) queryParams.append("role", selectedRole);
+          if (selectedStatus) queryParams.append("isActive", selectedStatus);
+          if (selectedGender) queryParams.append("gender", selectedGender);
+
+          const url = `/api/v1/users?${queryParams.toString()}`;
+
+          try {
+            const response = await fetch(url, {
+              cache: "no-store", // Bypass cache
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(
+                errorData.message || "Gagal mengambil data pengguna."
+              );
+            }
+
+            const data = await response.json();
+            loadingMessage.style.display = "none";
+
+            if (data.data.users.length === 0) {
+              usersTableBody.innerHTML = `<tr><td colspan="10" class="py-3 px-6 text-center text-gray-500">Tidak ada pengguna ditemukan.</td></tr>`;
+              return;
+            }
+
+            data.data.users.forEach((user) => {
+              const row = `
+                <tr class="border-b border-gray-200 hover:bg-gray-100">
+                  <td class="py-3 px-6 text-left whitespace-nowrap">${
+                    user.id
+                  }</td>
+                  <td class="py-3 px-6 text-left">${
+                    user.name
+                  }</td>
+                  <td class="py-3 px-6 text-left">${
+                    user.email
+                  }</td>
+                  <td class="py-3 px-6 text-left">${
+                    user.phoneNumber || "-"
+                  }</td>
+                  <td class="py-3 px-6 text-left" style="min-width: 180px;">
+                    <select onchange="updateUserGender(${user.id}, this.value)" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                      <option value="Laki-laki" ${user.gender === 'Laki-laki' ? 'selected' : ''}>Laki-laki</option>
+                      <option value="Perempuan" ${user.gender === 'Perempuan' ? 'selected' : ''}>Perempuan</option>
+                    </select>
+                  </td>
+                  <td class="py-3 px-6 text-left">${
+                    user.dateOfBirth ? new Date(user.dateOfBirth).toLocaleDateString('id-ID') : "-"
+                  }</td>
+                  <td class="py-3 px-6 text-left" style="min-width: 150px;">
+                    <select onchange="updateUserRole(${user.id}, this.value)" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                      ${availableRoles.map(roleOption => `
+                        <option value="${roleOption}" ${user.role === roleOption ? 'selected' : ''}>${roleOption}</option>
+                      `).join('')}
+                    </select>
+                  </td>
+                  <td class="py-3 px-6 text-left">${
+                    user.storeName || "-"
+                  }</td>
+                  <td class="py-3 px-6 text-left">
+                    <span class="${user.isActive ? 'bg-green-200 text-green-600' : 'bg-red-200 text-red-600'} py-1 px-3 rounded-full text-xs">
+                      ${user.isActive ? 'Aktif' : 'Tidak Aktif'}
+                    </span>
+                  </td>
+                  <td class="py-3 px-6 text-center">
+                    <div class="flex item-center justify-center">
+                      <button onclick="viewUser(${user.id})" class="w-4 mr-2 transform hover:text-purple-500 hover:scale-110">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                      </button>
+                      <button onclick="editUser(${user.id})" class="w-4 mr-2 transform hover:text-purple-500 hover:scale-110">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </button>
+                      <button onclick="toggleUserStatus(${user.id}, ${user.isActive})" class="w-4 mr-2 transform hover:text-purple-500 hover:scale-110">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                        </svg>
+                      </button>
+                      <button onclick="deleteUser(${user.id})" class="w-4 mr-2 transform hover:text-purple-500 hover:scale-110">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              `;
+              usersTableBody.innerHTML += row;
+            });
+          } catch (error) {
+            console.error("Error fetching users:", error);
+            loadingMessage.style.display = "none";
+            errorMessage.textContent = `Error: ${error.message}. Pastikan Anda login sebagai admin.`;
+            errorMessage.style.display = "block";
           }
+        };
 
-          data.data.users.forEach((user) => {
-            const row = `
-              <tr>
-                <td class="py-2 px-4 border-b text-sm text-gray-700">${
-                  user.id
-                }</td>
-                <td class="py-2 px-4 border-b text-sm text-gray-700">${
-                  user.name
-                }</td>
-                <td class="py-2 px-4 border-b text-sm text-gray-700">${
-                  user.email
-                }</td>
-                <td class="py-2 px-4 border-b text-sm text-gray-700">${
-                  user.role
-                }</td>
-                <td class="py-2 px-4 border-b text-sm text-gray-700">${
-                  user.storeName || "-"
-                }</td>
-                <td class="py-2 px-4 border-b text-sm text-gray-700">
-                  <span class="${user.isActive ? 'text-green-600' : 'text-red-600'} font-semibold">
-                    ${user.isActive ? 'Aktif' : 'Tidak Aktif'}
-                  </span>
-                </td>
-                <td class="py-2 px-4 border-b text-sm text-gray-700">
-                  <button onclick="viewUser(${user.id})" class="bg-blue-500 hover:bg-blue-700 text-white py-1 px-2 rounded text-xs mr-2">Lihat</button>
-                  <button onclick="editUser(${user.id})" class="bg-yellow-500 hover:bg-yellow-700 text-white py-1 px-2 rounded text-xs mr-2">Edit</button>
-                  <button onclick="toggleUserStatus(${user.id}, ${user.isActive})" class="${user.isActive ? 'bg-red-500 hover:bg-red-700' : 'bg-green-500 hover:bg-green-700'} text-white py-1 px-2 rounded text-xs mr-2">
-                    ${user.isActive ? 'Nonaktifkan' : 'Aktifkan'}
-                  </button>
-                  <button onclick="deleteUser(${user.id})" class="bg-red-500 hover:bg-red-700 text-white py-1 px-2 rounded text-xs">Hapus</button>
-                </td>
-              </tr>
-            `;
-            usersTableBody.innerHTML += row;
-          });
-        } catch (error) {
-          console.error("Error fetching users:", error);
-          loadingMessage.style.display = "none";
-          errorMessage.textContent = `Error: ${error.message}. Pastikan Anda login sebagai admin.`;
-          errorMessage.style.display = "block";
-        }
+        // Initial fetch
+        fetchAndRenderUsers();
+
+        // Add event listeners to filters
+        searchInput.addEventListener("input", fetchAndRenderUsers);
+        roleFilter.addEventListener("change", fetchAndRenderUsers);
+        statusFilter.addEventListener("change", fetchAndRenderUsers);
+        genderFilter.addEventListener("change", fetchAndRenderUsers);
 
         // Handle modal actions
         const confirmDeleteModal = document.getElementById('confirm-delete-modal');
@@ -151,84 +272,147 @@
             alert(`Terjadi kesalahan jaringan saat menghapus user: ${error.message}`);
           }
         });
-      });
 
-      // Global functions for actions
-      function viewUser(id) {
-        alert(
-          `Melihat detail user dengan ID: ${id}. (Implementasi lebih lanjut diperlukan)`
-        );
-        // window.location.href = `/api/v1/users/${id}`;
-      }
+        // Global functions for actions
+        window.viewUser = function(id) {
+          alert(
+            `Melihat detail user dengan ID: ${id}. (Implementasi lebih lanjut diperlukan)`
+          );
+          // window.location.href = `/api/v1/users/${id}`;
+        }
 
-      function editUser(id) {
-        window.location.href = `/dashboard/admin/users/${id}/edit`;
-      }
+        window.editUser = function(id) {
+          window.location.href = `/dashboard/admin/users/${id}/edit`;
+        }
 
-      async function deleteUser(id) {
-        // Show custom confirmation modal
-        document.getElementById("confirm-delete-modal").classList.remove("hidden");
-        document.getElementById("confirm-delete-modal").dataset.userId = id; // Store ID
-      }
+        window.deleteUser = async function(id) {
+          // Show custom confirmation modal
+          document.getElementById("confirm-delete-modal").classList.remove("hidden");
+          document.getElementById("confirm-delete-modal").dataset.userId = id; // Store ID
+        }
 
-      async function toggleUserStatus(id, currentStatus) {
-        const newStatus = !currentStatus;
-        const action = newStatus ? 'mengaktifkan' : 'menonaktifkan';
+        window.toggleUserStatus = async function(id, currentStatus) {
+          const newStatus = !currentStatus;
+          const action = newStatus ? 'mengaktifkan' : 'menonaktifkan';
 
-        const toggleStatusModal = document.getElementById('confirm-toggle-status-modal');
-        const toggleStatusModalTitle = document.getElementById('toggle-status-modal-title');
-        const toggleStatusModalMessage = document.getElementById('toggle-status-modal-message');
-        const confirmToggleStatusButton = document.getElementById('confirm-toggle-status');
-        const cancelToggleStatusButton = document.getElementById('cancel-toggle-status');
+          const toggleStatusModal = document.getElementById('confirm-toggle-status-modal');
+          const toggleStatusModalTitle = document.getElementById('toggle-status-modal-title');
+          const toggleStatusModalMessage = document.getElementById('toggle-status-modal-message');
+          const confirmToggleStatusButton = document.getElementById('confirm-toggle-status');
+          const cancelToggleStatusButton = document.getElementById('cancel-toggle-status');
 
-        toggleStatusModalTitle.textContent = `Konfirmasi ${action === 'mengaktifkan' ? 'Aktivasi' : 'Deaktivasi'} Pengguna`;
-        toggleStatusModalMessage.textContent = `Apakah Anda yakin ingin ${action} pengguna ini?`;
-        toggleStatusModal.dataset.userId = id;
-        toggleStatusModal.dataset.newStatus = newStatus;
-        toggleStatusModal.classList.remove('hidden');
+          toggleStatusModalTitle.textContent = `Konfirmasi ${action === 'mengaktifkan' ? 'Aktivasi' : 'Deaktivasi'} Pengguna`;
+          toggleStatusModalMessage.textContent = `Apakah Anda yakin ingin ${action} pengguna ini?`;
+          toggleStatusModal.dataset.userId = id;
+          toggleStatusModal.dataset.newStatus = newStatus;
+          toggleStatusModal.classList.remove('hidden');
 
-        // Remove previous event listeners to prevent multiple bindings
-        confirmToggleStatusButton.replaceWith(confirmToggleStatusButton.cloneNode(true));
-        cancelToggleStatusButton.replaceWith(cancelToggleStatusButton.cloneNode(true));
+          // Remove previous event listeners to prevent multiple bindings
+          confirmToggleStatusButton.replaceWith(confirmToggleStatusButton.cloneNode(true));
+          cancelToggleStatusButton.replaceWith(cancelToggleStatusButton.cloneNode(true));
 
-        document.getElementById('confirm-toggle-status').addEventListener('click', async function handler() {
-          toggleStatusModal.classList.add('hidden');
-          const userId = toggleStatusModal.dataset.userId;
-          const statusToSet = toggleStatusModal.dataset.newStatus === 'true'; // Convert string to boolean
+          document.getElementById('confirm-toggle-status').addEventListener('click', async function handler() {
+            toggleStatusModal.classList.add('hidden');
+            const userId = toggleStatusModal.dataset.userId;
+            const statusToSet = toggleStatusModal.dataset.newStatus === 'true'; // Convert string to boolean
 
+            try {
+              const response = await fetch(`/api/v1/admin/users/${userId}/toggle-status`, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ isActive: statusToSet }),
+              });
+
+              if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || `Gagal ${action} pengguna.`);
+              }
+
+              const successNotification = document.getElementById('success-notification');
+              successNotification.textContent = `Pengguna berhasil di${action}kan!`;
+              successNotification.classList.remove('hidden');
+              setTimeout(() => {
+                successNotification.classList.add('hidden');
+                window.location.reload(); // Reload to reflect changes
+              }, 3000); // Hide after 3 seconds
+            } catch (error) {
+              console.error(`Error toggling user status:`, error);
+              alert(`Terjadi kesalahan: ${error.message}`);
+            }
+            this.removeEventListener('click', handler); // Remove listener after execution
+          });
+
+          document.getElementById('cancel-toggle-status').addEventListener('click', function handler() {
+            toggleStatusModal.classList.add('hidden');
+            this.removeEventListener('click', handler); // Remove listener after execution
+          });
+        }
+
+        window.updateUserRole = async function(userId, newRole) {
           try {
-            const response = await fetch(`/api/v1/admin/users/${userId}/toggle-status`, {
-              method: 'PUT',
+            const response = await fetch(`/api/v1/users/${userId}`, {
+              method: 'PATCH',
               headers: {
                 'Content-Type': 'application/json',
               },
-              body: JSON.stringify({ isActive: statusToSet }),
+              body: JSON.stringify({ role: newRole }),
             });
 
             if (!response.ok) {
               const errorData = await response.json();
-              throw new Error(errorData.message || `Gagal ${action} pengguna.`);
+              throw new Error(errorData.message || 'Gagal memperbarui role pengguna.');
             }
 
+            // Immediately re-fetch and render users to reflect the change
+            await fetchAndRenderUsers();
+
             const successNotification = document.getElementById('success-notification');
-            successNotification.textContent = `Pengguna berhasil di${action}kan!`;
+            successNotification.textContent = `Role pengguna berhasil diperbarui menjadi ${newRole}!`;
             successNotification.classList.remove('hidden');
             setTimeout(() => {
               successNotification.classList.add('hidden');
-              window.location.reload(); // Reload to reflect changes
-            }, 3000); // Hide after 3 seconds
+            }, 3000);
+
+            // Removed: selectElement.value = newRole; as fetchAndRenderUsers will handle it
           } catch (error) {
-            console.error(`Error toggling user status:`, error);
+            console.error('Error updating user role:', error);
             alert(`Terjadi kesalahan: ${error.message}`);
           }
-          this.removeEventListener('click', handler); // Remove listener after execution
-        });
+        }
 
-        document.getElementById('cancel-toggle-status').addEventListener('click', function handler() {
-          toggleStatusModal.classList.add('hidden');
-          this.removeEventListener('click', handler); // Remove listener after execution
-        });
-      }
+        window.updateUserGender = async function(userId, newGender) {
+          try {
+            const response = await fetch(`/api/v1/users/${userId}`, {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ gender: newGender }),
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.message || 'Gagal memperbarui jenis kelamin pengguna.');
+            }
+
+            // Immediately re-fetch and render users to reflect the change
+            await fetchAndRenderUsers();
+
+            const successNotification = document.getElementById('success-notification');
+            successNotification.textContent = `Jenis kelamin pengguna berhasil diperbarui menjadi ${newGender}!`;
+            successNotification.classList.remove('hidden');
+            setTimeout(() => {
+              successNotification.classList.add('hidden');
+            }, 3000);
+
+          } catch (error) {
+            console.error('Error updating user gender:', error);
+            alert(`Terjadi kesalahan: ${error.message}`);
+          }
+        }
+      });
     </script>
 
     <!-- Custom Confirmation Modal -->
@@ -240,10 +424,10 @@
             <p class="text-sm text-gray-500">Apakah Anda yakin ingin menghapus pengguna ini? Tindakan ini tidak dapat dibatalkan.</p>
           </div>
           <div class="items-center px-4 py-3">
-            <button id="confirm-delete" class="px-4 py-2 bg-red-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 sm:ml-3 sm:w-auto sm:text-sm">
+            <button id="confirm-delete" class="inline-flex justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 sm:ml-3 sm:w-auto sm:text-sm">
               Hapus
             </button>
-            <button id="cancel-delete" class="mt-3 px-4 py-2 bg-gray-300 text-gray-800 text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 sm:mt-0 sm:w-auto sm:text-sm">
+            <button id="cancel-delete" class="mt-3 inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:mt-0 sm:w-auto sm:text-sm">
               Batal
             </button>
           </div>
@@ -260,10 +444,10 @@
             <p id="toggle-status-modal-message" class="text-sm text-gray-500">Apakah Anda yakin ingin melakukan aksi ini?</p>
           </div>
           <div class="items-center px-4 py-3">
-            <button id="confirm-toggle-status" class="px-4 py-2 bg-blue-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 sm:ml-3 sm:w-auto sm:text-sm">
+            <button id="confirm-toggle-status" class="inline-flex justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 sm:ml-3 sm:w-auto sm:text-sm">
               Konfirmasi
             </button>
-            <button id="cancel-toggle-status" class="mt-3 px-4 py-2 bg-gray-300 text-gray-800 text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 sm:mt-0 sm:w-auto sm:text-sm">
+            <button id="cancel-toggle-status" class="mt-3 inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:mt-0 sm:w-auto sm:text-sm">
               Batal
             </button>
           </div>

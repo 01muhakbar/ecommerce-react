@@ -12,6 +12,13 @@ router.get("/me", protect, userController.getUserProfile);
 // Rute untuk user menjadi penjual
 router.patch("/become-seller", protect, userController.becomeSeller);
 
+// --- User Profile Management Routes ---
+router.get("/account/profile", protect, userController.renderProfilePage);
+router.patch("/account/profile", protect, userController.updateMyProfile);
+
+// Route to get all sellers for admin filter
+router.get("/sellers", protect, restrictTo("admin"), userController.getAllSellers);
+
 // --- Admin User Management Routes ---
 router.post("/create", protect, restrictTo("admin"), userController.createUser); // Create a new user (Admin only)
 router.use(protect, restrictTo("admin")); // All routes below this will be protected and restricted to admin
