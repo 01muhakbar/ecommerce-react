@@ -7,23 +7,22 @@
         <div class="p-4 border rounded-lg shadow-sm bg-white">
             <h3 class="text-lg font-semibold text-gray-800 mb-3">Rekomendasi</h3>
             <ul id="recommendation-checklist" class="space-y-2 text-sm">
-                <li id="rec-photo" class="flex items-center text-gray-500">
+                <li id="rec-photo" class="flex items-center text-gray-500 cursor-pointer">
                     <svg class="w-4 h-4 mr-2 text-gray-300" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>
                     Tambahkan minimal 3 foto produk
                 </li>
-                <li id="rec-video" class="flex items-center text-gray-500">
+                <li id="rec-video" class="flex items-center text-gray-500 cursor-pointer">
                     <svg class="w-4 h-4 mr-2 text-gray-300" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>
                     Tambahkan video
                 </li>
-                <li id="rec-name" class="flex items-center text-gray-500">
+                <li id="rec-name" class="flex items-center text-gray-500 cursor-pointer">
                     <svg class="w-4 h-4 mr-2 text-gray-300" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>
                     Nama produk (25-100 karakter)
                 </li>
-                <li id="rec-desc" class="flex items-center text-gray-500">
+                <li id="rec-desc" class="flex items-center text-gray-500 cursor-pointer">
                     <svg class="w-4 h-4 mr-2 text-gray-300" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>
                     Deskripsi (min. 100 karakter)
                 </li>
-                
             </ul>
         </div>
         <!-- Tips Panel -->
@@ -92,7 +91,7 @@
                         <label for="no-gtin" class="ml-2 block text-sm text-gray-900">Produk tanpa GTIN</label>
                     </div>
                 </div>
-                <div class="col-span-full">
+                <div id="product-photo-section" class="col-span-full">
                     <label class="block text-sm font-medium text-gray-700">Foto Produk <span class="text-red-500">*</span></label>
                     <div class="mt-1 flex items-center space-x-4">
                         <input type="file" id="product-images" name="productImages" accept="image/*" multiple class="hidden">
@@ -126,7 +125,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="col-span-full">
+                <div id="product-video-section" class="col-span-full">
                     <label class="block text-sm font-medium text-gray-700">Video Produk</label>
                     <div class="mt-2 flex items-center space-x-4">
                         <input type="radio" id="video-upload-option" name="video-source" value="upload" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded" checked>
@@ -677,25 +676,41 @@
         const MAX_IMAGES = 9;
 
         let uploadedFiles = [];
+        let currentImageIndex = 0;
 
         const defaultPreview = mainPreviewContainer.innerHTML;
 
+        function updateMainPreview() {
+            if (uploadedFiles.length > 0) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    mainPreviewContainer.innerHTML = `
+                        <div class="relative w-full h-full">
+                            <img src="${e.target.result}" alt="Preview Produk" class="w-full h-full object-cover rounded-md">
+                            <div class="absolute inset-0 flex justify-between items-center">
+                                <button type="button" id="prev-image-btn" class="bg-black bg-opacity-50 text-white rounded-full p-2 m-2 hover:bg-opacity-75">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+                                </button>
+                                <button type="button" id="next-image-btn" class="bg-black bg-opacity-50 text-white rounded-full p-2 m-2 hover:bg-opacity-75">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                };
+                reader.readAsDataURL(uploadedFiles[currentImageIndex]);
+            } else {
+                mainPreviewContainer.innerHTML = defaultPreview;
+            }
+        }
+
         productImagesInput.addEventListener("change", (event) => {
             const files = Array.from(event.target.files);
-            
             const newImageFiles = files.filter(file => file.type.startsWith('image/') && uploadedFiles.length < MAX_IMAGES);
 
             if (newImageFiles.length === 0 && files.length > 0) {
                 alert("Hanya file gambar yang diizinkan atau batas maksimum 9 gambar telah tercapai.");
                 return;
-            }
-
-            if (newImageFiles.length > 0 && uploadedFiles.length === 0) {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    mainPreviewContainer.innerHTML = `<img src="${e.target.result}" alt="Preview Produk" class="w-full h-full object-cover rounded-md">`;
-                };
-                reader.readAsDataURL(newImageFiles[0]);
             }
 
             newImageFiles.forEach(file => {
@@ -704,7 +719,7 @@
                     const reader = new FileReader();
                     reader.onload = (e) => {
                         const imgDiv = document.createElement("div");
-                        imgDiv.className = "relative group";
+                        imgDiv.className = "relative group cursor-pointer";
                         imgDiv.setAttribute('data-file-name', file.name);
                         imgDiv.innerHTML = `
                             <img src="${e.target.result}" class="w-full h-32 object-cover rounded-md border border-gray-300">
@@ -721,6 +736,7 @@
             });
 
             updateImageCount();
+            updateMainPreview();
             productImagesInput.value = '';
         });
 
@@ -730,19 +746,34 @@
                 const imageDiv = removeBtn.closest(".relative.group");
                 const fileNameToRemove = imageDiv.dataset.fileName;
                 
+                const removedIndex = uploadedFiles.findIndex(file => file.name === fileNameToRemove);
                 uploadedFiles = uploadedFiles.filter(file => file.name !== fileNameToRemove);
                 imageDiv.remove();
                 updateImageCount();
 
-                if (uploadedFiles.length > 0) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        mainPreviewContainer.innerHTML = `<img src="${e.target.result}" alt="Preview Produk" class="w-full h-full object-cover rounded-md">`;
-                    };
-                    reader.readAsDataURL(uploadedFiles[0]);
-                } else {
-                    mainPreviewContainer.innerHTML = defaultPreview;
+                if (currentImageIndex >= uploadedFiles.length) {
+                    currentImageIndex = Math.max(0, uploadedFiles.length - 1);
                 }
+                updateMainPreview();
+                return; 
+            }
+
+            const imageDiv = event.target.closest(".relative.group");
+            if (imageDiv) {
+                const fileName = imageDiv.dataset.fileName;
+                currentImageIndex = uploadedFiles.findIndex(file => file.name === fileName);
+                updateMainPreview();
+            }
+        });
+
+        mainPreviewContainer.addEventListener('click', (event) => {
+            if (event.target.closest('#prev-image-btn')) {
+                currentImageIndex = (currentImageIndex - 1 + uploadedFiles.length) % uploadedFiles.length;
+                updateMainPreview();
+            }
+            if (event.target.closest('#next-image-btn')) {
+                currentImageIndex = (currentImageIndex + 1) % uploadedFiles.length;
+                updateMainPreview();
             }
         });
 
@@ -1105,6 +1136,80 @@
                 event.target.closest(".wholesale-tier").remove();
             }
         });
+
+        // Recommendation Panel Logic
+        const recPhoto = document.getElementById('rec-photo');
+        const recVideo = document.getElementById('rec-video');
+        const recName = document.getElementById('rec-name');
+        const recDesc = document.getElementById('rec-desc');
+
+        const photoSection = document.getElementById('product-photo-section');
+        const videoSection = document.getElementById('product-video-section');
+        const nameInput = document.getElementById('product-name');
+        const descInput = document.getElementById('description');
+
+        const greenCheckIcon = `
+        <svg class="w-4 h-4 mr-2 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+        </svg>`;
+
+        const defaultIcon = `
+        <svg class="w-4 h-4 mr-2 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+        </svg>`;
+
+        function updateRecommendationStatus(element, isComplete) {
+            const icon = element.querySelector('svg');
+            const text = element.innerText;
+            if (isComplete) {
+                if (!icon.classList.contains('text-green-500')) {
+                    element.innerHTML = greenCheckIcon + text;
+                    element.classList.remove('text-gray-500');
+                    element.classList.add('text-green-500');
+                }
+            } else {
+                if (icon.classList.contains('text-green-500')) {
+                    element.innerHTML = defaultIcon + text;
+                    element.classList.remove('text-green-500');
+                    element.classList.add('text-gray-500');
+                }
+            }
+        }
+
+        recPhoto.addEventListener('click', () => photoSection.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+        recVideo.addEventListener('click', () => videoSection.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+        recName.addEventListener('click', () => nameInput.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+        recDesc.addEventListener('click', () => descInput.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+
+        function checkPhotoRec() {
+            updateRecommendationStatus(recPhoto, uploadedFiles.length >= 3);
+        }
+
+        function checkVideoRec() {
+            updateRecommendationStatus(recVideo, productVideoFile !== null || (youtubeLinkInput.value && getYouTubeId(youtubeLinkInput.value) !== null));
+        }
+
+        function checkNameRec() {
+            const len = nameInput.value.length;
+            updateRecommendationStatus(recName, len >= 25 && len <= 100);
+        }
+
+        function checkDescRec() {
+            updateRecommendationStatus(recDesc, descInput.value.length >= 100);
+        }
+
+        productImagesInput.addEventListener("change", checkPhotoRec);
+        
+        productVideoInput.addEventListener("change", checkVideoRec);
+        youtubeLinkInput.addEventListener("input", checkVideoRec);
+        nameInput.addEventListener('input', checkNameRec);
+        descInput.addEventListener('input', checkDescRec);
+
+        // Initial check
+        checkPhotoRec();
+        checkVideoRec();
+        checkNameRec();
+        checkDescRec();
     });
 </script>
 
