@@ -369,9 +369,47 @@
       }
 
       function deleteProduct(id) {
-        document.getElementById("confirm-delete-modal").classList.remove("hidden");
-        document.getElementById("confirm-delete-modal").dataset.productId = id;
+        const modal = document.getElementById("confirm-delete-modal");
+        modal.classList.remove("hidden");
+        modal.dataset.productId = id;
       }
+
+      document.addEventListener('DOMContentLoaded', () => {
+        const modal = document.getElementById('confirm-delete-modal');
+        const confirmDeleteBtn = document.getElementById('confirm-delete');
+        const cancelDeleteBtn = document.getElementById('cancel-delete');
+
+        cancelDeleteBtn.addEventListener('click', () => {
+          modal.classList.add('hidden');
+        });
+
+        confirmDeleteBtn.addEventListener('click', async () => {
+          const productId = modal.dataset.productId;
+          if (!productId) return;
+
+          try {
+            const response = await fetch(`/api/v1/products/${productId}`, {
+              method: 'DELETE',
+            });
+
+            if (response.ok) {
+              modal.classList.add('hidden');
+              const notification = document.getElementById('success-notification');
+              notification.classList.remove('hidden');
+              setTimeout(() => {
+                notification.classList.add('hidden');
+                window.location.reload();
+              }, 2000);
+            } else {
+              const errorData = await response.json();
+              alert(`Gagal menghapus produk: ${errorData.message}`);
+            }
+          } catch (error) {
+            console.error('Error deleting product:', error);
+            alert('Terjadi kesalahan saat menghapus produk.');
+          }
+        });
+      });
     </script>
 
   </body>

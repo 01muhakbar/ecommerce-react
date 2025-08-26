@@ -1999,6 +1999,37 @@
       updateRecommendationStatus(recPhoto, uploadedFiles.length >= 3);
     }
 
+    const form = document.querySelector('form[action="/api/v1/products"]');
+    const saveAndPublishButton = document.querySelector('button[value="publish"]');
+
+    if (form && saveAndPublishButton) {
+        saveAndPublishButton.addEventListener('click', (event) => {
+            const requiredFields = [
+                { id: 'product-name', name: 'Nama Produk' },
+                { id: 'description', name: 'Deskripsi' },
+                { id: 'category', name: 'Kategori' },
+                { id: 'price', name: 'Harga' },
+                { id: 'stock', name: 'Stok' },
+                { id: 'weight', name: 'Berat' },
+                { id: 'promo-product-image', name: 'Foto Produk Promosi' }
+            ];
+
+            const emptyFields = [];
+
+            requiredFields.forEach(field => {
+                const input = document.getElementById(field.id);
+                if (!input.value.trim()) {
+                    emptyFields.push(field.name);
+                }
+            });
+
+            if (emptyFields.length > 0) {
+                event.preventDefault();
+                alert(`Harap isi semua kolom yang wajib diisi:\n\n- ${emptyFields.join('\n- ')}`);
+            }
+        });
+    }
+
     function checkVideoRec() {
       updateRecommendationStatus(
         recVideo,
@@ -2039,10 +2070,7 @@
   src="https://unpkg.com/react@18/umd/react.development.js"
   crossorigin
 ></script>
-<script
-  src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"
-  crossorigin
-></script>
+<script type="module" src="/dist/main.js"></script> 
 <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
 
 <%- include('partials/footer') %>
