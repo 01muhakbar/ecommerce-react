@@ -77,6 +77,10 @@
               <th class="py-3 px-6 text-left">Stok</th>
               <th class="py-3 px-6 text-left">Kategori</th>
               <th class="py-3 px-6 text-left">Penjual</th>
+              <th class="py-3 px-6 text-left">Status</th>
+              <th class="py-3 px-6 text-left">Berat</th>
+              <th class="py-3 px-6 text-left">Kondisi</th>
+              <th class="py-3 px-6 text-center">Gambar Promosi</th>
               <th class="py-3 px-6 text-center">Aksi</th>
             </tr>
           </thead>
@@ -203,12 +207,13 @@
             loadingMessage.style.display = "none";
 
             if (data.data.products.length === 0) {
-              productsTableBody.innerHTML = `<tr><td colspan="7" class="py-3 px-6 text-center text-gray-500">Tidak ada produk ditemukan.</td></tr>`;
+              productsTableBody.innerHTML = `<tr><td colspan="11" class="py-3 px-6 text-center text-gray-500">Tidak ada produk ditemukan.</td></tr>`;
               return;
             }
 
             data.data.products.forEach((product) => {
               const categoryOptions = categories.map(cat => `<option value="${cat.id}" ${product.categoryId == cat.id ? 'selected' : ''}>${cat.name}</option>`).join('');
+              const promoImageSrc = product.promoImagePath ? `/${product.promoImagePath.replace(/\\/g, '/')}` : '/images/placeholder.png';
               const row = `
                 <tr class="border-b border-gray-200 hover:bg-gray-100">
                   <td class="py-3 px-6 text-left whitespace-nowrap">${product.id}</td>
@@ -222,6 +227,12 @@
                     </select>
                   </td>
                   <td class="py-3 px-6 text-left">${product.seller ? product.seller.name : 'N/A'}</td>
+                  <td class="py-3 px-6 text-left">${product.status || 'N/A'}</td>
+                  <td class="py-3 px-6 text-left">${product.weight || 'N/A'} gr</td>
+                  <td class="py-3 px-6 text-left">${product.condition || 'N/A'}</td>
+                  <td class="py-3 px-6 text-center">
+                    <img src="${promoImageSrc}" alt="Promo" class="w-12 h-12 object-cover rounded-md mx-auto" onerror="this.onerror=null;this.src='/images/placeholder.png';">
+                  </td>
                   <td class="py-3 px-6 text-center">
                     <div class="flex item-center justify-center">
                       <button onclick="viewProduct(${product.id})" class="w-4 mr-2 transform hover:text-purple-500 hover:scale-110">

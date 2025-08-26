@@ -1,67 +1,111 @@
-// src/controllers/productController.js
-
 const db = require("../models");
 const { Op } = require('sequelize');
 
-// Fungsi baru untuk merender halaman produk
-exports.renderAllProducts = async (req, res) => {
-  try {
-    const products = await db.Product.findAll({
-      order: [['createdAt', 'DESC']], // Urutkan berdasarkan terbaru
-    });
-    // Render view EJS dan kirim data produk
-    res.render("products", {
-      products: products,
-      isLoggedIn: req.cookies.token ? true : false, // Cek jika pengguna login
-      messages: {}, // Untuk pesan flash (jika ada)
-    });
-  } catch (error) {
-    // Handle error, mungkin render halaman error
-    res.status(500).send("<h1>Error memuat halaman produk</h1><p>" + error.message + "</p>");
-  }
-};
-
-
-
+// Fungsi untuk membuat produk baru
 exports.createProduct = async (req, res) => {
   try {
-    const { name, description, price, stock, categoryId } = req.body;
-    const userId = req.user.id; // Get user ID from authenticated user
-
-    console.log("--- createProduct Debug ---");
-    console.log("Received req.body:", req.body);
-    console.log("Extracted userId:", userId);
-    console.log("Extracted categoryId:", categoryId);
-
-    // Validasi dasar
-    if (!name || !price || stock === undefined) {
-      console.log("Validation failed: Name, price, or stock missing.");
-      return res
-        .status(400)
-        .json({ message: "Name, price, and stock are required." });
-    }
-
-    const newProduct = await db.Product.create({
+    // 1. Ambil data teks dari req.body
+    const {
       name,
       description,
       price,
       stock,
-      userId, // Associate product with the user
       categoryId,
+      status, // Field baru
+      gtin,
+      notes,
+      parentSku,
+      condition,
+      weight,
+      length,
+      width,
+      height,
+      dangerousProduct,
+      preOrder,
+      preorderDays,
+      youtubeLink,
+      variations, // Ini akan berupa JSON string
+      wholesale, // Ini juga JSON string
+    } = req.body;
+
+    const userId = req.user.id; // Ambil ID pengguna dari middleware otentikasi
+
+    // 2. Ambil path file dari req.files (disediakan oleh multer)
+    let promoImagePath = null;
+    if (req.files && req.files.promoProductImage) {
+      promoImagePath = req.files.promoProductImage[0].path;
+    }
+
+    let imagePaths = [];
+    if (req.files && req.files.productImages) {
+      imagePaths = req.files.productImages.map(file => file.path);
+    }
+
+    let videoPath = null;
+    if (req.files && req.files.productVideo) {
+      videoPath = req.files.productVideo[0].path;
+    }
+
+    // 3. Validasi dasar (bisa diperkuat sesuai kebutuhan)
+    if (!name || !price || !stock || !weight) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Nama, harga, stok, dan berat produk wajib diisi."
+      });
+    }
+
+    // 4. Buat produk di database dengan semua data yang sudah diproses
+    const newProduct = await db.Product.create({
+      name,
+      description,
+      price: parseFloat(price),
+      stock: parseInt(stock, 10),
+      categoryId,
+      userId,
+      status: status || 'archived', // Default ke 'archived' jika tidak ada status
+      
+      // Tambahkan field-field baru di sini
+      // PASTIKAN NAMA-NAMA INI SESUAI DENGAN KOLOM DI DATABASE ANDA
+      gtin,
+      notes,
+      parentSku,
+      condition,
+      weight: parseInt(weight, 10),
+      length: length ? parseInt(length, 10) : null,
+      width: width ? parseInt(width, 10) : null,
+      height: height ? parseInt(height, 10) : null,
+      dangerousProduct: dangerousProduct === 'true',
+      preOrder: preOrder === 'true',
+      preorderDays: preOrder === 'true' ? parseInt(preorderDays, 10) : null,
+      youtubeLink,
+      
+      // Simpan path file
+      promoImagePath: promoImagePath, // Path untuk gambar promosi
+      imagePaths: imagePaths,       // Array path untuk gambar produk
+      videoPath: videoPath,           // Path untuk video produk
+
+      // Simpan data JSON (pastikan tipe data di DB adalah JSON atau TEXT)
+      variations: variations ? JSON.parse(variations) : null,
+      wholesale: wholesale ? JSON.parse(wholesale) : null,
     });
 
-    console.log("Product created successfully:", newProduct.toJSON());
+    res.status(201).json({ 
+      success: true, 
+      message: "Produk berhasil dibuat!", 
+      product: newProduct 
+    });
 
-    res
-      .status(201)
-      .json({ message: "Product created successfully", product: newProduct });
   } catch (error) {
-    console.error("CREATE PRODUCT ERROR:", error); // More detailed error logging
-    res
-      .status(500)
-      .json({ message: "Failed to create product", error: error.message });
+    console.error("CREATE PRODUCT ERROR:", error); 
+    res.status(500).json({ 
+      success: false, 
+      message: "Gagal membuat produk", 
+      error: error.message 
+    });
   }
 };
+
+// ... (sisa fungsi controller lainnya tidak diubah)
 
 // Fungsi untuk mengambil semua produk
 exports.getAllProducts = async (req, res) => {
@@ -79,10 +123,6 @@ exports.getAllProducts = async (req, res) => {
       where.name = { [Op.like]: `%${search}%` };
     }
 
-    console.log("--- getAllProducts Debug ---");
-    console.log("Received query parameters:", req.query);
-    console.log("Constructed where clause:", where);
-
     const products = await db.Product.findAll({
       where,
       include: [
@@ -90,8 +130,6 @@ exports.getAllProducts = async (req, res) => {
         { model: db.Category, as: 'category', attributes: ['name'] }
       ],
     });
-
-    console.log("Number of products found:", products.length);
 
     res.status(200).json({
       status: "success",
@@ -101,7 +139,7 @@ exports.getAllProducts = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("GET ALL PRODUCTS ERROR:", error); // More detailed error logging
+    console.error("GET ALL PRODUCTS ERROR:", error);
     res
       .status(500)
       .json({ message: "Failed to fetch products", error: error.message });
@@ -253,5 +291,21 @@ exports.renderAddProductPageAdmin = async (req, res) => {
     });
   } catch (error) {
     res.status(500).send("<h1>Error loading page</h1><p>" + error.message + "</p>");
+  }
+};
+
+// ... (Menyisakan fungsi renderAllProducts yang mungkin masih digunakan di tempat lain)
+exports.renderAllProducts = async (req, res) => {
+  try {
+    const products = await db.Product.findAll({
+      order: [['createdAt', 'DESC']],
+    });
+    res.render("products", {
+      products: products,
+      isLoggedIn: req.cookies.token ? true : false,
+      messages: {}, 
+    });
+  } catch (error) {
+    res.status(500).send("<h1>Error memuat halaman produk</h1><p>" + error.message + "</p>");
   }
 };
