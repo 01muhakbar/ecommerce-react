@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from "express";
-import { User, Order, OrderItem, Product } from "../models";
+import db from "../models";
 import { Op, fn, col, literal, cast } from "sequelize";
+
+const { User, Order, OrderItem, Product } = db;
 
 export const getDashboardStatistics = async (
   req: Request,

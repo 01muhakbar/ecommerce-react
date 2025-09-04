@@ -3,10 +3,11 @@
   "version": "1.0.0",
   "description": "A simple e-commerce project",
   "main": "dist/src/app.js",
+  "type": "module",
   "scripts": {
     "build": "tsc",
     "start": "node dist/app.js",
-    "dev": "npm run build -w @ecommerce/schemas && nodemon --watch \"src/**/*.ts\" --exec \"ts-node\" src/app.ts",
+    "dev": "npm run build -w @ecommerce/schemas && nodemon --watch \"src/**/*.ts\" --exec \"ts-node -r tsconfig-paths/register\" src/app.ts",
     "dev:vite": "vite",
     "test": "echo \"No test specified for server\" && exit 0",
     "build:css": "postcss ./public/css/input.css -o ./public/css/style.css --watch",
@@ -36,7 +37,6 @@
     "react-toastify": "^11.0.5",
     "sequelize": "^6.37.3",
     "tailwindcss": "^4.1.12",
-    "tailwindcss": "^4.1.12",
     "zod": "^3.22.4"
   },
   "devDependencies": {
@@ -51,6 +51,7 @@
     "@types/sequelize": "^4.28.20",
     "@vitejs/plugin-react": "^5.0.1",
     "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
     "typescript": "^5.9.2",
     "vite": "^7.1.3"
   }

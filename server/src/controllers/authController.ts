@@ -2,9 +2,10 @@ import { Request, Response, NextFunction } from "express";
 import bcrypt from "bcryptjs";
 import jwt, { SignOptions } from "jsonwebtoken";
 import crypto from "crypto";
-import { User } from "../models";
+import db from "../models";
 import sendEmail from "../services/emailService";
 import { Op } from "sequelize";
+const { User } = db;
 
 // Helper function to sign JWT
 const signToken = (id: number, role: string): string => {

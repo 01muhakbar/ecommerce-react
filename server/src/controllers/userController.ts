@@ -1,13 +1,16 @@
 import { Request, Response, NextFunction } from "express";
-import { User } from "../models";
+import db from "../models";
 import bcrypt from "bcryptjs";
 
 interface CustomRequest extends Request {
+  // @ts-ignore
   user?: {
     id: number;
     role: string;
   };
 }
+
+const { User } = db;
 
 export const getMe = async (
   req: CustomRequest,

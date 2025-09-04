@@ -1,19 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
-import { User } from '../models/index';
+import jwt, { JwtPayload } from 'jsonwebtoken';
+import db from '../models/index';
+import { AppError } from "./errorMiddleware";
+
+const { User } = db;
 
 // --- INTERFACES ---
 
 interface CustomRequest extends Request {
-  user?: User;
+  user?: InstanceType<typeof User>;
 }
-
-interface JwtPayload {
-  id: number;
-  iat: number;
-  exp: number;
-}
-
 // --- MIDDLEWARE ---
 
 /**
@@ -48,7 +44,7 @@ export const protect = async (req: CustomRequest, res: Response, next: NextFunct
     }
 
     // Use synchronous jwt.verify which throws an error on failure, caught by the outer catch block
-    const decoded = jwt.verify(token, secret) as JwtPayload;
+    const decoded = jwt.verify(token, secret) as { id: number; iat: number; exp: number };
 
     const currentUser = await User.findByPk(decoded.id);
     if (!currentUser) {

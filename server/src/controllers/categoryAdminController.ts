@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
-import { Category } from '../models/index';
+import db from '../models/index';
+
+const { Category } = db;
 
 // [REFACTORED] Menggantikan renderManageCategoriesPage
 export const getAllCategories = async (req: Request, res: Response): Promise<void> => {

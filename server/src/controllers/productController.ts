@@ -1,9 +1,12 @@
 import { Request, Response, NextFunction } from "express";
-import { Product, User, Category } from "../models/index";
+import db from "../models/index";
 import { Op } from "sequelize";
+
+const { Product, User, Category } = db;
 
 // Kustomisasi tipe Request dari Express untuk menyertakan properti `user` dan `files`
 interface CustomRequest extends Request {
+  // @ts-ignore
   user?: User;
   files?:
     | { [fieldname: string]: Express.Multer.File[] }

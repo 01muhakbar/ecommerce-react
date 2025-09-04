@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
-import { Category } from '../models/index';
+import db from '../models/index';
+
+const { Category } = db;
 
 export const createCategory = async (req: Request, res: Response): Promise<void> => {
   try {

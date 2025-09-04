@@ -1,13 +1,8 @@
 import { Request, Response } from "express";
-import {
-  sequelize,
-  Order,
-  Cart,
-  Product,
-  OrderItem,
-  User,
-} from "../models/index";
+import db from "../models/index";
 import { Transaction } from "sequelize";
+
+const { sequelize, Order, Cart, Product, OrderItem, User } = db;
 
 // --- ENUMS & TYPES ---
 

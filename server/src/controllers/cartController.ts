@@ -1,8 +1,11 @@
 import { Request, Response } from 'express';
-import { Cart, CartItem, Product, User } from '../models/index';
+import db from '../models/index';
+
+const { Cart, CartItem, Product, User } = db;
 
 // Kustomisasi tipe Request dari Express untuk menyertakan properti `user`
 interface CustomRequest extends Request {
+  // @ts-ignore
   user?: User;
 }
 

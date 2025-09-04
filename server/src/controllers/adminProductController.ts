@@ -1,7 +1,9 @@
 import { Request, Response, NextFunction } from "express";
-import { Product, Category, User } from "../models";
+import db from "../models";
 import { AppError } from "../middleware/errorMiddleware";
 import { Op } from "sequelize";
+
+const { Product, Category, User } = db;
 
 // Helper function to generate a unique slug
 const generateUniqueSlug = async (name: string): Promise<string> => {

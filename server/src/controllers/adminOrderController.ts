@@ -1,10 +1,13 @@
 import { Request, Response } from 'express';
-import { Order } from '../models/Order';
-import { User } from '../models/User';
+import db from '../models';
 import { z } from 'zod';
 
+const { Order, User } = db;
+
 // Define a type for the order object that includes the user
+// @ts-ignore
 interface OrderWithUser extends Order {
+  // @ts-ignore
   user: User;
 }
 

@@ -1,27 +1,28 @@
-import "dotenv/config"; // Muat environment variables
+import "dotenv/config";
 import express, { Application, Request, Response, NextFunction } from "express";
 import path from "path";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import methodOverride from "method-override";
+import { fileURLToPath } from "url";
 
 // Impor semua rute yang sudah di-TypeScript-kan
-import userRoutes from "./routes/userRoutes";
-import authRoutes from "./routes/authRoutes";
-import productRoutes from "./routes/productRoutes";
-import cartRoutes from "./routes/cartRoutes";
-import sellerRoutes from "./routes/sellerRoutes";
-import categoryRoutes from "./routes/categoryRoutes";
-import categoryAdminRoutes from "./routes/categoryAdminRoutes";
-import orderRoutes from "./routes/orderRoutes";
-import adminProductRoutes from "./routes/adminProductRoutes"; // Pastikan path ini benar
-import adminRoutes from "./routes/admin";
-import adminOrderRoutes from "./routes/adminOrderRoutes";
-import devRoutes from "./routes/devRoutes"; // Impor rute baru
+import userRoutes from "./routes/userRoutes.js";
+import authRoutes from "./routes/authRoutes.js";
+import productRoutes from "./routes/productRoutes.js";
+import cartRoutes from "./routes/cartRoutes.js";
+import sellerRoutes from "./routes/sellerRoutes.js";
+import categoryRoutes from "./routes/categoryRoutes.js";
+import categoryAdminRoutes from "./routes/categoryAdminRoutes.js";
+import orderRoutes from "./routes/orderRoutes.js";
+import adminProductRoutes from "./routes/adminProductRoutes.js";
+import adminRoutes from "./routes/admin.js";
+import adminOrderRoutes from "./routes/adminOrderRoutes.js";
+import devRoutes from "./routes/devRoutes.js";
 
 // Impor model dan middleware
-import db from "./models";
-import globalErrorHandler from "./middleware/errorMiddleware";
+import db from "./models/index.js";
+import globalErrorHandler from "./middleware/errorMiddleware.js";
 
 const app: Application = express();
 const PORT: number = parseInt(process.env.PORT || "3000", 10);
@@ -37,6 +38,9 @@ app.use(
     credentials: true,
   })
 ); // Aktifkan CORS untuk semua rute
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Sajikan file statis dari folder 'public'
 app.use(express.static(path.join(__dirname, "..", "public")));
