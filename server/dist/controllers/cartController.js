@@ -21,7 +21,7 @@ const addToCart = async (req, res) => {
         });
         const [cartItem, itemCreated] = await index_1.CartItem.findOrCreate({
             where: { cartId: cart.id, productId: productId },
-            defaults: { quantity: quantity },
+            defaults: { quantity: quantity, productId: productId, cartId: cart.id },
         });
         if (!itemCreated) {
             cartItem.quantity += quantity;

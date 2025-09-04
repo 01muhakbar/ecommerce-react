@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { loginAdminSchema, type LoginAdminInput } from "@ecommerce/schemas";
 import { useAuthStore } from "../store/authStore";
 import api from "../api/axios";
@@ -102,16 +102,16 @@ const SpinnerIcon = (props: React.SVGProps<SVGSVGElement>) => (
 
 // --- New Auth Graphic Component ---
 const AuthGraphic = () => (
-  <div className="relative w-full h-full bg-gradient-to-br from-sky-500 to-sky-700 overflow-hidden">
+  <div className="relative w-full h-full bg-gradient-to-br from-blue-500 to-blue-700 overflow-hidden">
     <div className="absolute top-0 left-0 w-full h-full opacity-50">
       {/* Abstract shapes */}
-      <div className="absolute -top-16 -left-16 w-64 h-64 bg-sky-400 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
-      <div className="absolute -bottom-24 -right-10 w-72 h-72 bg-sky-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
+      <div className="absolute -top-16 -left-16 w-64 h-64 bg-blue-400 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
+      <div className="absolute -bottom-24 -right-10 w-72 h-72 bg-blue-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
       <div className="absolute top-1/2 left-1/2 w-48 h-48 -translate-x-1/2 -translate-y-1/2 bg-white rounded-full mix-blend-screen filter blur-md opacity-50"></div>
     </div>
     <div className="relative z-10 flex flex-col items-center justify-center h-full p-12 text-white">
       <h2 className="text-4xl font-bold mb-4">E-Commerce</h2>
-      <p className="text-lg text-sky-100 max-w-sm text-center">
+      <p className="text-lg text-blue-100 max-w-sm text-center">
         Manajemen terpusat untuk toko online Anda. Kelola produk, pesanan, dan
         pelanggan dengan mudah.
       </p>
@@ -156,7 +156,7 @@ const AdminLoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-sky-50 to-slate-200 text-slate-800 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-200 text-slate-800 flex items-center justify-center p-4">
       <div className="w-full max-w-5xl mx-auto min-h-[600px]">
         <div className="grid md:grid-cols-2 bg-white rounded-2xl shadow-2xl shadow-slate-400/20 overflow-hidden h-full">
           {/* Left Column: Graphic */}
@@ -170,7 +170,7 @@ const AdminLoginPage: React.FC = () => {
               <h1 className="text-3xl font-bold text-slate-900 mb-2">
                 Admin Login
               </h1>
-              <p className="text-slate-500 mb-8">
+              <p className="text-gray-500 mb-8">
                 Selamat datang kembali! Silakan masuk.
               </p>
 
@@ -186,16 +186,16 @@ const AdminLoginPage: React.FC = () => {
 
                 {/* Email Input */}
                 <div className="relative group">
-                  <MailIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-sky-500 transition-colors" />
+                  <MailIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
                   <input
                     id="email"
                     type="email"
                     {...register("email")}
                     placeholder="alamat@email.com"
-                    className={`w-full pl-12 pr-4 py-3 bg-slate-50 border rounded-lg transition-all duration-300 focus:outline-none focus:ring-2 focus:bg-white ${
+                    className={`w-full pl-12 pr-4 py-3 bg-gray-100 border rounded-lg transition-all duration-300 focus:outline-none focus:ring-2 focus:bg-white ${
                       errors.email
                         ? "border-red-400 ring-red-300 focus:ring-red-500"
-                        : "border-slate-200 focus:border-sky-500 focus:ring-sky-500"
+                        : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                     }`}
                   />
                 </div>
@@ -207,22 +207,22 @@ const AdminLoginPage: React.FC = () => {
 
                 {/* Password Input */}
                 <div className="relative group">
-                  <LockIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-sky-500 transition-colors" />
+                  <LockIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
                   <input
                     id="password"
                     type={showPassword ? "text" : "password"}
                     {...register("password")}
                     placeholder="Password"
-                    className={`w-full pl-12 pr-12 py-3 bg-slate-50 border rounded-lg transition-all duration-300 focus:outline-none focus:ring-2 focus:bg-white ${
+                    className={`w-full pl-12 pr-12 py-3 bg-gray-100 border rounded-lg transition-all duration-300 focus:outline-none focus:ring-2 focus:bg-white ${
                       errors.password
                         ? "border-red-400 ring-red-300 focus:ring-red-500"
-                        : "border-slate-200 focus:border-sky-500 focus:ring-sky-500"
+                        : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                     }`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
                     aria-label={
                       showPassword
                         ? "Sembunyikan password"
@@ -242,10 +242,14 @@ const AdminLoginPage: React.FC = () => {
                   </p>
                 )}
 
+                <div className="text-sm text-right">
+                    <Link to="/admin/forgot-password" className="font-medium text-blue-600 hover:text-blue-500">Lupa Kata Sandi?</Link>
+                </div>
+
                 <button
                   type="submit"
                   disabled={mutation.isPending}
-                  className="w-full flex items-center justify-center py-3 px-4 bg-sky-600 text-white font-semibold rounded-lg shadow-lg shadow-sky-600/20 hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 disabled:bg-slate-400 disabled:shadow-none disabled:cursor-not-allowed transform hover:-translate-y-0.5 transition-all duration-300"
+                  className="w-full flex items-center justify-center py-3 px-4 bg-blue-600 text-white font-semibold rounded-lg shadow-lg shadow-blue-600/20 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-slate-400 disabled:shadow-none disabled:cursor-not-allowed transform hover:-translate-y-0.5 transition-all duration-300"
                 >
                   {mutation.isPending ? (
                     <>

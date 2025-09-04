@@ -7,8 +7,9 @@ class Order extends sequelize_1.Model {
         Order.belongsTo(models.User, { foreignKey: "userId" });
         Order.belongsToMany(models.Product, {
             through: models.OrderItem,
-            foreignKey: 'orderId',
-            otherKey: 'productId',
+            foreignKey: "orderId",
+            otherKey: "productId",
+            as: "products", // Tambahkan alias yang sesuai
         });
     }
     static initModel(sequelize) {

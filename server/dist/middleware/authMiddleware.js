@@ -5,7 +5,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.restrictTo = exports.protect = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const util_1 = require("util");
 const index_1 = require("../models/index");
 // --- MIDDLEWARE ---
 /**
@@ -17,6 +16,9 @@ const protect = async (req, res, next) => {
         let token;
         if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
             token = req.headers.authorization.split(' ')[1];
+        }
+        else if (req.cookies.jwt) {
+            token = req.cookies.jwt;
         }
         const isApiRequest = req.originalUrl.startsWith('/api');
         if (!token || token === "loggedout") {
@@ -33,7 +35,8 @@ const protect = async (req, res, next) => {
         if (!secret) {
             throw new Error('JWT_SECRET is not defined in the environment variables');
         }
-        const decoded = await (0, util_1.promisify)(jsonwebtoken_1.default.verify)(token, secret);
+        // Use synchronous jwt.verify which throws an error on failure, caught by the outer catch block
+        const decoded = jsonwebtoken_1.default.verify(token, secret);
         const currentUser = await index_1.User.findByPk(decoded.id);
         if (!currentUser) {
             const message = 'The user belonging to this token does no longer exist.';

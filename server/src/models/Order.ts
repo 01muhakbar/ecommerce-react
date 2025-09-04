@@ -1,19 +1,25 @@
-import { DataTypes, Model, Optional, Sequelize } from 'sequelize';
+import { DataTypes, Model, Optional, Sequelize } from "sequelize";
 
 interface OrderAttributes {
   id: number;
   userId: number;
   totalAmount: number;
-  status: 'pending' | 'completed' | 'cancelled';
+  status: "pending" | "completed" | "cancelled";
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
-interface OrderCreationAttributes extends Optional<OrderAttributes, 'id' | 'status'> {}
+interface OrderCreationAttributes
+  extends Optional<OrderAttributes, "id" | "status"> {}
 
-export class Order extends Model<OrderAttributes, OrderCreationAttributes> implements OrderAttributes {
+export class Order
+  extends Model<OrderAttributes, OrderCreationAttributes>
+  implements OrderAttributes
+{
   public id!: number;
   public userId!: number;
   public totalAmount!: number;
-  public status!: 'pending' | 'completed' | 'cancelled';
+  public status!: "pending" | "completed" | "cancelled";
 
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -23,8 +29,9 @@ export class Order extends Model<OrderAttributes, OrderCreationAttributes> imple
 
     Order.belongsToMany(models.Product, {
       through: models.OrderItem,
-      foreignKey: 'orderId',
-      otherKey: 'productId',
+      foreignKey: "orderId",
+      otherKey: "productId",
+      as: "products", // Tambahkan alias yang sesuai
     });
   }
 

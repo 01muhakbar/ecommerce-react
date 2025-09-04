@@ -4,7 +4,8 @@ exports.OrderItem = void 0;
 const sequelize_1 = require("sequelize");
 class OrderItem extends sequelize_1.Model {
     static associate(models) {
-        // No explicit associations defined here, as it's a through model
+        OrderItem.belongsTo(models.Order, { foreignKey: "orderId" });
+        OrderItem.belongsTo(models.Product, { foreignKey: "productId" });
     }
     static initModel(sequelize) {
         OrderItem.init({

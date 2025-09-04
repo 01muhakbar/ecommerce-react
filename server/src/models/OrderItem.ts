@@ -21,7 +21,8 @@ export class OrderItem extends Model<OrderItemAttributes, OrderItemCreationAttri
   public readonly updatedAt!: Date;
 
   static associate(models: any) {
-    // No explicit associations defined here, as it's a through model
+    OrderItem.belongsTo(models.Order, { foreignKey: "orderId" });
+    OrderItem.belongsTo(models.Product, { foreignKey: "productId" });
   }
 
   static initModel(sequelize: Sequelize): typeof OrderItem {

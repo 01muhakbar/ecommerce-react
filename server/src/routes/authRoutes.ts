@@ -1,6 +1,7 @@
 import express, { Router, Request, Response } from "express";
 import path from "path";
 import * as authController from "../controllers/authController";
+import { protect, restrictTo } from "../middleware/authMiddleware"; // Import protect and restrictTo
 import { validateRegister, validateLogin } from "../middleware/validators";
 import validate from "../middleware/validate";
 import {
@@ -43,6 +44,12 @@ router.post(
   "/admin/reset-password/:token",
   validate(resetPasswordAdminSchema),
   authController.resetPasswordAdmin
+);
+router.post(
+  "/admin/logout",
+  protect,
+  restrictTo("admin"),
+  authController.logoutAdmin
 );
 
 export default router;

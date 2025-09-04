@@ -1,33 +1,22 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.loginValidation = exports.resetPasswordValidation = exports.registerValidation = exports.handleValidationErrors = void 0;
-const express_validator_1 = require("express-validator");
-// Middleware untuk menangani hasil dari rantai validasi
-const handleValidationErrors = (req, res, next) => {
-    const errors = (0, express_validator_1.validationResult)(req);
-    if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
+exports.validateUpdateProfile = exports.validateRegister = exports.validateLogin = exports.validate = void 0;
+const zod_1 = require("zod");
+const schemas_1 = require("@ecommerce/schemas");
+const validate = (schema) => (req, res, next) => {
+    try {
+        schema.parse(req.body);
+        next();
     }
-    next();
+    catch (error) {
+        if (error instanceof zod_1.ZodError) {
+            return res.status(400).json({ errors: error.issues });
+        }
+        next(error);
+    }
 };
-exports.handleValidationErrors = handleValidationErrors;
-exports.registerValidation = [
-    (0, express_validator_1.body)('name').notEmpty().withMessage('Nama tidak boleh kosong.'),
-    (0, express_validator_1.body)('email').isEmail().withMessage('Format email tidak valid.'),
-    (0, express_validator_1.body)('password')
-        .isLength({ min: 6 })
-        .withMessage('Password minimal harus 6 karakter.'),
-    exports.handleValidationErrors,
-];
-exports.resetPasswordValidation = [
-    (0, express_validator_1.body)('token').notEmpty().withMessage('Token tidak boleh kosong.'),
-    (0, express_validator_1.body)('password')
-        .isLength({ min: 6 })
-        .withMessage('Password baru minimal harus 6 karakter.'),
-    exports.handleValidationErrors,
-];
-exports.loginValidation = [
-    (0, express_validator_1.body)('email').isEmail().withMessage('Format email tidak valid.'),
-    (0, express_validator_1.body)('password').notEmpty().withMessage('Password tidak boleh kosong.'),
-    exports.handleValidationErrors,
-];
+exports.validate = validate;
+// Ekspor validator spesifik untuk digunakan di rute
+exports.validateLogin = (0, exports.validate)(schemas_1.loginSchema);
+exports.validateRegister = (0, exports.validate)(schemas_1.registerSchema);
+exports.validateUpdateProfile = (0, exports.validate)(schemas_1.updateProfileSchema);

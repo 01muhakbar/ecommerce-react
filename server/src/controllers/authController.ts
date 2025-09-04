@@ -19,7 +19,7 @@ const signToken = (id: number, role: string): string => {
 };
 
 // Helper function to create a token, set a cookie, and send the response
-const createAndSendToken = (
+export const createAndSendToken = (
   user: any,
   statusCode: number,
   res: Response
@@ -110,6 +110,17 @@ export const logout = (req: Request, res: Response): void => {
   res.cookie("jwt", "loggedout", {
     expires: new Date(Date.now() + 10 * 1000),
     httpOnly: true,
+  });
+  res
+    .status(200)
+    .json({ status: "success", message: "Logged out successfully" });
+};
+
+export const logoutAdmin = (req: Request, res: Response): void => {
+  res.cookie("jwt", "loggedout", {
+    expires: new Date(Date.now() + 10 * 1000),
+    httpOnly: true,
+    path: "/", // Ensure the cookie is cleared from the root path
   });
   res
     .status(200)

@@ -41,36 +41,33 @@ const multer_1 = __importDefault(require("multer"));
 const path_1 = __importDefault(require("path"));
 const authMiddleware_1 = require("../middleware/authMiddleware");
 const productController = __importStar(require("../controllers/productController"));
+const validate_1 = __importDefault(require("../middleware/validate"));
+const schemas_1 = require("@ecommerce/schemas");
 const router = express_1.default.Router();
-// Konfigurasi Multer untuk penyimpanan file dengan tipe yang benar
+// Konfigurasi Multer untuk penyimpanan file
 const storage = multer_1.default.diskStorage({
     destination: (req, file, cb) => {
-        // Simpan file di folder public/images/products
         cb(null, "public/images/products");
     },
     filename: (req, file, cb) => {
-        // Buat nama file yang unik untuk menghindari konflik
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-        cb(null, file.fieldname + '-' + uniqueSuffix + path_1.default.extname(file.originalname));
+        const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+        cb(null, file.fieldname + "-" + uniqueSuffix + path_1.default.extname(file.originalname));
     },
 });
-// Inisialisasi Multer dengan konfigurasi storage
 const upload = (0, multer_1.default)({ storage: storage });
 // --- RUTE PRODUK ---
-// Rute untuk mendapatkan semua produk (Akses Publik)
 router.get("/", productController.getAllProducts);
-// Rute untuk mendapatkan detail satu produk (Akses Publik)
 router.get("/:id", productController.getProductById);
-// Rute baru untuk mendapatkan detail produk untuk halaman preview (Admin/Penjual)
 router.get("/:id/preview", authMiddleware_1.protect, (0, authMiddleware_1.restrictTo)("admin", "penjual"), productController.getProductDetailsForPreview);
-// Rute untuk membuat produk baru (Hanya Penjual/Admin)
+// Rute untuk membuat produk baru
 router.post("/", authMiddleware_1.protect, (0, authMiddleware_1.restrictTo)("penjual", "admin"), upload.fields([
     { name: "productImages", maxCount: 9 },
     { name: "promoProductImage", maxCount: 1 },
     { name: "productVideo", maxCount: 1 },
-]), productController.createProduct);
-// Rute untuk menghapus produk (Hanya Admin)
+]), (0, validate_1.default)(schemas_1.createProductSchema), // Pindahkan validasi ke sini setelah multer
+productController.createProduct);
+// Rute untuk menghapus produk
 router.delete("/:id", authMiddleware_1.protect, (0, authMiddleware_1.restrictTo)("admin"), productController.deleteProduct);
-// Rute untuk memperbarui produk (Hanya Admin/Penjual)
+// Rute untuk memperbarui produk
 router.put("/:id", authMiddleware_1.protect, (0, authMiddleware_1.restrictTo)("admin", "penjual"), productController.updateProduct);
 exports.default = router;

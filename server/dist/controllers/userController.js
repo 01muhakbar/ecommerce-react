@@ -1,204 +1,146 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteUser = exports.updateUser = exports.createUser = exports.getUserById = exports.getAllUsers = exports.updateMyProfile = exports.becomeSeller = exports.getUserProfile = exports.getDashboardInfo = void 0;
-const sequelize_1 = require("sequelize");
-const models_1 = require("../models");
-// --- REFACTORED CONTROLLERS ---
-// [REFACTORED] Menggantikan renderDashboard
-const getDashboardInfo = (req, res) => {
-    const user = req.user;
-    if (!user) {
-        res.status(401).json({ message: "Unauthorized" });
-        return;
-    }
-    // Kirim data esensial untuk frontend bisa membangun dashboard yang sesuai
-    res.status(200).json({
-        status: 'success',
-        data: {
-            id: user.id,
-            name: user.name,
-            role: user.role
-        }
-    });
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
 };
-exports.getDashboardInfo = getDashboardInfo;
-// Mendapatkan profil user yang sedang login
-const getUserProfile = async (req, res) => {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.updateMe = exports.deleteUser = exports.updateUser = exports.createUser = exports.getUserById = exports.getAllUsers = exports.getMe = void 0;
+const models_1 = require("../models");
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
+const getMe = async (req, res, next) => {
     try {
-        // ID user sudah ada di req.user dari middleware
-        const user = await models_1.User.findByPk(req.user?.id, {
-            attributes: { exclude: ["password"] },
+        const userId = req.user?.id;
+        if (!userId) {
+            // Seharusnya tidak terjadi jika middleware isAuth bekerja
+            return res.status(401).json({ message: "Not authorized" });
+        }
+        const user = await models_1.User.findByPk(userId, {
+            attributes: ["id", "name", "email", "role"],
         });
         if (!user) {
-            res.status(404).json({ message: "User not found." });
-            return;
+            return res.status(404).json({ message: "User not found" });
         }
         res.status(200).json(user);
     }
     catch (error) {
-        res.status(500).json({ message: "Failed to fetch user profile.", error: error.message });
+        next(error);
     }
 };
-exports.getUserProfile = getUserProfile;
-// Mengubah role user menjadi penjual
-const becomeSeller = async (req, res) => {
-    try {
-        const { storeName } = req.body;
-        const user = await models_1.User.findByPk(req.user?.id);
-        if (!user) {
-            res.status(404).json({ status: "fail", message: "User not found." });
-            return;
-        }
-        if (user.role === "penjual" || user.role === "admin") {
-            res.status(400).json({ status: "fail", message: "Anda sudah terdaftar sebagai penjual atau admin." });
-            return;
-        }
-        user.role = "penjual";
-        user.storeName = storeName;
-        await user.save();
-        res.status(200).json({ status: "success", message: "Selamat! Anda sekarang adalah penjual." });
-    }
-    catch (error) {
-        res.status(500).json({ status: "error", message: "Terjadi kesalahan saat mendaftar sebagai penjual.", error: error.message });
-    }
-};
-exports.becomeSeller = becomeSeller;
-// Memperbarui profil user yang sedang login
-const updateMyProfile = async (req, res) => {
-    try {
-        const { name, email, phoneNumber, gender, dateOfBirth, storeName } = req.body;
-        const user = await models_1.User.findByPk(req.user?.id);
-        if (!user) {
-            res.status(404).json({ status: "fail", message: "User not found." });
-            return;
-        }
-        // Update fields
-        user.name = name ?? user.name;
-        user.email = email ?? user.email;
-        user.phoneNumber = phoneNumber ?? user.phoneNumber;
-        user.gender = gender ?? user.gender;
-        user.dateOfBirth = dateOfBirth ?? user.dateOfBirth;
-        user.storeName = storeName ?? user.storeName;
-        await user.save();
-        res.status(200).json({ status: "success", message: "Profil berhasil diperbarui." });
-    }
-    catch (error) {
-        if (error.name === "SequelizeUniqueConstraintError") {
-            res.status(400).json({ status: "fail", message: "Email sudah terdaftar." });
-            return;
-        }
-        res.status(500).json({ status: "error", message: "Terjadi kesalahan saat memperbarui profil.", error: error.message });
-    }
-};
-exports.updateMyProfile = updateMyProfile;
+exports.getMe = getMe;
 // --- ADMIN FUNCTIONS ---
-// Mendapatkan semua pengguna (Admin only)
-const getAllUsers = async (req, res) => {
+/**
+ * Mendapatkan semua pengguna (Admin only).
+ */
+const getAllUsers = async (req, res, next) => {
     try {
-        let where = {};
-        const { role, isActive, gender, search } = req.query;
-        if (role)
-            where.role = role;
-        if (isActive !== undefined)
-            where.isActive = isActive === "true";
-        if (gender)
-            where.gender = gender;
-        if (search) {
-            where[sequelize_1.Op.or] = [
-                { name: { [sequelize_1.Op.like]: `%${search}%` } },
-                { email: { [sequelize_1.Op.like]: `%${search}%` } },
-            ];
-        }
-        const users = await models_1.User.findAll({ where, attributes: { exclude: ["password"] } });
-        res.status(200).json({ status: "success", results: users.length, data: { users } });
+        const users = await models_1.User.findAll({
+            attributes: { exclude: ["password"] },
+            order: [["createdAt", "DESC"]],
+        });
+        res
+            .status(200)
+            .json({ status: "success", results: users.length, data: users });
     }
     catch (error) {
-        res.status(500).json({ status: "error", message: "Gagal mengambil data pengguna.", error: error.message });
+        next(error);
     }
 };
 exports.getAllUsers = getAllUsers;
-// Mendapatkan user tunggal (Admin only)
-const getUserById = async (req, res) => {
+/**
+ * Mendapatkan satu pengguna berdasarkan ID (Admin only).
+ */
+const getUserById = async (req, res, next) => {
     try {
         const user = await models_1.User.findByPk(req.params.id, {
             attributes: { exclude: ["password"] },
         });
         if (!user) {
-            res.status(404).json({ status: "fail", message: "Pengguna tidak ditemukan." });
-            return;
+            return res.status(404).json({ message: "User not found" });
         }
-        res.status(200).json({ status: "success", data: { user } });
+        res.status(200).json({ status: "success", data: user });
     }
     catch (error) {
-        res.status(500).json({ status: "error", message: "Gagal mengambil data pengguna.", error: error.message });
+        next(error);
     }
 };
 exports.getUserById = getUserById;
-// Membuat user baru (Admin only)
-const createUser = async (req, res) => {
+/**
+ * Membuat pengguna baru (Admin only).
+ */
+const createUser = async (req, res, next) => {
     try {
-        const { name, email, password, role, storeName } = req.body;
-        if (!name || !email || !password) {
-            res.status(400).json({ status: "fail", message: "Nama, email, dan password harus diisi." });
-            return;
-        }
+        const { name, email, password, role } = req.body;
+        const hashedPassword = await bcryptjs_1.default.hash(password, 12);
         const newUser = await models_1.User.create({
             name,
             email,
-            password,
-            role: role || 'pembeli',
-            storeName,
+            password: hashedPassword,
+            role: role || "pembeli",
         });
-        res.status(201).json({ status: "success", message: "Pengguna berhasil ditambahkan.", data: { user: newUser } });
+        newUser.password = undefined;
+        res.status(201).json({ status: "success", data: newUser });
     }
     catch (error) {
         if (error.name === "SequelizeUniqueConstraintError") {
-            res.status(400).json({ status: "fail", message: "Email sudah terdaftar." });
-            return;
+            return res
+                .status(400)
+                .json({ status: "fail", message: "Email sudah terdaftar." });
         }
-        res.status(500).json({ status: "error", message: "Gagal membuat pengguna.", error: error.message });
+        next(error);
     }
 };
 exports.createUser = createUser;
-// Memperbarui user (Admin only)
-const updateUser = async (req, res) => {
+/**
+ * Memperbarui pengguna (Admin only).
+ */
+const updateUser = async (req, res, next) => {
     try {
-        const user = await models_1.User.findByPk(req.params.id);
-        if (!user) {
-            res.status(404).json({ status: "fail", message: "Pengguna tidak ditemukan." });
-            return;
+        const [updatedRows] = await models_1.User.update(req.body, {
+            where: { id: req.params.id },
+        });
+        if (updatedRows === 0) {
+            return res.status(404).json({ message: "User not found to update." });
         }
-        const { name, email, role, storeName, phoneNumber, gender, dateOfBirth, isActive } = req.body;
-        // Update fields
-        user.name = name ?? user.name;
-        user.email = email ?? user.email;
-        user.role = role ?? user.role;
-        user.storeName = storeName ?? user.storeName;
-        user.phoneNumber = phoneNumber ?? user.phoneNumber;
-        user.gender = gender ?? user.gender;
-        user.dateOfBirth = dateOfBirth ?? user.dateOfBirth;
-        user.isActive = isActive ?? user.isActive;
-        await user.save();
-        res.status(200).json({ status: "success", message: "Data pengguna berhasil diperbarui.", data: { user } });
+        const updatedUser = await models_1.User.findByPk(req.params.id, {
+            attributes: { exclude: ["password"] },
+        });
+        res.status(200).json({ status: "success", data: updatedUser });
     }
     catch (error) {
-        res.status(500).json({ status: "error", message: "Gagal memperbarui pengguna.", error: error.message });
+        next(error);
     }
 };
 exports.updateUser = updateUser;
-// Menghapus user (Admin only)
-const deleteUser = async (req, res) => {
+/**
+ * Menghapus pengguna (Admin only).
+ */
+const deleteUser = async (req, res, next) => {
     try {
-        const user = await models_1.User.findByPk(req.params.id);
-        if (!user) {
-            res.status(404).json({ status: "fail", message: "Pengguna tidak ditemukan." });
-            return;
+        const deletedRows = await models_1.User.destroy({ where: { id: req.params.id } });
+        if (deletedRows === 0) {
+            return res.status(404).json({ message: "User not found to delete." });
         }
-        await user.destroy();
-        res.status(204).json({ status: "success", data: null });
+        res.status(204).send();
     }
     catch (error) {
-        res.status(500).json({ status: "error", message: "Gagal menghapus pengguna.", error: error.message });
+        next(error);
     }
 };
 exports.deleteUser = deleteUser;
+const updateMe = async (req, res, next) => {
+    try {
+        const userId = req.user?.id;
+        const { name } = req.body;
+        const [updatedRows] = await models_1.User.update({ name }, { where: { id: userId } });
+        if (updatedRows === 0) {
+            return res.status(404).json({ message: "User not found to update." });
+        }
+        const updatedUser = await models_1.User.findByPk(userId, {
+            attributes: ["id", "name", "email", "role"],
+        });
+        res.status(200).json({ status: "success", data: updatedUser });
+    }
+    catch (error) {
+        next(error);
+    }
+};
+exports.updateMe = updateMe;

@@ -37,23 +37,29 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-const authController = __importStar(require("../controllers/authController"));
 const path_1 = __importDefault(require("path"));
+const authController = __importStar(require("../controllers/authController"));
+const authMiddleware_1 = require("../middleware/authMiddleware"); // Import protect and restrictTo
+const validators_1 = require("../middleware/validators");
+const validate_1 = __importDefault(require("../middleware/validate"));
+const schemas_1 = require("@ecommerce/schemas");
 const router = express_1.default.Router();
-// Rute untuk registrasi user baru
-router.post("/register", authController.register);
-// Rute untuk login user
-router.post("/login", authController.login);
-// Rute untuk logout user
+// --- User Auth ---
+router.post("/register", validators_1.validateRegister, authController.register);
+router.post("/login", validators_1.validateLogin, authController.login);
 router.post("/logout", authController.logout);
-// --- Rute untuk Manajemen Password ---
-// Rute untuk meminta reset password (mengirim email ke pengguna)
+// --- User Password Management ---
 router.post("/forgot-password", authController.forgotPassword);
-// Rute untuk melakukan reset password dengan token yang valid
-router.patch("/reset-password/:token", authController.resetPassword);
-// Rute untuk menampilkan halaman reset password (file statis)
-router.get("/reset-password/:token", (req, res) => {
-    // Path disesuaikan untuk bekerja dari lokasi file saat ini
+router
+    .route("/reset-password/:token")
+    .get((req, res) => {
+    // Menyajikan halaman statis untuk form reset password
     res.sendFile(path_1.default.join(__dirname, "..", "..", "public", "reset-password.html"));
-});
+})
+    .patch(authController.resetPassword);
+// --- Admin Auth & Password ---
+router.post("/admin/login", (0, validate_1.default)(schemas_1.loginAdminSchema), authController.loginAdmin);
+router.post("/admin/forgot-password", (0, validate_1.default)(schemas_1.forgotPasswordAdminSchema), authController.forgotPasswordAdmin);
+router.post("/admin/reset-password/:token", (0, validate_1.default)(schemas_1.resetPasswordAdminSchema), authController.resetPasswordAdmin);
+router.post("/admin/logout", authMiddleware_1.protect, (0, authMiddleware_1.restrictTo)("admin"), authController.logoutAdmin);
 exports.default = router;

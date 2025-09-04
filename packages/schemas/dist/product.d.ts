@@ -1,9 +1,40 @@
 import { z } from "zod";
 export declare const createProductSchema: z.ZodObject<{
     name: z.ZodString;
-    description: z.ZodString;
-    price: z.ZodString;
-    stock: z.ZodString;
-    categoryId: z.ZodString;
-}, z.core.$strip>;
+    description: z.ZodOptional<z.ZodString>;
+    sku: z.ZodOptional<z.ZodString>;
+    barcode: z.ZodOptional<z.ZodString>;
+    categoryId: z.ZodEffects<z.ZodNumber, number, unknown>;
+    price: z.ZodEffects<z.ZodNumber, number, unknown>;
+    salePrice: z.ZodEffects<z.ZodUnion<[z.ZodOptional<z.ZodNumber>, z.ZodLiteral<"">]>, number | "" | undefined, unknown>;
+    quantity: z.ZodEffects<z.ZodNumber, number, unknown>;
+    slug: z.ZodString;
+    tags: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
+    images: z.ZodOptional<z.ZodAny>;
+}, "strip", z.ZodTypeAny, {
+    name: string;
+    categoryId: number;
+    price: number;
+    quantity: number;
+    slug: string;
+    description?: string | undefined;
+    sku?: string | undefined;
+    barcode?: string | undefined;
+    salePrice?: number | "" | undefined;
+    tags?: string[] | undefined;
+    images?: any;
+}, {
+    name: string;
+    slug: string;
+    description?: string | undefined;
+    sku?: string | undefined;
+    barcode?: string | undefined;
+    categoryId?: unknown;
+    price?: unknown;
+    salePrice?: unknown;
+    quantity?: unknown;
+    tags?: string[] | undefined;
+    images?: any;
+}>;
+export type CreateProductSchema = z.infer<typeof createProductSchema>;
 export type CreateProductInput = z.infer<typeof createProductSchema>;

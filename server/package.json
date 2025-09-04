@@ -8,8 +8,9 @@
     "start": "node dist/app.js",
     "dev": "npm run build -w @ecommerce/schemas && nodemon --watch \"src/**/*.ts\" --exec \"ts-node\" src/app.ts",
     "dev:vite": "vite",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build:css": "postcss ./public/css/input.css -o ./public/css/style.css --watch"
+    "test": "echo \"No test specified for server\" && exit 0",
+    "build:css": "postcss ./public/css/input.css -o ./public/css/style.css --watch",
+    "db:migrate": "npx sequelize-cli db:migrate"
   },
   "keywords": [],
   "author": "",
@@ -35,7 +36,8 @@
     "react-toastify": "^11.0.5",
     "sequelize": "^6.37.3",
     "tailwindcss": "^4.1.12",
-    "tailwindcss": "^4.1.12"
+    "tailwindcss": "^4.1.12",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

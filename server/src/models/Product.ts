@@ -1,4 +1,4 @@
-import { DataTypes, Model, Optional, Sequelize } from 'sequelize';
+import { DataTypes, Model, Optional, Sequelize } from "sequelize";
 
 // Antarmuka untuk atribut produk, agar sesuai dengan database
 interface ProductAttributes {
@@ -6,14 +6,19 @@ interface ProductAttributes {
   name: string;
   description?: string;
   price: number;
+  salePrice?: number;
   stock: number;
+  slug: string;
+  tags?: string[];
   categoryId?: number;
   userId: number;
-  status: 'active' | 'archived' | 'draft';
+  status: "active" | "archived" | "draft";
   gtin?: string;
   notes?: string;
   parentSku?: string;
-  condition: 'new' | 'used';
+  sku?: string;
+  barcode?: string;
+  condition: "new" | "used";
   weight: number;
   length?: number;
   width?: number;
@@ -25,26 +30,37 @@ interface ProductAttributes {
   promoImagePath?: string;
   imagePaths?: string[];
   videoPath?: string;
+  isPublished: boolean;
   variations?: object;
   wholesale?: object;
 }
 
 // Atribut yang bersifat opsional saat pembuatan produk (misalnya 'id')
-interface ProductCreationAttributes extends Optional<ProductAttributes, 'id' | 'stock' | 'status' | 'condition' | 'dangerousProduct' | 'preOrder'> {}
+interface ProductCreationAttributes
+  extends Optional<
+    ProductAttributes,
+    "id" | "stock" | "status" | "condition" | "dangerousProduct" | "preOrder"
+  > {}
 
-export class Product extends Model<ProductAttributes, ProductCreationAttributes> implements ProductAttributes {
+export class Product
+  extends Model<ProductAttributes, ProductCreationAttributes>
+  implements ProductAttributes
+{
   public id!: number;
   public name!: string;
   public description?: string;
   public price!: number;
+  public salePrice?: number;
   public stock!: number;
+  public slug!: string;
+  public tags?: string[];
   public categoryId?: number;
   public userId!: number;
-  public status!: 'active' | 'archived' | 'draft';
+  public status!: "active" | "archived" | "draft";
   public gtin?: string;
   public notes?: string;
   public parentSku?: string;
-  public condition!: 'new' | 'used';
+  public condition!: "new" | "used";
   public weight!: number;
   public length?: number;
   public width?: number;
@@ -56,6 +72,7 @@ export class Product extends Model<ProductAttributes, ProductCreationAttributes>
   public promoImagePath?: string;
   public imagePaths?: string[];
   public videoPath?: string;
+  public isPublished!: boolean;
   public variations?: object;
   public wholesale?: object;
 
@@ -76,14 +93,16 @@ export class Product extends Model<ProductAttributes, ProductCreationAttributes>
     });
 
     Product.belongsTo(models.Category, {
-      foreignKey: 'categoryId',
-      as: 'category',
+      foreignKey: "categoryId",
+      as: "category",
+      onDelete: "SET NULL",
     });
 
     Product.belongsToMany(models.Order, {
       through: models.OrderItem,
       foreignKey: "productId",
       otherKey: "orderId",
+      as: "orders", // Menambahkan alias yang konsisten
     });
   }
 
@@ -107,6 +126,19 @@ export class Product extends Model<ProductAttributes, ProductCreationAttributes>
           type: DataTypes.DECIMAL(10, 2),
           allowNull: false,
         },
+        salePrice: {
+          type: DataTypes.DECIMAL(10, 2),
+          allowNull: true,
+        },
+        slug: {
+          type: DataTypes.STRING,
+          allowNull: false,
+          unique: true,
+        },
+        tags: {
+          type: DataTypes.JSON,
+          allowNull: true,
+        },
         stock: {
           type: DataTypes.INTEGER,
           allowNull: false,
@@ -121,8 +153,8 @@ export class Product extends Model<ProductAttributes, ProductCreationAttributes>
           allowNull: false,
         },
         status: {
-          type: DataTypes.ENUM('active', 'archived', 'draft'),
-          defaultValue: 'draft',
+          type: DataTypes.ENUM("active", "archived", "draft"),
+          defaultValue: "draft",
           allowNull: false,
         },
         gtin: {
@@ -137,14 +169,23 @@ export class Product extends Model<ProductAttributes, ProductCreationAttributes>
           type: DataTypes.STRING,
           allowNull: true,
         },
+        sku: {
+          type: DataTypes.STRING,
+          allowNull: true,
+        },
+        barcode: {
+          type: DataTypes.STRING,
+          allowNull: true,
+        },
         condition: {
-          type: DataTypes.ENUM('new', 'used'),
-          defaultValue: 'new',
+          type: DataTypes.ENUM("new", "used"),
+          defaultValue: "new",
           allowNull: false,
         },
         weight: {
           type: DataTypes.INTEGER,
           allowNull: false, // in grams
+          defaultValue: 0, // Add a default value
         },
         length: {
           type: DataTypes.INTEGER,
@@ -195,6 +236,11 @@ export class Product extends Model<ProductAttributes, ProductCreationAttributes>
         wholesale: {
           type: DataTypes.JSON,
           allowNull: true,
+        },
+        isPublished: {
+          type: DataTypes.BOOLEAN,
+          allowNull: false,
+          defaultValue: false,
         },
       },
       {

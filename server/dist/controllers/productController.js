@@ -6,44 +6,58 @@ const sequelize_1 = require("sequelize");
 // Fungsi untuk membuat produk baru
 const createProduct = async (req, res) => {
     try {
-        const { name, description, price, stock, categoryId, status, gtin, notes, parentSku, condition, weight, length, width, height, dangerousProduct, preOrder, preorderDays, youtubeLink, variations, wholesale, } = req.body;
+        const { name, description, price, stock, categoryId, status, gtin, notes, parentSku, condition, weight, length, width, height, dangerousProduct, isPublished, preOrder, preorderDays, youtubeLink, variations, wholesale, } = req.body;
         const userId = req.user?.id;
         if (!userId) {
-            res.status(401).json({ success: false, message: "Unauthorized: User not logged in." });
+            res
+                .status(401)
+                .json({ success: false, message: "Unauthorized: User not logged in." });
             return;
         }
-        let promoImagePath = null;
-        if (req.files && req.files.promoProductImage) {
+        let promoImagePath = undefined;
+        if (req.files &&
+            req.files
+                .promoProductImage) {
             promoImagePath = req.files.promoProductImage[0].path;
         }
         let imagePaths = [];
-        if (req.files && req.files.productImages) {
+        if (req.files &&
+            req.files
+                .productImages) {
             imagePaths = req.files.productImages.map((file) => file.path);
         }
-        let videoPath = null;
-        if (req.files && req.files.productVideo) {
-            videoPath = req.files.productVideo[0].path;
-        }
-        if (!name || !price || !stock || !weight) {
-            res.status(400).json({
-                success: false,
-                message: "Nama, harga, stok, dan berat produk wajib diisi.",
-            });
-            return;
+        let videoPath = undefined;
+        if (req.files &&
+            req.files.productVideo) {
+            videoPath = req.files
+                .productVideo[0].path;
         }
         const newProduct = await index_1.Product.create({
-            name, description, price: parseFloat(price), stock: parseInt(stock, 10),
-            categoryId, userId, status: status || 'archived', gtin, notes, parentSku,
-            condition, weight: parseInt(weight, 10),
-            length: length ? parseInt(length, 10) : null,
-            width: width ? parseInt(width, 10) : null,
-            height: height ? parseInt(height, 10) : null,
-            dangerousProduct: dangerousProduct === 'true',
-            preOrder: preOrder === 'true',
-            preorderDays: preOrder === 'true' ? parseInt(preorderDays, 10) : null,
-            youtubeLink, promoImagePath, imagePaths, videoPath,
-            variations: variations ? JSON.parse(variations) : null,
-            wholesale: wholesale ? JSON.parse(wholesale) : null,
+            name,
+            description,
+            price: parseFloat(price),
+            stock: parseInt(stock, 10),
+            categoryId,
+            userId,
+            status: status || "archived",
+            gtin,
+            notes,
+            parentSku,
+            condition,
+            weight: parseInt(weight, 10),
+            length: length ? parseInt(length, 10) : undefined,
+            width: width ? parseInt(width, 10) : undefined,
+            height: height ? parseInt(height, 10) : undefined,
+            dangerousProduct: dangerousProduct === "true",
+            isPublished: isPublished === "true",
+            preOrder: preOrder === "true",
+            preorderDays: preOrder === "true" ? parseInt(preorderDays, 10) : undefined,
+            youtubeLink,
+            promoImagePath,
+            imagePaths,
+            videoPath,
+            variations: variations ? JSON.parse(variations) : undefined,
+            wholesale: wholesale ? JSON.parse(wholesale) : undefined,
         });
         res.status(201).json({
             success: true,
@@ -75,8 +89,8 @@ const getAllProducts = async (req, res) => {
         const products = await index_1.Product.findAll({
             where,
             include: [
-                { model: index_1.User, as: 'seller', attributes: ['name'] },
-                { model: index_1.Category, as: 'category', attributes: ['name'] },
+                { model: index_1.User, as: "seller", attributes: ["name"] },
+                { model: index_1.Category, as: "category", attributes: ["name"] },
             ],
         });
         res.status(200).json({
@@ -87,7 +101,12 @@ const getAllProducts = async (req, res) => {
     }
     catch (error) {
         console.error("GET ALL PRODUCTS ERROR:", error);
-        res.status(500).json({ message: "Failed to fetch products", error: error.message });
+        res
+            .status(500)
+            .json({
+            message: "Failed to fetch products",
+            error: error.message,
+        });
     }
 };
 exports.getAllProducts = getAllProducts;
@@ -103,7 +122,12 @@ const getProductById = async (req, res) => {
         res.status(200).json(product);
     }
     catch (error) {
-        res.status(500).json({ message: "Failed to fetch product details", error: error.message });
+        res
+            .status(500)
+            .json({
+            message: "Failed to fetch product details",
+            error: error.message,
+        });
     }
 };
 exports.getProductById = getProductById;
@@ -116,12 +140,17 @@ const getSellerProducts = async (req, res) => {
         }
         const products = await index_1.Product.findAll({
             where: { userId: req.user.id },
-            order: [['createdAt', 'DESC']],
+            order: [["createdAt", "DESC"]],
         });
         res.status(200).json({ success: true, data: products });
     }
     catch (error) {
-        res.status(500).json({ message: "Error loading products", error: error.message });
+        res
+            .status(500)
+            .json({
+            message: "Error loading products",
+            error: error.message,
+        });
     }
 };
 exports.getSellerProducts = getSellerProducts;
@@ -136,21 +165,38 @@ const getEditProductPage = async (req, res) => {
             where: { id: req.params.id, userId: req.user.id },
         });
         if (!product) {
-            res.status(404).json({ message: "Product not found or you don't have permission to edit it." });
+            res
+                .status(404)
+                .json({
+                message: "Product not found or you don't have permission to edit it.",
+            });
             return;
         }
         res.status(200).json({ success: true, data: product });
     }
     catch (error) {
-        res.status(500).json({ message: "Error loading product for editing", error: error.message });
+        res
+            .status(500)
+            .json({
+            message: "Error loading product for editing",
+            error: error.message,
+        });
     }
 };
 exports.getEditProductPage = getEditProductPage;
 // [REFACTORED] Get product and categories data for admin edit page
 const renderAdminEditProductPage = async (req, res) => {
     try {
-        const product = await index_1.Product.findByPk(req.query.id, {
-            include: [{ model: index_1.Category, as: 'category' }],
+        const { id } = req.query;
+        // Validate that the ID from the query string is a valid string
+        if (typeof id !== "string" || !id) {
+            res
+                .status(400)
+                .json({ success: false, message: "Product ID is required." });
+            return;
+        }
+        const product = await index_1.Product.findByPk(id, {
+            include: [{ model: index_1.Category, as: "category" }],
         });
         const categories = await index_1.Category.findAll();
         if (!product) {
@@ -160,7 +206,12 @@ const renderAdminEditProductPage = async (req, res) => {
         res.status(200).json({ success: true, data: { product, categories } });
     }
     catch (error) {
-        res.status(500).json({ message: "Error loading product for editing", error: error.message });
+        res
+            .status(500)
+            .json({
+            message: "Error loading product for editing",
+            error: error.message,
+        });
     }
 };
 exports.renderAdminEditProductPage = renderAdminEditProductPage;
@@ -178,7 +229,12 @@ const updateProduct = async (req, res) => {
         res.status(200).json({ message: "Product updated successfully.", product });
     }
     catch (error) {
-        res.status(500).json({ message: "Failed to update product", error: error.message });
+        res
+            .status(500)
+            .json({
+            message: "Failed to update product",
+            error: error.message,
+        });
     }
 };
 exports.updateProduct = updateProduct;
@@ -196,7 +252,12 @@ const deleteProduct = async (req, res) => {
         res.status(204).send();
     }
     catch (error) {
-        res.status(500).json({ message: "Failed to delete product", error: error.message });
+        res
+            .status(500)
+            .json({
+            message: "Failed to delete product",
+            error: error.message,
+        });
     }
 };
 exports.deleteProduct = deleteProduct;
@@ -205,13 +266,18 @@ const renderAdminProductsPage = async (req, res) => {
     try {
         const categories = await index_1.Category.findAll();
         const sellers = await index_1.User.findAll({
-            where: { role: 'penjual' },
-            attributes: ['id', 'name'],
+            where: { role: "penjual" },
+            attributes: ["id", "name"],
         });
         res.status(200).json({ success: true, data: { categories, sellers } });
     }
     catch (error) {
-        res.status(500).json({ message: "Error loading page data", error: error.message });
+        res
+            .status(500)
+            .json({
+            message: "Error loading page data",
+            error: error.message,
+        });
     }
 };
 exports.renderAdminProductsPage = renderAdminProductsPage;
@@ -222,7 +288,12 @@ const renderAddProductPageAdmin = async (req, res) => {
         res.status(200).json({ success: true, data: { categories } });
     }
     catch (error) {
-        res.status(500).json({ message: "Error loading page data", error: error.message });
+        res
+            .status(500)
+            .json({
+            message: "Error loading page data",
+            error: error.message,
+        });
     }
 };
 exports.renderAddProductPageAdmin = renderAddProductPageAdmin;
@@ -232,12 +303,14 @@ const getProductDetailsForPreview = async (req, res) => {
         const { id } = req.params;
         const product = await index_1.Product.findByPk(id, {
             include: [
-                { model: index_1.User, as: 'seller', attributes: ['name', 'storeName'] },
-                { model: index_1.Category, as: 'category', attributes: ['name'] },
+                { model: index_1.User, as: "seller", attributes: ["name", "storeName"] },
+                { model: index_1.Category, as: "category", attributes: ["name"] },
             ],
         });
         if (!product) {
-            res.status(404).json({ success: false, message: "Produk tidak ditemukan." });
+            res
+                .status(404)
+                .json({ success: false, message: "Produk tidak ditemukan." });
             return;
         }
         res.status(200).json({ success: true, data: product });
@@ -255,12 +328,17 @@ exports.getProductDetailsForPreview = getProductDetailsForPreview;
 const renderAllProducts = async (req, res) => {
     try {
         const products = await index_1.Product.findAll({
-            order: [['createdAt', 'DESC']],
+            order: [["createdAt", "DESC"]],
         });
         res.status(200).json({ success: true, data: products });
     }
     catch (error) {
-        res.status(500).json({ message: "Error memuat halaman produk", error: error.message });
+        res
+            .status(500)
+            .json({
+            message: "Error memuat halaman produk",
+            error: error.message,
+        });
     }
 };
 exports.renderAllProducts = renderAllProducts;

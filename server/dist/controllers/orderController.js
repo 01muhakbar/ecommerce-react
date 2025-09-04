@@ -1,7 +1,17 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateOrderStatus = exports.getAllOrders = exports.getOrderById = exports.getUserOrders = exports.createOrder = void 0;
+exports.updateOrderStatus = exports.getAllOrders = exports.getOrderById = exports.getUserOrders = exports.createOrder = exports.OrderStatus = void 0;
 const index_1 = require("../models/index");
+// --- ENUMS & TYPES ---
+// Menggunakan enum untuk status pesanan agar lebih aman dan mudah dikelola
+var OrderStatus;
+(function (OrderStatus) {
+    OrderStatus["Pending"] = "pending";
+    OrderStatus["Processing"] = "processing";
+    OrderStatus["Shipped"] = "shipped";
+    OrderStatus["Completed"] = "completed";
+    OrderStatus["Cancelled"] = "cancelled";
+})(OrderStatus || (exports.OrderStatus = OrderStatus = {}));
 // --- CONTROLLER FUNCTIONS ---
 /**
  * Membuat pesanan baru dari item yang ada di keranjang pengguna.
@@ -59,6 +69,7 @@ const createOrder = async (req, res) => {
         // 6. Kosongkan keranjang pengguna
         // Cukup hancurkan relasi di CartItem, bukan seluruh Cart jika Cart masih ingin disimpan
         // Namun jika modelnya 1 user 1 cart, destroy adalah pilihan yang tepat
+        // Cast to `any` because the custom type `CartWithProducts` doesn't know about the `setProducts` mixin method added by Sequelize.
         await cart.setProducts([], { transaction: t }); // Cara yang lebih aman untuk mengosongkan relasi
         // 7. Jika semua berhasil, commit transaksi
         await t.commit();
@@ -161,17 +172,11 @@ const updateOrderStatus = async (req, res) => {
     try {
         const { id } = req.params;
         const { status } = req.body;
-        // Validasi status yang diperbolehkan
-        const allowedStatus = [
-            "pending",
-            "processing",
-            "shipped",
-            "completed",
-            "cancelled",
-        ];
-        if (!status || !allowedStatus.includes(status)) {
+        // Validasi menggunakan enum untuk memastikan nilai status valid dan aman
+        if (!status ||
+            !Object.values(OrderStatus).includes(status)) {
             res.status(400).json({
-                message: `Status tidak valid. Gunakan salah satu dari: ${allowedStatus.join(", ")}`,
+                message: `Status tidak valid. Gunakan salah satu dari: ${Object.values(OrderStatus).join(", ")}`,
             });
             return;
         }

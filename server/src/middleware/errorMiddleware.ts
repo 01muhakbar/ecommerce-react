@@ -1,8 +1,7 @@
-
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from "express";
 
 // Class untuk error operasional yang bisa diprediksi
-class AppError extends Error {
+export class AppError extends Error {
   public statusCode: number;
   public status: string;
   public isOperational: boolean;
@@ -11,7 +10,7 @@ class AppError extends Error {
     super(message);
 
     this.statusCode = statusCode;
-    this.status = `${statusCode}`.startsWith('4') ? 'fail' : 'error';
+    this.status = `${statusCode}`.startsWith("4") ? "fail" : "error";
     this.isOperational = true;
 
     Error.captureStackTrace(this, this.constructor);
@@ -20,50 +19,69 @@ class AppError extends Error {
 
 // --- Fungsi-fungsi kecil untuk menangani jenis error spesifik ---
 
-const handleJWTError = () => new AppError('Invalid token. Please log in again!', 401);
-const handleJWTExpiredError = () => new AppError('Your token has expired! Please log in again.', 401);
+const handleJWTError = () =>
+  new AppError("Invalid token. Please log in again!", 401);
+const handleJWTExpiredError = () =>
+  new AppError("Your token has expired! Please log in again.", 401);
 const handleSequelizeValidationError = (err: any) => {
-    const errors = Object.values(err.errors).map((el: any) => el.message);
-    const message = `Invalid input data. ${errors.join('. ')}`;
-    return new AppError(message, 400);
-}
+  const errors = Object.values(err.errors).map((el: any) => el.message);
+  const message = `Invalid input data. ${errors.join(". ")}`;
+  return new AppError(message, 400);
+};
 
 // --- Fungsi utama untuk mengirim error ke client ---
 
-const sendError = (err: any, res: Response) => {
-    // Jika error operasional, kirim detailnya ke client
-    if (err.isOperational) {
-        res.status(err.statusCode).json({
-            status: err.status,
-            message: err.message
-        });
-    // Jika error programming atau dari library lain, jangan bocorkan detailnya
-    } else {
-        // 1) Log error ke konsol
-        console.error('ERROR 💥', err);
+const sendErrorDev = (err: any, res: Response) => {
+  res.status(err.statusCode).json({
+    status: err.status,
+    error: err,
+    message: err.message,
+    stack: err.stack,
+  });
+};
 
-        // 2) Kirim respons generik
-        res.status(500).json({
-            status: 'error',
-            message: 'Something went very wrong!'
-        });
-    }
+const sendErrorProd = (err: any, res: Response) => {
+  // A) Operational, trusted error: send message to client
+  if (err.isOperational) {
+    return res.status(err.statusCode).json({
+      status: err.status,
+      message: err.message,
+    });
+  }
+  // B) Programming or other unknown error: don't leak error details
+  // 1) Log error
+  console.error("ERROR 💥", err);
+  // 2) Send generic message
+  return res.status(500).json({
+    status: "error",
+    message: "Something went very wrong!",
+  });
 };
 
 // --- Middleware Utama ---
 
-const globalErrorHandler = (err: any, req: Request, res: Response, next: NextFunction) => {
-    err.statusCode = err.statusCode || 500;
-    err.status = err.status || 'error';
+const globalErrorHandler = (
+  err: any,
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  err.statusCode = err.statusCode || 500;
+  err.status = err.status || "error";
 
-    let error = { ...err };
-    error.message = err.message;
+  let error = { ...err };
+  error.message = err.message;
 
-    if (error.name === 'JsonWebTokenError') error = handleJWTError();
-    if (error.name === 'TokenExpiredError') error = handleJWTExpiredError();
-    if (error.name === 'SequelizeValidationError') error = handleSequelizeValidationError(error);
+  if (error.name === "JsonWebTokenError") error = handleJWTError();
+  if (error.name === "TokenExpiredError") error = handleJWTExpiredError();
+  if (error.name === "SequelizeValidationError")
+    error = handleSequelizeValidationError(error);
 
-    sendError(error, res);
+  if (process.env.NODE_ENV === "development") {
+    sendErrorDev(error, res);
+  } else if (process.env.NODE_ENV === "production") {
+    sendErrorProd(error, res);
+  }
 };
 
 export default globalErrorHandler;

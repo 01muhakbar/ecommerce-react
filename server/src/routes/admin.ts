@@ -1,12 +1,16 @@
 import express from "express";
 import * as userController from "../controllers/userController";
 import * as orderController from "../controllers/orderController";
+import * as adminController from "../controllers/adminController";
 import { protect, restrictTo } from "../middleware/authMiddleware";
 
 const router = express.Router();
 
 // Lindungi semua rute di file ini dengan otentikasi dan role check admin
 router.use(protect, restrictTo("admin"));
+
+// --- Dashboard Statistics ---
+router.get("/dashboard/statistics", adminController.getDashboardStatistics);
 
 // --- User Management ---
 router.get("/users", userController.getAllUsers);

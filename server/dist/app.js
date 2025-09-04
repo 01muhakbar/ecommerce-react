@@ -17,18 +17,23 @@ const sellerRoutes_1 = __importDefault(require("./routes/sellerRoutes"));
 const categoryRoutes_1 = __importDefault(require("./routes/categoryRoutes"));
 const categoryAdminRoutes_1 = __importDefault(require("./routes/categoryAdminRoutes"));
 const orderRoutes_1 = __importDefault(require("./routes/orderRoutes"));
+const adminProductRoutes_1 = __importDefault(require("./routes/adminProductRoutes"));
 const admin_1 = __importDefault(require("./routes/admin"));
+const adminOrderRoutes_1 = __importDefault(require("./routes/adminOrderRoutes"));
 // Impor model dan middleware
 const models_1 = __importDefault(require("./models"));
 const errorMiddleware_1 = __importDefault(require("./middleware/errorMiddleware"));
 const app = (0, express_1.default)();
-const PORT = parseInt(process.env.PORT || '3000', 10);
+const PORT = parseInt(process.env.PORT || "3000", 10);
 // Middleware
 app.use(express_1.default.json()); // Untuk parsing application/json
 app.use(express_1.default.urlencoded({ extended: true })); // Untuk parsing application/x-www-form-urlencoded
-app.use((0, method_override_1.default)('_method')); // Untuk mendukung PUT/DELETE dari form HTML
+app.use((0, method_override_1.default)("_method")); // Untuk mendukung PUT/DELETE dari form HTML
 app.use((0, cookie_parser_1.default)()); // Untuk mem-parsing cookie
-app.use((0, cors_1.default)()); // Aktifkan CORS untuk semua rute
+app.use((0, cors_1.default)({
+    origin: "http://localhost:5173",
+    credentials: true,
+})); // Aktifkan CORS untuk semua rute
 // --- Rute API --- (Semua rute sekarang adalah API)
 // Rute utama API v1
 app.use("/api/v1/users", userRoutes_1.default);
@@ -40,11 +45,13 @@ app.use("/api/v1/categories", categoryRoutes_1.default);
 app.use("/api/v1/admin/categories", categoryAdminRoutes_1.default);
 app.use("/api/v1/orders", orderRoutes_1.default);
 app.use("/api/v1/admin", admin_1.default);
+app.use("/api/v1/admin/products", adminProductRoutes_1.default);
+app.use("/api/v1/admin/orders", adminOrderRoutes_1.default);
 // --- Penanganan Rute Tidak Ditemukan (404) ---
 // Tangani semua rute yang tidak cocok dengan rute di atas
-app.all('*', (req, res, next) => {
+app.all("*", (req, res, next) => {
     res.status(404).json({
-        status: 'fail',
+        status: "fail",
         message: `Can't find ${req.originalUrl} on this server!`,
     });
 });

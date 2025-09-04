@@ -3,7 +3,15 @@ import { createBrowserRouter, RouterProvider, Outlet } from "react-router-dom";
 // Import Pages
 import AdminLoginPage from "./pages/AdminLoginPage";
 import ProfilePage from "./pages/ProfilePage";
-import AdminDashboardPage from "./pages/AdminDashboardPage"; // Halaman baru
+import AdminDashboardPage from "./pages/AdminDashboardPage";
+import AdminForgotPasswordPage from "./pages/AdminForgotPasswordPage";
+import AdminResetPasswordPage from "./pages/AdminResetPasswordPage";
+import AdminOrdersPage from "./pages/AdminOrdersPage";
+import AdminProductsPage from "./pages/AdminProductsPage";
+import AdminAddProductPage from "./pages/AdminAddProductPage";
+
+// Import Layouts
+import AdminLayout from "./layouts/AdminLayout";
 
 // Layout sederhana untuk rute-rute
 // Anda bisa menambahkan komponen seperti Navbar atau Sidebar di sini
@@ -33,9 +41,41 @@ const router = createBrowserRouter([
         element: <AdminLoginPage />,
       },
       {
-        path: "admin/dashboard",
-        element: <AdminDashboardPage />, // Halaman yang dituju setelah admin login
+        path: "admin/forgot-password",
+        element: <AdminForgotPasswordPage />,
       },
+      {
+        path: "admin/reset-password/:token",
+        element: <AdminResetPasswordPage />,
+      },
+    ],
+  },
+  {
+    path: "/admin",
+    element: <AdminLayout />,
+    children: [
+      {
+        path: "dashboard",
+        element: <AdminDashboardPage />,
+      },
+      {
+        path: "orders",
+        element: <AdminOrdersPage />,
+      },
+      {
+        path: "catalog/products",
+        element: <AdminProductsPage />,
+      },
+      {
+        path: "catalog/products/new",
+        element: <AdminAddProductPage />,
+      },
+      // Placeholder routes for other catalog pages
+      // {
+      //   path: "catalog/categories",
+      //   element: <AdminCategoriesPage />,
+      // },
+      // ... etc for attributes and coupons
     ],
   },
 ]);

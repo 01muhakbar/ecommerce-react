@@ -38,18 +38,23 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const userController = __importStar(require("../controllers/userController"));
+const orderController = __importStar(require("../controllers/orderController"));
+const adminController = __importStar(require("../controllers/adminController"));
 const authMiddleware_1 = require("../middleware/authMiddleware");
 const router = express_1.default.Router();
-// Semua rute di file ini dilindungi dan dibatasi untuk admin
-router.use(authMiddleware_1.protect, (0, authMiddleware_1.restrictTo)('admin'));
-// Rute untuk manajemen pengguna (Admin)
-router.get('/users', userController.getAllUsers); // Menggantikan renderAdminUsersPage
-router.post('/users', userController.createUser); // Membuat user baru (Admin only)
-// Rute untuk manajemen pengguna spesifik berdasarkan ID
-router.route('/users/:id')
-    .get(userController.getUserById) // Menggantikan renderViewUserPage
-    .patch(userController.updateUser) // Menggantikan updateUser dan updateUserStatus
+// Lindungi semua rute di file ini dengan otentikasi dan role check admin
+router.use(authMiddleware_1.protect, (0, authMiddleware_1.restrictTo)("admin"));
+// --- Dashboard Statistics ---
+router.get("/dashboard/statistics", adminController.getDashboardStatistics);
+// --- User Management ---
+router.get("/users", userController.getAllUsers);
+router.post("/users", userController.createUser);
+router
+    .route("/users/:id")
+    .get(userController.getUserById)
+    .patch(userController.updateUser) // Menggunakan updateUser untuk admin
     .delete(userController.deleteUser);
-// Rute untuk mendapatkan detail user untuk preview (jika masih diperlukan terpisah dari getUserById)
-router.get('/users/:id/details', userController.getUserById); // Menggunakan getUserById
+// --- Order Management ---
+router.get("/orders", orderController.getAllOrders);
+router.patch("/orders/:id/status", orderController.updateOrderStatus);
 exports.default = router;
