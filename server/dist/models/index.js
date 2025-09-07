@@ -1,54 +1,65 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.OrderItem = exports.Order = exports.Category = exports.CartItem = exports.Cart = exports.Product = exports.User = exports.Sequelize = exports.sequelize = void 0;
-const sequelize_1 = require("sequelize");
-Object.defineProperty(exports, "Sequelize", { enumerable: true, get: function () { return sequelize_1.Sequelize; } });
-const User_1 = require("./User");
-Object.defineProperty(exports, "User", { enumerable: true, get: function () { return User_1.User; } });
-const Product_1 = require("./Product");
-Object.defineProperty(exports, "Product", { enumerable: true, get: function () { return Product_1.Product; } });
-const Cart_1 = require("./Cart");
-Object.defineProperty(exports, "Cart", { enumerable: true, get: function () { return Cart_1.Cart; } });
-const CartItem_1 = require("./CartItem");
-Object.defineProperty(exports, "CartItem", { enumerable: true, get: function () { return CartItem_1.CartItem; } });
-const Category_1 = require("./Category");
-Object.defineProperty(exports, "Category", { enumerable: true, get: function () { return Category_1.Category; } });
-const Order_1 = require("./Order");
-Object.defineProperty(exports, "Order", { enumerable: true, get: function () { return Order_1.Order; } });
-const OrderItem_1 = require("./OrderItem");
-Object.defineProperty(exports, "OrderItem", { enumerable: true, get: function () { return OrderItem_1.OrderItem; } });
-const env = process.env.NODE_ENV || 'development';
-const config = require(__dirname + '/../../config/config.json')[env];
+import { Sequelize, Model } from "sequelize";
+import fs from "fs/promises"; // Gunakan fs/promises untuk operasi asinkron
+import path from "path";
+import { fileURLToPath } from "url";
+// Recreate __filename and __dirname for ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+// Load database configuration manually to avoid unsupported import assertion
+const configPath = path.join(__dirname, "..", "..", "config", "config.json");
+const configJson = JSON.parse(await fs.readFile(configPath, "utf-8"));
+const basename = path.basename(__filename);
+const env = process.env.NODE_ENV || "development";
+const config = configJson[env];
 let sequelize;
 if (config.use_env_variable) {
-    exports.sequelize = sequelize = new sequelize_1.Sequelize(process.env[config.use_env_variable], config);
+    sequelize = new Sequelize(process.env[config.use_env_variable], config);
 }
 else {
-    exports.sequelize = sequelize = new sequelize_1.Sequelize(config.database, config.username, config.password, config);
+    sequelize = new Sequelize(config.database, config.username, config.password, config);
 }
-// Initialize models
-User_1.User.initModel(sequelize);
-Product_1.Product.initModel(sequelize);
-Cart_1.Cart.initModel(sequelize);
-CartItem_1.CartItem.initModel(sequelize);
-Category_1.Category.initModel(sequelize);
-Order_1.Order.initModel(sequelize);
-OrderItem_1.OrderItem.initModel(sequelize);
-// Define associations
-const models = {
-    User: User_1.User,
-    Product: Product_1.Product,
-    Cart: Cart_1.Cart,
-    CartItem: CartItem_1.CartItem,
-    Category: Category_1.Category,
-    Order: Order_1.Order,
-    OrderItem: OrderItem_1.OrderItem,
-    sequelize,
-    Sequelize: sequelize_1.Sequelize,
-};
-Object.values(models).forEach((model) => {
-    if (model.associate) {
-        model.associate(models);
+const db = {};
+export const initializeDatabase = async () => {
+    const files = await fs.readdir(__dirname);
+    for (const file of files) {
+        if (file.indexOf(".") !== 0 &&
+            file !== basename &&
+            (file.slice(-3) === ".js" ||
+                (file.slice(-3) === ".ts" && file.indexOf(".d.ts") === -1))) {
+            const filePath = path.join(__dirname, file);
+            const fileUrl = `file://${filePath}`; // Gunakan URL untuk dynamic import
+            const importedModule = await import(fileUrl);
+            let model;
+            // Cek apakah modul mengekspor kelas model secara default atau sebagai named export
+            const exported = importedModule.default || importedModule;
+            // Cari kelas model yang valid di dalam modul yang diimpor
+            for (const key in exported) {
+                if (Object.prototype.hasOwnProperty.call(exported, key)) {
+                    const potentialModel = exported[key];
+                    if (typeof potentialModel === "function" &&
+                        potentialModel.prototype instanceof Model &&
+                        potentialModel.initModel) {
+                        model = potentialModel.initModel(sequelize);
+                        break;
+                    }
+                }
+            }
+            if (model && model.name) {
+                db[model.name] = model;
+            }
+        }
     }
-});
-exports.default = models;
+    // Setelah semua model dimuat, atur asosiasi antar model
+    Object.keys(db).forEach((modelName) => {
+        if (db[modelName].associate) {
+            db[modelName].associate(db); // Pass db object for associations
+        }
+    });
+    // Tetapkan instance sequelize dan library Sequelize ke objek db
+    db.sequelize = sequelize;
+    db.Sequelize = Sequelize;
+    return db;
+};
+// Ekspor db sebagai default untuk kompatibilitas, meskipun isinya kosong sampai inisialisasi
+const initializedDbPromise = initializeDatabase();
+export default initializedDbPromise;

@@ -1,72 +1,68 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateOrderStatus = exports.getOrders = void 0;
-const Order_1 = require("../models/Order");
-const User_1 = require("../models/User");
-const zod_1 = require("zod");
-const statusSchema = zod_1.z.object({
-    status: zod_1.z.enum(['pending', 'completed', 'cancelled']),
-});
-const getOrders = async (req, res) => {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 8;
-    const offset = (page - 1) * limit;
+import initializedDbPromise from "../models/index.js";
+const db = await initializedDbPromise;
+export const getOrders = async (req, res) => {
     try {
-        const { count, rows } = await Order_1.Order.findAndCountAll({
-            limit,
-            offset,
+        const page = parseInt(req.query.page, 10) || 1;
+        const limit = parseInt(req.query.limit, 10) || 8;
+        const offset = (page - 1) * limit;
+        const { count, rows: orders } = await db.Order.findAndCountAll({
             include: [
                 {
-                    model: User_1.User,
-                    as: 'user',
-                    attributes: ['name'],
+                    model: db.User,
+                    as: "user",
+                    attributes: ["name"], // Only fetch the user's name
                 },
             ],
-            order: [['createdAt', 'DESC']],
+            order: [["createdAt", "DESC"]],
+            limit,
+            offset,
+            distinct: true,
         });
-        const totalPages = Math.ceil(count / limit);
-        const data = rows.map(order => ({
+        // Cast the result to our more specific type
+        const typedOrders = orders;
+        const toClientStatus = (serverStatus) => {
+            switch (serverStatus) {
+                case "pending":
+                    return "Pending";
+                case "processing":
+                    return "Processing";
+                case "shipped":
+                    return "Delivered";
+                case "completed":
+                    return "Delivered";
+                case "cancelled":
+                    return "Cancelled";
+                default:
+                    // This case should ideally not be reached if all statuses are handled.
+                    return "Pending";
+            }
+        };
+        // Transform data for the client
+        const transformedData = typedOrders.map((order) => ({
             id: order.id,
-            invoiceNo: order.id,
-            orderTime: order.createdAt, // Use createdAt
-            customerName: order.user.name, // Use user.name
+            invoiceNo: order.invoiceNo,
+            orderTime: order.createdAt.toISOString(),
+            customerName: order.user?.name || "Guest",
             amount: order.totalAmount,
-            status: order.status,
+            status: toClientStatus(order.status),
         }));
-        res.json({
-            data,
+        res.status(200).json({
+            data: transformedData,
             pagination: {
-                currentPage: page,
-                totalPages,
                 totalItems: count,
+                totalPages: Math.ceil(count / limit),
+                currentPage: page,
             },
         });
     }
     catch (error) {
-        console.error('Error fetching orders:', error);
-        res.status(500).json({ message: 'Internal server error' });
+        res.status(500).json({
+            message: "Failed to fetch orders",
+            error: error.message,
+        });
     }
 };
-exports.getOrders = getOrders;
-const updateOrderStatus = async (req, res) => {
-    const { id } = req.params;
-    const validation = statusSchema.safeParse(req.body);
-    if (!validation.success) {
-        return res.status(400).json({ message: 'Invalid status provided', errors: validation.error.issues });
-    }
-    const { status } = validation.data;
-    try {
-        const order = await Order_1.Order.findByPk(id);
-        if (!order) {
-            return res.status(404).json({ message: 'Order not found' });
-        }
-        order.status = status;
-        await order.save();
-        res.json({ message: 'Order status updated successfully', order });
-    }
-    catch (error) {
-        console.error('Error updating order status:', error);
-        res.status(500).json({ message: 'Internal server error' });
-    }
+export const updateOrderStatus = async (req, res) => {
+    // Placeholder implementation
+    res.status(500).json({ message: "Not implemented yet" });
 };
-exports.updateOrderStatus = updateOrderStatus;

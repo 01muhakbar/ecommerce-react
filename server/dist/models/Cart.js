@@ -1,8 +1,5 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Cart = void 0;
-const sequelize_1 = require("sequelize");
-class Cart extends sequelize_1.Model {
+import { DataTypes, Model } from "sequelize";
+export class Cart extends Model {
     static associate(models) {
         Cart.belongsTo(models.User, { foreignKey: "userId" });
         Cart.belongsToMany(models.Product, {
@@ -14,12 +11,12 @@ class Cart extends sequelize_1.Model {
     static initModel(sequelize) {
         Cart.init({
             id: {
-                type: sequelize_1.DataTypes.INTEGER.UNSIGNED,
+                type: DataTypes.INTEGER.UNSIGNED,
                 autoIncrement: true,
                 primaryKey: true,
             },
             userId: {
-                type: sequelize_1.DataTypes.INTEGER.UNSIGNED,
+                type: DataTypes.INTEGER.UNSIGNED,
                 allowNull: false,
                 unique: true,
             },
@@ -30,4 +27,3 @@ class Cart extends sequelize_1.Model {
         return Cart;
     }
 }
-exports.Cart = Cart;

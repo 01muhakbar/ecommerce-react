@@ -2,7 +2,8 @@ import React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
-import { forgotPasswordAdminSchema, type ForgotPasswordAdminInput } from "@ecommerce/schemas";
+import { z } from "zod";
+import { forgotPasswordAdminSchema } from "@ecommerce/schemas";
 import api from "../api/axios";
 
 // --- Icon Components ---
@@ -42,6 +43,9 @@ const SpinnerIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+// --- Type Definition ---
+type ForgotPasswordAdminInput = z.infer<typeof forgotPasswordAdminSchema>;
+
 // --- Main Component ---
 const AdminForgotPasswordPage: React.FC = () => {
   const {
@@ -63,7 +67,9 @@ const AdminForgotPasswordPage: React.FC = () => {
       setError("root.serverSuccess", { type: "manual", message: data.message });
     },
     onError: (error: any) => {
-      const message = error.response?.data?.message || "Terjadi kesalahan. Silakan coba lagi.";
+      const message =
+        error.response?.data?.message ||
+        "Terjadi kesalahan. Silakan coba lagi.";
       setError("root.serverError", { type: "manual", message });
     },
   });
@@ -76,17 +82,28 @@ const AdminForgotPasswordPage: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-200 text-slate-800 flex items-center justify-center p-4">
       <div className="w-full max-w-md mx-auto">
         <div className="bg-white rounded-2xl shadow-2xl shadow-slate-400/20 overflow-hidden p-8 sm:p-12">
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">Lupa Kata Sandi Admin</h1>
-          <p className="text-gray-500 mb-8">Masukkan alamat email Anda dan kami akan mengirimkan tautan untuk mereset kata sandi Anda.</p>
+          <h1 className="text-3xl font-bold text-slate-900 mb-2">
+            Lupa Kata Sandi Admin
+          </h1>
+          <p className="text-gray-500 mb-8">
+            Masukkan alamat email Anda dan kami akan mengirimkan tautan untuk
+            mereset kata sandi Anda.
+          </p>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             {errors.root?.serverError && (
-              <div className="bg-red-100 border border-red-200 text-red-700 px-4 py-3 rounded-lg relative" role="alert">
+              <div
+                className="bg-red-100 border border-red-200 text-red-700 px-4 py-3 rounded-lg relative"
+                role="alert"
+              >
                 <p>{errors.root.serverError.message}</p>
               </div>
             )}
             {errors.root?.serverSuccess && (
-              <div className="bg-green-100 border border-green-200 text-green-700 px-4 py-3 rounded-lg relative" role="alert">
+              <div
+                className="bg-green-100 border border-green-200 text-green-700 px-4 py-3 rounded-lg relative"
+                role="alert"
+              >
                 <p>{errors.root.serverSuccess.message}</p>
               </div>
             )}
@@ -108,7 +125,7 @@ const AdminForgotPasswordPage: React.FC = () => {
             </div>
             {errors.email && (
               <p className="text-sm text-red-600 -mt-4">
-                {errors.email.message}
+                {String(errors.email?.message || "")}
               </p>
             )}
 

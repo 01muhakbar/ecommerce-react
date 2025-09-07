@@ -1,6 +1,7 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import api from "../api/axios";
+import type { Order } from "../types/order";
 import StatCard from "../components/StatCard"; // Assuming this is your StatCard component
 import SalesChart from "../components/SalesChart"; // Assuming this is your SalesChart component
 import BestSellersChart from "../components/BestSellersChart"; // Assuming this is your BestSellersChart component
@@ -62,43 +63,6 @@ const CheckCircleIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
-const ClockIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    {...props}
-  >
-    <circle cx="12" cy="12" r="10" />
-    <polyline points="12 6 12 12 16 14" />
-  </svg>
-);
-
-const RefreshCwIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    {...props}
-  >
-    <path d="M21.5 2v6h-6" />
-    <path d="M2.5 22v-6h6" />
-    <path d="M21.5 12c0 7-6.5 9-9 9s-9-2-9-9 6.5-9 9-9c1.8 0 3.5.2 5.1.7" />
-  </svg>
-);
-
 // --- TYPE DEFINITIONS ---
 
 interface SummaryStats {
@@ -126,20 +90,12 @@ interface BestSellingProduct {
   sales: number;
 }
 
-interface RecentOrder {
-  invoiceNo: number;
-  orderTime: string;
-  status: "pending" | "processing" | "shipped" | "completed" | "cancelled";
-  amount: number;
-  User: { name: string };
-}
-
 interface DashboardData {
   summaryStats: SummaryStats;
   orderStatusCounts: OrderStatusCounts;
-  weeklySalesData: WeeklySalesData;
+  weeklySalesData: WeeklySalesData[];
   bestSellingProducts: BestSellingProduct[];
-  recentOrders: RecentOrder[];
+  recentOrders: Order[];
 }
 
 // --- HELPER FUNCTIONS ---
@@ -184,29 +140,12 @@ const AdminDashboardPage: React.FC = () => {
     );
   }
 
-  // Debugging: Log the data before destructuring
-  // console.log("Data from useQuery:", data);
-
-  // Add a check for data being undefined or null
-  if (!data) {
-    return (
-      <div className="p-6 text-red-600 bg-red-100 border border-red-200 rounded-lg">
-        <h2 className="text-xl font-semibold mb-2">Error: Data is undefined</h2>
-        <p>
-          Dashboard data could not be loaded. Please check the network request
-          and backend response.
-        </p>
-      </div>
-    );
-  }
-
-  const {
-    summaryStats,
-    orderStatusCounts,
-    weeklySalesData,
-    bestSellingProducts,
-    recentOrders,
-  } = data;
+  // Defensively access data to prevent crashes
+  const summaryStats = data?.summaryStats;
+  const orderStatusCounts = data?.orderStatusCounts;
+  const weeklySalesData = data?.weeklySalesData || [];
+  const bestSellingProducts = data?.bestSellingProducts || [];
+  const recentOrders = data?.recentOrders || [];
 
   return (
     <div className="p-6">
@@ -216,25 +155,25 @@ const AdminDashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <StatCard
           title="Penjualan Hari Ini"
-          value={formatCurrency(summaryStats.todaySales)}
+          value={formatCurrency(summaryStats?.todaySales || 0)}
           icon={<DollarSignIcon />}
           color="bg-blue-500"
         />
         <StatCard
           title="Penjualan Kemarin"
-          value={formatCurrency(summaryStats.yesterdaySales)}
+          value={formatCurrency(summaryStats?.yesterdaySales || 0)}
           icon={<DollarSignIcon />}
           color="bg-green-500"
         />
         <StatCard
           title="Pesanan Total"
-          value={orderStatusCounts.total}
+          value={orderStatusCounts?.total || 0}
           icon={<ShoppingCartIcon />}
           color="bg-purple-500"
         />
         <StatCard
           title="Pesanan Selesai"
-          value={orderStatusCounts.delivered}
+          value={orderStatusCounts?.delivered || 0}
           icon={<CheckCircleIcon />}
           color="bg-teal-500"
         />
@@ -250,19 +189,19 @@ const AdminDashboardPage: React.FC = () => {
             <p>
               Penjualan Bulan Ini:{" "}
               <span className="font-bold text-gray-800">
-                {formatCurrency(summaryStats.thisMonthSales)}
+                {formatCurrency(summaryStats?.thisMonthSales || 0)}
               </span>
             </p>
             <p>
               Penjualan Bulan Lalu:{" "}
               <span className="font-bold text-gray-800">
-                {formatCurrency(summaryStats.lastMonthSales)}
+                {formatCurrency(summaryStats?.lastMonthSales || 0)}
               </span>
             </p>
             <p>
               Penjualan Sepanjang Waktu:{" "}
               <span className="font-bold text-gray-800">
-                {formatCurrency(summaryStats.allTimeSales)}
+                {formatCurrency(summaryStats?.allTimeSales || 0)}
               </span>
             </p>
           </div>
@@ -272,24 +211,24 @@ const AdminDashboardPage: React.FC = () => {
           <div className="space-y-2">
             <p>
               Total Pesanan:{" "}
-              <span className="font-bold">{orderStatusCounts.total}</span>
+              <span className="font-bold">{orderStatusCounts?.total || 0}</span>
             </p>
             <p>
               Pending:{" "}
               <span className="font-bold text-yellow-600">
-                {orderStatusCounts.pending}
+                {orderStatusCounts?.pending || 0}
               </span>
             </p>
             <p>
               Processing:{" "}
               <span className="font-bold text-blue-600">
-                {orderStatusCounts.processing}
+                {orderStatusCounts?.processing || 0}
               </span>
             </p>
             <p>
               Delivered:{" "}
               <span className="font-bold text-green-600">
-                {orderStatusCounts.delivered}
+                {orderStatusCounts?.delivered || 0}
               </span>
             </p>
           </div>
@@ -304,7 +243,7 @@ const AdminDashboardPage: React.FC = () => {
 
       {/* Recent Order Section */}
       <div className="mt-8">
-        {recentOrders && (
+        {recentOrders && recentOrders.length > 0 && (
           <OrdersTable title="Recent Orders" orders={recentOrders} />
         )}
       </div>

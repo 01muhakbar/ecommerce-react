@@ -1,10 +1,9 @@
-import express from "express";
-import { syncDatabase } from "../controllers/devController";
+import { Router } from "express";
+// FIX: Added .js extension to relative import
+import { syncDatabase } from "../controllers/devController.js";
 
-const router = express.Router();
+const router = Router();
 
-// Rute untuk sinkronisasi database (hanya untuk development)
-// GET /api/v1/dev/sync-database
-router.get("/sync-database", syncDatabase);
+router.post("/sync-db", syncDatabase);
 
 export default router;

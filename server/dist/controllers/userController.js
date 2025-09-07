@@ -1,19 +1,15 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateMe = exports.deleteUser = exports.updateUser = exports.createUser = exports.getUserById = exports.getAllUsers = exports.getMe = void 0;
-const models_1 = require("../models");
-const bcryptjs_1 = __importDefault(require("bcryptjs"));
-const getMe = async (req, res, next) => {
+import bcrypt from "bcryptjs";
+import initializedDbPromise from "../models/index.js";
+const db = await initializedDbPromise;
+const { User } = db;
+export const getMe = async (req, res, next) => {
     try {
         const userId = req.user?.id;
         if (!userId) {
             // Seharusnya tidak terjadi jika middleware isAuth bekerja
             return res.status(401).json({ message: "Not authorized" });
         }
-        const user = await models_1.User.findByPk(userId, {
+        const user = await User.findByPk(userId, {
             attributes: ["id", "name", "email", "role"],
         });
         if (!user) {
@@ -25,14 +21,13 @@ const getMe = async (req, res, next) => {
         next(error);
     }
 };
-exports.getMe = getMe;
 // --- ADMIN FUNCTIONS ---
 /**
  * Mendapatkan semua pengguna (Admin only).
  */
-const getAllUsers = async (req, res, next) => {
+export const getAllUsers = async (req, res, next) => {
     try {
-        const users = await models_1.User.findAll({
+        const users = await User.findAll({
             attributes: { exclude: ["password"] },
             order: [["createdAt", "DESC"]],
         });
@@ -44,13 +39,12 @@ const getAllUsers = async (req, res, next) => {
         next(error);
     }
 };
-exports.getAllUsers = getAllUsers;
 /**
  * Mendapatkan satu pengguna berdasarkan ID (Admin only).
  */
-const getUserById = async (req, res, next) => {
+export const getUserById = async (req, res, next) => {
     try {
-        const user = await models_1.User.findByPk(req.params.id, {
+        const user = await User.findByPk(req.params.id, {
             attributes: { exclude: ["password"] },
         });
         if (!user) {
@@ -62,15 +56,14 @@ const getUserById = async (req, res, next) => {
         next(error);
     }
 };
-exports.getUserById = getUserById;
 /**
  * Membuat pengguna baru (Admin only).
  */
-const createUser = async (req, res, next) => {
+export const createUser = async (req, res, next) => {
     try {
         const { name, email, password, role } = req.body;
-        const hashedPassword = await bcryptjs_1.default.hash(password, 12);
-        const newUser = await models_1.User.create({
+        const hashedPassword = await bcrypt.hash(password, 12);
+        const newUser = await User.create({
             name,
             email,
             password: hashedPassword,
@@ -88,19 +81,18 @@ const createUser = async (req, res, next) => {
         next(error);
     }
 };
-exports.createUser = createUser;
 /**
  * Memperbarui pengguna (Admin only).
  */
-const updateUser = async (req, res, next) => {
+export const updateUser = async (req, res, next) => {
     try {
-        const [updatedRows] = await models_1.User.update(req.body, {
+        const [updatedRows] = await User.update(req.body, {
             where: { id: req.params.id },
         });
         if (updatedRows === 0) {
             return res.status(404).json({ message: "User not found to update." });
         }
-        const updatedUser = await models_1.User.findByPk(req.params.id, {
+        const updatedUser = await User.findByPk(req.params.id, {
             attributes: { exclude: ["password"] },
         });
         res.status(200).json({ status: "success", data: updatedUser });
@@ -109,13 +101,12 @@ const updateUser = async (req, res, next) => {
         next(error);
     }
 };
-exports.updateUser = updateUser;
 /**
  * Menghapus pengguna (Admin only).
  */
-const deleteUser = async (req, res, next) => {
+export const deleteUser = async (req, res, next) => {
     try {
-        const deletedRows = await models_1.User.destroy({ where: { id: req.params.id } });
+        const deletedRows = await User.destroy({ where: { id: req.params.id } });
         if (deletedRows === 0) {
             return res.status(404).json({ message: "User not found to delete." });
         }
@@ -125,16 +116,15 @@ const deleteUser = async (req, res, next) => {
         next(error);
     }
 };
-exports.deleteUser = deleteUser;
-const updateMe = async (req, res, next) => {
+export const updateMe = async (req, res, next) => {
     try {
         const userId = req.user?.id;
         const { name } = req.body;
-        const [updatedRows] = await models_1.User.update({ name }, { where: { id: userId } });
+        const [updatedRows] = await User.update({ name }, { where: { id: userId } });
         if (updatedRows === 0) {
             return res.status(404).json({ message: "User not found to update." });
         }
-        const updatedUser = await models_1.User.findByPk(userId, {
+        const updatedUser = await User.findByPk(userId, {
             attributes: ["id", "name", "email", "role"],
         });
         res.status(200).json({ status: "success", data: updatedUser });
@@ -143,4 +133,3 @@ const updateMe = async (req, res, next) => {
         next(error);
     }
 };
-exports.updateMe = updateMe;

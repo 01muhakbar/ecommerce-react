@@ -1,13 +1,10 @@
-import express, { Router } from 'express';
-import { protect, restrictTo } from '../middleware/authMiddleware';
-import * as categoryController from '../controllers/categoryController';
+import { Router } from "express";
+// FIX: Added .js extension to all relative imports
+import * as categoryController from "../controllers/categoryController.js";
 
-const router: Router = express.Router();
+const router = Router();
 
-// Rute untuk membuat kategori baru (hanya admin)
-router.post('/', protect, restrictTo('admin'), categoryController.createCategory);
-
-// Rute untuk mendapatkan semua kategori (hanya admin)
-router.get('/', protect, restrictTo('admin'), categoryController.getAllCategories);
+router.get("/", categoryController.getAllCategories);
+router.get("/:id", categoryController.getCategoryById);
 
 export default router;

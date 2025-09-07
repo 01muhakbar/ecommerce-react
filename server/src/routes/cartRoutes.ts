@@ -1,19 +1,14 @@
-import express, { Router } from 'express';
-import * as cartController from '../controllers/cartController';
-import { isAuth } from '../middleware/auth'; // Asumsi isAuth adalah named export
+import { Router } from "express";
+// FIX: Added .js extension to all relative imports
+import * as cartController from "../controllers/cartController.js";
+import { protect } from "../middleware/authMiddleware.js";
 
-const router: Router = express.Router();
+const router = Router();
 
-// Rute untuk menambahkan item ke keranjang (dilindungi)
-router.post("/add", isAuth, cartController.addToCart);
+router.use(protect);
 
-// Rute untuk melihat isi keranjang (dilindungi)
-router.get("/", isAuth, cartController.getCart);
-
-// Rute untuk menghapus item dari keranjang (dilindungi)
-router.delete("/remove/:productId", isAuth, cartController.removeFromCart);
-
-// Rute untuk memperbarui kuantitas item di keranjang (dilindungi)
-router.put("/update/:productId", isAuth, cartController.updateCartItem);
+router.get("/", cartController.getCart);
+router.post("/add", cartController.addToCart);
+router.delete("/remove/:itemId", cartController.removeFromCart);
 
 export default router;

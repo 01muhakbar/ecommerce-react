@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/app.js",
-    "dev": "npm run build -w @ecommerce/schemas && nodemon --watch \"src/**/*.ts\" --exec \"ts-node -r tsconfig-paths/register\" src/app.ts",
+    "dev": "npm run build -w @ecommerce/schemas && nodemon --watch \"src/**/*.ts\" --exec \"node --loader ts-node/esm src/app.ts\"",
     "dev:vite": "vite",
     "test": "echo \"No test specified for server\" && exit 0",
     "build:css": "postcss ./public/css/input.css -o ./public/css/style.css --watch",
@@ -17,7 +17,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@ecommerce/schemas": "1.0.0",
+    "@ecommerce/schemas": "file:../packages/schemas",
     "@tailwindcss/postcss": "^4.1.12",
     "@types/cors": "^2.8.19",
     "autoprefixer": "^10.4.21",

@@ -1,9 +1,8 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.getDashboardStatistics = void 0;
-const models_1 = require("../models");
-const sequelize_1 = require("sequelize");
-const getDashboardStatistics = async (req, res, next) => {
+import { Op, fn, col, literal } from "sequelize";
+import initializedDbPromise from "../models/index.js";
+const db = await initializedDbPromise;
+const { User, Order, OrderItem, Product } = db;
+export const getDashboardStatistics = async (req, res, next) => {
     try {
         // Helper function to get date ranges
         const getDates = () => {
@@ -18,40 +17,40 @@ const getDashboardStatistics = async (req, res, next) => {
         };
         const { today, yesterday, thisMonth, lastMonth, endOfLastMonth } = getDates();
         // 1. Total Sales
-        const todaySales = await models_1.Order.sum("totalAmount", {
+        const todaySales = await Order.sum("totalAmount", {
             where: {
-                createdAt: { [sequelize_1.Op.gte]: today },
+                createdAt: { [Op.gte]: today },
                 status: "completed",
             },
         });
-        const yesterdaySales = await models_1.Order.sum("totalAmount", {
+        const yesterdaySales = await Order.sum("totalAmount", {
             where: {
-                createdAt: { [sequelize_1.Op.gte]: yesterday, [sequelize_1.Op.lt]: today },
+                createdAt: { [Op.gte]: yesterday, [Op.lt]: today },
                 status: "completed",
             },
         });
-        const thisMonthSales = await models_1.Order.sum("totalAmount", {
+        const thisMonthSales = await Order.sum("totalAmount", {
             where: {
-                createdAt: { [sequelize_1.Op.gte]: thisMonth },
+                createdAt: { [Op.gte]: thisMonth },
                 status: "completed",
             },
         });
-        const lastMonthSales = await models_1.Order.sum("totalAmount", {
+        const lastMonthSales = await Order.sum("totalAmount", {
             where: {
-                createdAt: { [sequelize_1.Op.gte]: lastMonth, [sequelize_1.Op.lt]: thisMonth },
+                createdAt: { [Op.gte]: lastMonth, [Op.lt]: thisMonth },
                 status: "completed",
             },
         });
-        const allTimeSales = await models_1.Order.sum("totalAmount", {
+        const allTimeSales = await Order.sum("totalAmount", {
             where: { status: "completed" },
         });
         // 2. Order Status Counts
-        const totalOrders = await models_1.Order.count();
-        const pendingOrders = await models_1.Order.count({ where: { status: "pending" } });
-        const processingOrders = await models_1.Order.count({
+        const totalOrders = await Order.count();
+        const pendingOrders = await Order.count({ where: { status: "pending" } });
+        const processingOrders = await Order.count({
             where: { status: "processing" },
         });
-        const deliveredOrders = await models_1.Order.count({
+        const deliveredOrders = await Order.count({
             where: { status: "completed" },
         });
         // 3. Weekly Sales Data (last 7 days)
@@ -62,9 +61,9 @@ const getDashboardStatistics = async (req, res, next) => {
             date.setHours(0, 0, 0, 0);
             const nextDay = new Date(date);
             nextDay.setDate(date.getDate() + 1);
-            const dailySales = await models_1.Order.sum("totalAmount", {
+            const dailySales = await Order.sum("totalAmount", {
                 where: {
-                    createdAt: { [sequelize_1.Op.gte]: date, [sequelize_1.Op.lt]: nextDay },
+                    createdAt: { [Op.gte]: date, [Op.lt]: nextDay },
                     status: "completed",
                 },
             });
@@ -74,18 +73,18 @@ const getDashboardStatistics = async (req, res, next) => {
             });
         }
         // 4. Best Selling Products (Top 5)
-        const bestSellingProducts = await models_1.OrderItem.findAll({
+        const bestSellingProducts = await OrderItem.findAll({
             attributes: [
                 "productId",
-                [(0, sequelize_1.fn)("SUM", (0, sequelize_1.col)("quantity")), "totalQuantity"],
-                [(0, sequelize_1.fn)("SUM", (0, sequelize_1.literal)("quantity * `OrderItem`.`price`")), "totalSales"],
+                [fn("SUM", col("quantity")), "totalQuantity"],
+                [fn("SUM", literal("quantity * `OrderItem`.`price`")), "totalSales"],
             ],
             group: ["productId"],
-            order: [[(0, sequelize_1.literal)("totalSales"), "DESC"]],
+            order: [[literal("totalSales"), "DESC"]],
             limit: 5,
             include: [
                 {
-                    model: models_1.Product,
+                    model: Product,
                     attributes: ["name"],
                     required: true,
                 },
@@ -95,23 +94,36 @@ const getDashboardStatistics = async (req, res, next) => {
             name: item.Product.name,
             sales: parseFloat(item.getDataValue("totalSales")),
         }));
-        // 5. Ambil 5 pesanan terbaru (LOGIKA YANG HILANG)
-        const recentOrders = await models_1.Order.findAll({
+        // 5. Ambil 5 pesanan terbaru dan transformasikan datanya agar konsisten
+        const recentOrdersRaw = await Order.findAll({
             limit: 5,
             order: [["createdAt", "DESC"]],
             include: [
                 {
-                    model: models_1.User,
-                    attributes: ["name"], // Hanya ambil nama dari user
+                    model: User,
+                    as: "user", // Pastikan alias sesuai dengan definisi model
+                    attributes: ["name"],
                 },
             ],
-            attributes: [
-                ["id", "invoiceNo"],
-                ["createdAt", "orderTime"],
-                "status",
-                ["totalAmount", "amount"],
-            ],
         });
+        const mapStatus = (status) => {
+            const statusMap = {
+                pending: "Pending",
+                processing: "Processing",
+                completed: "Delivered",
+                shipped: "Delivered",
+                cancelled: "Cancelled",
+            };
+            return statusMap[status.toLowerCase()] || "Pending";
+        };
+        const recentOrders = recentOrdersRaw.map((order) => ({
+            id: order.id,
+            invoiceNo: order.invoiceNo,
+            orderTime: order.createdAt.toISOString(),
+            customerName: order.user?.name || "Guest",
+            amount: order.totalAmount,
+            status: mapStatus(order.status),
+        }));
         res.status(200).json({
             status: "success",
             data: {
@@ -130,7 +142,7 @@ const getDashboardStatistics = async (req, res, next) => {
                 },
                 weeklySalesData,
                 bestSellingProducts: formattedBestSellingProducts,
-                recentOrders, // Tambahkan recentOrders ke dalam respons
+                recentOrders,
             },
         });
     }
@@ -141,4 +153,3 @@ const getDashboardStatistics = async (req, res, next) => {
             .json({ status: "error", message: error.message });
     }
 };
-exports.getDashboardStatistics = getDashboardStatistics;

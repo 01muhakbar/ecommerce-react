@@ -1,9 +1,10 @@
 import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate, Link } from "react-router-dom";
-import { loginAdminSchema, type LoginAdminInput } from "@ecommerce/schemas";
+import { loginAdminSchema } from "@ecommerce/schemas";
 import { useAuthStore } from "../store/authStore";
 import api from "../api/axios";
 
@@ -119,6 +120,9 @@ const AuthGraphic = () => (
   </div>
 );
 
+// --- Type Definition ---
+type LoginAdminInput = z.infer<typeof loginAdminSchema>;
+
 // --- Main Component ---
 const AdminLoginPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
@@ -140,7 +144,7 @@ const AdminLoginPage: React.FC = () => {
       return response.data;
     },
     onSuccess: (data) => {
-      login(data.data.user);
+      login(data.data.user, data.data.token);
       navigate("/admin/dashboard");
     },
     onError: () => {
@@ -201,7 +205,7 @@ const AdminLoginPage: React.FC = () => {
                 </div>
                 {errors.email && (
                   <p className="text-sm text-red-600 -mt-4">
-                    {errors.email.message}
+                    {String(errors.email.message || "")}
                   </p>
                 )}
 
@@ -238,12 +242,17 @@ const AdminLoginPage: React.FC = () => {
                 </div>
                 {errors.password && (
                   <p className="text-sm text-red-600 -mt-4">
-                    {errors.password.message}
+                    {String(errors.password.message || "")}
                   </p>
                 )}
 
                 <div className="text-sm text-right">
-                    <Link to="/admin/forgot-password" className="font-medium text-blue-600 hover:text-blue-500">Lupa Kata Sandi?</Link>
+                  <Link
+                    to="/admin/forgot-password"
+                    className="font-medium text-blue-600 hover:text-blue-500"
+                  >
+                    Lupa Kata Sandi?
+                  </Link>
                 </div>
 
                 <button

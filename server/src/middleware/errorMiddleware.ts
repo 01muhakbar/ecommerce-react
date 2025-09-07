@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from "express";
+import express from "express";
 
 // Class untuk error operasional yang bisa diprediksi
 export class AppError extends Error {
@@ -31,7 +31,7 @@ const handleSequelizeValidationError = (err: any) => {
 
 // --- Fungsi utama untuk mengirim error ke client ---
 
-const sendErrorDev = (err: any, res: Response) => {
+const sendErrorDev = (err: any, res: express.Response) => {
   res.status(err.statusCode).json({
     status: err.status,
     error: err,
@@ -40,7 +40,7 @@ const sendErrorDev = (err: any, res: Response) => {
   });
 };
 
-const sendErrorProd = (err: any, res: Response) => {
+const sendErrorProd = (err: any, res: express.Response) => {
   // A) Operational, trusted error: send message to client
   if (err.isOperational) {
     return res.status(err.statusCode).json({
@@ -62,9 +62,9 @@ const sendErrorProd = (err: any, res: Response) => {
 
 const globalErrorHandler = (
   err: any,
-  req: Request,
-  res: Response,
-  next: NextFunction
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
 ) => {
   err.statusCode = err.statusCode || 500;
   err.status = err.status || "error";

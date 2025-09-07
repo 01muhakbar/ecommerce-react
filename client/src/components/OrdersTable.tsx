@@ -1,18 +1,7 @@
 import React from "react";
+import type { Order } from "../types/order"; // Import the centralized type
 
 // --- TYPE DEFINITIONS ---
-
-interface Order {
-  invoiceNo: number;
-  orderTime: string;
-  customerName?: string; // Made optional for flexibility
-  User?: {
-    name: string;
-  };
-  status: "pending" | "processing" | "shipped" | "completed" | "cancelled";
-  amount: number;
-}
-
 interface OrdersTableProps {
   title: string;
   orders: Order[];
@@ -36,19 +25,17 @@ const formatDate = (dateString: string) => {
   });
 };
 
-const getStatusClass = (
-  status: "pending" | "processing" | "shipped" | "completed" | "cancelled"
-) => {
-  switch (status) {
-    case "pending":
+const getStatusClass = (status: Order["status"]) => {
+  switch (
+    status // Status is now capitalized
+  ) {
+    case "Pending":
       return "bg-yellow-200 text-yellow-800";
-    case "processing":
+    case "Processing":
       return "bg-blue-200 text-blue-800";
-    case "shipped":
-      return "bg-indigo-200 text-indigo-800";
-    case "completed":
+    case "Delivered":
       return "bg-green-200 text-green-800";
-    case "cancelled":
+    case "Cancelled":
       return "bg-red-200 text-red-800";
     default:
       return "bg-gray-200 text-gray-800";
@@ -84,16 +71,11 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ title, orders }) => {
           </thead>
           <tbody>
             {orders.map((order) => (
-              <tr
-                key={order.invoiceNo}
-                className="bg-white border-b hover:bg-gray-50"
-              >
+              <tr key={order.id} className="bg-white border-b hover:bg-gray-50">
                 <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">
                   #{order.invoiceNo}
                 </td>
-                <td className="px-6 py-4">
-                  {order.customerName || order.User?.name || "N/A"}
-                </td>
+                <td className="px-6 py-4">{order.customerName}</td>
                 <td className="px-6 py-4">{formatDate(order.orderTime)}</td>
                 <td className="px-6 py-4">{formatCurrency(order.amount)}</td>
                 <td className="px-6 py-4">
@@ -102,8 +84,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ title, orders }) => {
                       order.status
                     )}`}
                   >
-                    {order.status.charAt(0).toUpperCase() +
-                      order.status.slice(1)}
+                    {order.status}
                   </span>
                 </td>
               </tr>

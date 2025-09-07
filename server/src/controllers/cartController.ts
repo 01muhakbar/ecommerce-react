@@ -1,19 +1,24 @@
-import { Request, Response } from 'express';
-import db from '../models/index';
+import express from 'express';
+import initializedDbPromise from "../models/index.js";
 
+const db = await initializedDbPromise;
 const { Cart, CartItem, Product, User } = db;
 
 // Kustomisasi tipe Request dari Express untuk menyertakan properti `user`
-interface CustomRequest extends Request {
+interface CustomRequest extends express.Request {
   // @ts-ignore
   user?: User;
 }
 
 // --- CONTROLLER FUNCTIONS ---
 
-export const addToCart = async (req: CustomRequest, res: Response): Promise<void> => {
+export const addToCart = async (
+  req: CustomRequest,
+  res: express.Response
+): Promise<void> => {
   try {
-    const { productId, quantity = 1 }: { productId: number; quantity: number } = req.body;
+    const { productId, quantity = 1 }: { productId: number; quantity: number } =
+      req.body;
     const userId = req.user?.id;
 
     if (!userId) {
@@ -41,15 +46,24 @@ export const addToCart = async (req: CustomRequest, res: Response): Promise<void
       await cartItem.save();
     }
 
-    res.status(200).json({ message: "Product added to cart successfully.", cartItem });
-
+    res
+      .status(200)
+      .json({ message: "Product added to cart successfully.", cartItem });
   } catch (error) {
     console.error("ADD TO CART ERROR:", error);
-    res.status(500).json({ message: "Failed to add product to cart.", error: (error as Error).message });
+    res
+      .status(500)
+      .json({
+        message: "Failed to add product to cart.",
+        error: (error as Error).message,
+      });
   }
 };
 
-export const getCart = async (req: CustomRequest, res: Response): Promise<void> => {
+export const getCart = async (
+  req: CustomRequest,
+  res: express.Response
+): Promise<void> => {
   try {
     const userId = req.user?.id;
     if (!userId) {
@@ -59,10 +73,12 @@ export const getCart = async (req: CustomRequest, res: Response): Promise<void> 
 
     const cart = await Cart.findOne({
       where: { userId },
-      include: [{
-        model: Product,
-        through: { attributes: ["quantity"] },
-      }],
+      include: [
+        {
+          model: Product,
+          through: { attributes: ["quantity"] },
+        },
+      ],
     });
 
     if (!cart) {
@@ -71,14 +87,21 @@ export const getCart = async (req: CustomRequest, res: Response): Promise<void> 
     }
 
     res.status(200).json(cart);
-
   } catch (error) {
     console.error("GET CART ERROR:", error);
-    res.status(500).json({ message: "Failed to fetch cart.", error: (error as Error).message });
+    res
+      .status(500)
+      .json({
+        message: "Failed to fetch cart.",
+        error: (error as Error).message,
+      });
   }
 };
 
-export const removeFromCart = async (req: CustomRequest, res: Response): Promise<void> => {
+export const removeFromCart = async (
+  req: CustomRequest,
+  res: express.Response
+): Promise<void> => {
   try {
     const userId = req.user?.id;
     const { productId } = req.params;
@@ -107,14 +130,21 @@ export const removeFromCart = async (req: CustomRequest, res: Response): Promise
     }
 
     res.status(200).json({ message: "Item removed from cart successfully." });
-
   } catch (error) {
     console.error("REMOVE FROM CART ERROR:", error);
-    res.status(500).json({ message: "Failed to remove item from cart.", error: (error as Error).message });
+    res
+      .status(500)
+      .json({
+        message: "Failed to remove item from cart.",
+        error: (error as Error).message,
+      });
   }
 };
 
-export const updateCartItem = async (req: CustomRequest, res: Response): Promise<void> => {
+export const updateCartItem = async (
+  req: CustomRequest,
+  res: express.Response
+): Promise<void> => {
   try {
     const userId = req.user?.id;
     const { productId } = req.params;
@@ -150,7 +180,11 @@ export const updateCartItem = async (req: CustomRequest, res: Response): Promise
       return;
     }
     if (product.stock < quantity) {
-      res.status(400).json({ message: `Not enough stock. Only ${product.stock} items available.` });
+      res
+        .status(400)
+        .json({
+          message: `Not enough stock. Only ${product.stock} items available.`,
+        });
       return;
     }
 
@@ -160,9 +194,13 @@ export const updateCartItem = async (req: CustomRequest, res: Response): Promise
     );
 
     res.status(200).json({ message: "Cart updated successfully." });
-
   } catch (error) {
     console.error("UPDATE CART ERROR:", error);
-    res.status(500).json({ message: "Failed to update cart.", error: (error as Error).message });
+    res
+      .status(500)
+      .json({
+        message: "Failed to update cart.",
+        error: (error as Error).message,
+      });
   }
 };

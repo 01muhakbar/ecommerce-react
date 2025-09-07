@@ -1,8 +1,8 @@
-import { Request, Response, NextFunction } from "express";
-import db from "../models";
+import express from 'express';
 import bcrypt from "bcryptjs";
+import initializedDbPromise from "../models/index.js";
 
-interface CustomRequest extends Request {
+interface CustomRequest extends express.Request {
   // @ts-ignore
   user?: {
     id: number;
@@ -10,12 +10,13 @@ interface CustomRequest extends Request {
   };
 }
 
+const db = await initializedDbPromise;
 const { User } = db;
 
 export const getMe = async (
   req: CustomRequest,
-  res: Response,
-  next: NextFunction
+  res: express.Response,
+  next: express.NextFunction
 ) => {
   try {
     const userId = req.user?.id;
@@ -44,9 +45,9 @@ export const getMe = async (
  * Mendapatkan semua pengguna (Admin only).
  */
 export const getAllUsers = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
 ) => {
   try {
     const users = await User.findAll({
@@ -65,9 +66,9 @@ export const getAllUsers = async (
  * Mendapatkan satu pengguna berdasarkan ID (Admin only).
  */
 export const getUserById = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
 ) => {
   try {
     const user = await User.findByPk(req.params.id, {
@@ -86,9 +87,9 @@ export const getUserById = async (
  * Membuat pengguna baru (Admin only).
  */
 export const createUser = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
 ) => {
   try {
     const { name, email, password, role } = req.body;
@@ -115,9 +116,9 @@ export const createUser = async (
  * Memperbarui pengguna (Admin only).
  */
 export const updateUser = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
 ) => {
   try {
     const [updatedRows] = await User.update(req.body, {
@@ -139,9 +140,9 @@ export const updateUser = async (
  * Menghapus pengguna (Admin only).
  */
 export const deleteUser = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
 ) => {
   try {
     const deletedRows = await User.destroy({ where: { id: req.params.id } });
@@ -156,8 +157,8 @@ export const deleteUser = async (
 
 export const updateMe = async (
   req: CustomRequest,
-  res: Response,
-  next: NextFunction
+  res: express.Response,
+  next: express.NextFunction
 ) => {
   try {
     const userId = req.user?.id;

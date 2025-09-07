@@ -1,11 +1,15 @@
-import { Router } from 'express';
-import { getOrders, updateOrderStatus } from '../controllers/adminOrderController';
-import { protect, restrictTo } from '../middleware/authMiddleware';
+import { Router } from "express";
+// FIX: Added .js extension to all relative imports
+import {
+  getOrders,
+  updateOrderStatus,
+} from "../controllers/adminOrderController.js";
+import { protect, restrictTo } from "../middleware/authMiddleware.js";
 
 const router = Router();
 
 // Base path is /api/v1/admin/orders, so these routes are relative to that
-router.get('/', protect, restrictTo('admin'), getOrders);
-router.put('/:id/status', protect, restrictTo('admin'), updateOrderStatus);
+router.get("/", protect, restrictTo("admin"), getOrders);
+router.put("/:id/status", protect, restrictTo("admin"), updateOrderStatus);
 
 export default router;

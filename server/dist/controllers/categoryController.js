@@ -1,20 +1,19 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.getAllCategories = exports.createCategory = void 0;
-const index_1 = require("../models/index");
-const createCategory = async (req, res) => {
+import initializedDbPromise from "../models/index.js";
+const db = await initializedDbPromise;
+const { Category } = db;
+export const createCategory = async (req, res) => {
     try {
         const { name, description } = req.body;
         if (!name) {
             res.status(400).json({
-                status: 'fail',
-                message: 'Category name is required.',
+                status: "fail",
+                message: "Category name is required.",
             });
             return;
         }
-        const newCategory = await index_1.Category.create({ name, description });
+        const newCategory = await Category.create({ name, description });
         res.status(201).json({
-            status: 'success',
+            status: "success",
             data: {
                 category: newCategory,
             },
@@ -22,18 +21,17 @@ const createCategory = async (req, res) => {
     }
     catch (error) {
         res.status(500).json({
-            status: 'error',
-            message: 'Error creating category.',
+            status: "error",
+            message: "Error creating category.",
             error: error.message,
         });
     }
 };
-exports.createCategory = createCategory;
-const getAllCategories = async (req, res) => {
+export const getAllCategories = async (req, res) => {
     try {
-        const categories = await index_1.Category.findAll();
+        const categories = await Category.findAll();
         res.status(200).json({
-            status: 'success',
+            status: "success",
             results: categories.length,
             data: {
                 categories,
@@ -42,10 +40,30 @@ const getAllCategories = async (req, res) => {
     }
     catch (error) {
         res.status(500).json({
-            status: 'error',
-            message: 'Error fetching categories.',
+            status: "error",
+            message: "Error fetching categories.",
             error: error.message,
         });
     }
 };
-exports.getAllCategories = getAllCategories;
+export const getCategoryById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const category = await Category.findByPk(id);
+        if (!category) {
+            res.status(404).json({
+                status: "fail",
+                message: "Category not found.",
+            });
+            return;
+        }
+        res.status(200).json({ status: "success", data: { category } });
+    }
+    catch (error) {
+        res.status(500).json({
+            status: "error",
+            message: "Error fetching category.",
+            error: error.message,
+        });
+    }
+};

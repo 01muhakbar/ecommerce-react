@@ -1,8 +1,9 @@
-import { Request, Response, NextFunction } from "express";
-import db from "../models";
-import { AppError } from "../middleware/errorMiddleware";
+import express from 'express';
 import { Op } from "sequelize";
+import initializedDbPromise from "../models/index.js";
+import { AppError } from "../middleware/errorMiddleware.js";
 
+const db = await initializedDbPromise;
 const { Product, Category, User } = db;
 
 // Helper function to generate a unique slug
@@ -30,10 +31,13 @@ const generateUniqueSlug = async (name: string): Promise<string> => {
  * Mendapatkan semua produk dengan paginasi, pencarian, dan filter.
  * GET /api/v1/admin/products
  */
-export const getAllProducts = async (req: Request, res: Response) => {
+export const getAllProducts = async (
+  req: express.Request,
+  res: express.Response
+) => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const limit = parseInt(req.query.limit as string, 10) || 10;
     const offset = (page - 1) * limit;
 
     const { search, category, price_min, price_max } = req.query;
@@ -92,7 +96,10 @@ export const getAllProducts = async (req: Request, res: Response) => {
  * Mendapatkan satu produk berdasarkan ID.
  * GET /api/v1/admin/products/:id
  */
-export const getProductById = async (req: Request, res: Response) => {
+export const getProductById = async (
+  req: express.Request,
+  res: express.Response
+) => {
   try {
     const product = await Product.findByPk(req.params.id, {
       include: [{ model: Category, as: "category" }],
@@ -113,9 +120,9 @@ export const getProductById = async (req: Request, res: Response) => {
  * POST /api/v1/admin/products
  */
 export const createProduct = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
 ) => {
   // 1. Log untuk memastikan controller terpanggil
   console.log("--- createProduct Controller Invoked ---");
@@ -125,7 +132,9 @@ export const createProduct = async (
     console.log("req.body:", JSON.stringify(req.body, null, 2));
     console.log("req.files:", req.files);
 
-    const userId = (req as any).user?.id;
+    // Menggunakan tipe yang lebih aman untuk req.user
+    const user = (req as any).user;
+    const userId = user?.id;
     if (!userId) {
       // Gunakan AppError untuk konsistensi
       return next(new Error("Unauthorized: User not found in request."));
@@ -153,7 +162,7 @@ export const createProduct = async (
     let imagePaths: string[] = [];
     if (req.files && Array.isArray(req.files) && req.files.length > 0) {
       imagePaths = req.files.map(
-        (file) => `/uploads/products/${file.filename}`
+        (file: Express.Multer.File) => `/uploads/products/${file.filename}`
       );
     }
 
@@ -200,7 +209,10 @@ export const createProduct = async (
  * Memperbarui produk.
  * PUT /api/v1/admin/products/:id
  */
-export const updateProduct = async (req: Request, res: Response) => {
+export const updateProduct = async (
+  req: express.Request,
+  res: express.Response
+) => {
   try {
     const { id } = req.params;
     const [updatedRows] = await Product.update(req.body, { where: { id } });
@@ -220,7 +232,10 @@ export const updateProduct = async (req: Request, res: Response) => {
  * Menghapus produk.
  * DELETE /api/v1/admin/products/:id
  */
-export const deleteProduct = async (req: Request, res: Response) => {
+export const deleteProduct = async (
+  req: express.Request,
+  res: express.Response
+) => {
   try {
     const { id } = req.params;
     const deletedRows = await Product.destroy({ where: { id } });
@@ -239,7 +254,10 @@ export const deleteProduct = async (req: Request, res: Response) => {
  * Mengubah status publish produk.
  * PATCH /api/v1/admin/products/:id/toggle-publish
  */
-export const togglePublishStatus = async (req: Request, res: Response) => {
+export const togglePublishStatus = async (
+  req: express.Request,
+  res: express.Response
+) => {
   try {
     const { id } = req.params;
     const product = await Product.findByPk(id);

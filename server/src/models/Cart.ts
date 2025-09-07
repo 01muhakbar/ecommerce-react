@@ -1,13 +1,16 @@
-import { DataTypes, Model, Optional, Sequelize } from 'sequelize';
+import { DataTypes, Model, Sequelize, Optional } from "sequelize";
 
 interface CartAttributes {
   id: number;
   userId: number;
 }
 
-interface CartCreationAttributes extends Optional<CartAttributes, 'id'> {}
+interface CartCreationAttributes extends Optional<CartAttributes, "id"> {}
 
-export class Cart extends Model<CartAttributes, CartCreationAttributes> implements CartAttributes {
+export class Cart
+  extends Model<CartAttributes, CartCreationAttributes>
+  implements CartAttributes
+{
   public id!: number;
   public userId!: number;
 
@@ -35,7 +38,10 @@ export class Cart extends Model<CartAttributes, CartCreationAttributes> implemen
         userId: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
-          unique: true,
+          references: {
+            model: "Users", // Nama tabel yang direferensikan
+            key: "id",
+          },
         },
       },
       {

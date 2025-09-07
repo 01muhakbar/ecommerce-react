@@ -1,34 +1,35 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateOrderStatus = exports.getAllOrders = exports.getOrderById = exports.getUserOrders = exports.createOrder = exports.OrderStatus = void 0;
-const index_1 = require("../models/index");
+import initializedDbPromise from "../models/index.js";
+import { User } from "../models/User.js";
+import { Cart } from "../models/Cart.js";
+import { Product } from "../models/Product.js";
+const db = await initializedDbPromise;
+const { sequelize, Order, OrderItem } = db;
 // --- ENUMS & TYPES ---
-// Menggunakan enum untuk status pesanan agar lebih aman dan mudah dikelola
-var OrderStatus;
-(function (OrderStatus) {
-    OrderStatus["Pending"] = "pending";
-    OrderStatus["Processing"] = "processing";
-    OrderStatus["Shipped"] = "shipped";
-    OrderStatus["Completed"] = "completed";
-    OrderStatus["Cancelled"] = "cancelled";
-})(OrderStatus || (exports.OrderStatus = OrderStatus = {}));
+// Menggunakan const object untuk status pesanan agar lebih aman dan mudah dikelola
+export const OrderStatus = {
+    Pending: "pending",
+    Processing: "processing",
+    Shipped: "shipped",
+    Completed: "completed",
+    Cancelled: "cancelled",
+};
 // --- CONTROLLER FUNCTIONS ---
 /**
  * Membuat pesanan baru dari item yang ada di keranjang pengguna.
  * Menggunakan transaksi untuk memastikan integritas data.
  */
-const createOrder = async (req, res) => {
+export const createOrder = async (req, res) => {
     const userId = req.user?.id;
     if (!userId) {
         res.status(401).json({ message: "Unauthorized" });
         return;
     }
-    const t = await index_1.sequelize.transaction();
+    const t = await sequelize.transaction();
     try {
         // 1. Ambil keranjang dan isinya
-        const cart = (await index_1.Cart.findOne({
+        const cart = (await Cart.findOne({
             where: { userId },
-            include: [{ model: index_1.Product, as: "Products" }],
+            include: [{ model: Product, as: "Products" }],
             transaction: t,
         }));
         if (!cart || !cart.Products || cart.Products.length === 0) {
@@ -51,7 +52,7 @@ const createOrder = async (req, res) => {
             };
         });
         // 3. Buat pesanan (Order)
-        const order = await index_1.Order.create({
+        const order = await Order.create({
             userId,
             totalAmount,
             status: "pending",
@@ -61,15 +62,12 @@ const createOrder = async (req, res) => {
             ...item,
             orderId: order.id,
         }));
-        await index_1.OrderItem.bulkCreate(itemsWithOrderId, { transaction: t });
+        await OrderItem.bulkCreate(itemsWithOrderId, { transaction: t });
         // 5. Kurangi stok produk
         for (const product of cart.Products) {
-            await index_1.Product.update({ stock: index_1.sequelize.literal(`stock - ${product.CartItem.quantity}`) }, { where: { id: product.id }, transaction: t });
+            await Product.update({ stock: sequelize.literal(`stock - ${product.CartItem.quantity}`) }, { where: { id: product.id }, transaction: t });
         }
         // 6. Kosongkan keranjang pengguna
-        // Cukup hancurkan relasi di CartItem, bukan seluruh Cart jika Cart masih ingin disimpan
-        // Namun jika modelnya 1 user 1 cart, destroy adalah pilihan yang tepat
-        // Cast to `any` because the custom type `CartWithProducts` doesn't know about the `setProducts` mixin method added by Sequelize.
         await cart.setProducts([], { transaction: t }); // Cara yang lebih aman untuk mengosongkan relasi
         // 7. Jika semua berhasil, commit transaksi
         await t.commit();
@@ -84,18 +82,17 @@ const createOrder = async (req, res) => {
         });
     }
 };
-exports.createOrder = createOrder;
 /**
  * Mendapatkan semua pesanan milik pengguna yang sedang login.
  */
-const getUserOrders = async (req, res) => {
+export const getUserOrders = async (req, res) => {
     try {
         const userId = req.user?.id;
-        const orders = await index_1.Order.findAll({
+        const orders = await Order.findAll({
             where: { userId },
             include: [
                 {
-                    model: index_1.Product,
+                    model: Product,
                     as: "products",
                     through: { attributes: ["quantity", "price"] },
                 },
@@ -111,19 +108,18 @@ const getUserOrders = async (req, res) => {
         });
     }
 };
-exports.getUserOrders = getUserOrders;
 /**
  * Mendapatkan detail satu pesanan spesifik.
  */
-const getOrderById = async (req, res) => {
+export const getOrderById = async (req, res) => {
     try {
         const { id } = req.params;
         const userId = req.user?.id;
-        const order = await index_1.Order.findOne({
+        const order = await Order.findOne({
             where: { id, userId }, // Pastikan user hanya bisa akses order miliknya
             include: [
                 {
-                    model: index_1.Product,
+                    model: Product,
                     as: "products",
                     through: { attributes: ["quantity", "price"] },
                 },
@@ -142,15 +138,14 @@ const getOrderById = async (req, res) => {
         });
     }
 };
-exports.getOrderById = getOrderById;
 // --- ADMIN FUNCTIONS ---
 /**
  * Mendapatkan semua pesanan dari semua pengguna (Admin only).
  */
-const getAllOrders = async (req, res) => {
+export const getAllOrders = async (req, res) => {
     try {
-        const orders = await index_1.Order.findAll({
-            include: [{ model: index_1.User, attributes: ["id", "name", "email"] }],
+        const orders = await Order.findAll({
+            include: [{ model: User, attributes: ["id", "name", "email"] }],
             order: [["createdAt", "DESC"]],
         });
         res
@@ -164,11 +159,10 @@ const getAllOrders = async (req, res) => {
         });
     }
 };
-exports.getAllOrders = getAllOrders;
 /**
  * Memperbarui status pesanan (Admin only).
  */
-const updateOrderStatus = async (req, res) => {
+export const updateOrderStatus = async (req, res) => {
     try {
         const { id } = req.params;
         const { status } = req.body;
@@ -180,7 +174,7 @@ const updateOrderStatus = async (req, res) => {
             });
             return;
         }
-        const [updatedRows] = await index_1.Order.update({ status }, { where: { id } });
+        const [updatedRows] = await Order.update({ status }, { where: { id } });
         if (updatedRows === 0) {
             res.status(404).json({ message: "Pesanan tidak ditemukan." });
             return;
@@ -196,4 +190,3 @@ const updateOrderStatus = async (req, res) => {
         });
     }
 };
-exports.updateOrderStatus = updateOrderStatus;

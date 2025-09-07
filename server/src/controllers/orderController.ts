@@ -1,24 +1,31 @@
-import { Request, Response } from "express";
-import db from "../models/index";
+import express from 'express';
 import { Transaction } from "sequelize";
+import initializedDbPromise from "../models/index.js";
+import { User } from "../models/User.js";
+import { Cart } from "../models/Cart.js";
+import { Product } from "../models/Product.js";
 
-const { sequelize, Order, Cart, Product, OrderItem, User } = db;
+const db = await initializedDbPromise;
+const { sequelize, Order, OrderItem } = db;
 
 // --- ENUMS & TYPES ---
 
-// Menggunakan enum untuk status pesanan agar lebih aman dan mudah dikelola
-export enum OrderStatus {
-  Pending = "pending",
-  Processing = "processing",
-  Shipped = "shipped",
-  Completed = "completed",
-  Cancelled = "cancelled",
-}
+// Menggunakan const object untuk status pesanan agar lebih aman dan mudah dikelola
+export const OrderStatus = {
+  Pending: "pending",
+  Processing: "processing",
+  Shipped: "shipped",
+  Completed: "completed",
+  Cancelled: "cancelled",
+} as const;
+
+// Membuat tipe dari nilai-nilai const object di atas
+type OrderStatusType = typeof OrderStatus[keyof typeof OrderStatus];
 
 // --- INTERFACES ---
 
 // Menambahkan tipe data untuk user yang ter-attach pada request setelah otentikasi
-interface CustomRequest extends Request {
+interface CustomRequest extends express.Request {
   user?: User;
 }
 
@@ -35,7 +42,7 @@ interface CartWithProducts extends Cart {
  */
 export const createOrder = async (
   req: CustomRequest,
-  res: Response
+  res: express.Response
 ): Promise<void> => {
   const userId = req.user?.id;
   if (!userId) {
@@ -100,9 +107,6 @@ export const createOrder = async (
     }
 
     // 6. Kosongkan keranjang pengguna
-    // Cukup hancurkan relasi di CartItem, bukan seluruh Cart jika Cart masih ingin disimpan
-    // Namun jika modelnya 1 user 1 cart, destroy adalah pilihan yang tepat
-    // Cast to `any` because the custom type `CartWithProducts` doesn't know about the `setProducts` mixin method added by Sequelize.
     await (cart as any).setProducts([], { transaction: t }); // Cara yang lebih aman untuk mengosongkan relasi
 
     // 7. Jika semua berhasil, commit transaksi
@@ -124,7 +128,7 @@ export const createOrder = async (
  */
 export const getUserOrders = async (
   req: CustomRequest,
-  res: Response
+  res: express.Response
 ): Promise<void> => {
   try {
     const userId = req.user?.id;
@@ -154,7 +158,7 @@ export const getUserOrders = async (
  */
 export const getOrderById = async (
   req: CustomRequest,
-  res: Response
+  res: express.Response
 ): Promise<void> => {
   try {
     const { id } = req.params;
@@ -191,8 +195,8 @@ export const getOrderById = async (
  * Mendapatkan semua pesanan dari semua pengguna (Admin only).
  */
 export const getAllOrders = async (
-  req: Request,
-  res: Response
+  req: express.Request,
+  res: express.Response
 ): Promise<void> => {
   try {
     const orders = await Order.findAll({
@@ -214,8 +218,8 @@ export const getAllOrders = async (
  * Memperbarui status pesanan (Admin only).
  */
 export const updateOrderStatus = async (
-  req: Request,
-  res: Response
+  req: express.Request,
+  res: express.Response
 ): Promise<void> => {
   try {
     const { id } = req.params;
@@ -224,7 +228,7 @@ export const updateOrderStatus = async (
     // Validasi menggunakan enum untuk memastikan nilai status valid dan aman
     if (
       !status ||
-      !Object.values(OrderStatus).includes(status as OrderStatus)
+      !Object.values(OrderStatus).includes(status as OrderStatusType)
     ) {
       res.status(400).json({
         message: `Status tidak valid. Gunakan salah satu dari: ${Object.values(

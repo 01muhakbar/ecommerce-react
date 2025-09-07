@@ -1,10 +1,11 @@
-import { Request, Response, NextFunction } from "express";
+import express from "express";
 import bcrypt from "bcryptjs";
-import jwt, { SignOptions } from "jsonwebtoken";
+import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import db from "../models";
-import sendEmail from "../services/emailService";
+import initializedDbPromise from "../models/index.js";
+import sendEmail from "../services/emailService.js";
 import { Op } from "sequelize";
+const db = await initializedDbPromise;
 const { User } = db;
 
 // Helper function to sign JWT
@@ -13,9 +14,10 @@ const signToken = (id: number, role: string): string => {
   if (!secret) {
     throw new Error("JWT_SECRET is not defined");
   }
-  const options: SignOptions = {
+  const options: jwt.SignOptions = {
     expiresIn: (process.env.JWT_EXPIRES_IN || "90d") as any,
   };
+  console.log("Signing token with ID:", id, "and Role:", role);
   return jwt.sign({ id, role }, secret, options);
 };
 
@@ -23,7 +25,7 @@ const signToken = (id: number, role: string): string => {
 export const createAndSendToken = (
   user: any,
   statusCode: number,
-  res: Response
+  res: express.Response
 ): void => {
   const token = signToken(user.id, user.role);
 
@@ -35,7 +37,7 @@ export const createAndSendToken = (
     expires: new Date(Date.now() + cookieExpiresInDays * 24 * 60 * 60 * 1000),
     httpOnly: true,
     path: "/",
-    sameSite: "strict" as const,
+    sameSite: "lax" as const, // Changed from "strict" to "lax"
     secure: process.env.NODE_ENV === "production",
   };
 
@@ -45,6 +47,7 @@ export const createAndSendToken = (
   res.status(statusCode).json({
     status: "success",
     data: {
+      token,
       user: {
         id: user.id,
         name: user.name,
@@ -56,9 +59,9 @@ export const createAndSendToken = (
 };
 
 export const register = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
 ): Promise<void> => {
   try {
     const { name, email, password, role } = req.body;
@@ -85,9 +88,9 @@ export const register = async (
 };
 
 export const login = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
 ): Promise<void> => {
   try {
     const { email, password } = req.body;
@@ -107,7 +110,7 @@ export const login = async (
   }
 };
 
-export const logout = (req: Request, res: Response): void => {
+export const logout = (req: express.Request, res: express.Response): void => {
   res.cookie("jwt", "loggedout", {
     expires: new Date(Date.now() + 10 * 1000),
     httpOnly: true,
@@ -117,7 +120,10 @@ export const logout = (req: Request, res: Response): void => {
     .json({ status: "success", message: "Logged out successfully" });
 };
 
-export const logoutAdmin = (req: Request, res: Response): void => {
+export const logoutAdmin = (
+  req: express.Request,
+  res: express.Response
+): void => {
   res.cookie("jwt", "loggedout", {
     expires: new Date(Date.now() + 10 * 1000),
     httpOnly: true,
@@ -129,9 +135,9 @@ export const logoutAdmin = (req: Request, res: Response): void => {
 };
 
 export const forgotPassword = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
 ): Promise<void> => {
   try {
     const user = await User.findOne({ where: { email: req.body.email } });
@@ -176,9 +182,9 @@ export const forgotPassword = async (
 };
 
 export const resetPassword = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
 ): Promise<void> => {
   try {
     const hashedToken = crypto
@@ -212,9 +218,9 @@ export const resetPassword = async (
 };
 
 export const loginAdmin = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
 ): Promise<void> => {
   try {
     const { email, password } = req.body;
@@ -238,9 +244,9 @@ export const loginAdmin = async (
 };
 
 export const forgotPasswordAdmin = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
 ): Promise<void> => {
   try {
     const { email } = req.body;
@@ -279,9 +285,9 @@ export const forgotPasswordAdmin = async (
 };
 
 export const resetPasswordAdmin = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
 ): Promise<void> => {
   try {
     const hashedToken = crypto

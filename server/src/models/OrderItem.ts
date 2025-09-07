@@ -1,4 +1,4 @@
-import { DataTypes, Model, Optional, Sequelize } from 'sequelize';
+import { DataTypes, Model, Sequelize, Optional } from "sequelize";
 
 interface OrderItemAttributes {
   id: number;
@@ -8,9 +8,13 @@ interface OrderItemAttributes {
   price: number;
 }
 
-interface OrderItemCreationAttributes extends Optional<OrderItemAttributes, 'id'> {}
+interface OrderItemCreationAttributes
+  extends Optional<OrderItemAttributes, "id"> {}
 
-export class OrderItem extends Model<OrderItemAttributes, OrderItemCreationAttributes> implements OrderItemAttributes {
+export class OrderItem
+  extends Model<OrderItemAttributes, OrderItemCreationAttributes>
+  implements OrderItemAttributes
+{
   public id!: number;
   public orderId!: number;
   public productId!: number;

@@ -1,4 +1,13 @@
-export * from './userSchema.js';
-export * from './productAdminSchema.js';
-export * from "./adminAuth.js";
-export * from "./auth.js";
+import { z } from "zod";
+export declare const loginSchema: any;
+export declare const loginAdminSchema: any;
+export declare const forgotPasswordAdminSchema: any;
+export declare const resetPasswordAdminSchema: any;
+export declare const updateProfileSchema: any;
+export declare const createProductSchema: any;
+export type LoginInput = z.infer<typeof loginSchema>;
+export type LoginAdminInput = z.infer<typeof loginAdminSchema>;
+export type ForgotPasswordAdminInput = z.infer<typeof forgotPasswordAdminSchema>;
+export type ResetPasswordAdminInput = z.infer<typeof resetPasswordAdminSchema>;
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+export type CreateProductInput = z.infer<typeof createProductSchema>;

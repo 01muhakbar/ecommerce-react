@@ -1,23 +1,20 @@
-import express, { Router } from 'express';
-import * as categoryAdminController from '../controllers/categoryAdminController';
-import { protect, restrictTo } from '../middleware/authMiddleware';
+import { Router } from "express";
+// FIX: Added .js extension to all relative imports
+import * as categoryAdminController from "../controllers/categoryAdminController.js";
+import { protect, restrictTo } from "../middleware/authMiddleware.js";
 
-const router: Router = express.Router();
+const router = Router();
 
-// Middleware untuk melindungi semua rute di file ini (hanya untuk admin)
-router.use(protect, restrictTo('admin'));
+router.use(protect, restrictTo("admin"));
 
-// Mendapatkan semua kategori & membuat kategori baru
 router
-  .route('/')
+  .route("/")
   .get(categoryAdminController.getAllCategories)
   .post(categoryAdminController.createCategory);
 
-// Mendapatkan, memperbarui, dan menghapus kategori berdasarkan ID
 router
-  .route('/:id')
-  .get(categoryAdminController.getCategoryById)
-  .put(categoryAdminController.updateCategory)
+  .route("/:id")
+  .patch(categoryAdminController.updateCategory)
   .delete(categoryAdminController.deleteCategory);
 
 export default router;

@@ -1,45 +1,30 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Order = void 0;
-const sequelize_1 = require("sequelize");
-class Order extends sequelize_1.Model {
+import { Model, DataTypes, } from "sequelize";
+export class Order extends Model {
     static associate(models) {
-        Order.belongsTo(models.User, { foreignKey: "userId" });
+        Order.belongsTo(models.User, { foreignKey: "userId", as: "user" });
         Order.belongsToMany(models.Product, {
-            through: models.OrderItem,
-            foreignKey: "orderId",
-            otherKey: "productId",
-            as: "products", // Tambahkan alias yang sesuai
+            through: "OrderItem",
+            as: "products",
         });
-    }
-    static initModel(sequelize) {
-        Order.init({
-            id: {
-                type: sequelize_1.DataTypes.INTEGER.UNSIGNED,
-                autoIncrement: true,
-                primaryKey: true,
-            },
-            userId: {
-                type: sequelize_1.DataTypes.INTEGER.UNSIGNED,
-                allowNull: false,
-            },
-            totalAmount: {
-                type: sequelize_1.DataTypes.DECIMAL(10, 2),
-                allowNull: false,
-            },
-            status: {
-                type: sequelize_1.DataTypes.STRING,
-                allowNull: false,
-                defaultValue: "pending",
-                validate: {
-                    isIn: [["pending", "completed", "cancelled"]],
-                },
-            },
-        }, {
-            sequelize,
-            modelName: "Order",
-        });
-        return Order;
     }
 }
-exports.Order = Order;
+export const initOrder = (sequelize) => {
+    Order.init({
+        id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+        invoiceNo: { type: DataTypes.STRING, allowNull: false, unique: true },
+        userId: {
+            type: DataTypes.INTEGER,
+            allowNull: false,
+            references: { model: "Users", key: "id" },
+        },
+        totalAmount: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
+        status: {
+            type: DataTypes.ENUM("pending", "processing", "shipped", "completed", "cancelled"),
+            defaultValue: "pending",
+            allowNull: false,
+        },
+    }, {
+        sequelize,
+        modelName: "Order",
+    });
+};

@@ -1,4 +1,4 @@
-import { DataTypes, Model, Optional, Sequelize } from 'sequelize';
+import { DataTypes, Model, Sequelize, Optional } from "sequelize";
 
 interface CategoryAttributes {
   id: number;
@@ -6,9 +6,13 @@ interface CategoryAttributes {
   description?: string;
 }
 
-interface CategoryCreationAttributes extends Optional<CategoryAttributes, 'id'> {}
+interface CategoryCreationAttributes
+  extends Optional<CategoryAttributes, "id"> {}
 
-export class Category extends Model<CategoryAttributes, CategoryCreationAttributes> implements CategoryAttributes {
+export class Category
+  extends Model<CategoryAttributes, CategoryCreationAttributes>
+  implements CategoryAttributes
+{
   public id!: number;
   public name!: string;
   public description?: string;
@@ -17,7 +21,7 @@ export class Category extends Model<CategoryAttributes, CategoryCreationAttribut
   public readonly updatedAt!: Date;
 
   static associate(models: any) {
-    Category.hasMany(models.Product, { foreignKey: 'categoryId' });
+    Category.hasMany(models.Product, { foreignKey: "categoryId" });
   }
 
   static initModel(sequelize: Sequelize): typeof Category {
@@ -39,7 +43,7 @@ export class Category extends Model<CategoryAttributes, CategoryCreationAttribut
       },
       {
         sequelize,
-        modelName: 'Category',
+        modelName: "Category",
       }
     );
     return Category;

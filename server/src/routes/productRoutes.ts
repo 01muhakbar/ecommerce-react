@@ -1,24 +1,24 @@
-import express, { Router, Request } from "express";
-import multer, { StorageEngine } from "multer";
+import express from "express";
+import multer from "multer";
 import path from "path";
-import { protect, restrictTo } from "../middleware/authMiddleware";
-import * as productController from "../controllers/productController";
-import validate from "../middleware/validate";
+import { protect, restrictTo } from "../middleware/authMiddleware.js";
+import * as productController from "../controllers/productController.js";
+import validate from "../middleware/validate.js";
 import { createProductSchema } from "@ecommerce/schemas";
 
-const router: Router = express.Router();
+const router = express.Router();
 
 // Konfigurasi Multer untuk penyimpanan file
-const storage: StorageEngine = multer.diskStorage({
+const storage: multer.StorageEngine = multer.diskStorage({
   destination: (
-    req: Request,
+    req: express.Request,
     file: Express.Multer.File,
     cb: (error: Error | null, destination: string) => void
   ) => {
     cb(null, "public/images/products");
   },
   filename: (
-    req: Request,
+    req: express.Request,
     file: Express.Multer.File,
     cb: (error: Error | null, filename: string) => void
   ) => {

@@ -1,96 +1,65 @@
-import { Request, Response, NextFunction } from 'express';
-import jwt, { JwtPayload } from 'jsonwebtoken';
-import db from '../models/index';
-import { AppError } from "./errorMiddleware";
+import { Request, Response, NextFunction } from "express";
+import jwt from "jsonwebtoken";
+import { User as UserModel } from "../models/User.js"; // FIX: Renamed import to UserModel to avoid local scope conflict.
 
-const { User } = db;
-
-// --- INTERFACES ---
-
-interface CustomRequest extends Request {
-  user?: InstanceType<typeof User>;
+// Extend Express Request type to include the user property
+export interface CustomRequest extends Request {
+  user?: UserModel;
 }
-// --- MIDDLEWARE ---
 
-/**
- * Middleware untuk melindungi rute dengan memeriksa JWT yang valid.
- * Menangani request API dan navigasi browser.
- */
-export const protect = async (req: CustomRequest, res: Response, next: NextFunction): Promise<void> => {
+// FIX: The return type is changed from 'void' to 'Promise<void | Response>'
+// This allows the function to either call next() (void) or send a response directly.
+export const protect = async (
+  req: CustomRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void | Response> => {
+  let token;
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith("Bearer")
+  ) {
+    token = req.headers.authorization.split(" ")[1];
+  } else if (req.cookies.jwt) {
+    token = req.cookies.jwt;
+  }
+
+  if (!token) {
+    const message = "You are not logged in! Please log in to get access.";
+    // FIX: This return is now valid because of the updated function signature.
+    return res.status(401).json({ status: "fail", message });
+  }
+
   try {
-    let token: string | undefined;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
+      id: number;
+    };
 
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-      token = req.headers.authorization.split(' ')[1];
-    } else if (req.cookies.jwt) {
-      token = req.cookies.jwt;
-    }
+    const currentUser = await UserModel.findByPk(decoded.id);
 
-    const isApiRequest = req.originalUrl.startsWith('/api');
-
-    if (!token || token === "loggedout") {
-      const message = 'You are not logged in. Please log in to get access.';
-      if (isApiRequest) {
-        res.status(401).json({ status: 'fail', message });
-      } else {
-        res.redirect("/login");
-      }
-      return;
-    }
-
-    const secret = process.env.JWT_SECRET;
-    if (!secret) {
-      throw new Error('JWT_SECRET is not defined in the environment variables');
-    }
-
-    // Use synchronous jwt.verify which throws an error on failure, caught by the outer catch block
-    const decoded = jwt.verify(token, secret) as { id: number; iat: number; exp: number };
-
-    const currentUser = await User.findByPk(decoded.id);
     if (!currentUser) {
-      const message = 'The user belonging to this token does no longer exist.';
-      if (isApiRequest) {
-        res.status(401).json({ status: 'fail', message });
-      } else {
-        res.clearCookie("jwt");
-        res.redirect("/login");
-      }
-      return;
-    }
-
-    if (!currentUser.isActive) {
-        const message = 'Your account has been deactivated. Please contact support.';
-        if (isApiRequest) {
-            res.status(403).json({ status: 'fail', message });
-        } else {
-            res.clearCookie("jwt");
-            res.redirect("/login?message=account_deactivated");
-        }
-        return;
+      const message = "The user belonging to this token does no longer exist.";
+      return res.status(401).json({ status: "fail", message });
     }
 
     req.user = currentUser;
     next();
-
-  } catch (error) {
-    const isApiRequest = req.originalUrl.startsWith('/api');
-    const message = 'Invalid or expired token. Please log in again.';
-    if (isApiRequest) {
-      res.status(401).json({ status: 'fail', message });
-    } else {
-      res.redirect("/login");
-    }
+  } catch (err) {
+    const message = "Invalid token. Please log in again.";
+    return res.status(401).json({ status: "fail", message });
   }
 };
 
-/**
- * Middleware untuk membatasi akses ke peran (role) tertentu.
- */
+// FIX: The return type is changed to 'void | Response'
 export const restrictTo = (...roles: string[]) => {
-  return (req: CustomRequest, res: Response, next: NextFunction): void => {
+  return (
+    req: CustomRequest,
+    res: Response,
+    next: NextFunction
+  ): void | Response => {
     if (!req.user || !roles.includes(req.user.role)) {
-      res.status(403).send('<h1>403 - Forbidden</h1><p>Anda tidak memiliki izin untuk mengakses halaman ini.</p>');
-      return;
+      const message = "You do not have permission to perform this action.";
+      return res.status(403).json({ status: "fail", message });
     }
     next();
   };

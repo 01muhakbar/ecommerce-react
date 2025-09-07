@@ -1,12 +1,7 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const nodemailer_1 = __importDefault(require("nodemailer"));
+import nodemailer from 'nodemailer';
 const sendEmail = async (options) => {
     // 1) Buat transporter
-    const transporter = nodemailer_1.default.createTransport({
+    const transporter = nodemailer.createTransport({
         host: process.env.EMAIL_HOST,
         port: parseInt(process.env.EMAIL_PORT || '587', 10),
         secure: process.env.EMAIL_PORT === '465', // true for 465, false for other ports
@@ -30,4 +25,4 @@ const sendEmail = async (options) => {
     // 3) Kirim email
     await transporter.sendMail(mailOptions);
 };
-exports.default = sendEmail;
+export default sendEmail;

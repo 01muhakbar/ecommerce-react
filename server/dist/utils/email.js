@@ -1,12 +1,7 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const nodemailer_1 = __importDefault(require("nodemailer"));
+import nodemailer from "nodemailer";
 const sendEmail = async (options) => {
     // 1. Buat transporter menggunakan kredensial SMTP dari .env
-    const transporter = nodemailer_1.default.createTransport({
+    const transporter = nodemailer.createTransport({
         host: process.env.EMAIL_HOST,
         port: parseInt(process.env.EMAIL_PORT || '587', 10), // Add parseInt and default for port
         auth: {
@@ -26,4 +21,4 @@ const sendEmail = async (options) => {
     await transporter.sendMail(mailOptions);
     console.log(`Email sent to ${options.email} with subject "${options.subject}"`);
 };
-exports.default = sendEmail;
+export default sendEmail;

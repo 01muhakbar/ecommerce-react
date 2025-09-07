@@ -1,13 +1,14 @@
-import { Request, Response, NextFunction } from "express";
-import db from "../models";
+import express from "express";
 import { Op, fn, col, literal, cast } from "sequelize";
+import initializedDbPromise from "../models/index.js";
 
+const db = await initializedDbPromise;
 const { User, Order, OrderItem, Product } = db;
 
 export const getDashboardStatistics = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
 ): Promise<void> => {
   try {
     // Helper function to get date ranges
@@ -118,23 +119,40 @@ export const getDashboardStatistics = async (
       })
     );
 
-    // 5. Ambil 5 pesanan terbaru (LOGIKA YANG HILANG)
-    const recentOrders = await Order.findAll({
+    // 5. Ambil 5 pesanan terbaru dan transformasikan datanya agar konsisten
+    const recentOrdersRaw = await Order.findAll({
       limit: 5,
       order: [["createdAt", "DESC"]],
       include: [
         {
           model: User,
-          attributes: ["name"], // Hanya ambil nama dari user
+          as: "user", // Pastikan alias sesuai dengan definisi model
+          attributes: ["name"],
         },
       ],
-      attributes: [
-        ["id", "invoiceNo"],
-        ["createdAt", "orderTime"],
-        "status",
-        ["totalAmount", "amount"],
-      ],
     });
+
+    const mapStatus = (
+      status: string
+    ): "Pending" | "Processing" | "Delivered" | "Cancelled" => {
+      const statusMap: { [key: string]: any } = {
+        pending: "Pending",
+        processing: "Processing",
+        completed: "Delivered",
+        shipped: "Delivered",
+        cancelled: "Cancelled",
+      };
+      return statusMap[status.toLowerCase()] || "Pending";
+    };
+
+    const recentOrders = (recentOrdersRaw as any[]).map((order) => ({
+      id: order.id,
+      invoiceNo: order.invoiceNo,
+      orderTime: order.createdAt.toISOString(),
+      customerName: order.user?.name || "Guest",
+      amount: order.totalAmount,
+      status: mapStatus(order.status),
+    }));
 
     res.status(200).json({
       status: "success",
@@ -154,7 +172,7 @@ export const getDashboardStatistics = async (
         },
         weeklySalesData,
         bestSellingProducts: formattedBestSellingProducts,
-        recentOrders, // Tambahkan recentOrders ke dalam respons
+        recentOrders,
       },
     });
   } catch (error) {

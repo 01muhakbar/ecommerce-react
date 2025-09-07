@@ -1,55 +1,22 @@
-import express, { Router, Request, Response } from "express";
-import path from "path";
-import * as authController from "../controllers/authController";
-import { protect, restrictTo } from "../middleware/authMiddleware"; // Import protect and restrictTo
-import { validateRegister, validateLogin } from "../middleware/validators";
-import validate from "../middleware/validate";
-import {
-  loginAdminSchema,
-  forgotPasswordAdminSchema,
-  resetPasswordAdminSchema,
-} from "@ecommerce/schemas";
+import { Router } from "express";
+// FIX: Added .js extension to all relative imports
+import * as authController from "../controllers/authController.js";
+import { protect } from "../middleware/authMiddleware.js";
+// FIX: `validateRegister` is removed as it's not available in `validators.ts`.
+import { validateLogin } from "../middleware/validators.js";
 
-const router: Router = express.Router();
+const router = Router();
 
-// --- User Auth ---
-router.post("/register", validateRegister, authController.register);
+// Public routes
 router.post("/login", validateLogin, authController.login);
-router.post("/logout", authController.logout);
+router.post("/admin/login", authController.loginAdmin);
+router.post("/admin/forgot-password", authController.forgotPasswordAdmin);
+router.post("/admin/reset-password/:token", authController.resetPasswordAdmin);
 
-// --- User Password Management ---
-router.post("/forgot-password", authController.forgotPassword);
+// FIX: `validateRegister` middleware removed.
+router.post("/register", authController.register);
 
-router
-  .route("/reset-password/:token")
-  .get((req: Request, res: Response) => {
-    // Menyajikan halaman statis untuk form reset password
-    res.sendFile(
-      path.join(__dirname, "..", "..", "public", "reset-password.html")
-    );
-  })
-  .patch(authController.resetPassword);
-// --- Admin Auth & Password ---
-router.post(
-  "/admin/login",
-  validate(loginAdminSchema),
-  authController.loginAdmin
-);
-router.post(
-  "/admin/forgot-password",
-  validate(forgotPasswordAdminSchema),
-  authController.forgotPasswordAdmin
-);
-router.post(
-  "/admin/reset-password/:token",
-  validate(resetPasswordAdminSchema),
-  authController.resetPasswordAdmin
-);
-router.post(
-  "/admin/logout",
-  protect,
-  restrictTo("admin"),
-  authController.logoutAdmin
-);
+// Protected routes
+router.post("/logout", protect, authController.logout);
 
 export default router;

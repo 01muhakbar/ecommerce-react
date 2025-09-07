@@ -1,8 +1,5 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Product = void 0;
-const sequelize_1 = require("sequelize");
-class Product extends sequelize_1.Model {
+import { DataTypes, Model } from "sequelize";
+export class Product extends Model {
     static associate(models) {
         Product.belongsToMany(models.Cart, {
             through: models.CartItem,
@@ -17,7 +14,7 @@ class Product extends sequelize_1.Model {
         Product.belongsTo(models.Category, {
             foreignKey: "categoryId",
             as: "category",
-            onDelete: "SET NULL", // Opsional: jika kategori dihapus, set categoryId di produk menjadi null
+            onDelete: "SET NULL",
         });
         Product.belongsToMany(models.Order, {
             through: models.OrderItem,
@@ -29,113 +26,135 @@ class Product extends sequelize_1.Model {
     static initModel(sequelize) {
         Product.init({
             id: {
-                type: sequelize_1.DataTypes.INTEGER.UNSIGNED,
+                type: DataTypes.INTEGER.UNSIGNED,
                 autoIncrement: true,
                 primaryKey: true,
             },
             name: {
-                type: sequelize_1.DataTypes.STRING,
+                type: DataTypes.STRING,
                 allowNull: false,
             },
             description: {
-                type: sequelize_1.DataTypes.TEXT,
+                type: DataTypes.TEXT,
                 allowNull: true,
             },
             price: {
-                type: sequelize_1.DataTypes.DECIMAL(10, 2),
+                type: DataTypes.DECIMAL(10, 2),
                 allowNull: false,
             },
+            salePrice: {
+                type: DataTypes.DECIMAL(10, 2),
+                allowNull: true,
+            },
+            slug: {
+                type: DataTypes.STRING,
+                allowNull: false,
+                unique: true,
+            },
+            tags: {
+                type: DataTypes.JSON,
+                allowNull: true,
+            },
             stock: {
-                type: sequelize_1.DataTypes.INTEGER,
+                type: DataTypes.INTEGER,
                 allowNull: false,
                 defaultValue: 0,
             },
             categoryId: {
-                type: sequelize_1.DataTypes.INTEGER.UNSIGNED,
+                type: DataTypes.INTEGER.UNSIGNED,
                 allowNull: true,
             },
             userId: {
-                type: sequelize_1.DataTypes.INTEGER.UNSIGNED,
+                type: DataTypes.INTEGER.UNSIGNED,
                 allowNull: false,
             },
             status: {
-                type: sequelize_1.DataTypes.ENUM("active", "archived", "draft"),
+                type: DataTypes.ENUM("active", "archived", "draft"),
                 defaultValue: "draft",
                 allowNull: false,
             },
             gtin: {
-                type: sequelize_1.DataTypes.STRING,
+                type: DataTypes.STRING,
                 allowNull: true,
             },
             notes: {
-                type: sequelize_1.DataTypes.TEXT,
+                type: DataTypes.TEXT,
                 allowNull: true,
             },
             parentSku: {
-                type: sequelize_1.DataTypes.STRING,
+                type: DataTypes.STRING,
+                allowNull: true,
+            },
+            sku: {
+                type: DataTypes.STRING,
+                allowNull: true,
+            },
+            barcode: {
+                type: DataTypes.STRING,
                 allowNull: true,
             },
             condition: {
-                type: sequelize_1.DataTypes.ENUM("new", "used"),
+                type: DataTypes.ENUM("new", "used"),
                 defaultValue: "new",
                 allowNull: false,
             },
             weight: {
-                type: sequelize_1.DataTypes.INTEGER,
+                type: DataTypes.INTEGER,
                 allowNull: false, // in grams
+                defaultValue: 0, // Add a default value
             },
             length: {
-                type: sequelize_1.DataTypes.INTEGER,
+                type: DataTypes.INTEGER,
                 allowNull: true, // in cm
             },
             width: {
-                type: sequelize_1.DataTypes.INTEGER,
+                type: DataTypes.INTEGER,
                 allowNull: true, // in cm
             },
             height: {
-                type: sequelize_1.DataTypes.INTEGER,
+                type: DataTypes.INTEGER,
                 allowNull: true, // in cm
             },
             dangerousProduct: {
-                type: sequelize_1.DataTypes.BOOLEAN,
+                type: DataTypes.BOOLEAN,
                 defaultValue: false,
                 allowNull: false,
             },
             preOrder: {
-                type: sequelize_1.DataTypes.BOOLEAN,
+                type: DataTypes.BOOLEAN,
                 defaultValue: false,
                 allowNull: false,
             },
             preorderDays: {
-                type: sequelize_1.DataTypes.INTEGER,
+                type: DataTypes.INTEGER,
                 allowNull: true,
             },
             youtubeLink: {
-                type: sequelize_1.DataTypes.STRING,
+                type: DataTypes.STRING,
                 allowNull: true,
             },
             promoImagePath: {
-                type: sequelize_1.DataTypes.STRING,
+                type: DataTypes.STRING,
                 allowNull: true,
             },
             imagePaths: {
-                type: sequelize_1.DataTypes.JSON,
+                type: DataTypes.JSON,
                 allowNull: true,
             },
             videoPath: {
-                type: sequelize_1.DataTypes.STRING,
+                type: DataTypes.STRING,
                 allowNull: true,
             },
             variations: {
-                type: sequelize_1.DataTypes.JSON,
+                type: DataTypes.JSON,
                 allowNull: true,
             },
             wholesale: {
-                type: sequelize_1.DataTypes.JSON,
+                type: DataTypes.JSON,
                 allowNull: true,
             },
             isPublished: {
-                type: sequelize_1.DataTypes.BOOLEAN,
+                type: DataTypes.BOOLEAN,
                 allowNull: false,
                 defaultValue: false,
             },
@@ -147,4 +166,3 @@ class Product extends sequelize_1.Model {
         return Product;
     }
 }
-exports.Product = Product;

@@ -1,63 +1,80 @@
-import { DataTypes, Model, Optional, Sequelize } from "sequelize";
+import {
+  Model,
+  DataTypes,
+  Sequelize,
+  BelongsToManyGetAssociationsMixin,
+  BelongsToGetAssociationMixin,
+  Optional,
+} from "sequelize";
+import { Product } from "./Product.js";
+import { User } from "./User.js";
 
-interface OrderAttributes {
+// FIX: This interface is now exported to be accessible by other modules.
+export interface OrderAttributes {
   id: number;
+  invoiceNo: string;
   userId: number;
   totalAmount: number;
-  status: "pending" | "completed" | "cancelled";
+  status: "pending" | "processing" | "shipped" | "completed" | "cancelled";
   createdAt?: Date;
   updatedAt?: Date;
 }
 
-interface OrderCreationAttributes
-  extends Optional<OrderAttributes, "id" | "status"> {}
+interface OrderCreationAttributes extends Optional<OrderAttributes, "id"> {}
 
 export class Order
   extends Model<OrderAttributes, OrderCreationAttributes>
   implements OrderAttributes
 {
   public id!: number;
+  public invoiceNo!: string;
   public userId!: number;
   public totalAmount!: number;
-  public status!: "pending" | "completed" | "cancelled";
+  public status!:
+    | "pending"
+    | "processing"
+    | "shipped"
+    | "completed"
+    | "cancelled";
 
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 
-  static associate(models: any) {
-    Order.belongsTo(models.User, { foreignKey: "userId" });
+  // Mixins for associations
+  public getProducts!: BelongsToManyGetAssociationsMixin<Product>;
+  public getUser!: BelongsToGetAssociationMixin<User>;
 
+  public readonly user?: User;
+  public readonly products?: Product[];
+
+  public static associate(models: any) {
+    Order.belongsTo(models.User, { foreignKey: "userId", as: "user" });
     Order.belongsToMany(models.Product, {
-      through: models.OrderItem,
-      foreignKey: "orderId",
-      otherKey: "productId",
-      as: "products", // Tambahkan alias yang sesuai
+      through: "OrderItem",
+      as: "products",
     });
   }
-
-  static initModel(sequelize: Sequelize): typeof Order {
+static initModel(sequelize: Sequelize): typeof Order {
     Order.init(
       {
-        id: {
-          type: DataTypes.INTEGER.UNSIGNED,
-          autoIncrement: true,
-          primaryKey: true,
-        },
+        id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+        invoiceNo: { type: DataTypes.STRING, allowNull: false, unique: true },
         userId: {
-          type: DataTypes.INTEGER.UNSIGNED,
+          type: DataTypes.INTEGER,
           allowNull: false,
+          references: { model: "Users", key: "id" },
         },
-        totalAmount: {
-          type: DataTypes.DECIMAL(10, 2),
-          allowNull: false,
-        },
+        totalAmount: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
         status: {
-          type: DataTypes.STRING,
-          allowNull: false,
+          type: DataTypes.ENUM(
+            "pending",
+            "processing",
+            "shipped",
+            "completed",
+            "cancelled"
+          ),
           defaultValue: "pending",
-          validate: {
-            isIn: [["pending", "completed", "cancelled"]],
-          },
+          allowNull: false,
         },
       },
       {

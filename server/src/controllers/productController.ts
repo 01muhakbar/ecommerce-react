@@ -1,11 +1,12 @@
-import { Request, Response, NextFunction } from "express";
-import db from "../models/index";
+import express from 'express';
 import { Op } from "sequelize";
+import initializedDbPromise from "../models/index.js";
 
+const db = await initializedDbPromise;
 const { Product, User, Category } = db;
 
 // Kustomisasi tipe Request dari Express untuk menyertakan properti `user` dan `files`
-interface CustomRequest extends Request {
+interface CustomRequest extends express.Request {
   // @ts-ignore
   user?: User;
   files?:
@@ -16,7 +17,7 @@ interface CustomRequest extends Request {
 // Fungsi untuk membuat produk baru
 export const createProduct = async (
   req: CustomRequest,
-  res: Response
+  res: express.Response
 ): Promise<void> => {
   try {
     const {
@@ -135,8 +136,8 @@ export const createProduct = async (
 
 // Fungsi untuk mengambil semua produk
 export const getAllProducts = async (
-  req: Request,
-  res: Response
+  req: express.Request,
+  res: express.Response
 ): Promise<void> => {
   try {
     let where: any = {};
@@ -161,19 +162,17 @@ export const getAllProducts = async (
     });
   } catch (error) {
     console.error("GET ALL PRODUCTS ERROR:", error);
-    res
-      .status(500)
-      .json({
-        message: "Failed to fetch products",
-        error: (error as Error).message,
-      });
+    res.status(500).json({
+      message: "Failed to fetch products",
+      error: (error as Error).message,
+    });
   }
 };
 
 // Fungsi untuk mengambil detail satu produk berdasarkan ID
 export const getProductById = async (
-  req: Request,
-  res: Response
+  req: express.Request,
+  res: express.Response
 ): Promise<void> => {
   try {
     const { id } = req.params;
@@ -186,19 +185,17 @@ export const getProductById = async (
 
     res.status(200).json(product);
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        message: "Failed to fetch product details",
-        error: (error as Error).message,
-      });
+    res.status(500).json({
+      message: "Failed to fetch product details",
+      error: (error as Error).message,
+    });
   }
 };
 
 // [REFACTORED] Get all products for the logged-in seller
 export const getSellerProducts = async (
   req: CustomRequest,
-  res: Response
+  res: express.Response
 ): Promise<void> => {
   try {
     if (!req.user?.id) {
@@ -211,19 +208,17 @@ export const getSellerProducts = async (
     });
     res.status(200).json({ success: true, data: products });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        message: "Error loading products",
-        error: (error as Error).message,
-      });
+    res.status(500).json({
+      message: "Error loading products",
+      error: (error as Error).message,
+    });
   }
 };
 
 // [REFACTORED] Get product data for the edit page
 export const getEditProductPage = async (
   req: CustomRequest,
-  res: Response
+  res: express.Response
 ): Promise<void> => {
   try {
     if (!req.user?.id) {
@@ -235,28 +230,24 @@ export const getEditProductPage = async (
     });
 
     if (!product) {
-      res
-        .status(404)
-        .json({
-          message: "Product not found or you don't have permission to edit it.",
-        });
+      res.status(404).json({
+        message: "Product not found or you don't have permission to edit it.",
+      });
       return;
     }
     res.status(200).json({ success: true, data: product });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        message: "Error loading product for editing",
-        error: (error as Error).message,
-      });
+    res.status(500).json({
+      message: "Error loading product for editing",
+      error: (error as Error).message,
+    });
   }
 };
 
 // [REFACTORED] Get product and categories data for admin edit page
 export const renderAdminEditProductPage = async (
-  req: Request,
-  res: Response
+  req: express.Request,
+  res: express.Response
 ): Promise<void> => {
   try {
     const { id } = req.query;
@@ -280,19 +271,17 @@ export const renderAdminEditProductPage = async (
     }
     res.status(200).json({ success: true, data: { product, categories } });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        message: "Error loading product for editing",
-        error: (error as Error).message,
-      });
+    res.status(500).json({
+      message: "Error loading product for editing",
+      error: (error as Error).message,
+    });
   }
 };
 
 // Update a product
 export const updateProduct = async (
-  req: Request,
-  res: Response
+  req: express.Request,
+  res: express.Response
 ): Promise<void> => {
   try {
     const { id } = req.params;
@@ -323,19 +312,17 @@ export const updateProduct = async (
     await product.update(updateData);
     res.status(200).json({ message: "Product updated successfully.", product });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        message: "Failed to update product",
-        error: (error as Error).message,
-      });
+    res.status(500).json({
+      message: "Failed to update product",
+      error: (error as Error).message,
+    });
   }
 };
 
 // Delete a product
 export const deleteProduct = async (
-  req: Request,
-  res: Response
+  req: express.Request,
+  res: express.Response
 ): Promise<void> => {
   try {
     const { id } = req.params;
@@ -350,19 +337,17 @@ export const deleteProduct = async (
     // 204 No Content is appropriate for a successful deletion with no body
     res.status(204).send();
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        message: "Failed to delete product",
-        error: (error as Error).message,
-      });
+    res.status(500).json({
+      message: "Failed to delete product",
+      error: (error as Error).message,
+    });
   }
 };
 
 // [REFACTORED] Get data for admin products page (categories and sellers)
 export const renderAdminProductsPage = async (
-  req: Request,
-  res: Response
+  req: express.Request,
+  res: express.Response
 ): Promise<void> => {
   try {
     const categories = await Category.findAll();
@@ -372,37 +357,33 @@ export const renderAdminProductsPage = async (
     });
     res.status(200).json({ success: true, data: { categories, sellers } });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        message: "Error loading page data",
-        error: (error as Error).message,
-      });
+    res.status(500).json({
+      message: "Error loading page data",
+      error: (error as Error).message,
+    });
   }
 };
 
 // [REFACTORED] Get categories for the add product page
 export const renderAddProductPageAdmin = async (
-  req: Request,
-  res: Response
+  req: express.Request,
+  res: express.Response
 ): Promise<void> => {
   try {
     const categories = await Category.findAll();
     res.status(200).json({ success: true, data: { categories } });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        message: "Error loading page data",
-        error: (error as Error).message,
-      });
+    res.status(500).json({
+      message: "Error loading page data",
+      error: (error as Error).message,
+    });
   }
 };
 
 // Fungsi untuk mengambil detail satu produk untuk preview
 export const getProductDetailsForPreview = async (
-  req: Request,
-  res: Response
+  req: express.Request,
+  res: express.Response
 ): Promise<void> => {
   try {
     const { id } = req.params;
@@ -432,8 +413,8 @@ export const getProductDetailsForPreview = async (
 
 // [REFACTORED] Render all products
 export const renderAllProducts = async (
-  req: Request,
-  res: Response
+  req: express.Request,
+  res: express.Response
 ): Promise<void> => {
   try {
     const products = await Product.findAll({
@@ -441,11 +422,9 @@ export const renderAllProducts = async (
     });
     res.status(200).json({ success: true, data: products });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        message: "Error memuat halaman produk",
-        error: (error as Error).message,
-      });
+    res.status(500).json({
+      message: "Error memuat halaman produk",
+      error: (error as Error).message,
+    });
   }
 };

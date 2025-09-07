@@ -1,16 +1,16 @@
-import { DataTypes, Model, Optional, Sequelize } from 'sequelize';
-import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
+import { DataTypes, Model, Sequelize, Optional } from "sequelize";
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
 
 interface UserAttributes {
   id: number;
   name: string;
   email: string;
   password?: string;
-  role: 'pembeli' | 'penjual' | 'admin';
+  role: "pembeli" | "penjual" | "admin";
   storeName?: string;
   phoneNumber?: string;
-  gender?: 'Laki-laki' | 'Perempuan' | 'Lainnya';
+  gender?: "Laki-laki" | "Perempuan" | "Lainnya";
   dateOfBirth?: Date;
   refreshToken?: string;
   passwordResetToken?: string;
@@ -18,24 +18,28 @@ interface UserAttributes {
   isActive: boolean;
 }
 
-interface UserCreationAttributes extends Optional<UserAttributes, 'id' | 'isActive' | 'role'> {}
+interface UserCreationAttributes
+  extends Optional<UserAttributes, "id" | "isActive" | "role"> {}
 
-export class User extends Model<UserAttributes, UserCreationAttributes> implements UserAttributes {
+export class User
+  extends Model<UserAttributes, UserCreationAttributes>
+  implements UserAttributes
+{
   public id!: number;
   public name!: string;
   public email!: string;
-  public password!: string;
-  public role!: 'pembeli' | 'penjual' | 'admin';
+  public password?: string;
+  public role!: "pembeli" | "penjual" | "admin";
   public storeName?: string;
   public phoneNumber?: string;
-  public gender?: 'Laki-laki' | 'Perempuan' | 'Lainnya';
+  public gender?: "Laki-laki" | "Perempuan" | "Lainnya";
   public dateOfBirth?: Date;
   public refreshToken?: string;
   public passwordResetToken?: string;
   public passwordResetExpires?: Date;
   public isActive!: boolean;
 
-  // Timestamps
+  // timestamps!
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 
@@ -53,7 +57,7 @@ export class User extends Model<UserAttributes, UserCreationAttributes> implemen
   }
 
   async correctPassword(candidatePassword: string): Promise<boolean> {
-    return await bcrypt.compare(candidatePassword, this.password);
+    return await bcrypt.compare(candidatePassword, this.password!);
   }
 
   createPasswordResetToken(): string {
@@ -110,7 +114,7 @@ export class User extends Model<UserAttributes, UserCreationAttributes> implemen
           allowNull: true,
         },
         gender: {
-          type: DataTypes.ENUM('Laki-laki', 'Perempuan', 'Lainnya'),
+          type: DataTypes.ENUM("Laki-laki", "Perempuan", "Lainnya"),
           allowNull: true,
         },
         dateOfBirth: {
@@ -141,7 +145,7 @@ export class User extends Model<UserAttributes, UserCreationAttributes> implemen
         hooks: {
           beforeSave: async (user: User) => {
             if (user.changed("password")) {
-              user.password = await bcrypt.hash(user.password, 12);
+              user.password = await bcrypt.hash(user.password!, 12);
             }
           },
         },

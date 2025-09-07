@@ -1,93 +1,90 @@
 import React from "react";
 
+// Define a basic Product type for this component's props
 interface Product {
   id: number;
   name: string;
-  Category?: { name: string };
-  stock: number;
+  category?: { name: string };
   price: number;
+  stock: number;
   isPublished: boolean;
 }
 
 interface ProductsTableProps {
   products: Product[];
-  onEdit: (id: number) => void;
-  onDelete: (id: number) => void;
-  onTogglePublish: (id: number) => void;
+  // Add any event handlers you need, e.g., onEdit, onDelete
 }
 
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-  }).format(amount);
-};
+const ProductsTable: React.FC<ProductsTableProps> = ({ products }) => {
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      minimumFractionDigits: 0,
+    }).format(amount);
+  };
 
-const ProductsTable: React.FC<ProductsTableProps> = ({
-  products,
-  onEdit,
-  onDelete,
-  onTogglePublish,
-}) => {
   return (
-    <div className="overflow-x-auto bg-white rounded-lg shadow">
-      <table className="min-w-full text-sm text-left text-gray-500">
+    <div className="relative overflow-x-auto shadow-md sm:rounded-lg">
+      <table className="w-full text-sm text-left text-gray-500">
         <thead className="text-xs text-gray-700 uppercase bg-gray-50">
           <tr>
             <th scope="col" className="px-6 py-3">
-              Product
+              Product Name
             </th>
-            <th scope_col="col" className="px-6 py-3">
+            <th scope="col" className="px-6 py-3">
               Category
             </th>
-            <th scope_col="col" className="px-6 py-3">
-              Stock
-            </th>
-            <th scope_col="col" className="px-6 py-3">
+            <th scope="col" className="px-6 py-3">
               Price
             </th>
-            <th scope_col="col" className="px-6 py-3">
-              Published
+            <th scope="col" className="px-6 py-3">
+              Stock
             </th>
-            <th scope_col="col" className="px-6 py-3 text-center">
-              Actions
+            <th scope="col" className="px-6 py-3 text-center">
+              Status
+            </th>
+            <th scope="col" className="px-6 py-3">
+              <span className="sr-only">Actions</span>
             </th>
           </tr>
         </thead>
         <tbody>
           {products.map((product) => (
             <tr key={product.id} className="bg-white border-b hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium text-gray-900">
+              <th
+                scope="row"
+                className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap"
+              >
                 {product.name}
-              </td>
-              <td className="px-6 py-4">{product.Category?.name || "N/A"}</td>
-              <td className="px-6 py-4">{product.stock}</td>
+              </th>
+              <td className="px-6 py-4">{product.category?.name || "N/A"}</td>
               <td className="px-6 py-4">{formatCurrency(product.price)}</td>
-              <td className="px-6 py-4">
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={product.isPublished}
-                    onChange={() => onTogglePublish(product.id)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-focus:ring-4 peer-focus:ring-teal-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
-                </label>
+              <td className="px-6 py-4">{product.stock}</td>
+              <td className="px-6 py-4 text-center">
+                {product.isPublished ? (
+                  <span className="px-2 py-1 text-xs font-medium text-green-800 bg-green-100 rounded-full">
+                    Published
+                  </span>
+                ) : (
+                  <span className="px-2 py-1 text-xs font-medium text-red-800 bg-red-100 rounded-full">
+                    Unpublished
+                  </span>
+                )}
               </td>
-              <td className="px-6 py-4 text-center space-x-2">
-                <button
-                  onClick={() => onEdit(product.id)}
+              <td className="px-6 py-4 text-right">
+                <a
+                  href="#"
                   className="font-medium text-blue-600 hover:underline"
                 >
                   Edit
-                </button>
-                <button
-                  onClick={() => onDelete(product.id)}
-                  className="font-medium text-red-600 hover:underline"
+                </a>
+                <a
+                  href="#"
+                  className="ml-4 font-medium text-red-600 hover:underline"
                 >
                   Delete
-                </button>
+                </a>
               </td>
             </tr>
           ))}

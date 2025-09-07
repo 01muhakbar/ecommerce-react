@@ -1,39 +1,45 @@
-import React from 'react';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import React from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
-interface ProductSalesData {
+interface BestSellingProduct {
   name: string;
   sales: number;
 }
 
 interface BestSellersChartProps {
-  data: ProductSalesData[];
+  data: BestSellingProduct[];
 }
-
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF'];
 
 const BestSellersChart: React.FC<BestSellersChartProps> = ({ data }) => {
   return (
-    <div className="bg-white p-4 rounded-lg shadow-md h-80">
+    <div className="bg-white p-4 rounded-lg shadow-md">
       <h3 className="text-lg font-semibold mb-4">Produk Terlaris</h3>
-      <ResponsiveContainer width="100%" height="80%">
-        <PieChart>
-          <Pie
-            data={data}
-            cx="50%"
-            cy="50%"
-            labelLine={false}
-            outerRadius={80}
-            fill="#8884d8"
-            dataKey="sales"
-          >
-            {data.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-            ))}
-          </Pie>
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart
+          data={data}
+          margin={{
+            top: 5,
+            right: 30,
+            left: 20,
+            bottom: 5,
+          }}
+        >
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="name" />
+          <YAxis />
           <Tooltip />
           <Legend />
-        </PieChart>
+          <Bar dataKey="sales" fill="#8884d8" name="Penjualan" />
+        </BarChart>
       </ResponsiveContainer>
     </div>
   );

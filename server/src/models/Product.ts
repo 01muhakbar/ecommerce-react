@@ -1,4 +1,4 @@
-import { DataTypes, Model, Optional, Sequelize } from "sequelize";
+import { DataTypes, Model, Sequelize, Optional } from "sequelize";
 
 // Antarmuka untuk atribut produk, agar sesuai dengan database
 interface ProductAttributes {

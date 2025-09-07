@@ -1,5 +1,5 @@
 import "dotenv/config";
-import express, { Application, Request, Response, NextFunction } from "express";
+import express from "express";
 import path from "path";
 import cookieParser from "cookie-parser";
 import cors from "cors";
@@ -21,10 +21,10 @@ import adminOrderRoutes from "./routes/adminOrderRoutes.js";
 import devRoutes from "./routes/devRoutes.js";
 
 // Impor model dan middleware
-import db from "./models/index.js";
 import globalErrorHandler from "./middleware/errorMiddleware.js";
+import { initializeDatabase } from "./models/index.js";
 
-const app: Application = express();
+const app: express.Application = express();
 const PORT: number = parseInt(process.env.PORT || "3000", 10);
 
 // Middleware
@@ -63,12 +63,15 @@ app.use("/api/v1/dev", devRoutes); // Daftarkan rute baru
 
 // --- Penanganan Rute Tidak Ditemukan (404) ---
 // Tangani semua rute yang tidak cocok dengan rute di atas
-app.all("*", (req: Request, res: Response, next: NextFunction) => {
-  res.status(404).json({
-    status: "fail",
-    message: `Can't find ${req.originalUrl} on this server!`,
-  });
-});
+app.all(
+  "*",
+  (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    res.status(404).json({
+      status: "fail",
+      message: `Can't find ${req.originalUrl} on this server!`,
+    });
+  }
+);
 
 // --- Global Error Handling Middleware ---
 // Ini harus menjadi middleware terakhir
@@ -77,10 +80,11 @@ app.use(globalErrorHandler);
 // --- START SERVER ---
 const startServer = async () => {
   try {
+    const db = await initializeDatabase(); // Inisialisasi database dan model
     // Sinkronisasi database saat server start di mode development
     if (process.env.NODE_ENV === "development") {
-      await db.sequelize.sync({ alter: true });
-      console.log("Database synchronized successfully.");
+      // await db.sequelize.sync({ alter: true });
+      // console.log("Database synchronized successfully.");
     }
     app.listen(PORT, () =>
       console.log(`Server is running on http://localhost:${PORT}`)
@@ -90,5 +94,7 @@ const startServer = async () => {
     process.exit(1);
   }
 };
+
+console.log("JWT_SECRET:", process.env.JWT_SECRET);
 
 startServer();

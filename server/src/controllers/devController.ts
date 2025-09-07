@@ -1,5 +1,5 @@
-import { Request, Response, NextFunction } from "express";
-import db from "../models";
+import express from 'express';
+import initializedDbPromise from "../models/index.js";
 
 /**
  * Sinkronisasi database dengan model Sequelize.
@@ -7,9 +7,9 @@ import db from "../models";
  * GET /api/v1/dev/sync-database
  */
 export const syncDatabase = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
 ) => {
   // Keamanan: Pastikan endpoint ini tidak bisa diakses di produksi
   if (process.env.NODE_ENV === "production") {
@@ -19,6 +19,7 @@ export const syncDatabase = async (
   }
 
   try {
+    const db = await initializedDbPromise;
     const force = req.query.force === "true";
     const alter = req.query.alter === "true";
     const syncOptions = force ? { force: true } : alter ? { alter: true } : {};
@@ -33,6 +34,6 @@ export const syncDatabase = async (
     });
   } catch (error) {
     console.error("Database sync error:", error);
-    next(error); // Teruskan ke global error handler
+    next(error);
   }
 };

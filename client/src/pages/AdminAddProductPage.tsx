@@ -5,10 +5,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { AxiosError } from "axios";
-import {
-  createProductSchema,
-  type CreateProductInput as CreateProductSchema,
-} from "@ecommerce/schemas";
+import { z } from "zod";
+import { createProductSchema } from "@ecommerce/schemas";
 import api from "../api/axios";
 import ImageUploader from "../components/ImageUploader";
 import TagInput from "../components/TagInput";
@@ -16,13 +14,15 @@ import TagInput from "../components/TagInput";
 const AdminAddProductPage: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  // Define the type from the schema
+  type CreateProductInput = z.infer<typeof createProductSchema>;
 
   const {
     register,
     handleSubmit,
     formState: { errors },
     control,
-  } = useForm<CreateProductSchema>({
+  } = useForm<CreateProductInput>({
     resolver: zodResolver(createProductSchema),
     defaultValues: {
       tags: [],
@@ -74,11 +74,10 @@ const AdminAddProductPage: React.FC = () => {
     },
   });
 
-  const onSubmit = (data: CreateProductSchema) => {
+  const onSubmit = (data: CreateProductInput) => {
     const formData = new FormData();
 
-    Object.keys(data).forEach((key) => {
-      const value = data[key as keyof CreateProductSchema];
+    Object.entries(data).forEach(([key, value]) => {
       if (key === "images") {
         if (value && Array.isArray(value)) {
           value.forEach((file: File) => {
@@ -89,7 +88,7 @@ const AdminAddProductPage: React.FC = () => {
         if (value && Array.isArray(value)) {
           formData.append("tags", JSON.stringify(value));
         }
-      } else if (value !== null && value !== undefined) {
+      } else if (value != null) {
         formData.append(key, String(value));
       }
     });
@@ -116,7 +115,9 @@ const AdminAddProductPage: React.FC = () => {
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
           />
           {errors.name && (
-            <p className="mt-2 text-sm text-red-600">{errors.name.message}</p>
+            <p className="mt-2 text-sm text-red-600">
+              {String(errors.name?.message || "")}
+            </p>
           )}
         </div>
 
@@ -200,7 +201,7 @@ const AdminAddProductPage: React.FC = () => {
           </select>
           {errors.categoryId && (
             <p className="mt-2 text-sm text-red-600">
-              {errors.categoryId.message}
+              {String(errors.categoryId?.message || "")}
             </p>
           )}
         </div>
@@ -222,7 +223,7 @@ const AdminAddProductPage: React.FC = () => {
             />
             {errors.price && (
               <p className="mt-2 text-sm text-red-600">
-                {errors.price.message}
+                {String(errors.price?.message || "")}
               </p>
             )}
           </div>
@@ -257,7 +258,7 @@ const AdminAddProductPage: React.FC = () => {
             />
             {errors.quantity && (
               <p className="mt-2 text-sm text-red-600">
-                {errors.quantity.message}
+                {String(errors.quantity?.message || "")}
               </p>
             )}
           </div>
@@ -278,7 +279,9 @@ const AdminAddProductPage: React.FC = () => {
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
           />
           {errors.slug && (
-            <p className="mt-2 text-sm text-red-600">{errors.slug.message}</p>
+            <p className="mt-2 text-sm text-red-600">
+              {String(errors.slug?.message || "")}
+            </p>
           )}
         </div>
 

@@ -14,20 +14,17 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/01muhakbar/project-ecommerce.git"
+    "url": "git+https://github.com/01muhakbar/ecommerce-react.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/01muhakbar/project-ecommerce/issues"
+    "url": "https://github.com/01muhakbar/ecommerce-react/issues"
   },
-  "homepage": "https://github.com/01muhakbar/project-ecommerce#readme",
+  "homepage": "https://github.com/01muhakbar/ecommerce-react#readme",
   "devDependencies": {
     "sequelize-cli": "^6.6.3",
     "zod": "^4.1.5"
-  },
-  "dependencies": {
-    "@ecommerce/schemas": "^1.0.0"
   }
 }

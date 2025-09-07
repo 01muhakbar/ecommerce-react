@@ -1,7 +1,6 @@
-
 import express, { Router } from 'express';
-import { protect, restrictTo } from '../middleware/authMiddleware';
-import * as productController from '../controllers/productController';
+import { protect, restrictTo } from '../middleware/authMiddleware.js';
+import * as productController from '../controllers/productController.js';
 
 const router: Router = express.Router();
 
