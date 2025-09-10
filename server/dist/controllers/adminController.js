@@ -1,5 +1,5 @@
 import { Op, fn, col, literal } from "sequelize";
-import initializedDbPromise from "../models/index.js";
+import { initializedDbPromise } from "../models/index.js";
 const db = await initializedDbPromise;
 const { User, Order, OrderItem, Product } = db;
 export const getDashboardStatistics = async (req, res, next) => {

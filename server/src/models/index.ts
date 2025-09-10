@@ -1,90 +1,119 @@
-import { Sequelize, DataTypes, Model } from "sequelize";
-import fs from "fs/promises"; // Gunakan fs/promises untuk operasi asinkron
+import { Sequelize } from "sequelize";
+import fs from "fs/promises";
 import path from "path";
-import { fileURLToPath } from "url";
-// Recreate __filename and __dirname for ESM
+import { fileURLToPath, pathToFileURL } from "url";
+import dotenv from "dotenv";
+
+// Dapatkan __dirname di lingkungan ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load database configuration manually to avoid unsupported import assertion
-const configPath = path.join(__dirname, "..", "..", "config", "config.json");
-const configJson = JSON.parse(await fs.readFile(configPath, "utf-8"));
+// Muat variabel lingkungan dari .env
+dotenv.config({ path: path.resolve(__dirname, "..", "..", ".env") });
 
-const basename = path.basename(__filename);
-const env = process.env.NODE_ENV || "development";
-const config = configJson[env as keyof typeof configJson];
-
-let sequelize: Sequelize;
-if (config.use_env_variable) {
-  sequelize = new Sequelize(
-    process.env[config.use_env_variable] as string,
-    config
-  );
-} else {
-  sequelize = new Sequelize(
-    config.database,
-    config.username,
-    config.password,
-    config
-  );
-}
-
-const db: { [key: string]: typeof Model | any } = {};
+const db: { [key: string]: any } = {};
 
 export const initializeDatabase = async () => {
-  const files = await fs.readdir(__dirname);
+  try {
+    // 1. Validasi variabel lingkungan & Log yang aman
+    const requiredEnvVars = [
+      "DB_HOST",
+      "DB_USER",
+      "DB_PASS",
+      "DB_NAME",
+      "DB_DIALECT",
+    ];
+    const missingVars = requiredEnvVars.filter((v) => !process.env[v]);
 
-  for (const file of files) {
-    if (
-      file.indexOf(".") !== 0 &&
-      file !== basename &&
-      (file.slice(-3) === ".js" ||
-        (file.slice(-3) === ".ts" && file.indexOf(".d.ts") === -1))
-    ) {
-      const filePath = path.join(__dirname, file);
-      const fileUrl = `file://${filePath}`; // Gunakan URL untuk dynamic import
-      const importedModule = await import(fileUrl);
+    if (missingVars.length > 0) {
+      throw new Error(
+        `Gagal inisialisasi database: Variabel .env berikut tidak ditemukan: ${missingVars.join(", ")}`
+      );
+    }
 
-      let model: typeof Model | undefined;
+    const { DB_HOST, DB_USER, DB_PASS, DB_NAME, DB_DIALECT, DB_PORT } = process.env;
 
-      // Cek apakah modul mengekspor kelas model secara default atau sebagai named export
-      const exported = importedModule.default || importedModule;
+    console.log("🔍 Menggunakan konfigurasi database berikut:", {
+      host: DB_HOST,
+      user: DB_USER,
+      pass: DB_PASS ? '********' : '(KOSONG)',
+      name: DB_NAME,
+      dialect: DB_DIALECT,
+      port: DB_PORT || '3306 (default)',
+    });
 
-      // Cari kelas model yang valid di dalam modul yang diimpor
-      for (const key in exported) {
-        if (Object.prototype.hasOwnProperty.call(exported, key)) {
-          const potentialModel = exported[key];
-          if (
-            typeof potentialModel === "function" &&
-            potentialModel.prototype instanceof Model &&
-            potentialModel.initModel
-          ) {
-            model = potentialModel.initModel(sequelize);
-            break;
-          }
+    // __filename & __dirname untuk ESM
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const basename = path.basename(__filename);
+
+    // 2. Inisialisasi Sequelize dengan port
+    const sequelize = new Sequelize(DB_NAME!, DB_USER!, DB_PASS!, {
+      host: DB_HOST!,
+      port: DB_PORT ? parseInt(DB_PORT, 10) : 3306,
+      dialect: DB_DIALECT! as any,
+      logging: false, // non-aktifkan logging SQL sequelize jika tidak perlu
+    });
+
+    const files = await fs.readdir(__dirname, { withFileTypes: true });
+
+    for (const dirent of files) {
+      if (!dirent.isFile()) continue;
+
+      const file = dirent.name;
+
+      // skip file yang diawali titik, skip diri sendiri,
+      // dan hanya ambil .js atau .ts (kecuali .d.ts)
+      const isCandidate =
+        file[0] !== "." &&
+        file !== basename &&
+        (file.endsWith(".js") ||
+          (file.endsWith(".ts") && !file.endsWith(".d.ts")));
+
+      if (!isCandidate) continue;
+
+      try {
+        const filePath = path.join(__dirname, file);
+        // ✅ cara aman buat URL file (Windows-friendly)
+        const fileUrl = pathToFileURL(filePath).href;
+
+        const importedModule = await import(fileUrl);
+
+        // handle default export (ESM) atau module.exports (CJS)
+        const modelDefiner = importedModule.default || importedModule;
+
+        // jika modul mengekspor beberapa model, ambil yang ada initModel
+        const candidates = Object.values(modelDefiner ?? {});
+        let ModelClass: any =
+          candidates.find((x: any) => x && typeof x.initModel === "function") ||
+          modelDefiner;
+
+        if (ModelClass && typeof ModelClass.initModel === "function") {
+          const model = ModelClass.initModel(sequelize);
+          db[model.name] = model;
         }
-      }
-
-      if (model && model.name) {
-        db[model.name] = model;
+      } catch (error) {
+        console.error(`Error loading model from file ${file}:`, error);
+        throw error; // fail fast
       }
     }
+
+    // panggil associate jika ada
+    Object.keys(db).forEach((modelName) => {
+      if (typeof db[modelName].associate === "function") {
+        db[modelName].associate(db);
+      }
+    });
+
+    db.sequelize = sequelize;
+    db.Sequelize = Sequelize;
+
+    await sequelize.authenticate();
+    console.log("Database connection has been established successfully.");
+
+    return db;
+  } catch (error) {
+    console.error("Unable to initialize the database:", error);
+    throw error; // propagate ke caller (app.ts)
   }
-
-  // Setelah semua model dimuat, atur asosiasi antar model
-  Object.keys(db).forEach((modelName) => {
-    if (db[modelName].associate) {
-      db[modelName].associate(db); // Pass db object for associations
-    }
-  });
-
-  // Tetapkan instance sequelize dan library Sequelize ke objek db
-  db.sequelize = sequelize;
-  db.Sequelize = Sequelize;
-
-  return db;
 };
-
-// Ekspor db sebagai default untuk kompatibilitas, meskipun isinya kosong sampai inisialisasi
-const initializedDbPromise = initializeDatabase();
-export default initializedDbPromise;

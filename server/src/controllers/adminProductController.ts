@@ -1,10 +1,9 @@
-import express from 'express';
+import express from "express";
 import { Op } from "sequelize";
-import initializedDbPromise from "../models/index.js";
+import { Product } from '../models/Product.js';
+import { Category } from '../models/Category.js';
+import { User } from '../models/User.js';
 import { AppError } from "../middleware/errorMiddleware.js";
-
-const db = await initializedDbPromise;
-const { Product, Category, User } = db;
 
 // Helper function to generate a unique slug
 const generateUniqueSlug = async (name: string): Promise<string> => {
@@ -70,7 +69,6 @@ export const getAllProducts = async (
       limit,
       offset,
       order: [["createdAt", "DESC"]],
-      distinct: true, // Menambahkan distinct untuk penghitungan yang benar saat join
     });
 
     res.status(200).json({
@@ -84,6 +82,8 @@ export const getAllProducts = async (
       },
     });
   } catch (error) {
+    console.error("--- ERROR FETCHING PRODUCTS ---");
+    console.error(error); // <-- INI YANG PALING PENTING
     res.status(500).json({
       status: "error",
       message: "Gagal mengambil data produk.",

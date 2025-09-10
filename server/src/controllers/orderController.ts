@@ -1,12 +1,13 @@
-import express from 'express';
+import express from "express";
 import { Transaction } from "sequelize";
-import initializedDbPromise from "../models/index.js";
 import { User } from "../models/User.js";
 import { Cart } from "../models/Cart.js";
 import { Product } from "../models/Product.js";
+import { Order } from "../models/Order.js";
+import { OrderItem } from "../models/OrderItem.js";
 
-const db = await initializedDbPromise;
-const { sequelize, Order, OrderItem } = db;
+// The sequelize instance is attached to all models. We can grab it from any of them.
+const sequelize = User.sequelize;
 
 // --- ENUMS & TYPES ---
 
@@ -20,7 +21,7 @@ export const OrderStatus = {
 } as const;
 
 // Membuat tipe dari nilai-nilai const object di atas
-type OrderStatusType = typeof OrderStatus[keyof typeof OrderStatus];
+type OrderStatusType = (typeof OrderStatus)[keyof typeof OrderStatus];
 
 // --- INTERFACES ---
 

@@ -1,9 +1,9 @@
 import express from "express";
-import { Op, fn, col, literal, cast } from "sequelize";
-import initializedDbPromise from "../models/index.js";
-
-const db = await initializedDbPromise;
-const { User, Order, OrderItem, Product } = db;
+import { Op, fn, col, literal } from "sequelize";
+import { User } from '../models/User.js';
+import { Order } from '../models/Order.js';
+import { OrderItem } from '../models/OrderItem.js';
+import { Product } from '../models/Product.js';
 
 export const getDashboardStatistics = async (
   req: express.Request,

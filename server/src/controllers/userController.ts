@@ -1,17 +1,10 @@
-import express from 'express';
+import express from "express";
 import bcrypt from "bcryptjs";
-import initializedDbPromise from "../models/index.js";
+import { User } from '../models/User.js';
 
 interface CustomRequest extends express.Request {
-  // @ts-ignore
-  user?: {
-    id: number;
-    role: string;
-  };
+  user?: User;
 }
-
-const db = await initializedDbPromise;
-const { User } = db;
 
 export const getMe = async (
   req: CustomRequest,

@@ -1,8 +1,8 @@
 import express from 'express';
-import initializedDbPromise from "../models/index.js";
-
-const db = await initializedDbPromise;
-const { Cart, CartItem, Product, User } = db;
+import { Cart } from '../models/Cart.js';
+import { CartItem } from '../models/CartItem.js';
+import { Product } from '../models/Product.js';
+import { User } from '../models/User.js';
 
 // Kustomisasi tipe Request dari Express untuk menyertakan properti `user`
 interface CustomRequest extends express.Request {

@@ -1,5 +1,5 @@
 import { Op } from "sequelize";
-import initializedDbPromise from "../models/index.js";
+import { initializedDbPromise } from "../models/index.js";
 const db = await initializedDbPromise;
 const { Product, Category, User } = db;
 // Helper function to generate a unique slug
@@ -56,7 +56,6 @@ export const getAllProducts = async (req, res) => {
             limit,
             offset,
             order: [["createdAt", "DESC"]],
-            distinct: true, // Menambahkan distinct untuk penghitungan yang benar saat join
         });
         res.status(200).json({
             status: "success",
@@ -70,6 +69,8 @@ export const getAllProducts = async (req, res) => {
         });
     }
     catch (error) {
+        console.error("--- ERROR FETCHING PRODUCTS ---");
+        console.error(error); // <-- INI YANG PALING PENTING
         res.status(500).json({
             status: "error",
             message: "Gagal mengambil data produk.",

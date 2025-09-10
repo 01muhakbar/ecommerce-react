@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import initializedDbPromise from "../models/index.js";
+import { initializedDbPromise } from "../models/index.js";
 import sendEmail from "../services/emailService.js";
 import { Op } from "sequelize";
 const db = await initializedDbPromise;

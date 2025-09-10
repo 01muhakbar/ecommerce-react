@@ -1,18 +1,11 @@
-import initializedDbPromise from "../models/index.js";
+import { initializedDbPromise } from "../models/index.js";
+const db = await initializedDbPromise;
 /**
- * Sinkronisasi database dengan model Sequelize.
- * Hanya dapat diakses di lingkungan non-produksi.
- * GET /api/v1/dev/sync-database
+ * Synchronizes the database.
+ * Use query params `?force=true` or `?alter=true`.
  */
 export const syncDatabase = async (req, res, next) => {
-    // Keamanan: Pastikan endpoint ini tidak bisa diakses di produksi
-    if (process.env.NODE_ENV === "production") {
-        return res
-            .status(403)
-            .json({ message: "This endpoint is not available in production." });
-    }
     try {
-        const db = await initializedDbPromise;
         const force = req.query.force === "true";
         const alter = req.query.alter === "true";
         const syncOptions = force ? { force: true } : alter ? { alter: true } : {};

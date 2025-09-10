@@ -1,9 +1,6 @@
 import { Request, Response } from "express";
-import initializedDbPromise from "../models/index.js";
 import { Order } from "../models/Order.js";
 import { User } from "../models/User.js";
-
-const db = await initializedDbPromise;
 
 // This type combines Order attributes with a potential User relation from the join.
 // It extends the base Order model type.
@@ -17,10 +14,10 @@ export const getOrders = async (req: Request, res: Response) => {
     const limit = parseInt(req.query.limit as string, 10) || 8;
     const offset = (page - 1) * limit;
 
-    const { count, rows: orders } = await db.Order.findAndCountAll({
+    const { count, rows: orders } = await Order.findAndCountAll({
       include: [
         {
-          model: db.User,
+          model: User,
           as: "user",
           attributes: ["name"], // Only fetch the user's name
         },

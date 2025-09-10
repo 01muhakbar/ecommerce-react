@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import initializedDbPromise from "../models/index.js";
+import { initializedDbPromise } from "../models/index.js";
 const db = await initializedDbPromise;
 const { User } = db;
 export const getMe = async (req, res, next) => {

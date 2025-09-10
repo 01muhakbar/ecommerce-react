@@ -1,5 +1,5 @@
 import { Op } from "sequelize";
-import initializedDbPromise from "../models/index.js";
+import { initializedDbPromise } from "../models/index.js";
 const db = await initializedDbPromise;
 const { Product, User, Category } = db;
 // Fungsi untuk membuat produk baru

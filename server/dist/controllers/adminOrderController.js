@@ -1,4 +1,4 @@
-import initializedDbPromise from "../models/index.js";
+import { initializedDbPromise } from "../models/index.js";
 const db = await initializedDbPromise;
 export const getOrders = async (req, res) => {
     try {

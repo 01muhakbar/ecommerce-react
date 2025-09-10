@@ -1,4 +1,4 @@
-import initializedDbPromise from "../models/index.js";
+import { initializedDbPromise } from "../models/index.js";
 const db = await initializedDbPromise;
 const { Cart, CartItem, Product, User } = db;
 // --- CONTROLLER FUNCTIONS ---

@@ -18,7 +18,10 @@ export class Cart extends Model {
             userId: {
                 type: DataTypes.INTEGER.UNSIGNED,
                 allowNull: false,
-                unique: true,
+                references: {
+                    model: "Users", // Nama tabel yang direferensikan
+                    key: "id",
+                },
             },
         }, {
             sequelize,

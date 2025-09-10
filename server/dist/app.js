@@ -67,8 +67,8 @@ const startServer = async () => {
         const db = await initializeDatabase(); // Inisialisasi database dan model
         // Sinkronisasi database saat server start di mode development
         if (process.env.NODE_ENV === "development") {
-            await db.sequelize.sync({ alter: true });
-            console.log("Database synchronized successfully.");
+            // await db.sequelize.sync({ alter: true });
+            // console.log("Database synchronized successfully.");
         }
         app.listen(PORT, () => console.log(`Server is running on http://localhost:${PORT}`));
     }

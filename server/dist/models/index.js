@@ -22,10 +22,10 @@ const db = {};
 export const initializeDatabase = async () => {
     const files = await fs.readdir(__dirname);
     for (const file of files) {
-        if (file.indexOf(".") !== 0 &&
+        if (file.indexOf('.') !== 0 &&
             file !== basename &&
-            (file.slice(-3) === ".js" ||
-                (file.slice(-3) === ".ts" && file.indexOf(".d.ts") === -1))) {
+            (file.slice(-3) === '.js' ||
+                (file.slice(-3) === '.ts' && file.indexOf('.d.ts') === -1))) {
             const filePath = path.join(__dirname, file);
             const fileUrl = `file://${filePath}`; // Gunakan URL untuk dynamic import
             const importedModule = await import(fileUrl);
@@ -36,7 +36,7 @@ export const initializeDatabase = async () => {
             for (const key in exported) {
                 if (Object.prototype.hasOwnProperty.call(exported, key)) {
                     const potentialModel = exported[key];
-                    if (typeof potentialModel === "function" &&
+                    if (typeof potentialModel === 'function' &&
                         potentialModel.prototype instanceof Model &&
                         potentialModel.initModel) {
                         model = potentialModel.initModel(sequelize);
@@ -60,6 +60,5 @@ export const initializeDatabase = async () => {
     db.Sequelize = Sequelize;
     return db;
 };
-// Ekspor db sebagai default untuk kompatibilitas, meskipun isinya kosong sampai inisialisasi
-const initializedDbPromise = initializeDatabase();
-export default initializedDbPromise;
+export const initializedDbPromise = initializeDatabase();
+export { sequelize };

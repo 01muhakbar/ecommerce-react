@@ -4,7 +4,7 @@ import path from "path";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import methodOverride from "method-override";
-import { fileURLToPath } from "url";
+import { fileURLToPath } from 'url';
 
 // Impor semua rute yang sudah di-TypeScript-kan
 import userRoutes from "./routes/userRoutes.js";
@@ -24,6 +24,10 @@ import devRoutes from "./routes/devRoutes.js";
 import globalErrorHandler from "./middleware/errorMiddleware.js";
 import { initializeDatabase } from "./models/index.js";
 
+// Recreate __dirname for ESM since it's used in express.static
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app: express.Application = express();
 const PORT: number = parseInt(process.env.PORT || "3000", 10);
 
@@ -38,9 +42,6 @@ app.use(
     credentials: true,
   })
 ); // Aktifkan CORS untuk semua rute
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Sajikan file statis dari folder 'public'
 app.use(express.static(path.join(__dirname, "..", "public")));
@@ -80,12 +81,7 @@ app.use(globalErrorHandler);
 // --- START SERVER ---
 const startServer = async () => {
   try {
-    const db = await initializeDatabase(); // Inisialisasi database dan model
-    // Sinkronisasi database saat server start di mode development
-    if (process.env.NODE_ENV === "development") {
-      // await db.sequelize.sync({ alter: true });
-      // console.log("Database synchronized successfully.");
-    }
+    await initializeDatabase(); // Inisialisasi database dan model
     app.listen(PORT, () =>
       console.log(`Server is running on http://localhost:${PORT}`)
     );
@@ -94,7 +90,5 @@ const startServer = async () => {
     process.exit(1);
   }
 };
-
-console.log("JWT_SECRET:", process.env.JWT_SECRET);
 
 startServer();

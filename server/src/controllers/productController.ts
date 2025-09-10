@@ -1,9 +1,8 @@
 import express from 'express';
 import { Op } from "sequelize";
-import initializedDbPromise from "../models/index.js";
-
-const db = await initializedDbPromise;
-const { Product, User, Category } = db;
+import { Product } from '../models/Product.js';
+import { User } from '../models/User.js';
+import { Category } from '../models/Category.js';
 
 // Kustomisasi tipe Request dari Express untuk menyertakan properti `user` dan `files`
 interface CustomRequest extends express.Request {

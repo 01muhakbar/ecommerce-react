@@ -1,4 +1,4 @@
-import initializedDbPromise from "../models/index.js";
+import { initializedDbPromise } from "../models/index.js";
 import { User } from "../models/User.js";
 import { Cart } from "../models/Cart.js";
 import { Product } from "../models/Product.js";
