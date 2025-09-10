@@ -1,9 +1,10 @@
 import express from "express";
 import { Op } from "sequelize";
-import { Product } from '../models/Product.js';
-import { Category } from '../models/Category.js';
-import { User } from '../models/User.js';
+import { initializedDbPromise } from "../models/index.js";
 import { AppError } from "../middleware/errorMiddleware.js";
+
+const db = await initializedDbPromise;
+const { Product, Category, User } = db;
 
 // Helper function to generate a unique slug
 const generateUniqueSlug = async (name: string): Promise<string> => {

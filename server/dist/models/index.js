@@ -5,12 +5,18 @@ import { fileURLToPath } from "url";
 // Recreate __filename and __dirname for ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-// Load database configuration manually to avoid unsupported import assertion
-const configPath = path.join(__dirname, "..", "..", "config", "config.json");
-const configJson = JSON.parse(await fs.readFile(configPath, "utf-8"));
 const basename = path.basename(__filename);
 const env = process.env.NODE_ENV || "development";
-const config = configJson[env];
+// Build config object from environment variables instead of a JSON file.
+// This is more secure and consistent with how sequelize-cli is configured.
+const config = {
+    username: process.env.DB_USER,
+    password: process.env.DB_PASS,
+    database: process.env.DB_NAME,
+    host: process.env.DB_HOST,
+    port: process.env.DB_PORT || 3306,
+    dialect: process.env.DB_DIALECT || "mysql"
+};
 let sequelize;
 if (config.use_env_variable) {
     sequelize = new Sequelize(process.env[config.use_env_variable], config);

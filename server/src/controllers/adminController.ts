@@ -97,8 +97,8 @@ export const getDashboardStatistics = async (
     const bestSellingProducts = await OrderItem.findAll({
       attributes: [
         "productId",
-        [fn("SUM", col("quantity")), "totalQuantity"],
-        [fn("SUM", literal("quantity * `OrderItem`.`price`")), "totalSales"],
+        [fn("SUM", col("OrderItem.quantity")), "totalQuantity"],
+        [fn("SUM", literal("`OrderItem`.`quantity` * `OrderItem`.`price`")), "totalSales"],
       ],
       group: ["productId"],
       order: [[literal("totalSales"), "DESC"]],
@@ -106,7 +106,7 @@ export const getDashboardStatistics = async (
       include: [
         {
           model: Product,
-          attributes: ["name"],
+          attributes: ["productName"],
           required: true,
         },
       ],
@@ -114,7 +114,7 @@ export const getDashboardStatistics = async (
 
     const formattedBestSellingProducts = bestSellingProducts.map(
       (item: any) => ({
-        name: item.Product.name,
+        name: item.Product.productName,
         sales: parseFloat(item.getDataValue("totalSales")),
       })
     );
@@ -123,13 +123,12 @@ export const getDashboardStatistics = async (
     const recentOrdersRaw = await Order.findAll({
       limit: 5,
       order: [["createdAt", "DESC"]],
-      include: [
-        {
-          model: User,
-          as: "user", // Pastikan alias sesuai dengan definisi model
-          attributes: ["name"],
-        },
-      ],
+      attributes: ['id','invoiceNo','userId','totalAmount','status','createdAt','updatedAt'],
+      include: [{
+        model: User,
+        as: 'user',
+        attributes: ['id','name']
+      }],
     });
 
     const mapStatus = (

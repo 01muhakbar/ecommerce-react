@@ -1,83 +1,92 @@
-import { DataTypes, Model, Sequelize, Optional } from "sequelize";
+import {
+  Model,
+  DataTypes,
+  Sequelize,
+  Optional,
+  HasManyGetAssociationsMixin,
+  HasManyAddAssociationMixin,
+  HasOneGetAssociationMixin,
+} from "sequelize";
 import bcrypt from "bcryptjs";
-import crypto from "crypto";
+import { Product } from "./Product.js";
+import { Cart } from "./Cart.js";
+import { Order } from "./Order.js";
 
-interface UserAttributes {
+// Interface untuk atribut User
+export interface UserAttributes {
   id: number;
   name: string;
   email: string;
-  password?: string;
-  role: "pembeli" | "penjual" | "admin";
+  password?: string; // Password bisa opsional saat pengambilan data
+  role: "user" | "admin" | "seller";
   storeName?: string;
   phoneNumber?: string;
-  gender?: "Laki-laki" | "Perempuan" | "Lainnya";
+  gender?: "male" | "female" | "other";
   dateOfBirth?: Date;
   refreshToken?: string;
   passwordResetToken?: string;
   passwordResetExpires?: Date;
   isActive: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
+// Interface untuk atribut pembuatan User (password wajib)
 interface UserCreationAttributes
-  extends Optional<UserAttributes, "id" | "isActive" | "role"> {}
+  extends Optional<UserAttributes, "id" | "isActive"> {
+  password: string;
+}
 
 export class User
   extends Model<UserAttributes, UserCreationAttributes>
   implements UserAttributes
 {
-  public id!: number;
-  public name!: string;
-  public email!: string;
-  public password?: string;
-  public role!: "pembeli" | "penjual" | "admin";
-  public storeName?: string;
-  public phoneNumber?: string;
-  public gender?: "Laki-laki" | "Perempuan" | "Lainnya";
-  public dateOfBirth?: Date;
-  public refreshToken?: string;
-  public passwordResetToken?: string;
-  public passwordResetExpires?: Date;
-  public isActive!: boolean;
+  // --- ATTRIBUTES ---
+  // Gunakan 'public declare' untuk menghindari shadowing getter/setter Sequelize.
+  public declare id: number;
+  public declare name: string;
+  public declare email: string;
+  public declare password?: string;
+  public declare role: "user" | "admin" | "seller";
+  public declare storeName?: string;
+  public declare phoneNumber?: string;
+  public declare gender?: "male" | "female" | "other";
+  public declare dateOfBirth?: Date;
+  public declare refreshToken?: string;
+  public declare passwordResetToken?: string;
+  public declare passwordResetExpires?: Date;
+  public declare isActive: boolean;
 
-  // timestamps!
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
+  public declare readonly createdAt: Date;
+  public declare readonly updatedAt: Date;
 
-  static associate(models: any) {
-    User.hasOne(models.Cart, {
-      foreignKey: "userId",
-      as: "cart",
-      onDelete: "CASCADE",
-    });
+  // --- ASSOCIATIONS ---
+  public declare getProducts: HasManyGetAssociationsMixin<Product>;
+  public declare addProduct: HasManyAddAssociationMixin<Product, number>;
+  public declare getCart: HasOneGetAssociationMixin<Cart>;
+  public declare getOrders: HasManyGetAssociationsMixin<Order>;
 
+  // --- CLASS METHODS ---
+  public static associate(models: any) {
     User.hasMany(models.Product, {
       foreignKey: "userId",
       as: "products",
     });
+    User.hasOne(models.Cart, {
+      foreignKey: "userId",
+      as: "cart",
+    });
+    User.hasMany(models.Order, {
+      foreignKey: "userId",
+      as: "orders",
+    });
   }
 
-  async correctPassword(candidatePassword: string): Promise<boolean> {
-    return await bcrypt.compare(candidatePassword, this.password!);
-  }
-
-  createPasswordResetToken(): string {
-    const resetToken = crypto.randomBytes(32).toString("hex");
-
-    this.passwordResetToken = crypto
-      .createHash("sha256")
-      .update(resetToken)
-      .digest("hex");
-
-    this.passwordResetExpires = new Date(Date.now() + 10 * 60 * 1000);
-
-    return resetToken;
-  }
-
-  static initModel(sequelize: Sequelize): typeof User {
+  public static initModel(sequelize: Sequelize) {
     User.init(
       {
         id: {
-          type: DataTypes.INTEGER.UNSIGNED,
+          type: DataTypes.INTEGER,
           autoIncrement: true,
           primaryKey: true,
         },
@@ -96,14 +105,11 @@ export class User
         password: {
           type: DataTypes.STRING,
           allowNull: false,
-          validate: {
-            len: [8, 255],
-          },
         },
         role: {
-          type: DataTypes.ENUM("pembeli", "penjual", "admin"),
+          type: DataTypes.ENUM("user", "admin", "seller"),
+          defaultValue: "user",
           allowNull: false,
-          defaultValue: "pembeli",
         },
         storeName: {
           type: DataTypes.STRING,
@@ -114,11 +120,11 @@ export class User
           allowNull: true,
         },
         gender: {
-          type: DataTypes.ENUM("Laki-laki", "Perempuan", "Lainnya"),
+          type: DataTypes.ENUM("male", "female", "other"),
           allowNull: true,
         },
         dateOfBirth: {
-          type: DataTypes.DATEONLY,
+          type: DataTypes.DATE,
           allowNull: true,
         },
         refreshToken: {
@@ -135,17 +141,18 @@ export class User
         },
         isActive: {
           type: DataTypes.BOOLEAN,
-          allowNull: false,
           defaultValue: true,
         },
       },
       {
         sequelize,
-        modelName: "User",
+        tableName: "Users",
+        timestamps: true,
         hooks: {
           beforeSave: async (user: User) => {
-            if (user.changed("password")) {
-              user.password = await bcrypt.hash(user.password!, 12);
+            // Hanya hash password jika field ini berubah (atau saat baru dibuat)
+            if (user.changed("password") && user.password) {
+              user.password = await bcrypt.hash(user.password, 12);
             }
           },
         },

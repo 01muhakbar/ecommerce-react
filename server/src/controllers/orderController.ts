@@ -1,13 +1,14 @@
 import express from "express";
-import { Transaction } from "sequelize";
-import { User } from "../models/User.js";
-import { Cart } from "../models/Cart.js";
-import { Product } from "../models/Product.js";
-import { Order } from "../models/Order.js";
-import { OrderItem } from "../models/OrderItem.js";
+import { initializedDbPromise } from "../models/index.js";
+import type { Transaction } from "sequelize";
+import type { User } from "../models/User.js";
+import type { Cart } from "../models/Cart.js";
+import type { Product } from "../models/Product.js";
+import type { Order } from "../models/Order.js";
+import type { OrderItem } from "../models/OrderItem.js";
 
-// The sequelize instance is attached to all models. We can grab it from any of them.
-const sequelize = User.sequelize;
+const db = await initializedDbPromise;
+const { sequelize, User, Cart, Product, Order, OrderItem } = db;
 
 // --- ENUMS & TYPES ---
 

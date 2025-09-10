@@ -3,7 +3,7 @@ import { DataTypes, Model, Sequelize, Optional } from "sequelize";
 // Antarmuka untuk atribut produk, agar sesuai dengan database
 interface ProductAttributes {
   id: number;
-  name: string;
+  productName: string;
   description?: string;
   price: number;
   salePrice?: number;
@@ -47,7 +47,7 @@ export class Product
   implements ProductAttributes
 {
   public id!: number;
-  public name!: string;
+  public productName!: string;
   public description?: string;
   public price!: number;
   public salePrice?: number;
@@ -60,6 +60,8 @@ export class Product
   public gtin?: string;
   public notes?: string;
   public parentSku?: string;
+  public sku!: string;
+  public barcode?: string;
   public condition!: "new" | "used";
   public weight!: number;
   public length?: number;
@@ -114,7 +116,8 @@ export class Product
           autoIncrement: true,
           primaryKey: true,
         },
-        name: {
+        productName: {
+          field: 'product_name',
           type: DataTypes.STRING,
           allowNull: false,
         },
@@ -127,6 +130,7 @@ export class Product
           allowNull: false,
         },
         salePrice: {
+          field: 'sale_price',
           type: DataTypes.DECIMAL(10, 2),
           allowNull: true,
         },
@@ -145,10 +149,12 @@ export class Product
           defaultValue: 0,
         },
         categoryId: {
+          field: 'category_id',
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: true,
         },
         userId: {
+          field: 'user_id',
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
         },
@@ -166,6 +172,7 @@ export class Product
           allowNull: true,
         },
         parentSku: {
+          field: 'parent_sku',
           type: DataTypes.STRING,
           allowNull: true,
         },
@@ -200,20 +207,24 @@ export class Product
           allowNull: true, // in cm
         },
         dangerousProduct: {
+          field: 'dangerous_product',
           type: DataTypes.BOOLEAN,
           defaultValue: false,
           allowNull: false,
         },
         preOrder: {
+          field: 'pre_order',
           type: DataTypes.BOOLEAN,
           defaultValue: false,
           allowNull: false,
         },
         preorderDays: {
+          field: 'preorder_days',
           type: DataTypes.INTEGER,
           allowNull: true,
         },
         youtubeLink: {
+          field: 'youtube_link',
           type: DataTypes.STRING,
           allowNull: true,
         },
@@ -238,6 +249,7 @@ export class Product
           allowNull: true,
         },
         isPublished: {
+          field: 'is_published',
           type: DataTypes.BOOLEAN,
           allowNull: false,
           defaultValue: false,
@@ -247,6 +259,7 @@ export class Product
         sequelize,
         modelName: "Product",
         tableName: "Products", // Eksplisit nama tabel
+        underscored: true, // Ini akan otomatis map camelCase ke snake_case
       }
     );
     return Product;

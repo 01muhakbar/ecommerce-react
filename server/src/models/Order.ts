@@ -9,7 +9,6 @@ import {
 import { Product } from "./Product.js";
 import { User } from "./User.js";
 
-// FIX: This interface is now exported to be accessible by other modules.
 export interface OrderAttributes {
   id: number;
   invoiceNo: string;
@@ -40,7 +39,6 @@ export class Order
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 
-  // Mixins for associations
   public getProducts!: BelongsToManyGetAssociationsMixin<Product>;
   public getUser!: BelongsToGetAssociationMixin<User>;
 
@@ -54,17 +52,24 @@ export class Order
       as: "products",
     });
   }
-static initModel(sequelize: Sequelize): typeof Order {
+  static initModel(sequelize: Sequelize): typeof Order {
     Order.init(
       {
         id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
-        invoiceNo: { type: DataTypes.STRING, allowNull: false, unique: true },
+        invoiceNo: {
+          type: DataTypes.STRING,
+          allowNull: false,
+          unique: true,
+        },
         userId: {
           type: DataTypes.INTEGER,
           allowNull: false,
           references: { model: "Users", key: "id" },
         },
-        totalAmount: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
+        totalAmount: {
+          type: DataTypes.DECIMAL(10, 2),
+          allowNull: false,
+        },
         status: {
           type: DataTypes.ENUM(
             "pending",
@@ -80,8 +85,10 @@ static initModel(sequelize: Sequelize): typeof Order {
       {
         sequelize,
         modelName: "Order",
+        tableName: "Orders",
+        underscored: true,
       }
-    );
+    ); 
     return Order;
   }
 }

@@ -242,25 +242,34 @@ export const forgotPasswordAdmin = async (
       });
       return;
     }
+
     const resetToken = user.createPasswordResetToken();
     await user.save({ validate: false });
+
     const resetURL = `${req.protocol}://${req.get(
       "host"
     )}/admin/reset-password/${resetToken}`;
-    console.log(`Admin Reset URL: ${resetURL}`);
+    const message = `Anda menerima email ini karena Anda (atau orang lain) telah meminta reset password untuk akun admin Anda.\n\nSilakan klik tautan ini untuk mereset password Anda: ${resetURL}\n\nJika Anda tidak meminta ini, abaikan email ini dan password Anda akan tetap sama.`;
 
-    res.status(200).json({
-      status: "success",
-      message:
-        "Jika email terdaftar, Anda akan menerima instruksi reset password.",
-    });
+    try {
+      const { default: sendEmail } = await import("../services/emailService.js");
+      await sendEmail({
+        email: user.email,
+        subject: "Reset Kata Sandi Admin Anda",
+        message,
+      });
+    } catch (emailError) {
+      // Even if email fails, don't reveal that the user exists.
+      // Log the error for debugging, but send a generic response.
+      console.error("ADMIN EMAIL SENDING ERROR:", emailError);
+    }
+
+    // Always return the same message to prevent user enumeration
+    res.status(200).json({ status: "success", message: "Jika email terdaftar, Anda akan menerima instruksi reset password." });
   } catch (error) {
     console.error("ADMIN FORGOT PASSWORD ERROR:", error);
-    res.status(200).json({
-      status: "success",
-      message:
-        "Jika email terdaftar, Anda akan menerima instruksi reset password.",
-    });
+    // On a server error, it's better to send a 500 status
+    res.status(500).json({ status: "error", message: "Terjadi kesalahan pada server." });
   }
 };
 
