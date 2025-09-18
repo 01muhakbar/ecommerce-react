@@ -27,6 +27,12 @@ const CustomersIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
   </svg>
 );
+const StaffIcon = (props: React.SVGProps<SVGSVGElement>) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
+        <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+    </svg>
+);
 const LogoutIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
     <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
@@ -57,6 +63,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     { to: "/admin/catalog/products", label: "Catalog", icon: CatalogIcon },
     { to: "/admin/orders", label: "Orders", icon: OrdersIcon },
     { to: "/admin/customers", label: "Customers", icon: CustomersIcon },
+    { to: "/admin/our-staff", label: "Our Staff", icon: StaffIcon },
   ];
 
   const navLinkClasses = ({ isActive }: { isActive: boolean }) =>

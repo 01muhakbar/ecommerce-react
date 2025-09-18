@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import api from "../api/axios";
@@ -29,35 +29,50 @@ interface ApiResponse {
 const AdminProductsPage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchTerm);
   const limit = 10;
 
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+      setCurrentPage(1); // Reset ke halaman pertama saat pencarian baru
+    }, 500); // Delay 500ms
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [searchTerm]);
+
   const { data, isLoading, error, isFetching } = useQuery<ApiResponse>({
-    queryKey: ["adminProducts", currentPage, limit, searchTerm],
+    queryKey: ["adminProducts", currentPage, limit, debouncedSearchTerm],
     queryFn: async () => {
-      const params = new URLSearchParams({
-        page: String(currentPage),
-        limit: String(limit),
-      });
-      if (searchTerm) {
-        params.append("search", searchTerm);
+      const params: { page: number; limit: number; search?: string } = {
+        page: currentPage,
+        limit,
+      };
+      if (debouncedSearchTerm) {
+        params.search = debouncedSearchTerm;
       }
-      const { data } = await api.get(`/admin/products?${params.toString()}`);
+      const { data } = await api.get("/admin/products", { params });
       return data;
     },
     placeholderData: keepPreviousData,
   });
 
-  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(event.target.value);
-    setCurrentPage(1); // Reset to first page on new search
-  };
-
   if (error) {
-    return (
-      <div className="p-6 text-red-500">
-        Error fetching products: {error.message}
-      </div>
-    );
+    // Penanganan error yang lebih baik
+    const status = (error as any)?.response?.status;
+    const message = (error as any)?.response?.data?.message || error.message;
+    let friendlyMessage = `Error fetching products: ${message}`;
+
+    if (status === 401) {
+      friendlyMessage = "Sesi Anda telah berakhir. Silakan login kembali.";
+    } else if (status === 403) {
+      friendlyMessage =
+        "Akses ditolak. Anda tidak memiliki izin untuk melihat sumber daya ini.";
+    }
+
+    return <div className="p-6 text-red-500">{friendlyMessage}</div>;
   }
 
   return (
@@ -65,10 +80,10 @@ const AdminProductsPage: React.FC = () => {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Product Management</h1>
         <Link
-          to="/admin/catalog/products/add"
+          to="/admin/catalog/products/new"
           className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300"
         >
-          Add New Product
+          Tambah Produk Baru
         </Link>
       </div>
 
@@ -80,13 +95,13 @@ const AdminProductsPage: React.FC = () => {
               htmlFor="search"
               className="block text-sm font-medium text-gray-700"
             >
-              Search Products
+              Cari Produk
             </label>
             <input
               type="text"
               id="search"
               value={searchTerm}
-              onChange={handleSearchChange}
+              onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search by product name..."
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
             />
@@ -98,11 +113,11 @@ const AdminProductsPage: React.FC = () => {
       {/* Loading and Fetching Indicators */}
       {isLoading ? (
         <div className="text-center p-8">
-          <p className="text-lg font-semibold">Loading products...</p>
+          <p className="text-lg font-semibold">Memuat produk...</p>
         </div>
       ) : isFetching ? (
         <div className="text-center py-2 text-sm text-gray-500">
-          <p>Updating list...</p>
+          <p>Memperbarui daftar...</p>
         </div>
       ) : null}
 
@@ -113,10 +128,11 @@ const AdminProductsPage: React.FC = () => {
       {!isLoading && (!data || data.data.length === 0) && (
         <div className="text-center bg-white p-8 rounded-lg shadow">
           <h2 className="text-xl font-semibold text-gray-700">
-            No Products Found
+            Produk Tidak Ditemukan
           </h2>
           <p className="text-gray-500 mt-2">
-            Try adjusting your search or filters, or add a new product.
+            Coba sesuaikan pencarian atau filter Anda, atau tambahkan produk
+            baru.
           </p>
         </div>
       )}

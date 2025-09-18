@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { User as UserModel } from "../models/User.js"; // FIX: Renamed import to UserModel to avoid local scope conflict.
+import { AppError } from "./errorMiddleware.js";
 
 // Extend Express Request type to include the user property
 export interface CustomRequest extends Request {
@@ -27,7 +28,7 @@ export const protect = async (
   if (!token) {
     const message = "You are not logged in! Please log in to get access.";
     // FIX: This return is now valid because of the updated function signature.
-    return res.status(401).json({ status: "fail", message });
+    return next(new AppError(message, 401));
   }
 
   try {
@@ -39,28 +40,22 @@ export const protect = async (
 
     if (!currentUser) {
       const message = "The user belonging to this token does no longer exist.";
-      return res.status(401).json({ status: "fail", message });
+      return next(new AppError(message, 401));
     }
 
     req.user = currentUser;
     next();
   } catch (err) {
     const message = "Invalid token. Please log in again.";
-    return res.status(401).json({ status: "fail", message });
+    return next(new AppError(message, 401));
   }
 };
 
-// FIX: The return type is changed to 'void | Response'
-export const restrictTo = (...roles: string[]) => {
-  return (
-    req: CustomRequest,
-    res: Response,
-    next: NextFunction
-  ): void | Response => {
-    if (!req.user || !roles.includes(req.user.role)) {
-      const message = "You do not have permission to perform this action.";
-      return res.status(403).json({ status: "fail", message });
+export const restrictTo = (...allowed: string[]) =>
+  (req: CustomRequest, _res: Response, next: NextFunction) => {
+    if (!req.user) return next(new AppError('Not authenticated', 401));
+    if (!allowed.includes(req.user.role)) {
+      return next(new AppError('Forbidden', 403));
     }
     next();
   };
-};

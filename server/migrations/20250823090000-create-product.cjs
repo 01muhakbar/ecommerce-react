@@ -7,34 +7,34 @@ module.exports = {
         allowNull: false,
         autoIncrement: true,
         primaryKey: true,
-        type: Sequelize.INTEGER
+        type: Sequelize.INTEGER.UNSIGNED
       },
-      productName: {
-        type: Sequelize.STRING
+      product_name: { // Diubah ke snake_case
+        type: Sequelize.STRING,
+        allowNull: false,
       },
       description: {
         type: Sequelize.TEXT
       },
       price: {
-        type: Sequelize.DECIMAL
+        type: Sequelize.DECIMAL(10, 2),
+        allowNull: false,
       },
-      quantity: {
-        type: Sequelize.INTEGER
-      },
-      sku: {
-        type: Sequelize.STRING
+      stock: { // diganti dari quantity ke stock
+        type: Sequelize.INTEGER,
+        allowNull: false,
+        defaultValue: 0
       },
       slug: {
-        type: Sequelize.STRING
+        type: Sequelize.STRING,
+        allowNull: false,
+        unique: true
       },
-      tags: {
-        type: Sequelize.TEXT
-      },
-      createdAt: {
+      created_at: { // Diubah ke snake_case
         allowNull: false,
         type: Sequelize.DATE
       },
-      updatedAt: {
+      updated_at: { // Diubah ke snake_case
         allowNull: false,
         type: Sequelize.DATE
       }

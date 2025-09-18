@@ -1,9 +1,9 @@
 import express from "express";
 import { Op, fn, col, literal } from "sequelize";
-import { User } from '../models/User.js';
-import { Order } from '../models/Order.js';
-import { OrderItem } from '../models/OrderItem.js';
-import { Product } from '../models/Product.js';
+import { User } from "../models/User.js";
+import { Order } from "../models/Order.js";
+import { OrderItem } from "../models/OrderItem.js";
+import { Product } from "../models/Product.js";
 
 export const getDashboardStatistics = async (
   req: express.Request,
@@ -97,24 +97,30 @@ export const getDashboardStatistics = async (
     const bestSellingProducts = await OrderItem.findAll({
       attributes: [
         "productId",
-        [fn("SUM", col("OrderItem.quantity")), "totalQuantity"],
-        [fn("SUM", literal("`OrderItem`.`quantity` * `OrderItem`.`price`")), "totalSales"],
+        [fn("SUM", col("quantity")), "totalQuantity"],
+        [
+          fn("SUM", literal("`OrderItem`.`quantity` * `OrderItem`.`price`")),
+          "totalSales",
+        ],
       ],
-      group: ["productId"],
-      order: [[literal("totalSales"), "DESC"]],
-      limit: 5,
       include: [
         {
           model: Product,
-          attributes: ["productName"],
+          as: "product",
+          attributes: [], // Atribut diambil dari group, tidak perlu di-select di sini
           required: true,
         },
       ],
+      // Gunakan nama kolom database yang sebenarnya untuk pengelompokan
+      group: ["OrderItem.product_id", "product.id", "product.product_name"],
+      order: [[literal("totalSales"), "DESC"]],
+      limit: 5,
     });
 
     const formattedBestSellingProducts = bestSellingProducts.map(
       (item: any) => ({
-        name: item.Product.productName,
+        // Ambil nama produk dari hasil query yang sudah di-group
+        name: item.get("product.product_name"),
         sales: parseFloat(item.getDataValue("totalSales")),
       })
     );
@@ -123,12 +129,22 @@ export const getDashboardStatistics = async (
     const recentOrdersRaw = await Order.findAll({
       limit: 5,
       order: [["createdAt", "DESC"]],
-      attributes: ['id','invoiceNo','userId','totalAmount','status','createdAt','updatedAt'],
-      include: [{
-        model: User,
-        as: 'user',
-        attributes: ['id','name']
-      }],
+      attributes: [
+        "id",
+        "invoiceNo",
+        "userId",
+        "totalAmount",
+        "status",
+        "createdAt",
+        "updatedAt",
+      ],
+      include: [
+        {
+          model: User,
+          as: "user",
+          attributes: ["id", "name"],
+        },
+      ],
     });
 
     const mapStatus = (

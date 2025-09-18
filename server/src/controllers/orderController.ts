@@ -1,4 +1,5 @@
 import express from "express";
+import { Op } from "sequelize";
 import { initializedDbPromise } from "../models/index.js";
 import type { Transaction } from "sequelize";
 import type { User } from "../models/User.js";
@@ -201,18 +202,69 @@ export const getAllOrders = async (
   res: express.Response
 ): Promise<void> => {
   try {
-    const orders = await Order.findAll({
-      include: [{ model: User, attributes: ["id", "name", "email"] }],
+    const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+    const limit = Math.max(parseInt(req.query.limit as string) || 10, 1);
+    const offset = (page - 1) * limit;
+
+    const { rows, count } = await Order.findAndCountAll({
+      attributes: [
+        "id",
+        ["invoice_no", "invoiceNo"],
+        ["user_id", "userId"],
+        ["total_amount", "totalAmount"],
+        "status",
+        "createdAt",
+        "updatedAt",
+      ],
+      include: [
+        {
+          model: User,
+          as: "user",
+          attributes: ["id", "name"],
+        },
+        {
+          model: OrderItem,
+          as: "items",
+          attributes: ["id", "quantity", "price", ["product_id", "productId"]],
+          include: [
+            {
+              model: Product,
+              as: "product",
+              attributes: ["id", ["product_name", "productName"]],
+            },
+          ],
+        },
+      ],
       order: [["createdAt", "DESC"]],
+      limit,
+      offset,
+      distinct: true,
     });
+
+    const totalPages = Math.ceil(count / limit);
+
+    console.log("getAllOrders response meta =>", {
+      page,
+      limit,
+      total: count,
+      totalPages,
+    });
+
+    res.status(200).json({
+      status: "success",
+      data: rows,
+      pagination: {
+        totalItems: count,
+        totalPages,
+        currentPage: page,
+        itemsPerPage: limit,
+      },
+    });
+  } catch (err: any) {
+    console.error("ADMIN ORDERS ERROR:", err);
     res
-      .status(200)
-      .json({ status: "success", results: orders.length, data: orders });
-  } catch (error) {
-    res.status(500).json({
-      message: "Gagal mengambil semua pesanan.",
-      error: (error as Error).message,
-    });
+      .status(500)
+      .json({ message: "Failed to fetch orders", error: err.message });
   }
 };
 

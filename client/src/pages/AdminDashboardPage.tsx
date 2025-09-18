@@ -129,13 +129,21 @@ const AdminDashboardPage: React.FC = () => {
   }
 
   if (isError) {
+    const status = (error as any)?.response?.status;
+    const msg = (error as any)?.response?.data?.error || error.message;
+    let friendlyMessage = `Failed to fetch dashboard: ${msg}`;
+
+    if (status === 401) {
+        friendlyMessage = 'Unauthorized: Please login again.';
+    } else if (status === 403) {
+        const actualRole = (error as any)?.response?.data?.actual;
+        friendlyMessage = `Forbidden: Your account (Role: ${actualRole}) lacks permission to access this resource.`;
+    }
+
     return (
       <div className="p-6 text-red-600 bg-red-100 border border-red-200 rounded-lg">
         <h2 className="text-xl font-semibold mb-2">Error Loading Dashboard</h2>
-        <p>
-          There was an error fetching dashboard data:{" "}
-          {error?.message || "Unknown error"}
-        </p>
+        <p>{friendlyMessage}</p>
       </div>
     );
   }

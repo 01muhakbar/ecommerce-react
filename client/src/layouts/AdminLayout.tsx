@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
 import { useMutation } from "@tanstack/react-query";
@@ -9,7 +9,14 @@ import Header from "../components/Header";
 const AdminLayout: React.FC = () => {
   const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
   const logoutClient = useAuthStore((state) => state.logout);
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      navigate("/admin/login", { replace: true });
+    }
+  }, [isLoggedIn, navigate]);
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
@@ -17,19 +24,25 @@ const AdminLayout: React.FC = () => {
     },
     onSuccess: () => {
       logoutClient(); // Clear client-side state
-      navigate("/admin/login"); // Redirect to login page
+      // The useEffect will handle the redirect
     },
     onError: (error) => {
       console.error("Logout failed:", error);
       // Even if backend logout fails, clear client state for UX
       logoutClient();
-      navigate("/admin/login");
+      // The useEffect will handle the redirect
     },
   });
 
   const handleLogout = () => {
     logoutMutation.mutate();
   };
+
+  // While checking auth, you might want to show a loader
+  // For now, we'll just render null to prevent flashing the layout
+  if (!isLoggedIn) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-gray-100">

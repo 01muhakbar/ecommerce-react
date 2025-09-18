@@ -59,6 +59,16 @@ export const getAllProducts = async (
 
     const { count, rows } = await Product.findAndCountAll({
       where: whereClause,
+      attributes: [
+        "id",
+        "name",
+        "price",
+        "salePrice",
+        "stock",
+        "isPublished",
+        "slug",
+        "createdAt",
+      ],
       include: [
         {
           model: User,

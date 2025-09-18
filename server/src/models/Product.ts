@@ -1,9 +1,9 @@
 import { DataTypes, Model, Sequelize, Optional } from "sequelize";
 
-// Antarmuka untuk atribut produk, agar sesuai dengan database
+// ... (Interface tetap sama)
 interface ProductAttributes {
   id: number;
-  productName: string;
+  name: string;
   description?: string;
   price: number;
   salePrice?: number;
@@ -35,7 +35,6 @@ interface ProductAttributes {
   wholesale?: object;
 }
 
-// Atribut yang bersifat opsional saat pembuatan produk (misalnya 'id')
 interface ProductCreationAttributes
   extends Optional<
     ProductAttributes,
@@ -46,8 +45,9 @@ export class Product
   extends Model<ProductAttributes, ProductCreationAttributes>
   implements ProductAttributes
 {
+  // ... (Atribut publik tetap sama)
   public id!: number;
-  public productName!: string;
+  public name!: string;
   public description?: string;
   public price!: number;
   public salePrice?: number;
@@ -82,29 +82,17 @@ export class Product
   public readonly updatedAt!: Date;
 
   static associate(models: any) {
-    Product.belongsToMany(models.Cart, {
-      through: models.CartItem,
-      foreignKey: "productId",
-      otherKey: "cartId",
-    });
-
     Product.belongsTo(models.User, {
-      foreignKey: "userId",
+      foreignKey: "userId", // Explicitly set the foreign key
       as: "seller",
-      onDelete: "CASCADE",
     });
-
     Product.belongsTo(models.Category, {
       foreignKey: "categoryId",
       as: "category",
-      onDelete: "SET NULL",
     });
-
-    Product.belongsToMany(models.Order, {
-      through: models.OrderItem,
-      foreignKey: "productId",
-      otherKey: "orderId",
-      as: "orders", // Menambahkan alias yang konsisten
+    Product.belongsToMany(models.Cart, {
+      through: models.CartItem,
+      foreignKey: "productId", // GUNAKAN camelCase agar konsisten
     });
   }
 
@@ -116,150 +104,75 @@ export class Product
           autoIncrement: true,
           primaryKey: true,
         },
-        productName: {
-          field: 'product_name',
+        name: {
           type: DataTypes.STRING,
           allowNull: false,
+          field: "product_name",
         },
-        description: {
-          type: DataTypes.TEXT,
-          allowNull: true,
-        },
-        price: {
-          type: DataTypes.DECIMAL(10, 2),
-          allowNull: false,
-        },
-        salePrice: {
-          field: 'sale_price',
-          type: DataTypes.DECIMAL(10, 2),
-          allowNull: true,
-        },
-        slug: {
-          type: DataTypes.STRING,
-          allowNull: false,
-          unique: true,
-        },
-        tags: {
-          type: DataTypes.JSON,
-          allowNull: true,
-        },
-        stock: {
-          type: DataTypes.INTEGER,
-          allowNull: false,
-          defaultValue: 0,
-        },
+        description: { type: DataTypes.TEXT, allowNull: true },
+        price: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
+        salePrice: { type: DataTypes.DECIMAL(10, 2), allowNull: true },
+        stock: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+        slug: { type: DataTypes.STRING, allowNull: false, unique: true },
+        tags: { type: DataTypes.JSON, allowNull: true },
         categoryId: {
-          field: 'category_id',
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: true,
+          field: "category_id",
         },
         userId: {
-          field: 'user_id',
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
+          field: "user_id",
+          references: { model: "Users", key: "id" },
         },
         status: {
           type: DataTypes.ENUM("active", "archived", "draft"),
           defaultValue: "draft",
           allowNull: false,
         },
-        gtin: {
-          type: DataTypes.STRING,
-          allowNull: true,
-        },
-        notes: {
-          type: DataTypes.TEXT,
-          allowNull: true,
-        },
-        parentSku: {
-          field: 'parent_sku',
-          type: DataTypes.STRING,
-          allowNull: true,
-        },
-        sku: {
-          type: DataTypes.STRING,
-          allowNull: true,
-        },
-        barcode: {
-          type: DataTypes.STRING,
-          allowNull: true,
-        },
+        gtin: { type: DataTypes.STRING, allowNull: true },
+        notes: { type: DataTypes.TEXT, allowNull: true },
+        parentSku: { type: DataTypes.STRING, allowNull: true },
+        sku: { type: DataTypes.STRING, allowNull: true },
+        barcode: { type: DataTypes.STRING, allowNull: true },
         condition: {
           type: DataTypes.ENUM("new", "used"),
           defaultValue: "new",
           allowNull: false,
         },
-        weight: {
-          type: DataTypes.INTEGER,
-          allowNull: false, // in grams
-          defaultValue: 0, // Add a default value
-        },
-        length: {
-          type: DataTypes.INTEGER,
-          allowNull: true, // in cm
-        },
-        width: {
-          type: DataTypes.INTEGER,
-          allowNull: true, // in cm
-        },
-        height: {
-          type: DataTypes.INTEGER,
-          allowNull: true, // in cm
-        },
+        weight: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+        length: { type: DataTypes.INTEGER, allowNull: true },
+        width: { type: DataTypes.INTEGER, allowNull: true },
+        height: { type: DataTypes.INTEGER, allowNull: true },
         dangerousProduct: {
-          field: 'dangerous_product',
           type: DataTypes.BOOLEAN,
           defaultValue: false,
           allowNull: false,
         },
         preOrder: {
-          field: 'pre_order',
           type: DataTypes.BOOLEAN,
           defaultValue: false,
           allowNull: false,
         },
-        preorderDays: {
-          field: 'preorder_days',
-          type: DataTypes.INTEGER,
-          allowNull: true,
-        },
-        youtubeLink: {
-          field: 'youtube_link',
-          type: DataTypes.STRING,
-          allowNull: true,
-        },
-        promoImagePath: {
-          type: DataTypes.STRING,
-          allowNull: true,
-        },
-        imagePaths: {
-          type: DataTypes.JSON,
-          allowNull: true,
-        },
-        videoPath: {
-          type: DataTypes.STRING,
-          allowNull: true,
-        },
-        variations: {
-          type: DataTypes.JSON,
-          allowNull: true,
-        },
-        wholesale: {
-          type: DataTypes.JSON,
-          allowNull: true,
-        },
+        preorderDays: { type: DataTypes.INTEGER, allowNull: true },
+        youtubeLink: { type: DataTypes.STRING, allowNull: true },
+        promoImagePath: { type: DataTypes.STRING, allowNull: true },
+        imagePaths: { type: DataTypes.JSON, allowNull: true },
+        videoPath: { type: DataTypes.STRING, allowNull: true },
         isPublished: {
-          field: 'is_published',
           type: DataTypes.BOOLEAN,
           allowNull: false,
           defaultValue: false,
         },
+        variations: { type: DataTypes.JSON, allowNull: true },
+        wholesale: { type: DataTypes.JSON, allowNull: true },
       },
       {
         sequelize,
         modelName: "Product",
-        tableName: "Products", // Eksplisit nama tabel
-        underscored: true, // Ini akan otomatis map camelCase ke snake_case
+        tableName: "Products",
+        underscored: true, // Diaktifkan kembali!
       }
     );
     return Product;

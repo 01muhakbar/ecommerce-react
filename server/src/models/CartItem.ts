@@ -23,7 +23,9 @@ export class CartItem
   public readonly updatedAt!: Date;
 
   static associate(models: any) {
-    // No explicit associations defined here, as it's a through model
+    // Definisikan relasi balik ke Cart dan Product
+    CartItem.belongsTo(models.Cart, { foreignKey: "cartId" });
+    CartItem.belongsTo(models.Product, { foreignKey: "productId" });
   }
 
   static initModel(sequelize: Sequelize): typeof CartItem {
@@ -36,11 +38,13 @@ export class CartItem
         },
         cartId: {
           type: DataTypes.INTEGER.UNSIGNED,
+          field: "cart_id",
           allowNull: false,
         },
         productId: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
+          field: "product_id",
         },
         quantity: {
           type: DataTypes.INTEGER,
@@ -51,6 +55,7 @@ export class CartItem
       {
         sequelize,
         modelName: "CartItem",
+        underscored: true,
       }
     );
     return CartItem;

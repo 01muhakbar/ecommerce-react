@@ -26,7 +26,10 @@ export class OrderItem
 
   static associate(models: any) {
     OrderItem.belongsTo(models.Order, { foreignKey: "orderId" });
-    OrderItem.belongsTo(models.Product, { foreignKey: "productId" });
+    OrderItem.belongsTo(models.Product, {
+      as: "product",
+      foreignKey: "productId",
+    });
   }
 
   static initModel(sequelize: Sequelize): typeof OrderItem {
@@ -57,6 +60,8 @@ export class OrderItem
       {
         sequelize,
         modelName: "OrderItem",
+        tableName: "OrderItems",
+        underscored: true,
       }
     );
     return OrderItem;

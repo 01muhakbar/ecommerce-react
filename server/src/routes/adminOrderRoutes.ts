@@ -9,7 +9,7 @@ import { protect, restrictTo } from "../middleware/authMiddleware.js";
 const router = Router();
 
 // Base path is /api/v1/admin/orders, so these routes are relative to that
-router.get("/", protect, restrictTo("admin"), getOrders);
-router.put("/:id/status", protect, restrictTo("admin"), updateOrderStatus);
+router.get("/", protect, restrictTo("Super Admin", "Admin"), getOrders);
+router.put("/:id/status", protect, restrictTo("Super Admin", "Admin"), updateOrderStatus);
 
 export default router;

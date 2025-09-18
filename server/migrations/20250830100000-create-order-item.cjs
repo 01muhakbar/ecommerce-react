@@ -21,7 +21,7 @@ module.exports = {
         onDelete: 'CASCADE'
       },
       productId: {
-        type: Sequelize.INTEGER,
+        type: Sequelize.INTEGER.UNSIGNED,
         allowNull: true, // Set true agar bisa di-set NULL jika produk dihapus
         references: {
           model: 'Products', // Nama tabel yang direferensikan

@@ -44,6 +44,8 @@ export class Category
       {
         sequelize,
         modelName: "Category",
+        tableName: "Categories",
+        underscored: true,
       }
     );
     return Category;

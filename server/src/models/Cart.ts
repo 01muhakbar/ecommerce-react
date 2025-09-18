@@ -1,4 +1,5 @@
 import { DataTypes, Model, Sequelize, Optional } from "sequelize";
+import { User } from "./User.js"; // Pastikan User diimpor
 
 interface CartAttributes {
   id: number;
@@ -18,12 +19,15 @@ export class Cart
   public readonly updatedAt!: Date;
 
   static associate(models: any) {
-    Cart.belongsTo(models.User, { foreignKey: "userId" });
-
+    // Definisikan relasi di sini
+    Cart.belongsTo(models.User, {
+      foreignKey: "userId",
+      as: "user",
+    });
     Cart.belongsToMany(models.Product, {
-      through: models.CartItem,
-      foreignKey: "cartId",
-      otherKey: "productId",
+      through: models.CartItem, // Gunakan model langsung
+      as: "Products",
+      foreignKey: "cartId", // GUNAKAN camelCase agar konsisten
     });
   }
 
@@ -35,10 +39,13 @@ export class Cart
           autoIncrement: true,
           primaryKey: true,
         },
+        // --- PERBAIKAN DI SINI ---
+        // Pastikan tipe data sama dengan primary key di tabel User
         userId: {
-          type: DataTypes.INTEGER.UNSIGNED,
+          type: DataTypes.INTEGER.UNSIGNED, // <-- PASTIKAN ADA .UNSIGNED
           allowNull: false,
           references: {
+            // Referensi ini sudah benar
             model: "Users", // Nama tabel yang direferensikan
             key: "id",
           },
@@ -47,6 +54,8 @@ export class Cart
       {
         sequelize,
         modelName: "Cart",
+        tableName: "Carts",
+        underscored: true,
       }
     );
     return Cart;

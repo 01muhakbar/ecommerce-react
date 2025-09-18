@@ -61,15 +61,27 @@ export const getOrders = async (req: Request, res: Response) => {
       status: toClientStatus(order.status),
     }));
 
+    const totalPages = Math.ceil(count / limit);
+
+    console.log("getAllOrders response meta =>", {
+      page,
+      limit,
+      total: count,
+      totalPages,
+    });
+
     res.status(200).json({
+      status: "success",
       data: transformedData,
       pagination: {
         totalItems: count,
-        totalPages: Math.ceil(count / limit),
+        totalPages,
         currentPage: page,
+        itemsPerPage: limit,
       },
     });
   } catch (error) {
+    console.error("ADMIN ORDERS ERROR:", error);
     res.status(500).json({
       message: "Failed to fetch orders",
       error: (error as Error).message,

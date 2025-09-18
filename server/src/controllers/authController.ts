@@ -189,7 +189,7 @@ export const resetPassword = async (
       });
       return;
     }
-    user.password = req.body.password;
+        user.password = await bcrypt.hash(req.body.password, 12);
     user.passwordResetToken = undefined;
     user.passwordResetExpires = undefined;
     await user.save();
@@ -298,7 +298,7 @@ export const resetPasswordAdmin = async (
       });
       return;
     }
-    user.password = req.body.password;
+        user.password = await bcrypt.hash(req.body.password, 12);
     user.passwordResetToken = undefined;
     user.passwordResetExpires = undefined;
     await user.save();

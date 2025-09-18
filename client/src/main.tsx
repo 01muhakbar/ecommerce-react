@@ -5,6 +5,8 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import './index.css'
 import App from './App.tsx'
 
+console.log("main.tsx loaded");
+
 // Create a client
 const queryClient = new QueryClient()
 

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -128,6 +128,13 @@ const AdminLoginPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
   const login = useAuthStore((state) => state.login);
+  const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
+
+  useEffect(() => {
+    if (isLoggedIn) {
+      navigate("/admin/dashboard", { replace: true });
+    }
+  }, [isLoggedIn, navigate]);
 
   const {
     register,

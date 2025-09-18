@@ -46,23 +46,30 @@ export class Order
   public readonly products?: Product[];
 
   public static associate(models: any) {
-    Order.belongsTo(models.User, { foreignKey: "userId", as: "user" });
-    Order.belongsToMany(models.Product, {
-      through: "OrderItem",
-      as: "products",
+    Order.belongsTo(models.User, {
+      foreignKey: { name: "userId", field: "user_id" },
+      as: "user",
+    });
+    Order.hasMany(models.OrderItem, {
+      foreignKey: { name: "orderId", field: "order_id" },
+      as: "items",
     });
   }
   static initModel(sequelize: Sequelize): typeof Order {
     Order.init(
       {
-        id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+        id: {
+          type: DataTypes.INTEGER.UNSIGNED,
+          autoIncrement: true,
+          primaryKey: true,
+        },
         invoiceNo: {
           type: DataTypes.STRING,
           allowNull: false,
           unique: true,
         },
         userId: {
-          type: DataTypes.INTEGER,
+          type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
           references: { model: "Users", key: "id" },
         },
@@ -88,7 +95,7 @@ export class Order
         tableName: "Orders",
         underscored: true,
       }
-    ); 
+    );
     return Order;
   }
 }

@@ -49,7 +49,7 @@ const AdminOrdersPage: React.FC = () => {
 
       {isLoading && <div className="text-center p-4">Fetching orders...</div>}
 
-      {data && data.pagination.totalPages > 1 && (
+      {data?.pagination && data.pagination.totalPages > 1 && (
         <div className="mt-6 flex justify-center">
           <Pagination
             currentPage={data.pagination.currentPage}

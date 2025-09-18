@@ -42,7 +42,7 @@ export const initializeDatabase = async (): Promise<Db> => {
       host: process.env.DB_HOST,
       port: Number(process.env.DB_PORT) || 3306,
       dialect: process.env.DB_DIALECT || "mysql",
-      logging: false, // Set to console.log for debugging
+      logging: console.log, // Set to console.log for debugging
       pool: { max: 5, min: 0, acquire: 30000, idle: 10000 },
     };
 
@@ -100,6 +100,11 @@ export const initializeDatabase = async (): Promise<Db> => {
         model.associate(db);
       }
     });
+
+    // Log associations for OrderItem for debugging
+    if (db.OrderItem) {
+      console.log("OrderItem associations:", Object.keys((db.OrderItem as any).associations));
+    }
 
     db.sequelize = sequelize;
     db.Sequelize = Sequelize;
