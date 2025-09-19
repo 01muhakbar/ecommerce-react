@@ -51,11 +51,17 @@ export const protect = async (
   }
 };
 
-export const restrictTo = (...allowed: string[]) =>
-  (req: CustomRequest, _res: Response, next: NextFunction) => {
-    if (!req.user) return next(new AppError('Not authenticated', 401));
-    if (!allowed.includes(req.user.role)) {
-      return next(new AppError('Forbidden', 403));
+export const restrictTo = (...roles: string[]) => {
+  return (req: CustomRequest, res: Response, next: NextFunction) => {
+    const userRole = (req.user?.role || '').toLowerCase();
+    const allowed = roles.map(r => r.toLowerCase());
+    if (!allowed.includes(userRole)) {
+      // Return a standard 403 Forbidden response
+      return res.status(403).json({ 
+        status: 'fail',
+        message: 'You do not have permission to perform this action' 
+      });
     }
     next();
   };
+};

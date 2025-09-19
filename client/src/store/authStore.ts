@@ -20,7 +20,13 @@ export const useAuthStore = create<AuthState>()(
       isLoggedIn: false,
       user: null,
       token: null,
-      login: (user, token) => set({ isLoggedIn: true, user, token }),
+      login: (user, token) => {
+        const normalizedUser = {
+          ...user,
+          role: (user.role ?? '').trim(),
+        };
+        set({ isLoggedIn: true, user: normalizedUser, token });
+      },
       logout: () => set({ isLoggedIn: false, user: null, token: null }),
     }),
     {

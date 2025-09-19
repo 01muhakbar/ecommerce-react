@@ -1,25 +1,24 @@
-import { Navigate, Outlet, useLocation } from "react-router-dom";
-import { useEffect, useState } from "react";
-import { useAuthStore } from "../store/authStore";
+import { Navigate, Outlet } from 'react-router-dom';
+import { useAuthStore } from '../store/authStore';
 
-export default function RequireAdmin() {
-  const location = useLocation();
-  const user = useAuthStore((state) => state.user);
-  const allowedRoles = ["Admin", "Super Admin"];
+type RequireAdminProps = {
+  allowedRoles?: string[]; // default: ['Admin','Super Admin']
+};
 
-  // If not logged in, or if the user role is not allowed, redirect to login.
-  // We pass the current location so the user can be redirected back after login.
-  if (!user || !allowedRoles.includes(user.role)) {
-    // For debugging purposes, you can log why the redirect is happening.
-    if (user) {
-      console.log(
-        `Redirecting to login. User role: '${user.role}' is not in allowed roles:`,
-        allowedRoles
-      );
-    }
-    return <Navigate to="/admin/login" state={{ from: location }} replace />;
+export default function RequireAdmin({ allowedRoles = ['Admin','Super Admin'] }: RequireAdminProps) {
+  const user = useAuthStore(s => s.user);
+  const userRole = (user?.role ?? '').toLowerCase();
+  const normalizedAllowed = allowedRoles.map(r => r.toLowerCase());
+
+  console.debug('RequireAdmin user snapshot:', user);
+
+  if (!user) {
+    return <Navigate to="/admin/login" replace />;
+  }
+  if (!normalizedAllowed.includes(userRole)) {
+    console.warn(`Redirecting to login. User role: '${user?.role}' is not in allowed roles:`, allowedRoles);
+    return <Navigate to="/admin/login" replace />;
   }
 
-  // If logged in, render the child routes.
   return <Outlet />;
 }

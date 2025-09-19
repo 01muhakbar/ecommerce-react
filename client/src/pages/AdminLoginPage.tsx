@@ -151,6 +151,7 @@ const AdminLoginPage: React.FC = () => {
       return response.data;
     },
     onSuccess: (data) => {
+      console.log('Login successful, user role:', data.data.user.role);
       login(data.data.user, data.data.token);
       navigate("/admin/dashboard");
     },
