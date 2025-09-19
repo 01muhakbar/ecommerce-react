@@ -2,9 +2,11 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import { User } from '../models/User.js';
+import { User } from "../models/User.js";
 // import sendEmail from "../services/emailService.js"; // Replaced with dynamic import
 import { Op } from "sequelize";
+
+const allowedAdminRoles = ["Admin", "Super Admin"] as const;
 
 // Helper function to sign JWT
 const signToken = (id: number, role: string): string => {
@@ -12,10 +14,11 @@ const signToken = (id: number, role: string): string => {
   if (!secret) {
     throw new Error("JWT_SECRET is not defined");
   }
-  const options: jwt.SignOptions = {
-    expiresIn: (process.env.JWT_EXPIRES_IN || "90d") as any,
-  };
-  return jwt.sign({ id, role }, secret, options);
+  // Payload sekarang menyertakan lebih banyak detail jika diperlukan, tapi id dan role adalah yang utama.
+  const payload = { id, role };
+  return jwt.sign(payload, secret, {
+    expiresIn: process.env.JWT_EXPIRES_IN || "7d",
+  });
 };
 
 // Helper function to create a token, set a cookie, and send the response
@@ -24,15 +27,12 @@ export const createAndSendToken = (
   statusCode: number,
   res: express.Response
 ): void => {
-  const token = signToken(user.id, user.role);
+  const token = signToken(user.id, user.role); // Menggunakan helper yang sudah ada
 
-  const cookieExpiresInDays = parseInt(
-    process.env.JWT_COOKIE_EXPIRES_IN || "90",
-    10
-  );
   const cookieOptions = {
-    expires: new Date(Date.now() + cookieExpiresInDays * 24 * 60 * 60 * 1000),
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 hari dalam milidetik
     httpOnly: true,
+    // secure: process.env.NODE_ENV === "production", // Aktifkan di produksi dengan HTTPS
     path: "/",
     sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
@@ -139,7 +139,9 @@ export const forgotPassword = async (
     const message = `Anda menerima email ini karena Anda (atau orang lain) telah meminta reset password untuk akun Anda.\n\nSilakan klik tautan ini untuk mereset password Anda: ${resetURL}\n\nJika Anda tidak meminta ini, abaikan email ini dan password Anda akan tetap sama.`;
     try {
       // Dynamically import sendEmail only when needed
-      const { default: sendEmail } = await import("../services/emailService.js");
+      const { default: sendEmail } = await import(
+        "../services/emailService.js"
+      );
       await sendEmail({
         email: user.email,
         subject: "Reset Kata Sandi Anda",
@@ -189,7 +191,7 @@ export const resetPassword = async (
       });
       return;
     }
-        user.password = await bcrypt.hash(req.body.password, 12);
+    user.password = await bcrypt.hash(req.body.password, 12);
     user.passwordResetToken = undefined;
     user.passwordResetExpires = undefined;
     await user.save();
@@ -202,27 +204,34 @@ export const resetPassword = async (
   }
 };
 
-export const loginAdmin = async (
+export const adminLogin = async (
   req: express.Request,
   res: express.Response,
   next: express.NextFunction
 ): Promise<void> => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ where: { email, role: "admin" } });
+    const user = await User.findOne({ where: { email } });
 
+    // Cek user dan password dalam satu langkah untuk keamanan
     if (!user || !(await bcrypt.compare(password, user.password!))) {
-      res
-        .status(401)
-        .json({ status: "fail", message: "Email atau password salah." });
+      res.status(401).json({ status: "fail", message: "Invalid credentials" });
       return;
     }
+
+    // Cek apakah role diizinkan untuk login admin
+    if (!allowedAdminRoles.includes(user.role as any)) {
+      res
+        .status(403)
+        .json({ status: "fail", message: `Forbidden for role ${user.role}` });
+      return;
+    }
+
     createAndSendToken(user, 200, res);
   } catch (error) {
     console.error("ADMIN LOGIN ERROR:", error);
-    res
-      .status(500)
-      .json({ status: "error", message: (error as Error).message });
+    // Menggunakan next(error) untuk penanganan error terpusat
+    next(error);
   }
 };
 
@@ -233,7 +242,9 @@ export const forgotPasswordAdmin = async (
 ): Promise<void> => {
   try {
     const { email } = req.body;
-    const user = await User.findOne({ where: { email, role: "admin" } });
+    const user = await User.findOne({
+      where: { email, role: { [Op.in]: [...allowedAdminRoles] } },
+    });
     if (!user) {
       res.status(200).json({
         status: "success",
@@ -252,7 +263,9 @@ export const forgotPasswordAdmin = async (
     const message = `Anda menerima email ini karena Anda (atau orang lain) telah meminta reset password untuk akun admin Anda.\n\nSilakan klik tautan ini untuk mereset password Anda: ${resetURL}\n\nJika Anda tidak meminta ini, abaikan email ini dan password Anda akan tetap sama.`;
 
     try {
-      const { default: sendEmail } = await import("../services/emailService.js");
+      const { default: sendEmail } = await import(
+        "../services/emailService.js"
+      );
       await sendEmail({
         email: user.email,
         subject: "Reset Kata Sandi Admin Anda",
@@ -265,11 +278,19 @@ export const forgotPasswordAdmin = async (
     }
 
     // Always return the same message to prevent user enumeration
-    res.status(200).json({ status: "success", message: "Jika email terdaftar, Anda akan menerima instruksi reset password." });
+    res
+      .status(200)
+      .json({
+        status: "success",
+        message:
+          "Jika email terdaftar, Anda akan menerima instruksi reset password.",
+      });
   } catch (error) {
     console.error("ADMIN FORGOT PASSWORD ERROR:", error);
     // On a server error, it's better to send a 500 status
-    res.status(500).json({ status: "error", message: "Terjadi kesalahan pada server." });
+    res
+      .status(500)
+      .json({ status: "error", message: "Terjadi kesalahan pada server." });
   }
 };
 
@@ -287,7 +308,7 @@ export const resetPasswordAdmin = async (
       where: {
         passwordResetToken: hashedToken,
         passwordResetExpires: { [Op.gt]: Date.now() },
-        role: "admin",
+        role: { [Op.in]: [...allowedAdminRoles] },
       },
     });
     if (!user) {
@@ -298,7 +319,7 @@ export const resetPasswordAdmin = async (
       });
       return;
     }
-        user.password = await bcrypt.hash(req.body.password, 12);
+    user.password = await bcrypt.hash(req.body.password, 12);
     user.passwordResetToken = undefined;
     user.passwordResetExpires = undefined;
     await user.save();

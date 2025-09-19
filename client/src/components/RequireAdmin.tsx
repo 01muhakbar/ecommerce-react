@@ -4,12 +4,19 @@ import { useAuthStore } from "../store/authStore";
 
 export default function RequireAdmin() {
   const location = useLocation();
-  const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
+  const user = useAuthStore((state) => state.user);
+  const allowedRoles = ["Admin", "Super Admin"];
 
-  // This guard is now simpler because the check is explicit.
-  // If not logged in, redirect to the login page.
+  // If not logged in, or if the user role is not allowed, redirect to login.
   // We pass the current location so the user can be redirected back after login.
-  if (!isLoggedIn) {
+  if (!user || !allowedRoles.includes(user.role)) {
+    // For debugging purposes, you can log why the redirect is happening.
+    if (user) {
+      console.log(
+        `Redirecting to login. User role: '${user.role}' is not in allowed roles:`,
+        allowedRoles
+      );
+    }
     return <Navigate to="/admin/login" state={{ from: location }} replace />;
   }
 

@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import cookieParser from "cookie-parser";
-import bcrypt from "bcryptjs"; // Impor bcrypt
+import bcrypt from "bcryptjs";
 import cors from "cors";
 import methodOverride from "method-override";
 import { fileURLToPath } from "url";
@@ -24,7 +24,7 @@ import adminStaffRoutes from "./routes/adminStaffRoutes.js";
 
 // Impor model dan middleware
 import globalErrorHandler from "./middleware/errorMiddleware.js";
-import { initializeDatabase, Db } from "./models/index.js"; // Impor tipe Db
+import { initializeDatabase, Db } from "./models/index.js";
 
 // Recreate __dirname for ESM since it's used in express.static
 const __filename = fileURLToPath(import.meta.url);
@@ -82,15 +82,17 @@ app.all(
 // Ini harus menjadi middleware terakhir
 app.use(globalErrorHandler);
 
-// Fungsi untuk membuat admin default jika tidak ada
+// --- DEFAULT ADMIN SEEDER ---
 const createDefaultAdmin = async (db: Db) => {
   const { User } = db;
-  const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@example.com';
-  const ADMIN_NAME  = process.env.ADMIN_NAME  || 'Admin User';
-  const RAW_PASS    = process.env.ADMIN_PASSWORD || 'Admin@123';
-  const ADMIN_ROLE  = 'Admin'; // Consistent role casing
+  const ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || "super@admin.com";
+  const ADMIN_NAME = "Super Admin";
+  const RAW_PASS = process.env.SUPER_ADMIN_PASSWORD || "SuperAdmin_123!";
+  const ADMIN_ROLE = "Super Admin";
 
-  console.log('[SEED] Ensuring default admin exists...', { email: ADMIN_EMAIL });
+  console.log("[SEED] Ensuring default super admin exists...", {
+    email: ADMIN_EMAIL,
+  });
 
   try {
     const [user, created] = await User.findOrCreate({
@@ -101,27 +103,33 @@ const createDefaultAdmin = async (db: Db) => {
         password: await bcrypt.hash(RAW_PASS, 12),
         role: ADMIN_ROLE,
         isActive: true,
-        // isPublished is not a field in the model I read, so I am omitting it.
+        isPublished: true,
       },
     });
 
     if (created) {
-      console.log(`[SEED] Default admin created: ${user.email}`);
+      console.log(`[SEED] Default super admin created: ${user.email}`);
     } else {
-      // If user already existed, check if role needs updating
       const needsUpdate = user.role !== ADMIN_ROLE || !user.isActive;
       if (needsUpdate) {
         await user.update({
           role: ADMIN_ROLE,
           isActive: true,
         });
-        console.log(`[SEED] Default admin already exists and was updated: ${user.email}`);
+        console.log(
+          `[SEED] User ${user.email} already existed and was updated to Super Admin.`
+        );
       } else {
-        console.log(`[SEED] Default admin already exists and is up-to-date: ${user.email}`);
+        console.log(
+          `[SEED] Super admin ${user.email} already exists and is up-to-date.`
+        );
       }
     }
   } catch (error) {
-    console.error("[SEED] Failed to create or update default admin user:", error);
+    console.error(
+      "[SEED] Failed to create or update default super admin user:",
+      error
+    );
   }
 };
 
@@ -132,7 +140,7 @@ const startServer = async () => {
 
     // Di mode development, pastikan ada admin default
     if (process.env.NODE_ENV === "development") {
-      await db.sequelize.sync({ alter: true }); // Gunakan alter: true untuk menjaga data
+      await db.sequelize.sync({ alter: true }); // Use alter: true to keep data
       console.log("Database synchronized with { alter: true }.");
       await createDefaultAdmin(db);
     }
