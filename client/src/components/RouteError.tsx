@@ -1,29 +1,16 @@
-import React from 'react';
-
-export default class RouteError extends React.Component<
-  { children: React.ReactNode },
-  { hasError: boolean; msg?: string }
-> {
-  constructor(props:any){
-    super(props);
-    this.state = { hasError: false };
+// client/src/components/RouteError.tsx
+import { useRouteError, isRouteErrorResponse } from "react-router-dom";
+export default function RouteError() {
+  const err = useRouteError() as any;
+  if (isRouteErrorResponse(err)) {
+    return <div style={{padding:24}}>
+      <h2>Unexpected Application Error</h2>
+      <pre>{err.status} {err.statusText}</pre>
+      <pre>{err.data?.message || ""}</pre>
+    </div>;
   }
-
-  static getDerivedStateFromError(e:any){
-    return { hasError: true, msg: String(e?.message || e) };
-  }
-
-  componentDidCatch(err:any, info:any){
-    console.error('Route error caught by ErrorBoundary:', err, info);
-  }
-
-  render(){
-    if(this.state.hasError){
-      return <div style={{padding:16, margin: 16, border: '1px solid red', borderRadius: 8, backgroundColor: '#fff5f5'}}>
-        <h2 style={{color: '#c53030'}}>Unexpected Application Error</h2>
-        <pre style={{whiteSpace: 'pre-wrap', wordBreak: 'break-all'}}>{this.state.msg}</pre>
-      </div>;
-    }
-    return this.props.children;
-  }
+  return <div style={{padding:24}}>
+    <h2>Unexpected Application Error</h2>
+    <pre>{err?.message || String(err)}</pre>
+  </div>;
 }

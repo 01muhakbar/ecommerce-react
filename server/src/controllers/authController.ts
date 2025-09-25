@@ -5,6 +5,7 @@ import crypto from "crypto";
 import { User } from "../models/User.js";
 // import sendEmail from "../services/emailService.js"; // Replaced with dynamic import
 import { Op } from "sequelize";
+import { CustomRequest } from "../middleware/authMiddleware.js";
 
 const allowedAdminRoles = ["Admin", "Super Admin"] as const;
 
@@ -331,3 +332,30 @@ export const resetPasswordAdmin = async (
       .json({ status: "error", message: (error as Error).message });
   }
 };
+
+export const getMe = async (
+  req: CustomRequest,
+  res: express.Response,
+  next: express.NextFunction
+): Promise<void> => {
+  // Asumsi middleware 'protect' sudah menaruh user di res.locals.user
+  const user = req.user;
+
+  if (!user) {
+    res.status(401).json({ status: "fail", message: "Not logged in" });
+    return;
+  }
+
+  res.status(200).json({
+    status: "success",
+    data: {
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    },
+  });
+};
+

@@ -1,36 +1,37 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { api } from "@/api/axios";
 
-export interface User {
-  name: string;
-  role: string;
-}
+type User = { id: number; name: string; email: string; role: string };
 
-interface AuthState {
-  isLoggedIn: boolean;
+type AuthState = {
+  isAuthenticated: boolean;
   user: User | null;
   token: string | null;
-  login: (user: User, token: string) => void;
+  loading: boolean;
+  setAuth: (v: { isAuthenticated: boolean; user: User; token: string; }) => void;
   logout: () => void;
-}
+  init: () => Promise<void>;
+};
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
-      isLoggedIn: false,
-      user: null,
-      token: null,
-      login: (user, token) => {
-        const normalizedUser = {
-          ...user,
-          role: (user.role ?? '').trim(),
-        };
-        set({ isLoggedIn: true, user: normalizedUser, token });
-      },
-      logout: () => set({ isLoggedIn: false, user: null, token: null }),
-    }),
-    {
-      name: "auth-storage", // Nama item di localStorage
+export const useAuthStore = create<AuthState>((set) => ({
+  isAuthenticated: false,
+  user: null,
+  token: null,
+  loading: true, // Start with loading true on app start
+
+  setAuth: (values) => set({ ...values, loading: false }),
+
+  logout: () => set({ isAuthenticated: false, user: null, token: null, loading: false }),
+
+  init: async () => {
+    try {
+      console.log("AuthStore: Initializing session...");
+      const { data } = await api.get("/auth/me");
+      console.log("AuthStore: Session initialized successfully.", data.data.user);
+      set({ isAuthenticated: true, user: data.data.user, token: null, loading: false });
+    } catch (error: any) {
+      console.error("AuthStore: Failed to initialize session.", error.response?.data || error.message);
+      set({ isAuthenticated: false, user: null, token: null, loading: false });
     }
-  )
-);
+  },
+}));

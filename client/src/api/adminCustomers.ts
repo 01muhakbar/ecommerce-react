@@ -1,4 +1,4 @@
-import api from "./axios"; // asumsikan ini adalah instance axios yang sudah dikonfigurasi
+import { api } from "@/api/axios";
 
 export type CustomerRow = {
   id: string;

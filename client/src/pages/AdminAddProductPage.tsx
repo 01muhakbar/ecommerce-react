@@ -7,7 +7,7 @@ import { toast } from "react-toastify";
 import { AxiosError } from "axios";
 import { z } from "zod";
 import { createProductSchema } from "@ecommerce/schemas";
-import api from "../api/axios";
+import { api } from "@/api/axios";
 import ImageUploader from "../components/ImageUploader";
 import TagInput from "../components/TagInput";
 

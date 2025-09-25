@@ -61,8 +61,12 @@ export const initializeDatabase = async (): Promise<Db> => {
       {
         host: config.host,
         port: config.port,
-        dialect: config.dialect as any,
-        logging: config.logging,
+        dialect: 'mysql',
+        logging: console.log, // aktif sementara untuk debug
+        define: { underscored: true },
+        dialectOptions: {
+          ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+        },
         pool: config.pool,
       }
     );

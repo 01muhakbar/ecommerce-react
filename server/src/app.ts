@@ -138,6 +138,15 @@ const startServer = async () => {
   try {
     const db = await initializeDatabase(); // Inisialisasi database dan model
 
+    // Test database connection
+    try {
+      await db.sequelize.authenticate();
+      console.log(`DB connection OK as ${process.env.DB_USER} on ${process.env.DB_NAME}`);
+    } catch (err) {
+      console.error('DB connection FAILED:', err);
+      throw err; // hentikan startServer jika gagal
+    }
+
     // Di mode development, pastikan ada admin default
     if (process.env.NODE_ENV === "development") {
       await db.sequelize.sync({ alter: true }); // Use alter: true to keep data

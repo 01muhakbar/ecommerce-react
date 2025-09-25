@@ -5,7 +5,7 @@ import { z } from "zod";
 import { useMutation } from "@tanstack/react-query";
 import { useParams, Link } from "react-router-dom";
 import { resetPasswordAdminSchema } from "@ecommerce/schemas";
-import api from "../api/axios";
+import { api } from "@/api/axios";
 
 // --- Icon Components ---
 const LockIcon = (props: React.SVGProps<SVGSVGElement>) => (

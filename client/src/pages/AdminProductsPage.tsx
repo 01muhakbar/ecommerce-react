@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import api from "../api/axios";
+import { api } from "@/api/axios";
 import Pagination from "../components/Pagination";
 import ProductsTable from "../components/ProductsTable";
 

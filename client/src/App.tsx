@@ -1,100 +1,61 @@
-import {
-  createBrowserRouter,
-  RouterProvider,
-  Navigate,
-} from "react-router-dom";
-import { Suspense, lazy } from 'react';
+import React, { Suspense, useEffect } from "react";
+import { createBrowserRouter, RouterProvider, Navigate } from "react-router-dom";
+import { useAuthStore } from "@/store/authStore";
+import RequireAdmin from "@/components/RequireAdmin";
+import AdminLayout from "@/layouts/AdminLayout";
+import AuthLayout from "@/layouts/AuthLayout";
 
-// Import Layouts, Guards, and Error Boundaries
-import AdminLayout from "./layouts/AdminLayout";
-import RequireAdmin from "./components/RequireAdmin";
-import RouteError from "./components/RouteError";
+// Lazy load all pages
+const AdminDashboardPage = React.lazy(() => import("@/pages/AdminDashboardPage"));
+const AdminProductsPage  = React.lazy(() => import("@/pages/AdminProductsPage"));
+const AdminOrdersPage    = React.lazy(() => import("@/pages/AdminOrdersPage"));
+const AdminCustomersPage = React.lazy(() => import("@/pages/AdminCustomersPage"));
+const AdminStaffPage     = React.lazy(() => import("@/pages/AdminStaffPage"));
+const AdminLoginPage     = React.lazy(() => import("@/pages/AdminLoginPage"));
 
-// Lazy load all page components
-const AdminLoginPage = lazy(() => import('./pages/AdminLoginPage'));
-const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage'));
-const AdminOrdersPage = lazy(() => import('./pages/AdminOrdersPage'));
-const AdminProductsPage = lazy(() => import('./pages/AdminProductsPage'));
-const AdminCustomersPage = lazy(() => import('./pages/AdminCustomersPage'));
-const AdminAddProductPage = lazy(() => import('./pages/AdminAddProductPage'));
-const AdminStaffPage = lazy(() => import('./pages/AdminStaffPage'));
-const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
-
-// Helper component for Suspense fallback
-const PageLoader = () => <div style={{padding: 24}}>Loading page...</div>;
-
-// Definisikan semua rute aplikasi
 const router = createBrowserRouter([
-  // Rute publik: tidak memerlukan login
   {
     path: "/admin/login",
     element: (
-      <RouteError>
-        <Suspense fallback={<PageLoader />}>
+      <AuthLayout>
+        <Suspense fallback={<div className="p-8">Loading…</div>}>
           <AdminLoginPage />
         </Suspense>
-      </RouteError>
+      </AuthLayout>
     ),
   },
 
-  // Rute admin yang dilindungi
   {
     path: "/admin",
-    element: <RequireAdmin />, // Guard akan memeriksa login
+    element: (
+      <RequireAdmin allowedRoles={["Admin", "Super Admin"]}>
+        <AdminLayout />
+      </RequireAdmin>
+    ),
     children: [
-      {
-        // Layout ini hanya akan dirender jika login berhasil
-        element: <AdminLayout />,
-        children: [
-          { index: true, element: <Navigate to="/admin/dashboard" replace /> },
-          {
-            path: "dashboard",
-            element: <Suspense fallback={<PageLoader />}><AdminDashboardPage /></Suspense>,
-          },
-          {
-            path: "orders",
-            element: <Suspense fallback={<PageLoader />}><AdminOrdersPage /></Suspense>,
-          },
-          {
-            path: "catalog/products",
-            element: <Suspense fallback={<PageLoader />}><AdminProductsPage /></Suspense>,
-          },
-          {
-            path: "catalog/products/new",
-            element: <Suspense fallback={<PageLoader />}><AdminAddProductPage /></Suspense>,
-          },
-          {
-            path: "customers",
-            element: <Suspense fallback={<PageLoader />}><AdminCustomersPage /></Suspense>,
-          },
-          {
-            path: "our-staff",
-            element: <Suspense fallback={<PageLoader />}><AdminStaffPage /></Suspense>,
-          },
-        ],
-      },
+      { index: true, element: <Navigate to="dashboard" replace /> },
+      { path: "dashboard",        element: <Suspense fallback={<div>Loading...</div>}><AdminDashboardPage /></Suspense> },
+      { path: "catalog/products", element: <Suspense fallback={<div>Loading...</div>}><AdminProductsPage /></Suspense> },
+      { path: "orders",           element: <Suspense fallback={<div>Loading...</div>}><AdminOrdersPage /></Suspense> },
+      { path: "customers",        element: <Suspense fallback={<div>Loading...</div>}><AdminCustomersPage /></Suspense> },
+      { path: "our-staff",        element: <Suspense fallback={<div>Loading...</div>}><AdminStaffPage /></Suspense> },
     ],
   },
 
-  // Redirect dari root ke area admin
-  {
-    path: "/",
-    element: <Navigate to="/admin" replace />,
-  },
-
-  // Fallback untuk rute yang tidak ditemukan
-  {
-    path: "*",
-    element: <Suspense fallback={<PageLoader />}><NotFoundPage /></Suspense>,
-  },
+  // optional: redirect root ke login atau ke landing
+  { path: "/", element: <Navigate to="/admin/login" replace /> },
 ]);
 
-function App() {
+export default function App() {
+  const init = useAuthStore((s) => s.init);
+
+  useEffect(() => {
+    init(); // cek session dari cookie/token
+  }, [init]);
+
   return (
-    <RouteError>
-      <RouterProvider router={router} />
-    </RouteError>
+    <Suspense fallback={<div>Loading...</div>}>
+       <RouterProvider router={router} />
+    </Suspense>
   );
 }
-
-export default App;

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import api from "../api/axios";
+import { api } from "@/api/axios";
 import type { Order } from "../types/order";
 import OrdersTable from "../components/OrdersTable";
 import Pagination from "../components/Pagination";

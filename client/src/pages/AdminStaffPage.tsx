@@ -5,8 +5,13 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
-  fetchStaff, createStaff, updateStaff, deleteStaff, ROLES, StaffItem, StaffRole
-} from "../api/adminStaff";
+  fetchStaff, createStaff, updateStaff, deleteStaff, type StaffItem, type StaffRole
+} from "@/api/adminStaff";
+
+// Define roles based on the imported type
+const ROLES: StaffRole[] = [
+  "Super Admin", "Admin", "Cashier", "CEO", "Manager", "Accountant", "Driver", "Security Guard", "Delivery Person"
+];
 
 const pageLimit = 10;
 

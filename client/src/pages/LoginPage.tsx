@@ -5,7 +5,7 @@ import { z } from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { loginSchema } from "@ecommerce/schemas";
-import api from "../api/axios";
+import { api } from "@/api/axios";
 
 // --- SVG Icons as React Components ---
 

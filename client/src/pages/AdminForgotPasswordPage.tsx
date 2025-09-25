@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { z } from "zod";
 import { forgotPasswordAdminSchema } from "@ecommerce/schemas";
-import api from "../api/axios";
+import { api } from "@/api/axios";
 
 // --- Icon Components ---
 const MailIcon = (props: React.SVGProps<SVGSVGElement>) => (

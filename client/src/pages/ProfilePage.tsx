@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { updateProfileSchema } from "@ecommerce/schemas";
-import api from "../api/axios";
+import { api } from "@/api/axios";
 
 // Define the type from the schema
 type UpdateProfileInput = z.infer<typeof updateProfileSchema>;

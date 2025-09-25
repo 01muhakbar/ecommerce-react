@@ -1,22 +1,22 @@
 import React, { useState, useEffect } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
-import { useAuthStore } from "../store/authStore";
+import { useAuthStore } from "@/store/authStore";
 import { useMutation } from "@tanstack/react-query";
-import api from "../api/axios";
-import Sidebar from "../components/Sidebar";
-import Header from "../components/Header";
+import { api } from "@/api/axios";
+import Sidebar from "@/components/Sidebar";
+import Header from "@/components/Header";
 
 const AdminLayout: React.FC = () => {
   const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const logoutClient = useAuthStore((state) => state.logout);
 
   useEffect(() => {
-    if (!isLoggedIn) {
+    if (!isAuthenticated) {
       navigate("/admin/login", { replace: true });
     }
-  }, [isLoggedIn, navigate]);
+  }, [isAuthenticated, navigate]);
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
@@ -40,7 +40,7 @@ const AdminLayout: React.FC = () => {
 
   // While checking auth, you might want to show a loader
   // For now, we'll just render null to prevent flashing the layout
-  if (!isLoggedIn) {
+  if (!isAuthenticated) {
     return null;
   }
 

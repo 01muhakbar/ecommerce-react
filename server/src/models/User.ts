@@ -18,9 +18,12 @@ interface UserAttributes {
   isPublished: boolean;
   createdAt: Date;
   updatedAt: Date;
+  joinedAt?: Date | null;
+  avatarUrl?: string | null;
+  allowedRoutes?: string[] | null;
 }
 
-type UserCreationAttributes = Optional<UserAttributes, 'id'|'phoneNumber'|'isActive'|'isPublished'|'createdAt'|'updatedAt'|'password'>;
+type UserCreationAttributes = Optional<UserAttributes, 'id'|'phoneNumber'|'isActive'|'isPublished'|'createdAt'|'updatedAt'|'password'|'joinedAt'|'avatarUrl'|'allowedRoutes'>;
 
 export class User extends Model<UserAttributes, UserCreationAttributes> implements UserAttributes {
   public declare id: number;
@@ -33,6 +36,9 @@ export class User extends Model<UserAttributes, UserCreationAttributes> implemen
   public declare isPublished: boolean;
   public declare readonly createdAt: Date;
   public declare readonly updatedAt: Date;
+  public declare joinedAt: Date | null;
+  public declare avatarUrl: string | null;
+  public declare allowedRoutes: string[] | null;
 
   public static associate(models: any) {
     User.hasMany(models.Product, { foreignKey: "userId", as: "products" });
@@ -52,6 +58,9 @@ export class User extends Model<UserAttributes, UserCreationAttributes> implemen
       isPublished: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true, field: 'is_published' },
       createdAt: { type: DataTypes.DATE, allowNull: false, field: 'created_at' },
       updatedAt: { type: DataTypes.DATE, allowNull: false, field: 'updated_at' },
+      joinedAt: { type: DataTypes.DATE, field: 'joined_at' },
+      avatarUrl: { type: DataTypes.STRING, field: 'avatar_url' },
+      allowedRoutes: { type: DataTypes.JSON, field: 'allowed_routes' },
     }, {
       sequelize, tableName: 'Users', underscored: true,
     });

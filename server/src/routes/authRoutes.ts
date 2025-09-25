@@ -13,6 +13,7 @@ router.post("/admin/reset-password/:token", authController.resetPasswordAdmin);
 router.post("/register", authController.register);
 
 // Protected routes
+router.get("/me", protect, authController.getMe);
 router.post("/logout", protect, authController.logout);
 
 export default router;

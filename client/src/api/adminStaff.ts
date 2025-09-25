@@ -1,9 +1,15 @@
-// client/src/api/adminStaff.ts
-import api from "./axios";
+import { api } from "@/api/axios";
 
 export type StaffRole =
-  | 'Super Admin' | 'Admin' | 'Cashier' | 'CEO' | 'Manager'
-  | 'Accountant' | 'Driver' | 'Security Guard' | 'Delivery Person';
+  | "Super Admin"
+  | "Admin"
+  | "Cashier"
+  | "CEO"
+  | "Manager"
+  | "Accountant"
+  | "Driver"
+  | "Security Guard"
+  | "Delivery Person";
 
 export interface StaffItem {
   id: number;
@@ -14,39 +20,42 @@ export interface StaffItem {
   isActive: boolean;
   isPublished: boolean;
   createdAt: string; // ISO
+  updatedAt: string; // ISO
 }
 
 export interface StaffListResponse {
-  data: StaffItem[];
-  meta: { page: number; limit: number; total: number; totalPages: number; };
+  rows: StaffItem[];
+  count: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
-export const ROLES: StaffRole[] = [
-  'Super Admin','Admin','Cashier','CEO','Manager',
-  'Accountant','Driver','Security Guard','Delivery Person'
-];
-
-export async function fetchStaff(params: {
-  page?: number; limit?: number; q?: string; role?: StaffRole | '';
-}) {
-  const res = await api.get<StaffListResponse>('/v1/admin/staff', { params });
-  return res.data;
+export interface StaffQuery {
+  page?: number;
+  limit?: number;
+  q?: string;
+  role?: StaffRole | "";
+  sortBy?: "createdAt" | "name" | "email" | "role";
+  sort?: "ASC" | "DESC";
 }
 
-export async function createStaff(payload: {
-  name: string; email: string; phoneNumber?: string; role: StaffRole;
-  password: string; isActive?: boolean; isPublished?: boolean;
-}) {
-  const res = await api.post('/v1/admin/staff', payload);
-  return res.data;
+export async function fetchStaff(params: StaffQuery = {}): Promise<StaffListResponse> {
+  const { data } = await api.get("/admin/staff", { params });
+  return data;
 }
 
-export async function updateStaff(id: number, payload: Partial<Omit<StaffItem,'id'|'createdAt'>>) {
-  const res = await api.patch(`/v1/admin/staff/${id}`, payload);
-  return res.data;
+export async function createStaff(payload: Omit<StaffItem, "id" | "createdAt" | "updatedAt">) {
+  const { data } = await api.post("/admin/staff", payload);
+  return data as StaffItem;
+}
+
+export async function updateStaff(id: number, payload: Partial<StaffItem>) {
+  const { data } = await api.patch(`/admin/staff/${id}`, payload);
+  return data as StaffItem;
 }
 
 export async function deleteStaff(id: number) {
-  const res = await api.delete(`/v1/admin/staff/${id}`);
-  return res.data;
+  const { data } = await api.delete(`/admin/staff/${id}`);
+  return data as { success: true };
 }
