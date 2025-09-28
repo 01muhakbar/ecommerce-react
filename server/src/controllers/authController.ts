@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { User } from "../models/User.js";
+import { Staff } from "../models/Staff.js";
 // import sendEmail from "../services/emailService.js"; // Replaced with dynamic import
 import { Op } from "sequelize";
 import { CustomRequest } from "../middleware/authMiddleware.js";
@@ -39,13 +40,12 @@ export const createAndSendToken = (
     secure: process.env.NODE_ENV === "production",
   };
 
-  res.cookie("jwt", token, cookieOptions);
+  res.cookie("token", token, cookieOptions);
   user.password = undefined;
 
   res.status(statusCode).json({
     status: "success",
     data: {
-      token,
       user: {
         id: user.id,
         name: user.name,
@@ -109,13 +109,23 @@ export const login = async (
 };
 
 export const logout = (req: express.Request, res: express.Response): void => {
-  res.cookie("jwt", "loggedout", {
-    expires: new Date(Date.now() + 10 * 1000),
-    httpOnly: true,
+  res.clearCookie("token", { 
+    path: "/", 
+    sameSite: "lax", 
+    secure: process.env.NODE_ENV === "production", 
+    httpOnly: true 
   });
-  res
-    .status(200)
-    .json({ status: "success", message: "Logged out successfully" });
+  res.status(200).json({ status: "success", message: "Logged out successfully" });
+};
+
+export const adminLogout = (req: express.Request, res: express.Response): void => {
+  res.clearCookie("token", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+  });
+  res.status(200).json({ ok: true });
 };
 
 export const forgotPassword = async (
@@ -205,36 +215,41 @@ export const resetPassword = async (
   }
 };
 
-export const adminLogin = async (
-  req: express.Request,
-  res: express.Response,
-  next: express.NextFunction
-): Promise<void> => {
-  try {
-    const { email, password } = req.body;
-    const user = await User.findOne({ where: { email } });
+import { Staff } from "../models/Staff.js";
 
-    // Cek user dan password dalam satu langkah untuk keamanan
-    if (!user || !(await bcrypt.compare(password, user.password!))) {
-      res.status(401).json({ status: "fail", message: "Invalid credentials" });
-      return;
-    }
-
-    // Cek apakah role diizinkan untuk login admin
-    if (!allowedAdminRoles.includes(user.role as any)) {
-      res
-        .status(403)
-        .json({ status: "fail", message: `Forbidden for role ${user.role}` });
-      return;
-    }
-
-    createAndSendToken(user, 200, res);
-  } catch (error) {
-    console.error("ADMIN LOGIN ERROR:", error);
-    // Menggunakan next(error) untuk penanganan error terpusat
-    next(error);
+export const adminLogin = async (req: express.Request, res: express.Response) => {
+  const { email, password } = req.body as { email: string; password: string };
+  const staff = await Staff.findOne({ where: { email } });
+  if (!staff) {
+    return res.status(401).json({ message: "Invalid credentials" });
   }
-};
+
+  const ok = await bcrypt.compare(password, staff.passwordHash);
+  if (!ok) {
+    return res.status(401).json({ message: "Invalid credentials" });
+  }
+
+  if (staff.status !== "Active") {
+    return res.status(403).json({ message: "Account inactive" });
+  }
+
+  const token = jwt.sign(
+    { id: staff.id, role: staff.role, email: staff.email },
+    process.env.JWT_SECRET!,
+    { expiresIn: "7d" }
+  );
+
+  res.cookie("token", token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === 'production',  // set true jika pakai HTTPS
+    path: "/",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+
+  // jangan kirim token di body
+  return res.status(200).json({ ok: true, user: { id: staff.id, role: staff.role, email: staff.email } });
+}
 
 export const forgotPasswordAdmin = async (
   req: express.Request,
@@ -338,24 +353,33 @@ export const getMe = async (
   res: express.Response,
   next: express.NextFunction
 ): Promise<void> => {
-  // Asumsi middleware 'protect' sudah menaruh user di res.locals.user
-  const user = req.user;
+  try {
+    // req.user is the JWT payload, contains id
+    if (!req.user?.id) {
+      res.status(401).json({ message: "Not authenticated or token is missing user ID." });
+      return;
+    }
 
-  if (!user) {
-    res.status(401).json({ status: "fail", message: "Not logged in" });
-    return;
+    // Fetch the full, fresh user data from the database
+    const staff = await Staff.findByPk(req.user.id);
+
+    if (!staff) {
+      res.status(401).json({ message: "User for this token no longer exists." });
+      return;
+    }
+
+    // Return the flat user object as requested
+    res.status(200).json({
+      id: staff.id,
+      email: staff.email,
+      role: staff.role,
+      status: staff.status,
+      name: staff.name, // also include name, it's useful
+      routes: staff.routes ?? [],
+    });
+
+  } catch (error) {
+    next(error);
   }
-
-  res.status(200).json({
-    status: "success",
-    data: {
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
-    },
-  });
 };
 

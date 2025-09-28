@@ -10,7 +10,8 @@
     "dev:vite": "vite",
     "test": "echo \"No test specified for server\" && exit 0",
     "build:css": "postcss ./public/css/input.css -o ./public/css/style.css --watch",
-    "db:migrate": "npx sequelize-cli db:migrate"
+    "db:migrate": "npx sequelize-cli db:migrate",
+    "reset:sa": "ts-node --esm src/scripts/resetSuperAdmin.ts"
   },
   "keywords": [],
   "author": "",

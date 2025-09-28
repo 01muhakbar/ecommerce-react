@@ -6,6 +6,7 @@ import StatCard from "../components/StatCard"; // Assuming this is your StatCard
 import SalesChart from "../components/SalesChart"; // Assuming this is your SalesChart component
 import BestSellersChart from "../components/BestSellersChart"; // Assuming this is your BestSellersChart component
 import OrdersTable from "../components/OrdersTable"; // Import the new OrdersTable component
+import { useAuthStore } from "@/store/authStore";
 
 // --- Icon Components for StatCards ---
 const DollarSignIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -108,12 +109,15 @@ const formatCurrency = (amount: number) => {
 };
 
 const AdminDashboardPage: React.FC = () => {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
   const { data, isLoading, isError, error } = useQuery<DashboardData>({
     queryKey: ["adminDashboardStatistics"],
     queryFn: async () => {
       const response = await api.get("/admin/dashboard/statistics");
       return response.data.data; // Perbaikan: Akses objek 'data' di dalam respons
     },
+    enabled: isAuthenticated, // Hanya jalankan query jika pengguna terotentikasi
   });
 
   if (isLoading) {
@@ -134,10 +138,10 @@ const AdminDashboardPage: React.FC = () => {
     let friendlyMessage = `Failed to fetch dashboard: ${msg}`;
 
     if (status === 401) {
-        friendlyMessage = 'Unauthorized: Please login again.';
+      friendlyMessage = "Unauthorized: Please login again.";
     } else if (status === 403) {
-        const actualRole = (error as any)?.response?.data?.actual;
-        friendlyMessage = `Forbidden: Your account (Role: ${actualRole}) lacks permission to access this resource.`;
+      const actualRole = (error as any)?.response?.data?.actual;
+      friendlyMessage = `Forbidden: Your account (Role: ${actualRole}) lacks permission to access this resource.`;
     }
 
     return (

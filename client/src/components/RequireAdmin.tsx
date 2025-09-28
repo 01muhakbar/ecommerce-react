@@ -1,27 +1,20 @@
-import { Navigate, useLocation } from "react-router-dom";
-import { useAuthStore } from "@/store/authStore";
+import { useQuery } from "@tanstack/react-query";
+import { Navigate, Outlet } from "react-router-dom";
+import { api } from "@/api/axios";
 
-type Props = { allowedRoles?: string[]; children: JSX.Element };
+export default function RequireAdmin({ children }: { children?: JSX.Element }) {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["auth", "me"],
+    queryFn: async () => (await api.get("/auth/me")).data, // ← harus {id,email,role,...}
+    retry: false,
+    staleTime: 60_000,
+  });
 
-export default function RequireAdmin({
-  allowedRoles = ["Admin", "Super Admin"],
-  children,
-}: Props) {
-  const { isAuthenticated, user, loading } = useAuthStore();
+  console.log("RequireAdmin:", { isLoading, isError, data });
 
-  console.log("RequireAdmin checking auth state:", { isAuthenticated, user, loading });
+  if (isLoading) return <div className="p-6 text-center">Authenticating...</div>;
+  if (isError || !data?.id) return <Navigate to="/admin/login" replace />;
 
-  if (loading) {
-    return <div className="p-8">Checking session…</div>;
-  }
-
-  if (!isAuthenticated || !user) {
-    return <Navigate to="/admin/login" replace />;
-  }
-
-  if (!allowedRoles.includes(user.role)) {
-    return <Navigate to="/admin/login" replace />;
-  }
-
-  return children;
+  // Lolos: render anak atau Outlet
+  return children ?? <Outlet />;
 }

@@ -10,44 +10,20 @@ export interface CustomRequest extends Request {
 
 // FIX: The return type is changed from 'void' to 'Promise<void | Response>'
 // This allows the function to either call next() (void) or send a response directly.
-export const protect = async (
+export const protect = (
   req: CustomRequest,
   res: Response,
   next: NextFunction
-): Promise<void | Response> => {
-  let token;
-  if (
-    req.headers.authorization &&
-    req.headers.authorization.startsWith("Bearer")
-  ) {
-    token = req.headers.authorization.split(" ")[1];
-  } else if (req.cookies.jwt) {
-    token = req.cookies.jwt;
-  }
-
-  if (!token) {
-    const message = "You are not logged in! Please log in to get access.";
-    // FIX: This return is now valid because of the updated function signature.
-    return next(new AppError(message, 401));
-  }
-
+): void | Response => {
+  console.log("Cookies received by protect middleware:", req.cookies);
+  const token = req.cookies?.token;
+  if (!token) return res.sendStatus(401);
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
-      id: number;
-    };
-
-    const currentUser = await UserModel.findByPk(decoded.id);
-
-    if (!currentUser) {
-      const message = "The user belonging to this token does no longer exist.";
-      return next(new AppError(message, 401));
-    }
-
-    req.user = currentUser;
-    next();
-  } catch (err) {
-    const message = "Invalid token. Please log in again.";
-    return next(new AppError(message, 401));
+    const payload = jwt.verify(token, process.env.JWT_SECRET!) as any;
+    req.user = payload;
+    return next();
+  } catch {
+    return res.sendStatus(401);
   }
 };
 

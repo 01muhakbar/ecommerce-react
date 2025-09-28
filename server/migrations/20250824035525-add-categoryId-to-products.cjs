@@ -2,18 +2,24 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.addColumn('Products', 'categoryId', {
-      type: Sequelize.INTEGER,
-      references: {
-        model: 'Categories',
-        key: 'id',
-      },
-      onUpdate: 'CASCADE',
-      onDelete: 'SET NULL',
-    });
+    const table = await queryInterface.describeTable('Products');
+    if (!table['categoryId']) {
+      await queryInterface.addColumn('Products', 'categoryId', {
+        type: Sequelize.INTEGER.UNSIGNED,
+        references: {
+          model: 'Categories',
+          key: 'id',
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'SET NULL',
+      });
+    }
   },
 
   down: async (queryInterface, Sequelize) => {
-    await queryInterface.removeColumn('Products', 'categoryId');
+    const table = await queryInterface.describeTable('Products');
+    if (table['categoryId']) {
+      await queryInterface.removeColumn('Products', 'categoryId');
+    }
   }
 };

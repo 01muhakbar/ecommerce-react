@@ -1,107 +1,189 @@
-import { Op } from 'sequelize';
-import { Request, Response } from 'express';
-import { User } from '../models/User.js';
-import bcrypt from 'bcryptjs';
+import { Request, Response } from "express";
+import bcrypt from "bcryptjs";
+import { initializedDbPromise } from "../models/index.js";
 
-const sortMap: Record<string, string> = { createdAt: 'created_at', name: 'name', email: 'email' };
+const db = await initializedDbPromise;
+const { Staff } = db;
 
-export const getStaff = async (req: Request, res: Response) => {
+const toAvatarUrl = (req: Request, filename?: string | null) => {
+  if (!filename) return undefined;
+  const base = process.env.BASE_URL ?? `${req.protocol}://${req.get("host")}`;
+  return `${base}/uploads/staff/${filename}`;
+};
+
+const norm = (v: any): string[] => {
+  if (Array.isArray(v)) return v.filter((x: any) => typeof x === "string");
+  if (typeof v === "string") {
+    try { const j = JSON.parse(v); if (Array.isArray(j)) return j; } catch {}
+    return v.split(",").map((s: string) => s.trim()).filter(Boolean);
+  }
+  if (v && typeof v === "object") return Object.values(v).filter((x: any) => typeof x === "string");
+  return [];
+};
+
+export async function listStaff(req: Request, res: Response) {
+  const q = (req.query.q as string)?.trim().toLowerCase() ?? "";
+
+  const all = await Staff.findAll({ order: [["id", "DESC"]] });
+  const filtered = q
+    ? all.filter(s =>
+        [s.name, s.email, s.contactNumber].some(v => (v ?? "").toLowerCase().includes(q))
+      )
+    : all;
+
+  res.json(filtered.map(s => ({
+    id: s.id,
+    name: s.name,
+    email: s.email,
+    role: s.role,
+    routes: norm(s.routes),
+    contactNumber: s.contactNumber,
+    joiningDate: s.joiningDate,
+    avatarUrl: toAvatarUrl(req, s.avatarUrl),
+    status: s.status,
+    published: s.published,
+  })));
+}
+
+export async function createStaff(req: Request, res: Response) {
   try {
-    const page = Number(req.query.page ?? 1);
-    const limit = Number(req.query.limit ?? 10);
-    const q = (req.query.q as string) ?? '';
-    const role = (req.query.role as string) || undefined;
-    const sortBy = sortMap[String(req.query.sortBy ?? 'createdAt')] ?? 'created_at';
-    const sort = (String(req.query.sort ?? 'DESC').toUpperCase() === 'ASC') ? 'ASC' : 'DESC';
+    const {
+      name, email, password, contactNumber, joiningDate, role,
+    } = req.body as Record<string, string>;
 
-    const where: any = {};
-    if (q) where[Op.or] = [
-      { name: { [Op.like]: `%${q}%` } },
-      { email: { [Op.like]: `%${q}%` } },
-      { phoneNumber: { [Op.like]: `%${q}%` } },
-    ];
-    if (role) where.role = role;
+    const routesRaw = (req.body["routes[]"] ?? req.body["routes"]) as string | string[] | undefined;
+    const routes = Array.isArray(routesRaw) ? routesRaw : routesRaw ? [routesRaw] : [];
 
-    const { rows, count } = await User.findAndCountAll({
-      where,
-      attributes: ['id','name','email','phoneNumber','role','isActive','isPublished','createdAt'],
-      order: [[sortBy, sort]],
-      limit,
-      offset: (page - 1) * limit,
+    if (!name || !email || !password) return res.status(400).json({ message: "name, email, password required" });
+    if (!["Super Admin","Admin","Manager","Staff"].includes(role ?? "Staff")) return res.status(400).json({ message: "invalid role" });
+
+    const exists = await Staff.findOne({ where: { email } });
+    if (exists) return res.status(409).json({ message: "email already exists" });
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const filename = (req.file && req.file.filename) || undefined;
+    const staff = await Staff.create({
+      name,
+      email,
+      passwordHash,
+      contactNumber: contactNumber || null,
+      joiningDate: joiningDate || null,
+      role: role || "Staff",
+      routes,
+      avatarUrl: filename,
     });
 
-    return res.json({
-      data: rows,
-      meta: { page, limit, total: count, totalPages: Math.ceil(count/limit) }
+    res.status(201).json({
+      id: staff.id,
+      name: staff.name,
+      email: staff.email,
+      role: staff.role,
+      routes: norm(staff.routes),
+      contactNumber: staff.contactNumber,
+      joiningDate: staff.joiningDate,
+      avatarUrl: toAvatarUrl(req, staff.avatarUrl),
+      status: staff.status,
+      published: staff.published,
     });
-  } catch (err: any) {
-    console.error('ADMIN GET STAFF ERROR:', err?.parent ?? err);
-    return res.status(500).json({ message: 'Failed to fetch staff' });
+  } catch (e: any) {
+    console.error(e);
+    res.status(500).json({ message: "failed to create staff" });
   }
-};
+}
 
-export const createStaff = async (req: Request, res: Response) => {
-  try {
-    const { name, email, phone, role, password, isActive = true, isPublished = true } = req.body;
-    const hashed = await bcrypt.hash(password, 10);
-    const u = await User.create({ name, email, phoneNumber: phone, role, password: hashed, isActive, isPublished });
-    res.status(201).json(u);
-  } catch (err: any) {
-    console.error('ADMIN CREATE STAFF ERROR:', err?.parent ?? err);
-    res.status(400).json({ message: 'Failed to create staff' });
-  }
-};
+export async function updateStatus(req: Request, res: Response) {
+  const s = await Staff.findByPk(req.params.id);
+  if(!s) return res.status(404).json({message:"Not found"});
+  const status = req.body.status;
+  if (!["Active","Inactive"].includes(status)) return res.status(400).json({message:"invalid status"});
+  s.status = status;
+  await s.save();
+  res.json(s);
+}
 
-export const updateStaff = async (req: Request, res: Response) => {
-  try {
-    const id = Number(req.params.id);
-    const { name, email, phone, role, isActive, isPublished } = req.body;
-    const [n] = await User.update({ name, email, phoneNumber: phone, role, isActive, isPublished }, { where: { id } });
-    if (!n) return res.status(404).json({ message: 'Not found' });
-    const fresh = await User.findByPk(id, { attributes: ['id','name','email','phoneNumber','role','isActive','isPublished'] });
-    res.json(fresh);
-  } catch (err: any) {
-    console.error('ADMIN UPDATE STAFF ERROR:', err?.parent ?? err);
-    res.status(400).json({ message: 'Failed to update staff' });
-  }
-};
+export async function updatePublishedStatus(req: Request, res: Response) {
+  const s = await Staff.findByPk(req.params.id);
+  if (!s) return res.status(404).json({ message: "Not found" });
 
-export const deleteStaff = async (req: Request, res: Response) => {
-  try {
-    const id = Number(req.params.id);
-    const n = await User.destroy({ where: { id } });
-    if (!n) return res.status(404).json({ message: 'Not found' });
-    res.json({ ok: true });
-  } catch (err: any) {
-    console.error('ADMIN DELETE STAFF ERROR:', err?.parent ?? err);
-    res.status(400).json({ message: 'Failed to delete staff' });
-  }
-};
+  const published = !!req.body.published;
+  s.published = published;
 
-export const toggleActive = async (req: Request, res: Response) => {
-  try {
-    const id = Number(req.params.id);
-    const user = await User.findByPk(id);
-    if (!user) return res.status(404).json({ message: 'Not found' });
-    user.isActive = !user.isActive;
-    await user.save();
-    res.json({ id: user.id, isActive: user.isActive });
-  } catch (err: any) {
-    console.error('ADMIN TOGGLE ACTIVE ERROR:', err?.parent ?? err);
-    res.status(400).json({ message: 'Failed to toggle' });
-  }
-};
+  // sinkronisasi status sesuai kebutuhanmu:
+  s.status = published ? "Active" : "Inactive";
 
-export const togglePublished = async (req: Request, res: Response) => {
+  await s.save();
+  return res.json(s);
+}
+
+export async function getStaff(req: Request, res: Response) {
+  const staff = await Staff.findByPk(req.params.id);
+  if(!staff) return res.status(404).json({message:"Not found"});
+  
+  const staffJson = staff.toJSON();
+  staffJson.routes = norm(staffJson.routes);
+  staffJson.avatarUrl = toAvatarUrl(req, staffJson.avatarUrl);
+
+  res.json(staffJson);
+}
+
+export async function updateStaff(req: Request, res: Response) {
+  const s = await Staff.findByPk(req.params.id);
+  if(!s) return res.status(404).json({message:"Not found"});
+
+  const { name, email, contactNumber, joiningDate, role } = req.body;
+  const routesRaw = (req.body["routes[]"] ?? req.body["routes"]) as string | string[] | undefined;
+  const routes = Array.isArray(routesRaw) ? routesRaw : routesRaw ? [routesRaw] : s.routes;
+
+  if (name !== undefined) s.name = name;
+  if (email !== undefined) s.email = email;
+  if (contactNumber !== undefined) s.contactNumber = contactNumber || null;
+  if (joiningDate !== undefined) s.joiningDate = joiningDate || null;
+  if (role !== undefined) s.role = role;
+  if (routes !== undefined) s.routes = routes;
+  if (req.file) s.avatarUrl = req.file.filename;
+
+  await s.save();
+  
+  const staffJson = s.toJSON();
+  staffJson.routes = norm(staffJson.routes);
+  staffJson.avatarUrl = toAvatarUrl(req, staffJson.avatarUrl);
+
+  res.json(staffJson);
+}
+
+export async function deleteStaff(req: Request, res: Response) {
+  const count = await Staff.destroy({ where: { id: req.params.id }});
+  if(!count) return res.status(404).json({message:"Not found"});
+  res.json({ ok: true });
+}
+
+export async function changePassword(req: Request, res: Response) {
   try {
-    const id = Number(req.params.id);
-    const user = await User.findByPk(id);
-    if (!user) return res.status(404).json({ message: 'Not found' });
-    user.isPublished = !user.isPublished;
-    await user.save();
-    res.json({ id: user.id, isPublished: user.isPublished });
-  } catch (err: any) {
-    console.error('ADMIN TOGGLE PUBLISHED ERROR:', err?.parent ?? err);
-    res.status(400).json({ message: 'Failed to toggle' });
+    const { id } = req.params;
+    const { oldPassword, newPassword } = req.body;
+
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({ message: "Old password and new password are required." });
+    }
+
+    const staff = await Staff.findByPk(id);
+    if (!staff) {
+      return res.status(404).json({ message: "Staff not found" });
+    }
+
+    const isMatch = await bcrypt.compare(oldPassword, staff.passwordHash);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Incorrect old password." });
+    }
+
+    staff.passwordHash = await bcrypt.hash(newPassword, 10);
+    await staff.save();
+
+    res.status(200).json({ message: "Password updated successfully." });
+
+  } catch (e: any) {
+    console.error(e);
+    res.status(500).json({ message: "Failed to change password." });
   }
-};
+}

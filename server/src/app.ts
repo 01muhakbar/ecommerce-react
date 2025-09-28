@@ -1,3 +1,5 @@
+// Load environment variables as early as possible
+import "./preload";
 import express from "express";
 import path from "path";
 import cookieParser from "cookie-parser";
@@ -45,26 +47,27 @@ app.use(
   })
 ); // Aktifkan CORS untuk semua rute
 
-// Sajikan file statis dari folder 'public'
+// Sajikan file statis dari folder 'public' dan 'uploads'
 app.use(express.static(path.join(__dirname, "..", "public")));
+app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 
 // --- Rute API --- (Semua rute sekarang adalah API)
 
-// Rute utama API v1
-app.use("/api/v1/users", userRoutes);
-app.use("/api/v1/auth", authRoutes);
-app.use("/api/v1/products", productRoutes);
-app.use("/api/v1/cart", cartRoutes);
-app.use("/api/v1/sellers", sellerRoutes);
-app.use("/api/v1/categories", categoryRoutes);
-app.use("/api/v1/admin/categories", categoryAdminRoutes);
-app.use("/api/v1/orders", orderRoutes);
-app.use("/api/v1/admin", adminRoutes);
-app.use("/api/v1/admin/products", adminProductRoutes);
-app.use("/api/v1/admin/orders", adminOrderRoutes);
-app.use("/api/v1/admin/customers", adminCustomerRoutes);
-app.use("/api/v1/admin/staff", adminStaffRoutes);
-app.use("/api/v1/dev", devRoutes); // Daftarkan rute baru
+// Rute utama API
+app.use("/api/users", userRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/products", productRoutes);
+app.use("/api/cart", cartRoutes);
+app.use("/api/sellers", sellerRoutes);
+app.use("/api/categories", categoryRoutes);
+app.use("/api/admin/categories", categoryAdminRoutes);
+app.use("/api/orders", orderRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/admin/products", adminProductRoutes);
+app.use("/api/admin/orders", adminOrderRoutes);
+app.use("/api/admin/customers", adminCustomerRoutes);
+app.use("/api/admin/staff", adminStaffRoutes);
+app.use("/api/dev", devRoutes); // Daftarkan rute baru
 
 // --- Penanganan Rute Tidak Ditemukan (404) ---
 // Tangani semua rute yang tidak cocok dengan rute di atas
@@ -141,16 +144,17 @@ const startServer = async () => {
     // Test database connection
     try {
       await db.sequelize.authenticate();
-      console.log(`DB connection OK as ${process.env.DB_USER} on ${process.env.DB_NAME}`);
+      console.log(
+        `DB connection OK as ${process.env.DB_USER} on ${process.env.DB_NAME}`
+      );
     } catch (err) {
-      console.error('DB connection FAILED:', err);
+      console.error("DB connection FAILED:", err);
       throw err; // hentikan startServer jika gagal
     }
 
     // Di mode development, pastikan ada admin default
     if (process.env.NODE_ENV === "development") {
-      await db.sequelize.sync({ alter: true }); // Use alter: true to keep data
-      console.log("Database synchronized with { alter: true }.");
+      console.log("Database synchronized.");
       await createDefaultAdmin(db);
     }
 

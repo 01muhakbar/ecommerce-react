@@ -1,5 +1,4 @@
 import express, { Request, Response, NextFunction } from "express";
-// We import a model (e.g., User) to get access to the shared sequelize instance.
 import { User } from "../models/User.js";
 
 /**
@@ -17,7 +16,6 @@ export const syncDatabase = async (
     const syncOptions = force ? { force: true } : alter ? { alter: true } : {};
 
     if (force || alter) {
-      // Access the sequelize instance from any imported model
       await User.sequelize.sync(syncOptions);
     }
 

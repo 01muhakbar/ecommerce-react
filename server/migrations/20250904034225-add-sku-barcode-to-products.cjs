@@ -3,13 +3,19 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up (queryInterface, Sequelize) {
-    await queryInterface.addColumn('Products', 'barcode', {
-      type: Sequelize.STRING,
-      allowNull: true,
-    });
+    const table = await queryInterface.describeTable('Products');
+    if (!table['barcode']) {
+      await queryInterface.addColumn('Products', 'barcode', {
+        type: Sequelize.STRING,
+        allowNull: true,
+      });
+    }
   },
 
   async down (queryInterface, Sequelize) {
-    await queryInterface.removeColumn('Products', 'barcode');
+    const table = await queryInterface.describeTable('Products');
+    if (table['barcode']) {
+      await queryInterface.removeColumn('Products', 'barcode');
+    }
   }
 };
