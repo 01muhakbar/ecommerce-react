@@ -1,5 +1,5 @@
 import express, { Request, Response, NextFunction } from "express";
-import { User } from "../models/User.js";
+import { sequelize } from "../models";
 
 /**
  * Synchronizes the database.
@@ -16,7 +16,7 @@ export const syncDatabase = async (
     const syncOptions = force ? { force: true } : alter ? { alter: true } : {};
 
     if (force || alter) {
-      await User.sequelize.sync(syncOptions);
+      await sequelize.sync(syncOptions as any);
     }
 
     const syncMode = force ? "force: true" : alter ? "alter: true" : "no-op";

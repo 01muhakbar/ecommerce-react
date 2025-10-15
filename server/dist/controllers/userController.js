@@ -1,12 +1,9 @@
 import bcrypt from "bcryptjs";
-import { initializedDbPromise } from "../models/index.js";
-const db = await initializedDbPromise;
-const { User } = db;
+import { User } from "../models";
 export const getMe = async (req, res, next) => {
     try {
         const userId = req.user?.id;
         if (!userId) {
-            // Seharusnya tidak terjadi jika middleware isAuth bekerja
             return res.status(401).json({ message: "Not authorized" });
         }
         const user = await User.findByPk(userId, {
@@ -86,7 +83,16 @@ export const createUser = async (req, res, next) => {
  */
 export const updateUser = async (req, res, next) => {
     try {
-        const [updatedRows] = await User.update(req.body, {
+        const { name, role } = req.body;
+        const updateData = {};
+        if (name)
+            updateData.name = name;
+        // Type guard for role
+        const isValidRole = (role) => role === "Admin" || role === "Super Admin" || role === "User";
+        if (role && isValidRole(role)) {
+            updateData.role = role;
+        }
+        const [updatedRows] = await User.update(updateData, {
             where: { id: req.params.id },
         });
         if (updatedRows === 0) {

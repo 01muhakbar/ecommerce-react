@@ -1,17 +1,17 @@
 {
-  "name": "project-ecommerce",
+  "name": "server",
   "version": "1.0.0",
   "type": "module",
   "description": "A simple e-commerce project",
   "main": "dist/src/app.js",
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/app.js",
-    "dev:vite": "vite",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
     "test": "echo \"No test specified for server\" && exit 0",
     "build:css": "postcss ./public/css/input.css -o ./public/css/style.css --watch",
-    "db:migrate": "npx sequelize-cli db:migrate",
-    "reset:sa": "ts-node --esm src/scripts/resetSuperAdmin.ts"
+    "db:migrate": "sequelize db:migrate",
+    "db:seed:super": "tsx src/scripts/seedSuperAdmin.ts"
   },
   "keywords": [],
   "author": "",
@@ -24,6 +24,7 @@
     "bcryptjs": "^3.0.2",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "dayjs": "^1.11.18",
     "dotenv": "^16.6.1",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",

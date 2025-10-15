@@ -11,9 +11,8 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev:server": "npm run build -w @ecommerce/schemas && tsx watch --require dotenv/config server/src/app.ts",
-    "dev:client": "npm run dev -w client"
+    "build": "pnpm -F server build && pnpm -F client build",
+    "dev": "echo use package-level dev scripts"
   },
   "repository": {
     "type": "git",
@@ -39,6 +38,7 @@
     "zod": "^4.1.5"
   },
   "dependencies": {
+    "multer": "^2.0.2",
     "mysql2": "^3.14.5",
     "sequelize": "^6.37.7"
   }

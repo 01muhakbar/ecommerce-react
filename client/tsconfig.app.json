@@ -27,5 +27,13 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // pastikan tsc tidak meng-compile test saat build
+  "exclude": [
+    "dist",
+    "node_modules",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/**/__tests__/**"
+  ]
 }

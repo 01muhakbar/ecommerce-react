@@ -21,6 +21,8 @@ export class Category extends Model {
         }, {
             sequelize,
             modelName: "Category",
+            tableName: "Categories",
+            underscored: true,
         });
         return Category;
     }

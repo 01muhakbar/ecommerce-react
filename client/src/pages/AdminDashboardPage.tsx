@@ -1,266 +1,240 @@
-import React from "react";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/api/axios";
-import type { Order } from "../types/order";
-import StatCard from "../components/StatCard"; // Assuming this is your StatCard component
-import SalesChart from "../components/SalesChart"; // Assuming this is your SalesChart component
-import BestSellersChart from "../components/BestSellersChart"; // Assuming this is your BestSellersChart component
-import OrdersTable from "../components/OrdersTable"; // Import the new OrdersTable component
-import { useAuthStore } from "@/store/authStore";
+import React, { lazy, Suspense, useMemo } from "react";
+import { Link } from "react-router-dom";
+import { formatIDR } from "@/utils/currency";
+import { useAdminStats } from "@/hooks/admin/useAdminStats";
+import { cn } from "@/utils/cn";
 
-// --- Icon Components for StatCards ---
-const DollarSignIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    {...props}
-  >
-    <line x1="12" y1="1" x2="12" y2="23" />
-    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-  </svg>
+const WeeklySalesCard = lazy(() =>
+  import("@/components/admin/charts/WeeklySalesCard").then((m) => ({
+    default: m.WeeklySalesCard,
+  }))
+);
+const BestSellingCard = lazy(() =>
+  import("@/components/admin/charts/BestSellingCard").then((m) => ({
+    default: m.BestSellingCard,
+  }))
 );
 
-const ShoppingCartIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    {...props}
+type EBProps = { fallback: React.ReactNode; children: React.ReactNode };
+type EBState = { hasError: boolean };
+class CardErrorBoundary extends React.Component<EBProps, EBState> {
+  state: EBState = { hasError: false };
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch() {}
+  render() {
+    if (this.state.hasError) return <>{this.props.fallback}</>;
+    return this.props.children as React.ReactElement;
+  }
+}
+
+const CardSkeleton = ({ className }: { className?: string }) => (
+  <div
+    className={cn("rounded-xl border border-slate-200 bg-white p-5", className)}
   >
-    <circle cx="9" cy="21" r="1" />
-    <circle cx="20" cy="21" r="1" />
-    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-  </svg>
+    <div className="h-6 w-1/3 animate-pulse rounded bg-slate-200" />
+    <div className="mt-4 h-8 w-1/4 animate-pulse rounded bg-slate-200" />
+    <div className="mt-6 h-40 w-full animate-pulse rounded bg-slate-200" />
+  </div>
 );
 
-const CheckCircleIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    {...props}
-  >
-    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-    <polyline points="22 4 12 14.01 9 11.01" />
-  </svg>
+const EmptyWeeklyCard = () => (
+  <div className="rounded-xl border border-slate-200 bg-white p-5">
+    <div className="mb-2 text-base font-semibold">Weekly Sales</div>
+    <p className="text-slate-500">
+      Belum ada penjualan minggu ini.{" "}
+      <Link className="text-emerald-600 underline" to="/admin/orders">
+        Buat order
+      </Link>
+    </p>
+  </div>
 );
 
-// --- TYPE DEFINITIONS ---
+const EmptyBestSellingCard = () => (
+  <div className="rounded-xl border border-slate-200 bg-white p-5">
+    <div className="mb-2 text-base font-semibold">Best Selling Products</div>
+    <p className="text-slate-500">
+      Belum ada produk terlaris.{" "}
+      <Link className="text-emerald-600 underline" to="/admin/catalog/products">
+        Tambah produk
+      </Link>
+    </p>
+  </div>
+);
 
-interface SummaryStats {
-  todaySales: number;
-  yesterdaySales: number;
-  thisMonthSales: number;
-  lastMonthSales: number;
-  allTimeSales: number;
-}
-
-interface OrderStatusCounts {
-  total: number;
-  pending: number;
-  processing: number;
-  delivered: number;
-}
-
-interface WeeklySalesData {
-  date: string;
-  sales: number;
-}
-
-interface BestSellingProduct {
-  name: string;
-  sales: number;
-}
-
-interface DashboardData {
-  summaryStats: SummaryStats;
-  orderStatusCounts: OrderStatusCounts;
-  weeklySalesData: WeeklySalesData[];
-  bestSellingProducts: BestSellingProduct[];
-  recentOrders: Order[];
-}
-
-// --- HELPER FUNCTIONS ---
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-  }).format(amount);
+const DEFAULT_STATS = {
+  todayOrders: 0,
+  yesterdayOrders: 0,
+  thisMonth: 0,
+  lastMonth: 0,
+  allTimeSales: 0,
+  totalOrders: 0,
+  pending: 0,
+  processing: 0,
+  delivered: 0,
 };
 
-const AdminDashboardPage: React.FC = () => {
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+export default function AdminDashboardPage() {
+  const {
+    data: rawStats,
+    isLoading: statsLoading,
+    isError: statsError,
+  } = useAdminStats();
 
-  const { data, isLoading, isError, error } = useQuery<DashboardData>({
-    queryKey: ["adminDashboardStatistics"],
-    queryFn: async () => {
-      const response = await api.get("/admin/dashboard/statistics");
-      return response.data.data; // Perbaikan: Akses objek 'data' di dalam respons
-    },
-    enabled: isAuthenticated, // Hanya jalankan query jika pengguna terotentikasi
-  });
-
-  if (isLoading) {
-    return (
-      <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-pulse">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-32 bg-gray-300 rounded-lg shadow-md"></div>
-        ))}
-        <div className="lg:col-span-2 h-80 bg-gray-300 rounded-lg shadow-md"></div>
-        <div className="lg:col-span-2 h-80 bg-gray-300 rounded-lg shadow-md"></div>
-      </div>
-    );
-  }
-
-  if (isError) {
-    const status = (error as any)?.response?.status;
-    const msg = (error as any)?.response?.data?.error || error.message;
-    let friendlyMessage = `Failed to fetch dashboard: ${msg}`;
-
-    if (status === 401) {
-      friendlyMessage = "Unauthorized: Please login again.";
-    } else if (status === 403) {
-      const actualRole = (error as any)?.response?.data?.actual;
-      friendlyMessage = `Forbidden: Your account (Role: ${actualRole}) lacks permission to access this resource.`;
-    }
-
-    return (
-      <div className="p-6 text-red-600 bg-red-100 border border-red-200 rounded-lg">
-        <h2 className="text-xl font-semibold mb-2">Error Loading Dashboard</h2>
-        <p>{friendlyMessage}</p>
-      </div>
-    );
-  }
-
-  // Defensively access data to prevent crashes
-  const summaryStats = data?.summaryStats;
-  const orderStatusCounts = data?.orderStatusCounts;
-  const weeklySalesData = data?.weeklySalesData || [];
-  const bestSellingProducts = data?.bestSellingProducts || [];
-  const recentOrders = data?.recentOrders || [];
+  const stats = useMemo(() => {
+    if (!rawStats || statsError) return DEFAULT_STATS;
+    return {
+      todayOrders: Number(rawStats.todayAmount ?? 0),
+      yesterdayOrders: Number(rawStats.yesterdayAmount ?? 0),
+      thisMonth: Number(rawStats.thisMonthAmount ?? 0),
+      lastMonth: Number(rawStats.lastMonthAmount ?? 0),
+      allTimeSales: Number(rawStats.allTimeAmount ?? 0),
+      totalOrders: Number(rawStats.totalOrders ?? 0),
+      pending: Number(rawStats.ordersPending ?? 0),
+      processing: Number(rawStats.ordersProcessing ?? 0),
+      delivered: Number(rawStats.ordersDelivered ?? 0),
+    };
+  }, [rawStats, statsError]);
 
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-bold text-gray-800 mb-6">Admin Dashboard</h1>
+    <main className="max-w-screen-2xl mx-auto px-3 sm:px-4 lg:px-6 py-6 space-y-6">
+      <header className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Dashboard Overview</h1>
+      </header>
 
-      {/* Summary Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <StatCard
-          title="Penjualan Hari Ini"
-          value={formatCurrency(summaryStats?.todaySales || 0)}
-          icon={<DollarSignIcon />}
-          color="bg-blue-500"
+      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+        <KpiCard
+          title="Today Orders"
+          value={formatIDR(stats.todayOrders)}
+          tone="emerald"
+          loading={statsLoading}
         />
-        <StatCard
-          title="Penjualan Kemarin"
-          value={formatCurrency(summaryStats?.yesterdaySales || 0)}
-          icon={<DollarSignIcon />}
-          color="bg-green-500"
+        <KpiCard
+          title="Yesterday Orders"
+          value={formatIDR(stats.yesterdayOrders)}
+          tone="orange"
+          loading={statsLoading}
         />
-        <StatCard
-          title="Pesanan Total"
-          value={orderStatusCounts?.total || 0}
-          icon={<ShoppingCartIcon />}
-          color="bg-purple-500"
+        <KpiCard
+          title="This Month"
+          value={formatIDR(stats.thisMonth)}
+          tone="emerald"
+          loading={statsLoading}
         />
-        <StatCard
-          title="Pesanan Selesai"
-          value={orderStatusCounts?.delivered || 0}
-          icon={<CheckCircleIcon />}
-          color="bg-teal-500"
+        <KpiCard
+          title="Last Month"
+          value={formatIDR(stats.lastMonth)}
+          tone="blue"
+          loading={statsLoading}
         />
-      </div>
+        <KpiCard
+          title="All-Time Sales"
+          value={formatIDR(stats.allTimeSales)}
+          tone="teal"
+          loading={statsLoading}
+        />
+      </section>
 
-      {/* Monthly Sales & Order Status */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <div className="bg-white p-4 rounded-lg shadow-md">
-          <h3 className="text-lg font-semibold mb-4">
-            Ringkasan Penjualan Bulanan
-          </h3>
-          <div className="space-y-2">
-            <p>
-              Penjualan Bulan Ini:{" "}
-              <span className="font-bold text-gray-800">
-                {formatCurrency(summaryStats?.thisMonthSales || 0)}
-              </span>
-            </p>
-            <p>
-              Penjualan Bulan Lalu:{" "}
-              <span className="font-bold text-gray-800">
-                {formatCurrency(summaryStats?.lastMonthSales || 0)}
-              </span>
-            </p>
-            <p>
-              Penjualan Sepanjang Waktu:{" "}
-              <span className="font-bold text-gray-800">
-                {formatCurrency(summaryStats?.allTimeSales || 0)}
-              </span>
-            </p>
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-lg shadow-md">
-          <h3 className="text-lg font-semibold mb-4">Status Pesanan</h3>
-          <div className="space-y-2">
-            <p>
-              Total Pesanan:{" "}
-              <span className="font-bold">{orderStatusCounts?.total || 0}</span>
-            </p>
-            <p>
-              Pending:{" "}
-              <span className="font-bold text-yellow-600">
-                {orderStatusCounts?.pending || 0}
-              </span>
-            </p>
-            <p>
-              Processing:{" "}
-              <span className="font-bold text-blue-600">
-                {orderStatusCounts?.processing || 0}
-              </span>
-            </p>
-            <p>
-              Delivered:{" "}
-              <span className="font-bold text-green-600">
-                {orderStatusCounts?.delivered || 0}
-              </span>
-            </p>
-          </div>
-        </div>
-      </div>
+      <section className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-4">
+        <StatBox
+          label="Total Order"
+          value={stats.totalOrders}
+          loading={statsLoading}
+        />
+        <StatBox
+          label="Orders Pending"
+          value={stats.pending}
+          loading={statsLoading}
+        />
+        <StatBox
+          label="Orders Processing"
+          value={stats.processing}
+          loading={statsLoading}
+        />
+        <StatBox
+          label="Orders Delivered"
+          value={stats.delivered}
+          loading={statsLoading}
+        />
+      </section>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <SalesChart data={weeklySalesData} />
-        <BestSellersChart data={bestSellingProducts} />
-      </div>
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <CardErrorBoundary fallback={<EmptyWeeklyCard />}>
+          <Suspense fallback={<CardSkeleton />}>
+            <WeeklySalesCard defaultDays={7} />
+          </Suspense>
+        </CardErrorBoundary>
 
-      {/* Recent Order Section */}
-      <div className="mt-8">
-        {recentOrders && recentOrders.length > 0 && (
-          <OrdersTable title="Recent Orders" orders={recentOrders} />
+        <CardErrorBoundary fallback={<EmptyBestSellingCard />}>
+          <Suspense fallback={<CardSkeleton />}>
+            <BestSellingCard limit={5} />
+          </Suspense>
+        </CardErrorBoundary>
+      </section>
+    </main>
+  );
+}
+
+function KpiCard({
+  title,
+  value,
+  tone = "emerald",
+  loading,
+}: {
+  title: string;
+  value: string | number;
+  tone?: "emerald" | "orange" | "blue" | "teal";
+  loading?: boolean;
+}) {
+  if (loading) return <CardSkeleton />;
+
+  const toneMap: Record<string, string> = {
+    emerald: "bg-emerald-600",
+    orange: "bg-orange-500",
+    blue: "bg-blue-600",
+    teal: "bg-teal-600",
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div
+        className={cn(
+          "mb-3 inline-block rounded-md px-2 py-1 text-white text-xs",
+          toneMap[tone]
         )}
+      >
+        {title}
+      </div>
+      <div className="text-2xl font-semibold">{value}</div>
+      <div className="mt-1 text-xs text-slate-500">
+        Semua akun (super admin)
       </div>
     </div>
   );
-};
+}
 
-export default AdminDashboardPage;
+function StatBox({
+  label,
+  value,
+  loading,
+}: {
+  label: string;
+  value: number;
+  loading?: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="h-5 w-1/3 animate-pulse rounded bg-slate-200" />
+        <div className="mt-3 h-7 w-10 animate-pulse rounded bg-slate-200" />
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="text-slate-500">{label}</div>
+      <div className="mt-2 text-xl font-semibold">{value}</div>
+    </div>
+  );
+}

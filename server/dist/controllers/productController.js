@@ -1,7 +1,7 @@
 import { Op } from "sequelize";
-import { initializedDbPromise } from "../models/index.js";
-const db = await initializedDbPromise;
-const { Product, User, Category } = db;
+import { Product } from "../models/Product";
+import { User } from "../models/User";
+import { Category } from "../models/Category";
 // Fungsi untuk membuat produk baru
 export const createProduct = async (req, res) => {
     try {
@@ -131,12 +131,13 @@ export const getProductById = async (req, res) => {
 // [REFACTORED] Get all products for the logged-in seller
 export const getSellerProducts = async (req, res) => {
     try {
-        if (!req.user?.id) {
+        const user = req.user;
+        if (!user?.id) {
             res.status(401).json({ message: "Unauthorized" });
             return;
         }
         const products = await Product.findAll({
-            where: { userId: req.user.id },
+            where: { userId: user.id },
             order: [["createdAt", "DESC"]],
         });
         res.status(200).json({ success: true, data: products });
@@ -151,12 +152,13 @@ export const getSellerProducts = async (req, res) => {
 // [REFACTORED] Get product data for the edit page
 export const getEditProductPage = async (req, res) => {
     try {
-        if (!req.user?.id) {
+        const user = req.user;
+        if (!user?.id) {
             res.status(401).json({ message: "Unauthorized" });
             return;
         }
         const product = await Product.findOne({
-            where: { id: req.params.id, userId: req.user.id },
+            where: { id: req.params.id, userId: user.id },
         });
         if (!product) {
             res.status(404).json({

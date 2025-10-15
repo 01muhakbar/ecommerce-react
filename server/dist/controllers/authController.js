@@ -1,40 +1,49 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import { initializedDbPromise } from "../models/index.js";
-import sendEmail from "../services/emailService.js";
+import { Staff } from "../models/Staff";
+import { User } from "../models/User";
 import { Op } from "sequelize";
-const db = await initializedDbPromise;
-const { User } = db;
+import { normalizeRoleServer } from "../utils/role";
+const jwtConfig = {
+    secret: process.env.JWT_SECRET,
+    expiresIn: process.env.JWT_EXPIRES || "7d",
+    cookieName: process.env.JWT_COOKIE_NAME || "token",
+};
+const noop = (..._args) => Promise.resolve();
+const allowedAdminRoles = ["Admin", "Super Admin"];
+// Default JWT expiration format
+const DEFAULT_EXPIRES = "7d";
 // Helper function to sign JWT
 const signToken = (id, role) => {
-    const secret = process.env.JWT_SECRET;
-    if (!secret) {
+    if (!jwtConfig.secret) {
+        console.error("JWT_SECRET is not defined in environment variables.");
         throw new Error("JWT_SECRET is not defined");
     }
+    const payload = { id, role };
+    // Use a known valid expiration format
     const options = {
-        expiresIn: (process.env.JWT_EXPIRES_IN || "90d"),
+        expiresIn: DEFAULT_EXPIRES,
     };
-    console.log("Signing token with ID:", id, "and Role:", role);
-    return jwt.sign({ id, role }, secret, options);
+    return jwt.sign(payload, jwtConfig.secret, options);
 };
 // Helper function to create a token, set a cookie, and send the response
 export const createAndSendToken = (user, statusCode, res) => {
-    const token = signToken(user.id, user.role);
-    const cookieExpiresInDays = parseInt(process.env.JWT_COOKIE_EXPIRES_IN || "90", 10);
+    const cookieName = process.env.JWT_COOKIE_NAME || "token"; // Use JWT_COOKIE_NAME
+    const token = signToken(user.id, user.role); // This token is for the user, not admin
     const cookieOptions = {
-        expires: new Date(Date.now() + cookieExpiresInDays * 24 * 60 * 60 * 1000),
+        maxAge: 7 * 24 * 60 * 60 * 1000,
         httpOnly: true,
         path: "/",
-        sameSite: "lax", // Changed from "strict" to "lax"
-        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production" ||
+            process.env.COOKIE_SECURE === "true", // Use COOKIE_SECURE for more control
     };
-    res.cookie("jwt", token, cookieOptions);
+    res.cookie(cookieName, token, cookieOptions); // Use cookieName
     user.password = undefined;
     res.status(statusCode).json({
         status: "success",
         data: {
-            token,
             user: {
                 id: user.id,
                 name: user.name,
@@ -89,23 +98,22 @@ export const login = async (req, res, next) => {
     }
 };
 export const logout = (req, res) => {
-    res.cookie("jwt", "loggedout", {
-        expires: new Date(Date.now() + 10 * 1000),
+    const cookieName = process.env.JWT_COOKIE_NAME || "token"; // Use JWT_COOKIE_NAME
+    res.clearCookie(cookieName, {
+        path: "/",
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production" ||
+            process.env.COOKIE_SECURE === "true",
         httpOnly: true,
     });
     res
         .status(200)
         .json({ status: "success", message: "Logged out successfully" });
 };
-export const logoutAdmin = (req, res) => {
-    res.cookie("jwt", "loggedout", {
-        expires: new Date(Date.now() + 10 * 1000),
-        httpOnly: true,
-        path: "/", // Ensure the cookie is cleared from the root path
-    });
-    res
-        .status(200)
-        .json({ status: "success", message: "Logged out successfully" });
+export const adminLogout = (req, res) => {
+    res.clearCookie("access_token", { path: "/" });
+    res.clearCookie("token", { path: "/" }); // legacy
+    res.status(200).json({ ok: true, message: "logged out" });
 };
 export const forgotPassword = async (req, res, next) => {
     try {
@@ -122,11 +130,7 @@ export const forgotPassword = async (req, res, next) => {
         const resetURL = `${req.protocol}://${req.get("host")}/reset-password.html?token=${resetToken}`;
         const message = `Anda menerima email ini karena Anda (atau orang lain) telah meminta reset password untuk akun Anda.\n\nSilakan klik tautan ini untuk mereset password Anda: ${resetURL}\n\nJika Anda tidak meminta ini, abaikan email ini dan password Anda akan tetap sama.`;
         try {
-            await sendEmail({
-                email: user.email,
-                subject: "Reset Kata Sandi Anda",
-                message,
-            });
+            await noop(user.email, "Reset Kata Sandi Anda", message);
             res.status(200).json({
                 status: "success",
                 message: "Token reset password telah dikirim ke email Anda.",
@@ -150,6 +154,7 @@ export const forgotPassword = async (req, res, next) => {
     }
 };
 export const resetPassword = async (req, res, next) => {
+    // This function is for regular users, not admin.
     try {
         const hashedToken = crypto
             .createHash("sha256")
@@ -157,8 +162,8 @@ export const resetPassword = async (req, res, next) => {
             .digest("hex");
         const user = await User.findOne({
             where: {
-                passwordResetToken: hashedToken,
-                passwordResetExpires: { [Op.gt]: Date.now() },
+                resetToken: hashedToken,
+                resetTokenExpires: { [Op.gt]: new Date() },
             },
         });
         if (!user) {
@@ -168,7 +173,7 @@ export const resetPassword = async (req, res, next) => {
             });
             return;
         }
-        user.password = req.body.password;
+        user.password = await bcrypt.hash(req.body.password, 12);
         user.passwordResetToken = undefined;
         user.passwordResetExpires = undefined;
         await user.save();
@@ -181,31 +186,68 @@ export const resetPassword = async (req, res, next) => {
             .json({ status: "error", message: error.message });
     }
 };
-export const loginAdmin = async (req, res, next) => {
-    try {
-        const { email, password } = req.body;
-        // Query langsung untuk user dengan role admin untuk efisiensi
-        const user = await User.findOne({ where: { email, role: "admin" } });
-        // Gabungkan pengecekan user dan password untuk keamanan (mencegah user enumeration)
-        if (!user || !(await bcrypt.compare(password, user.password))) {
-            res
-                .status(401)
-                .json({ status: "fail", message: "Email atau password salah." });
-            return;
-        }
-        createAndSendToken(user, 200, res);
+export const adminLogin = async (req, res) => {
+    const { email, password } = req.body;
+    const staff = await Staff.findOne({ where: { email } });
+    if (!staff) {
+        return res.status(401).json({ message: "Invalid credentials" });
     }
-    catch (error) {
-        console.error("ADMIN LOGIN ERROR:", error);
-        res
-            .status(500)
-            .json({ status: "error", message: error.message });
+    const ok = await bcrypt.compare(password, staff.passwordHash);
+    if (!ok) {
+        return res.status(401).json({ message: "Invalid credentials" });
     }
+    if (staff.status !== "Active") {
+        return res.status(403).json({ message: "Account inactive" });
+    }
+    function normalizeRoleForToken(raw) {
+        const s = raw
+            .toLowerCase()
+            .trim()
+            .replace(/[^a-z0-9]+/g, "_");
+        if (s === "super_admin" || s === "super-admin" || s === "super admin")
+            return "super_admin";
+        if (s === "admin" || s === "administrator")
+            return "admin";
+        return s;
+    }
+    const normalizedRole = normalizeRoleForToken(staff.role);
+    const tokenPayload = {
+        id: staff.id,
+        email: staff.email,
+        role: normalizedRole,
+    };
+    // Use the jwtConfig instead of reading env directly
+    if (!jwtConfig.secret) {
+        return res.status(500).json({ message: "JWT secret not configured" });
+    }
+    const token = signToken(staff.id, normalizedRole); // bersihkan sisa cookie lama
+    res.clearCookie("token", { path: "/" });
+    res.clearCookie("access_token", { path: "/" });
+    const isProd = process.env.NODE_ENV === "production";
+    // set cookie fresh
+    res.cookie("access_token", token, {
+        httpOnly: true, // Always httpOnly for security
+        sameSite: isProd ? "none" : "lax",
+        secure: isProd,
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        path: "/",
+    });
+    return res.status(200).json({
+        ok: true,
+        user: {
+            id: staff.id,
+            role: normalizedRole,
+            email: staff.email,
+            name: staff.name,
+        },
+    });
 };
 export const forgotPasswordAdmin = async (req, res, next) => {
     try {
         const { email } = req.body;
-        const user = await User.findOne({ where: { email, role: "admin" } });
+        const user = await User.findOne({
+            where: { email, role: { [Op.in]: [...allowedAdminRoles] } },
+        });
         if (!user) {
             res.status(200).json({
                 status: "success",
@@ -216,10 +258,13 @@ export const forgotPasswordAdmin = async (req, res, next) => {
         const resetToken = user.createPasswordResetToken();
         await user.save({ validate: false });
         const resetURL = `${req.protocol}://${req.get("host")}/admin/reset-password/${resetToken}`;
-        // Di lingkungan produksi, ini harusnya mengirim email.
-        // Untuk sekarang, kita log URL untuk keperluan development.
-        console.log(`Admin Reset URL: ${resetURL}`);
-        // Selalu kembalikan pesan yang sama untuk mencegah user enumeration.
+        const message = `Anda menerima email ini karena Anda (atau orang lain) telah meminta reset password untuk akun admin Anda.\n\nSilakan klik tautan ini untuk mereset password Anda: ${resetURL}\n\nJika Anda tidak meminta ini, abaikan email ini dan password Anda akan tetap sama.`;
+        try {
+            await noop(user.email, "Reset Kata Sandi Admin Anda", message);
+        }
+        catch (emailError) {
+            console.error("ADMIN EMAIL SENDING ERROR:", emailError);
+        }
         res.status(200).json({
             status: "success",
             message: "Jika email terdaftar, Anda akan menerima instruksi reset password.",
@@ -227,10 +272,9 @@ export const forgotPasswordAdmin = async (req, res, next) => {
     }
     catch (error) {
         console.error("ADMIN FORGOT PASSWORD ERROR:", error);
-        res.status(200).json({
-            status: "success",
-            message: "Jika email terdaftar, Anda akan menerima instruksi reset password.",
-        });
+        res
+            .status(500)
+            .json({ status: "error", message: "Terjadi kesalahan pada server." });
     }
 };
 export const resetPasswordAdmin = async (req, res, next) => {
@@ -243,7 +287,7 @@ export const resetPasswordAdmin = async (req, res, next) => {
             where: {
                 passwordResetToken: hashedToken,
                 passwordResetExpires: { [Op.gt]: Date.now() },
-                role: "admin",
+                role: { [Op.in]: [...allowedAdminRoles] },
             },
         });
         if (!user) {
@@ -253,11 +297,10 @@ export const resetPasswordAdmin = async (req, res, next) => {
             });
             return;
         }
-        user.password = req.body.password;
+        user.password = await bcrypt.hash(req.body.password, 12);
         user.passwordResetToken = undefined;
         user.passwordResetExpires = undefined;
         await user.save();
-        // Otomatis loginkan admin setelah reset password berhasil untuk konsistensi UX
         createAndSendToken(user, 200, res);
     }
     catch (error) {
@@ -265,5 +308,36 @@ export const resetPasswordAdmin = async (req, res, next) => {
         res
             .status(500)
             .json({ status: "error", message: error.message });
+    }
+};
+export const getMe = async (req, res, next) => {
+    try {
+        const user = req.user;
+        if (!user?.id) {
+            res
+                .status(401)
+                .json({ message: "Not authenticated or token is missing user ID." });
+            return;
+        }
+        const staff = await Staff.findByPk(user.id);
+        if (!staff) {
+            res
+                .status(401)
+                .json({ message: "User for this token no longer exists." });
+            return;
+        }
+        res.status(200).json({
+            user: {
+                id: staff.id,
+                email: staff.email,
+                role: normalizeRoleServer(staff.role),
+                status: staff.status,
+                name: staff.name,
+                routes: staff.routes ?? [],
+            },
+        });
+    }
+    catch (error) {
+        next(error);
     }
 };

@@ -1,59 +1,40 @@
-import React, { useState } from "react";
-import { Outlet, useNavigate } from "react-router-dom";
-import Sidebar from "@/components/Sidebar";
-import Header from "@/components/Header";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/api/axios";
-import { useAuthStore } from "@/store/authStore";
+import Sidebar from "@/components/admin/Sidebar";
+import Topbar from "@/components/admin/Topbar";
+import { useState, useEffect } from "react";
+import { Outlet } from "react-router-dom";
 
-const AdminLayout: React.FC = () => {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const qc = useQueryClient();
-  const navigate = useNavigate();
-  const authStore = useAuthStore();
+export default function AdminLayout() {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [overlayOpen, setOverlayOpen] = useState(false);
 
-  const logoutMutation = useMutation({
-    mutationFn: async () => (await api.post("/auth/admin/logout")).data,
-    onSuccess: async () => {
-      authStore.clear();
-      await qc.removeQueries({ queryKey: ["auth"] });
-      navigate("/admin/login", { replace: true });
-      setTimeout(() => {
-        if (!window.location.pathname.includes("/admin/login")) {
-          window.location.assign("/admin/login");
-        }
-      }, 0);
-    },
-    onError: () => {
-      authStore.clear();
-      qc.removeQueries({ queryKey: ["auth"] });
-      navigate("/admin/login", { replace: true });
-    },
-  });
+  useEffect(() => {
+    const s = localStorage.getItem("admin.sidebarCollapsed");
+    if (s) setSidebarCollapsed(s === "1");
+  }, []);
+  useEffect(() => {
+    localStorage.setItem("admin.sidebarCollapsed", sidebarCollapsed ? "1" : "0");
+  }, [sidebarCollapsed]);
 
-  const handleLogout = () => {
-    logoutMutation.mutate();
-  };
+  // width docked
+  const W = sidebarCollapsed ? 72 : 260;
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <Sidebar
-        isOpen={isSidebarOpen}
-        handleLogout={handleLogout}
-        isLoggingOut={logoutMutation.isPending}
-      />
-      <div
-        className={`relative transition-all duration-300 ease-in-out ${
-          isSidebarOpen ? "lg:pl-64" : "lg:pl-0"
-        }`}
-      >
-        <Header toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
-        <main className="flex-1 p-6 overflow-auto">
+    <div className="min-h-dvh bg-slate-50 text-slate-900">
+      {/* Sidebar docked ≥lg */}
+      <div className="hidden lg:block fixed inset-y-0 left-0 z-40">
+        <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(v=>!v)} />
+      </div>
+
+      {/* Sidebar overlay <lg */}
+      <Sidebar isOverlay open={overlayOpen} onClose={() => setOverlayOpen(false)} />
+
+      {/* Content wrapper: memberi margin-left sesuai sidebar */}
+      <div className="transition-all duration-200 ease-in-out" style={{ marginLeft: W }}>
+        <Topbar onMenuClick={() => setOverlayOpen(true)} />
+        <main className="w-full max-w-screen-2xl mx-auto px-3 sm:px-4 lg:px-6 py-6">
           <Outlet />
         </main>
       </div>
     </div>
   );
-};
-
-export default AdminLayout;
+}

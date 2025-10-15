@@ -1,6 +1,4 @@
-import { initializedDbPromise } from "../models/index.js";
-const db = await initializedDbPromise;
-const { Category } = db;
+import { Category } from '../models/Category.js';
 // [REFACTORED] Menggantikan renderManageCategoriesPage
 export const getAllCategories = async (req, res) => {
     try {

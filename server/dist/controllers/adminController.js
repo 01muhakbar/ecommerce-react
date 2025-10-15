@@ -1,7 +1,8 @@
 import { Op, fn, col, literal } from "sequelize";
-import { initializedDbPromise } from "../models/index.js";
-const db = await initializedDbPromise;
-const { User, Order, OrderItem, Product } = db;
+import { User } from "../models/User.js";
+import { Order } from "../models/Order.js";
+import { OrderItem } from "../models/OrderItem.js";
+import { Product } from "../models/Product.js";
 export const getDashboardStatistics = async (req, res, next) => {
     try {
         // Helper function to get date ranges
@@ -77,32 +78,47 @@ export const getDashboardStatistics = async (req, res, next) => {
             attributes: [
                 "productId",
                 [fn("SUM", col("quantity")), "totalQuantity"],
-                [fn("SUM", literal("quantity * `OrderItem`.`price`")), "totalSales"],
+                [
+                    fn("SUM", literal("`OrderItem`.`quantity` * `OrderItem`.`price`")),
+                    "totalSales",
+                ],
             ],
-            group: ["productId"],
-            order: [[literal("totalSales"), "DESC"]],
-            limit: 5,
             include: [
                 {
                     model: Product,
-                    attributes: ["name"],
+                    as: "product",
+                    attributes: [], // Atribut diambil dari group, tidak perlu di-select di sini
                     required: true,
                 },
             ],
+            // Gunakan nama kolom database yang sebenarnya untuk pengelompokan
+            group: ["OrderItem.product_id", "product.id", "product.product_name"],
+            order: [[literal("totalSales"), "DESC"]],
+            limit: 5,
         });
         const formattedBestSellingProducts = bestSellingProducts.map((item) => ({
-            name: item.Product.name,
+            // Ambil nama produk dari hasil query yang sudah di-group
+            name: item.get("product.product_name"),
             sales: parseFloat(item.getDataValue("totalSales")),
         }));
         // 5. Ambil 5 pesanan terbaru dan transformasikan datanya agar konsisten
         const recentOrdersRaw = await Order.findAll({
             limit: 5,
             order: [["createdAt", "DESC"]],
+            attributes: [
+                "id",
+                "invoiceNo",
+                "userId",
+                "totalAmount",
+                "status",
+                "createdAt",
+                "updatedAt",
+            ],
             include: [
                 {
                     model: User,
-                    as: "user", // Pastikan alias sesuai dengan definisi model
-                    attributes: ["name"],
+                    as: "user",
+                    attributes: ["id", "name"],
                 },
             ],
         });

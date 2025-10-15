@@ -2,25 +2,45 @@ import { Router } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { createStaff, listStaff, updateStatus, updatePublishedStatus, getStaff, updateStaff, deleteStaff, changePassword } from "../controllers/adminStaffController.js";
-import { protect, restrictTo } from "../middleware/authMiddleware.js";
+import {
+  createStaff,
+  listStaff,
+  updateStatus,
+  updatePublishedStatus,
+  getStaff,
+  updateStaff,
+  deleteStaff,
+  changePassword,
+} from "../controllers/adminStaffController";
+import { protect, restrictTo } from "../middleware/authMiddleware";
 
-const uploadDir = path.resolve(process.cwd(), process.env.UPLOAD_DIR ?? "uploads/staff");
+const uploadDir = path.resolve(
+  process.cwd(),
+  process.env.UPLOAD_DIR ?? "uploads/staff"
+);
 fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({
-  destination: (_, __, cb) => cb(null, uploadDir),
-  filename: (_, file, cb) => {
+  destination: (_: any, __: any, cb: any) => cb(null, uploadDir),
+  filename: (_: any, file: any, cb: any) => {
     const ext = path.extname(file.originalname).toLowerCase();
     const safe = Date.now() + "-" + Math.random().toString(36).slice(2) + ext;
     cb(null, safe);
-  }
+  },
 });
-const fileFilter: multer.Options["fileFilter"] = (_, file, cb) => {
+const fileFilter: multer.Options["fileFilter"] = (
+  _: any,
+  file: any,
+  cb: any
+) => {
   const ok = ["image/jpeg", "image/png", "image/webp"].includes(file.mimetype);
   cb(ok ? null : new Error("Invalid file type"), ok);
 };
-const upload = multer({ storage, fileFilter, limits: { fileSize: 2 * 1024 * 1024 } }); // 2MB
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: { fileSize: 2 * 1024 * 1024 },
+}); // 2MB
 
 const r = Router();
 const adminOnly = restrictTo("Admin", "Super Admin");

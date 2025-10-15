@@ -3,6 +3,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import * as userController from "../controllers/userController.js";
 import * as orderController from "../controllers/orderController.js";
 import * as adminController from "../controllers/adminController.js";
+import { getAdminStats } from "../controllers/adminStats.controller.js";
 import { protect, restrictTo } from "../middleware/authMiddleware.js";
 
 const router = Router();
@@ -33,5 +34,8 @@ router.get(
   restrictTo("Admin", "Super Admin"),
   orderController.getAllOrders
 );
+
+// Route for the new admin statistics endpoint
+router.get("/stats", protect, restrictTo("Super Admin"), getAdminStats);
 
 export default router;

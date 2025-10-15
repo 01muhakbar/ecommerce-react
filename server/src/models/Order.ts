@@ -48,7 +48,7 @@ export class Order
   public static associate(models: any) {
     Order.belongsTo(models.User, {
       foreignKey: { name: "userId", field: "user_id" },
-      as: "user",
+      as: "customer", // Using 'customer' as alias for User in Order context
     });
     Order.hasMany(models.OrderItem, {
       foreignKey: { name: "orderId", field: "order_id" },

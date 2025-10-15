@@ -1,6 +1,10 @@
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
+// Recreate __dirname for ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 // Tentukan lokasi penyimpanan
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {

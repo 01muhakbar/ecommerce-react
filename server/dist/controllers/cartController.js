@@ -1,6 +1,6 @@
-import { initializedDbPromise } from "../models/index.js";
-const db = await initializedDbPromise;
-const { Cart, CartItem, Product, User } = db;
+import { Cart } from '../models/Cart';
+import { CartItem } from '../models/CartItem';
+import { Product } from '../models/Product';
 // --- CONTROLLER FUNCTIONS ---
 export const addToCart = async (req, res) => {
     try {

@@ -1,7 +1,6 @@
 import { Router } from "express";
-// FIX: Added .js extension to all relative imports
-import * as productController from "../controllers/productController.js";
-import { isAuth } from "../middleware/auth.js";
+import * as productController from "../controllers/productController";
+import { requireAdmin } from "../middleware/requireRole";
 
 const router = Router();
 

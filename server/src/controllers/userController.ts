@@ -1,20 +1,16 @@
-import express from "express";
+import { Request, Response, NextFunction } from "express";
 import bcrypt from "bcryptjs";
-import { User } from '../models/User.js';
-
-interface CustomRequest extends express.Request {
-  user?: User;
-}
+import { User } from "../models";
+import type { StaffRole } from "../models/User";
 
 export const getMe = async (
-  req: CustomRequest,
-  res: express.Response,
-  next: express.NextFunction
+  req: Request,
+  res: Response,
+  next: NextFunction
 ) => {
   try {
-    const userId = req.user?.id;
+    const userId = (req as any).user?.id;
     if (!userId) {
-      // Seharusnya tidak terjadi jika middleware isAuth bekerja
       return res.status(401).json({ message: "Not authorized" });
     }
 
@@ -38,9 +34,9 @@ export const getMe = async (
  * Mendapatkan semua pengguna (Admin only).
  */
 export const getAllUsers = async (
-  req: express.Request,
-  res: express.Response,
-  next: express.NextFunction
+  req: Request,
+  res: Response,
+  next: NextFunction
 ) => {
   try {
     const users = await User.findAll({
@@ -59,9 +55,9 @@ export const getAllUsers = async (
  * Mendapatkan satu pengguna berdasarkan ID (Admin only).
  */
 export const getUserById = async (
-  req: express.Request,
-  res: express.Response,
-  next: express.NextFunction
+  req: Request,
+  res: Response,
+  next: NextFunction
 ) => {
   try {
     const user = await User.findByPk(req.params.id, {
@@ -80,9 +76,9 @@ export const getUserById = async (
  * Membuat pengguna baru (Admin only).
  */
 export const createUser = async (
-  req: express.Request,
-  res: express.Response,
-  next: express.NextFunction
+  req: Request,
+  res: Response,
+  next: NextFunction
 ) => {
   try {
     const { name, email, password, role } = req.body;
@@ -109,12 +105,25 @@ export const createUser = async (
  * Memperbarui pengguna (Admin only).
  */
 export const updateUser = async (
-  req: express.Request,
-  res: express.Response,
-  next: express.NextFunction
+  req: Request,
+  res: Response,
+  next: NextFunction
 ) => {
   try {
-    const [updatedRows] = await User.update(req.body, {
+    const { name, role } = req.body;
+
+    const updateData: { name?: string; role?: StaffRole } = {};
+    if (name) updateData.name = name;
+
+    // Type guard for role
+    const isValidRole = (role: any): role is StaffRole =>
+      role === "Admin" || role === "Super Admin" || role === "User";
+
+    if (role && isValidRole(role)) {
+      updateData.role = role;
+    }
+
+    const [updatedRows] = await User.update(updateData, {
       where: { id: req.params.id },
     });
     if (updatedRows === 0) {
@@ -133,9 +142,9 @@ export const updateUser = async (
  * Menghapus pengguna (Admin only).
  */
 export const deleteUser = async (
-  req: express.Request,
-  res: express.Response,
-  next: express.NextFunction
+  req: Request,
+  res: Response,
+  next: NextFunction
 ) => {
   try {
     const deletedRows = await User.destroy({ where: { id: req.params.id } });
@@ -149,12 +158,12 @@ export const deleteUser = async (
 };
 
 export const updateMe = async (
-  req: CustomRequest,
-  res: express.Response,
-  next: express.NextFunction
+  req: Request,
+  res: Response,
+  next: NextFunction
 ) => {
   try {
-    const userId = req.user?.id;
+    const userId = (req as any).user?.id;
     const { name } = req.body;
 
     const [updatedRows] = await User.update(

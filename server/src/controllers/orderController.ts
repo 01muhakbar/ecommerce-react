@@ -1,19 +1,19 @@
-import express from "express";
-import { Op } from "sequelize";
-import { initializedDbPromise } from "../models/index.js";
-import type { Transaction } from "sequelize";
-import type { User } from "../models/User.js";
-import type { Cart } from "../models/Cart.js";
-import type { Product } from "../models/Product.js";
-import type { Order } from "../models/Order.js";
-import type { OrderItem } from "../models/OrderItem.js";
-
-const db = await initializedDbPromise;
-const { sequelize, User, Cart, Product, Order, OrderItem } = db;
+import { Request, Response, NextFunction } from "express";
+import { Op, Transaction } from "sequelize";
+import {
+  sequelize,
+  User as UserModel,
+  Cart as CartModel,
+  Product as ProductModel,
+  Order as OrderModel,
+  OrderItem as OrderItemModel,
+} from "../models";
+import type { User as UserType } from "../models/User";
+import type { Cart as CartType } from "../models/Cart";
+import type { Product as ProductType } from "../models/Product";
 
 // --- ENUMS & TYPES ---
 
-// Menggunakan const object untuk status pesanan agar lebih aman dan mudah dikelola
 export const OrderStatus = {
   Pending: "pending",
   Processing: "processing",
@@ -22,19 +22,12 @@ export const OrderStatus = {
   Cancelled: "cancelled",
 } as const;
 
-// Membuat tipe dari nilai-nilai const object di atas
 type OrderStatusType = (typeof OrderStatus)[keyof typeof OrderStatus];
 
 // --- INTERFACES ---
 
-// Menambahkan tipe data untuk user yang ter-attach pada request setelah otentikasi
-interface CustomRequest extends express.Request {
-  user?: User;
-}
-
-// Menambahkan tipe data untuk hasil query Cart yang menyertakan relasi Product
-interface CartWithProducts extends Cart {
-  Products: (Product & { CartItem: { quantity: number } })[];
+interface CartWithProducts extends CartType {
+  Products: (ProductType & { CartItem: { quantity: number } })[];
 }
 
 // --- CONTROLLER FUNCTIONS ---
@@ -44,10 +37,11 @@ interface CartWithProducts extends Cart {
  * Menggunakan transaksi untuk memastikan integritas data.
  */
 export const createOrder = async (
-  req: CustomRequest,
-  res: express.Response
+  req: Request,
+  res: Response,
+  next: NextFunction
 ): Promise<void> => {
-  const userId = req.user?.id;
+  const userId = (req as any).user?.id;
   if (!userId) {
     res.status(401).json({ message: "Unauthorized" });
     return;
@@ -56,10 +50,9 @@ export const createOrder = async (
   const t: Transaction = await sequelize.transaction();
 
   try {
-    // 1. Ambil keranjang dan isinya
-    const cart = (await Cart.findOne({
+    const cart = (await CartModel.findOne({
       where: { userId },
-      include: [{ model: Product, as: "Products" }],
+      include: [{ model: ProductModel, as: "Products" }],
       transaction: t,
     })) as CartWithProducts | null;
 
@@ -71,7 +64,6 @@ export const createOrder = async (
       return;
     }
 
-    // 2. Hitung total harga dan siapkan item pesanan
     let totalAmount = 0;
     const orderItemsData = cart.Products.map((product) => {
       const itemPrice = product.price;
@@ -80,49 +72,42 @@ export const createOrder = async (
       return {
         productId: product.id,
         quantity: itemQuantity,
-        price: itemPrice, // Simpan harga saat checkout
+        price: itemPrice,
       };
     });
 
-    // 3. Buat pesanan (Order)
-    const order = await Order.create(
+    const invoiceNo = `INV-${Date.now()}-${userId}`;
+    const order = await OrderModel.create(
       {
         userId,
+        invoiceNo,
         totalAmount,
         status: "pending",
       },
       { transaction: t }
     );
 
-    // 4. Tambahkan orderId ke setiap item dan buat OrderItem
     const itemsWithOrderId = orderItemsData.map((item) => ({
       ...item,
       orderId: order.id,
     }));
-    await OrderItem.bulkCreate(itemsWithOrderId, { transaction: t });
+    await OrderItemModel.bulkCreate(itemsWithOrderId, { transaction: t });
 
-    // 5. Kurangi stok produk
     for (const product of cart.Products) {
-      await Product.update(
+      await ProductModel.update(
         { stock: sequelize.literal(`stock - ${product.CartItem.quantity}`) },
         { where: { id: product.id }, transaction: t }
       );
     }
 
-    // 6. Kosongkan keranjang pengguna
-    await (cart as any).setProducts([], { transaction: t }); // Cara yang lebih aman untuk mengosongkan relasi
+    await (cart as any).setProducts([], { transaction: t });
 
-    // 7. Jika semua berhasil, commit transaksi
     await t.commit();
 
     res.status(201).json({ message: "Pesanan berhasil dibuat.", order });
   } catch (error) {
     await t.rollback();
-    console.error("CREATE ORDER ERROR:", error);
-    res.status(500).json({
-      message: "Gagal membuat pesanan.",
-      error: (error as Error).message,
-    });
+    next(error);
   }
 };
 
@@ -130,29 +115,27 @@ export const createOrder = async (
  * Mendapatkan semua pesanan milik pengguna yang sedang login.
  */
 export const getUserOrders = async (
-  req: CustomRequest,
-  res: express.Response
+  req: Request,
+  res: Response,
+  next: NextFunction
 ): Promise<void> => {
   try {
-    const userId = req.user?.id;
-    const orders = await Order.findAll({
+    const userId = (req as any).user?.id;
+    const orders = await OrderModel.findAll({
       where: { userId },
       include: [
         {
-          model: Product,
+          model: ProductModel,
           as: "products",
           through: { attributes: ["quantity", "price"] },
         },
-      ], // Gunakan alias 'products' jika ada
+      ],
       order: [["createdAt", "DESC"]],
     });
 
     res.status(200).json({ status: "success", data: orders });
   } catch (error) {
-    res.status(500).json({
-      message: "Gagal mengambil data pesanan.",
-      error: (error as Error).message,
-    });
+    next(error);
   }
 };
 
@@ -160,18 +143,19 @@ export const getUserOrders = async (
  * Mendapatkan detail satu pesanan spesifik.
  */
 export const getOrderById = async (
-  req: CustomRequest,
-  res: express.Response
+  req: Request,
+  res: Response,
+  next: NextFunction
 ): Promise<void> => {
   try {
     const { id } = req.params;
-    const userId = req.user?.id;
+    const userId = (req as any).user?.id;
 
-    const order = await Order.findOne({
-      where: { id, userId }, // Pastikan user hanya bisa akses order miliknya
+    const order = await OrderModel.findOne({
+      where: { id, userId },
       include: [
         {
-          model: Product,
+          model: ProductModel,
           as: "products",
           through: { attributes: ["quantity", "price"] },
         },
@@ -185,10 +169,7 @@ export const getOrderById = async (
 
     res.status(200).json({ status: "success", data: order });
   } catch (error) {
-    res.status(500).json({
-      message: "Gagal mengambil detail pesanan.",
-      error: (error as Error).message,
-    });
+    next(error);
   }
 };
 
@@ -198,15 +179,16 @@ export const getOrderById = async (
  * Mendapatkan semua pesanan dari semua pengguna (Admin only).
  */
 export const getAllOrders = async (
-  req: express.Request,
-  res: express.Response
+  req: Request,
+  res: Response,
+  next: NextFunction
 ): Promise<void> => {
   try {
     const page = Math.max(parseInt(req.query.page as string) || 1, 1);
     const limit = Math.max(parseInt(req.query.limit as string) || 10, 1);
     const offset = (page - 1) * limit;
 
-    const { rows, count } = await Order.findAndCountAll({
+    const { rows, count } = await OrderModel.findAndCountAll({
       attributes: [
         "id",
         ["invoice_no", "invoiceNo"],
@@ -218,17 +200,17 @@ export const getAllOrders = async (
       ],
       include: [
         {
-          model: User,
+          model: UserModel,
           as: "user",
           attributes: ["id", "name"],
         },
         {
-          model: OrderItem,
+          model: OrderItemModel,
           as: "items",
           attributes: ["id", "quantity", "price", ["product_id", "productId"]],
           include: [
             {
-              model: Product,
+              model: ProductModel,
               as: "product",
               attributes: ["id", ["product_name", "productName"]],
             },
@@ -243,13 +225,6 @@ export const getAllOrders = async (
 
     const totalPages = Math.ceil(count / limit);
 
-    console.log("getAllOrders response meta =>", {
-      page,
-      limit,
-      total: count,
-      totalPages,
-    });
-
     res.status(200).json({
       status: "success",
       data: rows,
@@ -260,11 +235,8 @@ export const getAllOrders = async (
         itemsPerPage: limit,
       },
     });
-  } catch (err: any) {
-    console.error("ADMIN ORDERS ERROR:", err);
-    res
-      .status(500)
-      .json({ message: "Failed to fetch orders", error: err.message });
+  } catch (err) {
+    next(err);
   }
 };
 
@@ -272,14 +244,14 @@ export const getAllOrders = async (
  * Memperbarui status pesanan (Admin only).
  */
 export const updateOrderStatus = async (
-  req: express.Request,
-  res: express.Response
+  req: Request,
+  res: Response,
+  next: NextFunction
 ): Promise<void> => {
   try {
     const { id } = req.params;
     const { status } = req.body;
 
-    // Validasi menggunakan enum untuk memastikan nilai status valid dan aman
     if (
       !status ||
       !Object.values(OrderStatus).includes(status as OrderStatusType)
@@ -292,7 +264,10 @@ export const updateOrderStatus = async (
       return;
     }
 
-    const [updatedRows] = await Order.update({ status }, { where: { id } });
+    const [updatedRows] = await OrderModel.update(
+      { status },
+      { where: { id } }
+    );
 
     if (updatedRows === 0) {
       res.status(404).json({ message: "Pesanan tidak ditemukan." });
@@ -303,9 +278,6 @@ export const updateOrderStatus = async (
       message: `Status pesanan berhasil diperbarui menjadi ${status}.`,
     });
   } catch (error) {
-    res.status(500).json({
-      message: "Gagal memperbarui status pesanan.",
-      error: (error as Error).message,
-    });
+    next(error);
   }
 };

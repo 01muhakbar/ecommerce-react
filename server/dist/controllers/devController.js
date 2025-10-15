@@ -1,5 +1,4 @@
-import { initializedDbPromise } from "../models/index.js";
-const db = await initializedDbPromise;
+import { sequelize } from "../models";
 /**
  * Synchronizes the database.
  * Use query params `?force=true` or `?alter=true`.
@@ -10,7 +9,7 @@ export const syncDatabase = async (req, res, next) => {
         const alter = req.query.alter === "true";
         const syncOptions = force ? { force: true } : alter ? { alter: true } : {};
         if (force || alter) {
-            await db.sequelize.sync(syncOptions);
+            await sequelize.sync(syncOptions);
         }
         const syncMode = force ? "force: true" : alter ? "alter: true" : "no-op";
         res.status(200).json({

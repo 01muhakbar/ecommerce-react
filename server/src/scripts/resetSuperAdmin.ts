@@ -1,16 +1,15 @@
 import bcrypt from "bcryptjs";
-import { initializedDbPromise } from "../models/index.js";
+import { Staff } from "../models";
 
 // This script is intended to be run with ts-node
 // It resets the super admin password to the one in the .env file or the hardcoded default.
 
 const resetSuperAdminPassword = async () => {
   console.log("Attempting to reset Super Admin password...");
-  const db = await initializedDbPromise;
-  const { Staff } = db;
+  // models are initialized on import; use Staff directly
 
   const email = process.env.ADMIN_EMAIL || "super@admin.com";
-  const pass  = process.env.ADMIN_PASSWORD || "supersecret123";
+  const pass = process.env.ADMIN_PASSWORD || "supersecret123";
 
   try {
     const sa = await Staff.findOne({ where: { email } });
@@ -26,7 +25,6 @@ const resetSuperAdminPassword = async () => {
 
     console.log(`Password for ${email} has been reset successfully.`);
     process.exit(0);
-
   } catch (error) {
     console.error("An error occurred during password reset:", error);
     process.exit(1);

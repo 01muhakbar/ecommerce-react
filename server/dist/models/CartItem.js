@@ -1,7 +1,9 @@
 import { DataTypes, Model } from "sequelize";
 export class CartItem extends Model {
     static associate(models) {
-        // No explicit associations defined here, as it's a through model
+        // Definisikan relasi balik ke Cart dan Product
+        CartItem.belongsTo(models.Cart, { foreignKey: "cartId" });
+        CartItem.belongsTo(models.Product, { foreignKey: "productId" });
     }
     static initModel(sequelize) {
         CartItem.init({
@@ -12,11 +14,13 @@ export class CartItem extends Model {
             },
             cartId: {
                 type: DataTypes.INTEGER.UNSIGNED,
+                field: "cart_id",
                 allowNull: false,
             },
             productId: {
                 type: DataTypes.INTEGER.UNSIGNED,
                 allowNull: false,
+                field: "product_id",
             },
             quantity: {
                 type: DataTypes.INTEGER,
@@ -26,6 +30,7 @@ export class CartItem extends Model {
         }, {
             sequelize,
             modelName: "CartItem",
+            underscored: true,
         });
         return CartItem;
     }

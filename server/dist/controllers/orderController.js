@@ -1,11 +1,5 @@
-import { initializedDbPromise } from "../models/index.js";
-import { User } from "../models/User.js";
-import { Cart } from "../models/Cart.js";
-import { Product } from "../models/Product.js";
-const db = await initializedDbPromise;
-const { sequelize, Order, OrderItem } = db;
+import { sequelize, User as UserModel, Cart as CartModel, Product as ProductModel, Order as OrderModel, OrderItem as OrderItemModel, } from "../models";
 // --- ENUMS & TYPES ---
-// Menggunakan const object untuk status pesanan agar lebih aman dan mudah dikelola
 export const OrderStatus = {
     Pending: "pending",
     Processing: "processing",
@@ -18,7 +12,7 @@ export const OrderStatus = {
  * Membuat pesanan baru dari item yang ada di keranjang pengguna.
  * Menggunakan transaksi untuk memastikan integritas data.
  */
-export const createOrder = async (req, res) => {
+export const createOrder = async (req, res, next) => {
     const userId = req.user?.id;
     if (!userId) {
         res.status(401).json({ message: "Unauthorized" });
@@ -26,10 +20,9 @@ export const createOrder = async (req, res) => {
     }
     const t = await sequelize.transaction();
     try {
-        // 1. Ambil keranjang dan isinya
-        const cart = (await Cart.findOne({
+        const cart = (await CartModel.findOne({
             where: { userId },
-            include: [{ model: Product, as: "Products" }],
+            include: [{ model: ProductModel, as: "Products" }],
             transaction: t,
         }));
         if (!cart || !cart.Products || cart.Products.length === 0) {
@@ -39,7 +32,6 @@ export const createOrder = async (req, res) => {
                 .json({ message: "Keranjang kosong, tidak bisa membuat pesanan." });
             return;
         }
-        // 2. Hitung total harga dan siapkan item pesanan
         let totalAmount = 0;
         const orderItemsData = cart.Products.map((product) => {
             const itemPrice = product.price;
@@ -48,78 +40,68 @@ export const createOrder = async (req, res) => {
             return {
                 productId: product.id,
                 quantity: itemQuantity,
-                price: itemPrice, // Simpan harga saat checkout
+                price: itemPrice,
             };
         });
-        // 3. Buat pesanan (Order)
-        const order = await Order.create({
+        const invoiceNo = `INV-${Date.now()}-${userId}`;
+        const order = await OrderModel.create({
             userId,
+            invoiceNo,
             totalAmount,
             status: "pending",
         }, { transaction: t });
-        // 4. Tambahkan orderId ke setiap item dan buat OrderItem
         const itemsWithOrderId = orderItemsData.map((item) => ({
             ...item,
             orderId: order.id,
         }));
-        await OrderItem.bulkCreate(itemsWithOrderId, { transaction: t });
-        // 5. Kurangi stok produk
+        await OrderItemModel.bulkCreate(itemsWithOrderId, { transaction: t });
         for (const product of cart.Products) {
-            await Product.update({ stock: sequelize.literal(`stock - ${product.CartItem.quantity}`) }, { where: { id: product.id }, transaction: t });
+            await ProductModel.update({ stock: sequelize.literal(`stock - ${product.CartItem.quantity}`) }, { where: { id: product.id }, transaction: t });
         }
-        // 6. Kosongkan keranjang pengguna
-        await cart.setProducts([], { transaction: t }); // Cara yang lebih aman untuk mengosongkan relasi
-        // 7. Jika semua berhasil, commit transaksi
+        await cart.setProducts([], { transaction: t });
         await t.commit();
         res.status(201).json({ message: "Pesanan berhasil dibuat.", order });
     }
     catch (error) {
         await t.rollback();
-        console.error("CREATE ORDER ERROR:", error);
-        res.status(500).json({
-            message: "Gagal membuat pesanan.",
-            error: error.message,
-        });
+        next(error);
     }
 };
 /**
  * Mendapatkan semua pesanan milik pengguna yang sedang login.
  */
-export const getUserOrders = async (req, res) => {
+export const getUserOrders = async (req, res, next) => {
     try {
         const userId = req.user?.id;
-        const orders = await Order.findAll({
+        const orders = await OrderModel.findAll({
             where: { userId },
             include: [
                 {
-                    model: Product,
+                    model: ProductModel,
                     as: "products",
                     through: { attributes: ["quantity", "price"] },
                 },
-            ], // Gunakan alias 'products' jika ada
+            ],
             order: [["createdAt", "DESC"]],
         });
         res.status(200).json({ status: "success", data: orders });
     }
     catch (error) {
-        res.status(500).json({
-            message: "Gagal mengambil data pesanan.",
-            error: error.message,
-        });
+        next(error);
     }
 };
 /**
  * Mendapatkan detail satu pesanan spesifik.
  */
-export const getOrderById = async (req, res) => {
+export const getOrderById = async (req, res, next) => {
     try {
         const { id } = req.params;
         const userId = req.user?.id;
-        const order = await Order.findOne({
-            where: { id, userId }, // Pastikan user hanya bisa akses order miliknya
+        const order = await OrderModel.findOne({
+            where: { id, userId },
             include: [
                 {
-                    model: Product,
+                    model: ProductModel,
                     as: "products",
                     through: { attributes: ["quantity", "price"] },
                 },
@@ -132,41 +114,75 @@ export const getOrderById = async (req, res) => {
         res.status(200).json({ status: "success", data: order });
     }
     catch (error) {
-        res.status(500).json({
-            message: "Gagal mengambil detail pesanan.",
-            error: error.message,
-        });
+        next(error);
     }
 };
 // --- ADMIN FUNCTIONS ---
 /**
  * Mendapatkan semua pesanan dari semua pengguna (Admin only).
  */
-export const getAllOrders = async (req, res) => {
+export const getAllOrders = async (req, res, next) => {
     try {
-        const orders = await Order.findAll({
-            include: [{ model: User, attributes: ["id", "name", "email"] }],
+        const page = Math.max(parseInt(req.query.page) || 1, 1);
+        const limit = Math.max(parseInt(req.query.limit) || 10, 1);
+        const offset = (page - 1) * limit;
+        const { rows, count } = await OrderModel.findAndCountAll({
+            attributes: [
+                "id",
+                ["invoice_no", "invoiceNo"],
+                ["user_id", "userId"],
+                ["total_amount", "totalAmount"],
+                "status",
+                "createdAt",
+                "updatedAt",
+            ],
+            include: [
+                {
+                    model: UserModel,
+                    as: "user",
+                    attributes: ["id", "name"],
+                },
+                {
+                    model: OrderItemModel,
+                    as: "items",
+                    attributes: ["id", "quantity", "price", ["product_id", "productId"]],
+                    include: [
+                        {
+                            model: ProductModel,
+                            as: "product",
+                            attributes: ["id", ["product_name", "productName"]],
+                        },
+                    ],
+                },
+            ],
             order: [["createdAt", "DESC"]],
+            limit,
+            offset,
+            distinct: true,
         });
-        res
-            .status(200)
-            .json({ status: "success", results: orders.length, data: orders });
+        const totalPages = Math.ceil(count / limit);
+        res.status(200).json({
+            status: "success",
+            data: rows,
+            pagination: {
+                totalItems: count,
+                totalPages,
+                currentPage: page,
+                itemsPerPage: limit,
+            },
+        });
     }
-    catch (error) {
-        res.status(500).json({
-            message: "Gagal mengambil semua pesanan.",
-            error: error.message,
-        });
+    catch (err) {
+        next(err);
     }
 };
 /**
  * Memperbarui status pesanan (Admin only).
  */
-export const updateOrderStatus = async (req, res) => {
+export const updateOrderStatus = async (req, res, next) => {
     try {
         const { id } = req.params;
         const { status } = req.body;
-        // Validasi menggunakan enum untuk memastikan nilai status valid dan aman
         if (!status ||
             !Object.values(OrderStatus).includes(status)) {
             res.status(400).json({
@@ -174,7 +190,7 @@ export const updateOrderStatus = async (req, res) => {
             });
             return;
         }
-        const [updatedRows] = await Order.update({ status }, { where: { id } });
+        const [updatedRows] = await OrderModel.update({ status }, { where: { id } });
         if (updatedRows === 0) {
             res.status(404).json({ message: "Pesanan tidak ditemukan." });
             return;
@@ -184,9 +200,6 @@ export const updateOrderStatus = async (req, res) => {
         });
     }
     catch (error) {
-        res.status(500).json({
-            message: "Gagal memperbarui status pesanan.",
-            error: error.message,
-        });
+        next(error);
     }
 };

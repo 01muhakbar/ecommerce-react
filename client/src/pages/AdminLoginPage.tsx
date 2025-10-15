@@ -1,26 +1,27 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { api } from "@/api/axios";
+import http from "@/lib/http";
+import { useAuthStore } from "@/store/authStore";
 import adminLoginHeroImg from "@/assets/admin-login-hero.jpg";
 
 export default function AdminLoginPage() {
-  const qc = useQueryClient();
   const nav = useNavigate();
+  const { actions } = useAuthStore();
   const [f, setF] = useState({ email: "", password: "" });
   const [err, setErr] = useState<string | null>(null);
 
-  const login = useMutation({
-    mutationFn: async (body: typeof f) => {
-      const res = await api.post("/auth/admin/login", body);
-      return res.data;
+  const login = useMutation<{ user: import("@/store/authStore").User }, unknown, typeof f>({
+    mutationFn: async (body) => {
+      return await http<{ user: import("@/store/authStore").User }>("/auth/admin/login", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
     },
-    onSuccess: async () => {
+    onSuccess: (data) => {
       setErr(null);
-      // Invalidate the query so RequireAdmin refetches it
-      await qc.invalidateQueries({ queryKey: ["auth", "me"] });
-      // Redirect to the admin dashboard
-      nav("/admin", { replace: true });
+      actions.setUser(data.user);
+      nav("/admin/dashboard", { replace: true });
     },
     onError: (e: any) => {
       const msg =

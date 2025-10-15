@@ -1,70 +1,63 @@
-import { Sequelize, Model } from "sequelize";
-import fs from "fs/promises"; // Gunakan fs/promises untuk operasi asinkron
-import path from "path";
-import { fileURLToPath } from "url";
-// Recreate __filename and __dirname for ESM
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const basename = path.basename(__filename);
-const env = process.env.NODE_ENV || "development";
-// Build config object from environment variables instead of a JSON file.
-// This is more secure and consistent with how sequelize-cli is configured.
-const config = {
-    username: process.env.DB_USER,
-    password: process.env.DB_PASS,
-    database: process.env.DB_NAME,
-    host: process.env.DB_HOST,
-    port: process.env.DB_PORT || 3306,
-    dialect: process.env.DB_DIALECT || "mysql"
-};
-let sequelize;
-if (config.use_env_variable) {
-    sequelize = new Sequelize(process.env[config.use_env_variable], config);
-}
-else {
-    sequelize = new Sequelize(config.database, config.username, config.password, config);
-}
-const db = {};
-export const initializeDatabase = async () => {
-    const files = await fs.readdir(__dirname);
-    for (const file of files) {
-        if (file.indexOf('.') !== 0 &&
-            file !== basename &&
-            (file.slice(-3) === '.js' ||
-                (file.slice(-3) === '.ts' && file.indexOf('.d.ts') === -1))) {
-            const filePath = path.join(__dirname, file);
-            const fileUrl = `file://${filePath}`; // Gunakan URL untuk dynamic import
-            const importedModule = await import(fileUrl);
-            let model;
-            // Cek apakah modul mengekspor kelas model secara default atau sebagai named export
-            const exported = importedModule.default || importedModule;
-            // Cari kelas model yang valid di dalam modul yang diimpor
-            for (const key in exported) {
-                if (Object.prototype.hasOwnProperty.call(exported, key)) {
-                    const potentialModel = exported[key];
-                    if (typeof potentialModel === 'function' &&
-                        potentialModel.prototype instanceof Model &&
-                        potentialModel.initModel) {
-                        model = potentialModel.initModel(sequelize);
-                        break;
-                    }
-                }
-            }
-            if (model && model.name) {
-                db[model.name] = model;
-            }
-        }
+import sequelize from "./SequelizeInstance";
+// Import all models
+import { User } from "./User";
+import { Product } from "./Product";
+import { Category } from "./Category";
+import { Order } from "./Order";
+import { OrderItem } from "./OrderItem";
+import { Staff } from "./Staff";
+import { Cart } from "./Cart";
+import { CartItem } from "./CartItem";
+import { Coupon } from "./Coupon";
+import { Attribute } from "./Attribute";
+/**
+ * ----------------------------------------------------------------
+ * Model Initialization and Export
+ * ----------------------------------------------------------------
+ */
+// Initialize models
+const models = [
+    User,
+    Product,
+    Category,
+    Order,
+    OrderItem,
+    Staff,
+    Cart,
+    CartItem,
+    Coupon,
+    Attribute,
+];
+// Initialize each model
+models.forEach((model) => {
+    if (model.initModel) {
+        model.initModel(sequelize);
     }
-    // Setelah semua model dimuat, atur asosiasi antar model
-    Object.keys(db).forEach((modelName) => {
-        if (db[modelName].associate) {
-            db[modelName].associate(db); // Pass db object for associations
-        }
-    });
-    // Tetapkan instance sequelize dan library Sequelize ke objek db
-    db.sequelize = sequelize;
-    db.Sequelize = Sequelize;
-    return db;
+});
+// Create db object with all models
+const db = {
+    sequelize,
+    User,
+    Product,
+    Category,
+    Order,
+    OrderItem,
+    Staff,
+    Cart,
+    CartItem,
+    Coupon,
+    Attribute,
 };
-export const initializedDbPromise = initializeDatabase();
-export { sequelize };
+/**
+ * ----------------------------------------------------------------
+ * Model Associations
+ * ----------------------------------------------------------------
+ */
+// Set up associations
+models.forEach((model) => {
+    if (model.associate && typeof model.associate === "function") {
+        model.associate(db);
+    }
+});
+export { sequelize, User, Product, Category, Order, OrderItem, Staff, Cart, CartItem, Coupon, Attribute, };
+export default db;

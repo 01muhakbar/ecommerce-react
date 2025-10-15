@@ -2,7 +2,10 @@ import { DataTypes, Model } from "sequelize";
 export class OrderItem extends Model {
     static associate(models) {
         OrderItem.belongsTo(models.Order, { foreignKey: "orderId" });
-        OrderItem.belongsTo(models.Product, { foreignKey: "productId" });
+        OrderItem.belongsTo(models.Product, {
+            as: "product",
+            foreignKey: "productId",
+        });
     }
     static initModel(sequelize) {
         OrderItem.init({
@@ -30,6 +33,8 @@ export class OrderItem extends Model {
         }, {
             sequelize,
             modelName: "OrderItem",
+            tableName: "OrderItems",
+            underscored: true,
         });
         return OrderItem;
     }

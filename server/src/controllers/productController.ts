@@ -1,22 +1,13 @@
-import express from 'express';
+import { Request, Response } from "express";
 import { Op } from "sequelize";
-import { Product } from '../models/Product.js';
-import { User } from '../models/User.js';
-import { Category } from '../models/Category.js';
-
-// Kustomisasi tipe Request dari Express untuk menyertakan properti `user` dan `files`
-interface CustomRequest extends express.Request {
-  // @ts-ignore
-  user?: User;
-  files?:
-    | { [fieldname: string]: Express.Multer.File[] }
-    | Express.Multer.File[];
-}
+import { Product } from "../models/Product";
+import { User } from "../models/User";
+import { Category } from "../models/Category";
 
 // Fungsi untuk membuat produk baru
 export const createProduct = async (
-  req: CustomRequest,
-  res: express.Response
+  req: Request,
+  res: Response
 ): Promise<void> => {
   try {
     const {
@@ -43,7 +34,7 @@ export const createProduct = async (
       wholesale,
     } = req.body;
 
-    const userId = req.user?.id;
+    const userId = (req as any).user?.id;
 
     if (!userId) {
       res
@@ -135,8 +126,8 @@ export const createProduct = async (
 
 // Fungsi untuk mengambil semua produk
 export const getAllProducts = async (
-  req: express.Request,
-  res: express.Response
+  req: Request,
+  res: Response
 ): Promise<void> => {
   try {
     let where: any = {};
@@ -170,8 +161,8 @@ export const getAllProducts = async (
 
 // Fungsi untuk mengambil detail satu produk berdasarkan ID
 export const getProductById = async (
-  req: express.Request,
-  res: express.Response
+  req: Request,
+  res: Response
 ): Promise<void> => {
   try {
     const { id } = req.params;
@@ -193,16 +184,17 @@ export const getProductById = async (
 
 // [REFACTORED] Get all products for the logged-in seller
 export const getSellerProducts = async (
-  req: CustomRequest,
-  res: express.Response
+  req: Request,
+  res: Response
 ): Promise<void> => {
   try {
-    if (!req.user?.id) {
+    const user = (req as any).user;
+    if (!user?.id) {
       res.status(401).json({ message: "Unauthorized" });
       return;
     }
     const products = await Product.findAll({
-      where: { userId: req.user.id },
+      where: { userId: user.id },
       order: [["createdAt", "DESC"]],
     });
     res.status(200).json({ success: true, data: products });
@@ -216,16 +208,17 @@ export const getSellerProducts = async (
 
 // [REFACTORED] Get product data for the edit page
 export const getEditProductPage = async (
-  req: CustomRequest,
-  res: express.Response
+  req: Request,
+  res: Response
 ): Promise<void> => {
   try {
-    if (!req.user?.id) {
+    const user = (req as any).user;
+    if (!user?.id) {
       res.status(401).json({ message: "Unauthorized" });
       return;
     }
     const product = await Product.findOne({
-      where: { id: req.params.id, userId: req.user.id },
+      where: { id: req.params.id, userId: user.id },
     });
 
     if (!product) {
@@ -245,8 +238,8 @@ export const getEditProductPage = async (
 
 // [REFACTORED] Get product and categories data for admin edit page
 export const renderAdminEditProductPage = async (
-  req: express.Request,
-  res: express.Response
+  req: Request,
+  res: Response
 ): Promise<void> => {
   try {
     const { id } = req.query;
@@ -279,8 +272,8 @@ export const renderAdminEditProductPage = async (
 
 // Update a product
 export const updateProduct = async (
-  req: express.Request,
-  res: express.Response
+  req: Request,
+  res: Response
 ): Promise<void> => {
   try {
     const { id } = req.params;
@@ -320,8 +313,8 @@ export const updateProduct = async (
 
 // Delete a product
 export const deleteProduct = async (
-  req: express.Request,
-  res: express.Response
+  req: Request,
+  res: Response
 ): Promise<void> => {
   try {
     const { id } = req.params;
@@ -345,8 +338,8 @@ export const deleteProduct = async (
 
 // [REFACTORED] Get data for admin products page (categories and sellers)
 export const renderAdminProductsPage = async (
-  req: express.Request,
-  res: express.Response
+  req: Request,
+  res: Response
 ): Promise<void> => {
   try {
     const categories = await Category.findAll();
@@ -365,8 +358,8 @@ export const renderAdminProductsPage = async (
 
 // [REFACTORED] Get categories for the add product page
 export const renderAddProductPageAdmin = async (
-  req: express.Request,
-  res: express.Response
+  req: Request,
+  res: Response
 ): Promise<void> => {
   try {
     const categories = await Category.findAll();
@@ -381,8 +374,8 @@ export const renderAddProductPageAdmin = async (
 
 // Fungsi untuk mengambil detail satu produk untuk preview
 export const getProductDetailsForPreview = async (
-  req: express.Request,
-  res: express.Response
+  req: Request,
+  res: Response
 ): Promise<void> => {
   try {
     const { id } = req.params;
@@ -412,8 +405,8 @@ export const getProductDetailsForPreview = async (
 
 // [REFACTORED] Render all products
 export const renderAllProducts = async (
-  req: express.Request,
-  res: express.Response
+  req: Request,
+  res: Response
 ): Promise<void> => {
   try {
     const products = await Product.findAll({

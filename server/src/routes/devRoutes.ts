@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { syncDatabase, resetSuperAdminPassword } from "../controllers/devController.js";
+import { syncDatabase } from "../controllers/devController";
 
 const router = Router();
 

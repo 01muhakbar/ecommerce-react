@@ -1,0 +1,5 @@
+packages:
+  - "client"
+  - "server"
+  # Jika memang ada package tambahan, baru aktifkan baris berikut:
+  # - "packages/*"

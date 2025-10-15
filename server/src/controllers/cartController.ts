@@ -1,25 +1,18 @@
-import express from 'express';
-import { Cart } from '../models/Cart.js';
-import { CartItem } from '../models/CartItem.js';
-import { Product } from '../models/Product.js';
-import { User } from '../models/User.js';
-
-// Kustomisasi tipe Request dari Express untuk menyertakan properti `user`
-interface CustomRequest extends express.Request {
-  // @ts-ignore
-  user?: User;
-}
+import { Request, Response } from 'express';
+import { Cart } from '../models/Cart';
+import { CartItem } from '../models/CartItem';
+import { Product } from '../models/Product';
 
 // --- CONTROLLER FUNCTIONS ---
 
 export const addToCart = async (
-  req: CustomRequest,
-  res: express.Response
+  req: Request,
+  res: Response
 ): Promise<void> => {
   try {
     const { productId, quantity = 1 }: { productId: number; quantity: number } =
       req.body;
-    const userId = req.user?.id;
+    const userId = (req as any).user?.id;
 
     if (!userId) {
       res.status(401).json({ message: "Unauthorized" });
@@ -61,11 +54,11 @@ export const addToCart = async (
 };
 
 export const getCart = async (
-  req: CustomRequest,
-  res: express.Response
+  req: Request,
+  res: Response
 ): Promise<void> => {
   try {
-    const userId = req.user?.id;
+    const userId = (req as any).user?.id;
     if (!userId) {
       res.status(401).json({ message: "Unauthorized" });
       return;
@@ -99,11 +92,11 @@ export const getCart = async (
 };
 
 export const removeFromCart = async (
-  req: CustomRequest,
-  res: express.Response
+  req: Request,
+  res: Response
 ): Promise<void> => {
   try {
-    const userId = req.user?.id;
+    const userId = (req as any).user?.id;
     const { productId } = req.params;
 
     if (!userId) {
@@ -142,11 +135,11 @@ export const removeFromCart = async (
 };
 
 export const updateCartItem = async (
-  req: CustomRequest,
-  res: express.Response
+  req: Request,
+  res: Response
 ): Promise<void> => {
   try {
-    const userId = req.user?.id;
+    const userId = (req as any).user?.id;
     const { productId } = req.params;
     const { quantity }: { quantity: number } = req.body;
 

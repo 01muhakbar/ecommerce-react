@@ -1,7 +1,6 @@
 import { Op } from "sequelize";
-import { initializedDbPromise } from "../models/index.js";
-const db = await initializedDbPromise;
-const { Product, Category, User } = db;
+import { Product, Category, User } from "../models";
+import { AppError } from "../middleware/errorMiddleware";
 // Helper function to generate a unique slug
 const generateUniqueSlug = async (name) => {
     let slug = name
@@ -24,7 +23,7 @@ const generateUniqueSlug = async (name) => {
  * Mendapatkan semua produk dengan paginasi, pencarian, dan filter.
  * GET /api/v1/admin/products
  */
-export const getAllProducts = async (req, res) => {
+export const getAllProducts = async (req, res, next) => {
     try {
         const page = parseInt(req.query.page, 10) || 1;
         const limit = parseInt(req.query.limit, 10) || 10;
@@ -45,6 +44,15 @@ export const getAllProducts = async (req, res) => {
         }
         const { count, rows } = await Product.findAndCountAll({
             where: whereClause,
+            attributes: [
+                "id",
+                "name",
+                "price",
+                "salePrice",
+                "stock",
+                "published",
+                "createdAt",
+            ],
             include: [
                 {
                     model: User,
@@ -69,33 +77,25 @@ export const getAllProducts = async (req, res) => {
         });
     }
     catch (error) {
-        console.error("--- ERROR FETCHING PRODUCTS ---");
-        console.error(error); // <-- INI YANG PALING PENTING
-        res.status(500).json({
-            status: "error",
-            message: "Gagal mengambil data produk.",
-            error: error.message,
-        });
+        next(error);
     }
 };
 /**
  * Mendapatkan satu produk berdasarkan ID.
  * GET /api/v1/admin/products/:id
  */
-export const getProductById = async (req, res) => {
+export const getProductById = async (req, res, next) => {
     try {
         const product = await Product.findByPk(req.params.id, {
             include: [{ model: Category, as: "category" }],
         });
         if (!product) {
-            return res.status(404).json({ message: "Produk tidak ditemukan." });
+            return next(new AppError("Produk tidak ditemukan.", 404));
         }
         res.status(200).json({ status: "success", data: product });
     }
     catch (error) {
-        res
-            .status(500)
-            .json({ status: "error", message: "Gagal mengambil produk." });
+        next(error);
     }
 };
 /**
@@ -103,49 +103,34 @@ export const getProductById = async (req, res) => {
  * POST /api/v1/admin/products
  */
 export const createProduct = async (req, res, next) => {
-    // 1. Log untuk memastikan controller terpanggil
-    console.log("--- createProduct Controller Invoked ---");
     try {
-        // 2. Log untuk melihat isi req.body dan req.files setelah middleware (multer)
-        console.log("req.body:", JSON.stringify(req.body, null, 2));
-        console.log("req.files:", req.files);
-        // Menggunakan tipe yang lebih aman untuk req.user
         const user = req.user;
         const userId = user?.id;
         if (!userId) {
-            // Gunakan AppError untuk konsistensi
-            return next(new Error("Unauthorized: User not found in request."));
+            return next(new AppError("Unauthorized: User not found in request.", 401));
         }
-        const { name, tags, stock, price, categoryId, 
-        // Explicitly list all expected fields from the form
-        description, sku, weight, barcode, salePrice, slug, } = req.body;
-        // Generate slug dari nama produk jika tidak disediakan, atau pastikan unik jika disediakan.
+        const { name, tags, stock, price, categoryId, description, sku, weight, barcode, salePrice, slug, } = req.body;
         const finalSlug = await generateUniqueSlug(slug || name);
-        // Proses path gambar dari req.files
         let imagePaths = [];
         if (req.files && Array.isArray(req.files) && req.files.length > 0) {
             imagePaths = req.files.map((file) => `/uploads/products/${file.filename}`);
         }
-        // Persiapkan data untuk dimasukkan ke database
-        // Pastikan semua tipe data sesuai dengan model Sequelize
-        // (misal: string ke number, string JSON ke object)
         const newProduct = await Product.create({
             name,
             description,
             sku,
             barcode,
-            slug: finalSlug, // Pastikan slug dimasukkan
+            slug: finalSlug,
             price: parseFloat(price),
             weight: parseInt(weight, 10),
-            salePrice: salePrice ? parseFloat(salePrice) : undefined, // Use undefined to match model type
+            salePrice: salePrice ? parseFloat(salePrice) : undefined,
             stock: parseInt(stock, 10),
             categoryId: categoryId ? parseInt(categoryId, 10) : undefined,
             userId,
             imagePaths: imagePaths.length > 0 ? imagePaths : [],
             tags: tags ? JSON.parse(tags) : [],
-            isPublished: true, // Default ke published saat dibuat
+            isPublished: true,
         });
-        // 3. Ambil kembali data produk lengkap dengan relasinya untuk dikirim ke client
         const productWithRelations = await Product.findByPk(newProduct.id, {
             include: [{ model: Category, as: "category" }],
         });
@@ -156,10 +141,6 @@ export const createProduct = async (req, res, next) => {
         });
     }
     catch (err) {
-        // Log semua error yang terjadi di controller ini ke terminal
-        console.error("--- ERROR in createProduct Controller ---");
-        console.error(err);
-        // Teruskan error ke global error handler untuk dikirim ke client
         next(err);
     }
 };
@@ -167,63 +148,95 @@ export const createProduct = async (req, res, next) => {
  * Memperbarui produk.
  * PUT /api/v1/admin/products/:id
  */
-export const updateProduct = async (req, res) => {
+export const updateProduct = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const [updatedRows] = await Product.update(req.body, { where: { id } });
-        if (updatedRows === 0) {
-            return res.status(404).json({ message: "Produk tidak ditemukan." });
+        const product = await Product.findByPk(id);
+        if (!product) {
+            return next(new AppError("Produk tidak ditemukan.", 404));
         }
-        const updatedProduct = await Product.findByPk(id);
-        res.status(200).json({ status: "success", data: updatedProduct });
+        const { name, description, sku, barcode, price, weight, salePrice, stock, categoryId, tags, isPublished, slug, } = req.body;
+        const payload = {};
+        if (name !== undefined)
+            payload.name = name;
+        if (description !== undefined)
+            payload.description = description;
+        if (sku !== undefined)
+            payload.sku = sku;
+        if (barcode !== undefined)
+            payload.barcode = barcode;
+        if (price !== undefined)
+            payload.price = parseFloat(price);
+        if (weight !== undefined)
+            payload.weight = parseInt(weight, 10);
+        if (salePrice !== undefined)
+            payload.salePrice = parseFloat(salePrice);
+        if (stock !== undefined)
+            payload.stock = parseInt(stock, 10);
+        if (categoryId !== undefined)
+            payload.categoryId = parseInt(categoryId, 10);
+        if (tags !== undefined)
+            payload.tags = tags;
+        if (isPublished !== undefined)
+            payload.isPublished = isPublished;
+        if (slug && slug !== product.slug) {
+            payload.slug = await generateUniqueSlug(slug);
+        }
+        const [updatedRows] = await Product.update(payload, { where: { id } });
+        if (updatedRows === 0) {
+            return next(new AppError("Produk tidak ditemukan atau tidak ada perubahan.", 404));
+        }
+        const updatedProduct = await Product.findByPk(id, {
+            include: [{ model: Category, as: "category" }],
+        });
+        res.status(200).json({
+            status: "success",
+            message: "Produk berhasil diperbarui.",
+            data: updatedProduct,
+        });
     }
-    catch (error) {
-        res
-            .status(500)
-            .json({ status: "error", message: "Gagal memperbarui produk." });
+    catch (err) {
+        next(err);
     }
 };
 /**
  * Menghapus produk.
  * DELETE /api/v1/admin/products/:id
  */
-export const deleteProduct = async (req, res) => {
+export const deleteProduct = async (req, res, next) => {
     try {
         const { id } = req.params;
         const deletedRows = await Product.destroy({ where: { id } });
         if (deletedRows === 0) {
-            return res.status(404).json({ message: "Produk tidak ditemukan." });
+            return next(new AppError("Produk tidak ditemukan.", 404));
         }
         res.status(204).send();
     }
     catch (error) {
-        res
-            .status(500)
-            .json({ status: "error", message: "Gagal menghapus produk." });
+        next(error);
     }
 };
 /**
  * Mengubah status publish produk.
  * PATCH /api/v1/admin/products/:id/toggle-publish
  */
-export const togglePublishStatus = async (req, res) => {
+export const togglePublishStatus = async (req, res, next) => {
     try {
         const { id } = req.params;
         const product = await Product.findByPk(id);
         if (!product) {
-            return res.status(404).json({ message: "Produk tidak ditemukan." });
+            return next(new AppError("Produk tidak ditemukan.", 404));
         }
-        product.isPublished = !product.isPublished;
+        const newPublished = !product.isPublished;
+        product.isPublished = newPublished;
         await product.save();
         res.status(200).json({
             status: "success",
-            message: `Status produk berhasil diubah menjadi ${product.isPublished ? "Published" : "Unpublished"}.`,
+            message: `Status produk berhasil diubah menjadi ${newPublished ? "Published" : "Unpublished"}.`,
             data: product,
         });
     }
     catch (error) {
-        res
-            .status(500)
-            .json({ status: "error", message: "Gagal mengubah status produk." });
+        next(error);
     }
 };
