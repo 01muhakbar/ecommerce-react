@@ -1,10 +1,18 @@
+// Always use Vite dev proxy for API in development to avoid port coupling
+const API_BASE = "/api";
+
 export async function http<T = unknown>(
   url: string,
   init?: RequestInit
 ): Promise<T> {
-  const res = await fetch(import.meta.env.VITE_API_BASE + url, {
+  const isFormData = typeof FormData !== "undefined" && init?.body instanceof FormData;
+  const headers = isFormData
+    ? { ...(init?.headers || {}) } // let browser set multipart boundary
+    : { "Content-Type": "application/json", ...(init?.headers || {}) };
+
+  const res = await fetch(API_BASE + url, {
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
+    headers,
     ...init,
   });
   if (!res.ok) throw new Error((await res.text()) || "HTTP error");

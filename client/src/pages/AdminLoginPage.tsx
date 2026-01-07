@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import http from "@/lib/http";
 import { useAuthStore } from "@/store/authStore";
@@ -7,9 +7,11 @@ import adminLoginHeroImg from "@/assets/admin-login-hero.jpg";
 
 export default function AdminLoginPage() {
   const nav = useNavigate();
+  const loc = useLocation();
   const { actions } = useAuthStore();
   const [f, setF] = useState({ email: "", password: "" });
   const [err, setErr] = useState<string | null>(null);
+  const reason = (loc.state as any)?.reason as string | undefined;
 
   const login = useMutation<{ user: import("@/store/authStore").User }, unknown, typeof f>({
     mutationFn: async (body) => {
@@ -21,7 +23,15 @@ export default function AdminLoginPage() {
     onSuccess: (data) => {
       setErr(null);
       actions.setUser(data.user);
-      nav("/admin/dashboard", { replace: true });
+      const st = loc.state as any;
+      const from = st?.from;
+      const target =
+        typeof from === "string"
+          ? from
+          : from && typeof from === "object" && "pathname" in from
+          ? `${from.pathname}${from.search || ""}${from.hash || ""}`
+          : "/admin/dashboard";
+      nav(target, { replace: true });
     },
     onError: (e: any) => {
       const msg =
@@ -55,6 +65,12 @@ export default function AdminLoginPage() {
         <p className="text-slate-600 mb-8">
           Masuk untuk mengelola dashboard toko Anda
         </p>
+        {reason === "forbidden" && (
+          <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Akses ke halaman admin memerlukan akun dengan peran admin.
+            Silakan login menggunakan akun admin.
+          </div>
+        )}
         <form onSubmit={submit} className="space-y-4">
           <div>
             <label className="block mb-1 text-sm font-medium">Email</label>

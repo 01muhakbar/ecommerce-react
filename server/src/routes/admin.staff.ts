@@ -1,73 +1,39 @@
+// server/src/routes/admin.staff.ts
 import { Router } from "express";
 import { Op } from "sequelize";
-import { parseListQuery } from "../utils/pagination.js";
-import { Staff, StaffAttributes } from "../models/Staff.js";
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const models = require("../../../models/index.js");
 
+const { User } = models;
 const router = Router();
 
-const validRoles: StaffAttributes["role"][] = [
-  "admin",
-  "super_admin",
-  "editor",
-  "viewer",
-];
+// GET /api/admin/staff?page=1&pageSize=10&q=
+router.get("/", async (req, res, next) => {
+  try {
+    const page = Math.max(1, Number(req.query.page ?? 1));
+    const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize ?? 10)));
+    const q = String(req.query.q ?? "").trim();
 
-// GET list with pagination & search
-router.get("/", async (req, res) => {
-  const { page, pageSize, sort, order, search } = parseListQuery(req.query);
-  const where = search
-    ? {
-        [Op.or]: [
-          { name: { [Op.like]: `%${search}%` } },
-          { email: { [Op.like]: `%${search}%` } },
-        ],
-      }
-    : {};
+    const where: any = { role: "staff" };
+    if (q) {
+      where[Op.or] = [
+        { name: { [Op.like]: `%${q}%` } },
+        { email: { [Op.like]: `%${q}%` } },
+      ];
+    }
 
-  const { rows, count } = await Staff.findAndCountAll({
-    where,
-    order: [[sort, order]],
-    limit: pageSize,
-    offset: (page - 1) * pageSize,
-  });
+    const { rows, count } = await (User as any).findAndCountAll({
+      where,
+      offset: (page - 1) * pageSize,
+      limit: pageSize,
+      order: [["created_at", "DESC"]],
+    });
 
-  res.json({
-    data: rows,
-    meta: {
-      page,
-      pageSize,
-      total: count,
-      totalPages: Math.ceil(count / pageSize),
-    },
-  });
-});
-
-// GET detail
-router.get("/:id", async (req, res) => {
-  const staff = await Staff.findByPk(req.params.id);
-  if (!staff) return res.status(404).json({ message: "Staff not found" });
-  res.json(staff);
-});
-
-// PUT update
-router.put("/:id", async (req, res) => {
-  const staff = await Staff.findByPk(req.params.id);
-  if (!staff) return res.status(404).json({ message: "Staff not found" });
-
-  const { role } = req.body;
-  if (role && !validRoles.includes(role)) {
-    return res
-      .status(400)
-      .json({
-        message: `Invalid role. Must be one of: ${validRoles.join(", ")}`,
-      });
+    res.json({ data: rows, page, pageSize, total: count });
+  } catch (err) {
+    next(err);
   }
-
-  await staff.update(req.body);
-  res.json(staff);
 });
-
-// Other CRUD endpoints (POST, DELETE) can be added here following a similar pattern.
-// For simplicity, I'm focusing on GET and PUT as requested.
 
 export default router;

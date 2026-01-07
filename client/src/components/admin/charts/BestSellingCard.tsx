@@ -50,43 +50,67 @@ export function BestSellingCard({ limit = 5 }: { limit?: number }) {
           <p className="mt-4">No best selling products yet.</p>
         </div>
       ) : (
-        <div className="h-64 w-full relative">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={items}
-                dataKey="sales"
-                nameKey="name"
-                innerRadius={60}
-                outerRadius={90}
-                label={({ name, percent }) =>
-                  `${name} ${Math.round(Number(percent ?? 0) * 100)}%`
-                }
-              >
-                {items.map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip
-                formatter={(v: any, _n: string, entry: any) => [
-                  `${v} sold (${Math.round(
-                    (Number(v) / Math.max(total, 1)) * 100
-                  )}%)`,
-                  entry?.payload?.name,
-                ]}
-              />
-              <Legend verticalAlign="middle" align="right" layout="vertical" />
-            </PieChart>
-          </ResponsiveContainer>
+        <>
+          <div className="h-64 w-full relative">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={items}
+                  dataKey="sales"
+                  nameKey="name"
+                  innerRadius={60}
+                  outerRadius={90}
+                  label={({ name, percent }) =>
+                    `${name} ${Math.round(Number(percent ?? 0) * 100)}%`
+                  }
+                >
+                  {items.map((_: any, i: number) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(v: any, _n: string, entry: any) => [
+                    `${v} sold (${Math.round(
+                      (Number(v) / Math.max(total, 1)) * 100
+                    )}%)`,
+                    entry?.payload?.name,
+                  ]}
+                />
+                <Legend verticalAlign="middle" align="right" layout="vertical" />
+              </PieChart>
+            </ResponsiveContainer>
 
-          {/* total di tengah */}
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div className="text-center">
-              <div className="text-xs text-slate-500">Total Sold</div>
-              <div className="text-lg font-semibold">{total}</div>
+            {/* total di tengah */}
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div className="text-center">
+                <div className="text-xs text-slate-500">Total Sold</div>
+                <div className="text-lg font-semibold">{total}</div>
+              </div>
             </div>
           </div>
-        </div>
+
+          {/* small list with thumbnails */}
+          <ul className="mt-4 space-y-2">
+            {items.map((it: any, idx: number) => (
+              <li key={idx} className="flex items-center justify-between">
+                <div className="flex items-center gap-3 min-w-0">
+                  {it.mainImageUrl ? (
+                    <img
+                      src={it.mainImageUrl}
+                      alt={it.name}
+                      className="h-8 w-8 rounded object-cover border"
+                      onError={(e: any) => (e.currentTarget.style.display = 'none')}
+                    />
+                  ) : (
+                    <div className="h-8 w-8 rounded bg-slate-200 border" />
+                  )}
+                  <span className="truncate" title={it.name}>{it.name}</span>
+                </div>
+                <span className="text-sm text-slate-600">{Number(it.sales) || 0}</span>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </div>
   );

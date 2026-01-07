@@ -12,7 +12,12 @@
   "type": "module",
   "scripts": {
     "build": "pnpm -F server build && pnpm -F client build",
-    "dev": "echo use package-level dev scripts"
+    "start": "pnpm --filter server start",
+    "dev": "echo \"Run pnpm dev:server and pnpm dev:client in separate terminals\"",
+    "dev:server": "pnpm --filter server dev",
+    "dev:client": "pnpm --filter client dev",
+    "db:sync": "pnpm --filter server db:sync",
+    "seed:super": "pnpm --filter server seed:super"
   },
   "repository": {
     "type": "git",

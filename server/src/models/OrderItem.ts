@@ -43,10 +43,12 @@ export class OrderItem
         orderId: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
+          field: 'order_id',
         },
         productId: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
+          field: 'product_id',
         },
         quantity: {
           type: DataTypes.INTEGER,
@@ -61,7 +63,7 @@ export class OrderItem
         sequelize,
         modelName: "OrderItem",
         tableName: "OrderItems",
-        underscored: true,
+        underscored: false,
       }
     );
     return OrderItem;

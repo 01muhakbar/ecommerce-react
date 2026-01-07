@@ -2,8 +2,12 @@ import { DataTypes, Model, Sequelize, Optional } from "sequelize";
 
 interface CategoryAttributes {
   id: number;
+  code: string;
   name: string;
   description?: string;
+  icon?: string;
+  published: boolean;
+  parentId?: number | null;
 }
 
 interface CategoryCreationAttributes
@@ -14,14 +18,19 @@ export class Category
   implements CategoryAttributes
 {
   public id!: number;
+  public code!: string;
   public name!: string;
   public description?: string;
+  public icon?: string;
+  public published!: boolean;
+  public parentId?: number | null;
 
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 
-  static associate(models: any) {
-    Category.hasMany(models.Product, { foreignKey: "categoryId" });
+  static associate(_models: any) {
+    Category.hasMany(Category, { as: "children", foreignKey: "parent_id" });
+    Category.belongsTo(Category, { as: "parent", foreignKey: "parent_id" });
   }
 
   static initModel(sequelize: Sequelize): typeof Category {
@@ -32,12 +41,31 @@ export class Category
           autoIncrement: true,
           primaryKey: true,
         },
+        code: {
+          type: DataTypes.STRING(32),
+          allowNull: false,
+          unique: true,
+        },
         name: {
-          type: DataTypes.STRING,
+          type: DataTypes.STRING(120),
           allowNull: false,
         },
         description: {
-          type: DataTypes.TEXT,
+          type: DataTypes.STRING(255),
+          allowNull: true,
+        },
+        icon: {
+          type: DataTypes.STRING(255),
+          allowNull: true,
+        },
+        published: {
+          type: DataTypes.BOOLEAN,
+          allowNull: false,
+          defaultValue: true,
+        },
+        parentId: {
+          field: "parent_id",
+          type: DataTypes.INTEGER.UNSIGNED,
           allowNull: true,
         },
       },

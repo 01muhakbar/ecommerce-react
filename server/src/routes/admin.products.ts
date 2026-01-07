@@ -80,19 +80,57 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
       limit: pageSize,
       offset,
       order: [[sort, order]],
-    });
+  });
 
-    res.json({
-      items: rows,
-      page,
-      pageSize,
-      total: count,
-      totalPages: Math.ceil(count / pageSize),
-    });
+  res.json({
+    items: rows,
+    page,
+    pageSize,
+    total: count,
+    totalPages: Math.ceil(count / pageSize),
+  });
   } catch (err) {
     next(err);
   }
 });
+
+// GET /api/admin/products/:id
+router.get(
+  "/:id",
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const p = await Product.findByPk(req.params.id as any);
+      if (!p) return res.status(404).json({ message: "Not found" });
+      res.json(p);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// PUT /api/admin/products/:id/images — update promoImagePath and imagePaths
+router.put(
+  "/:id/images",
+  async (
+    req: Request<{ id: string }, {}, { promoImagePath?: string | null; images?: string[] }>,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { id } = req.params;
+      const { promoImagePath, images } = req.body;
+      const p = await Product.findByPk(id as any);
+      if (!p) return res.status(404).json({ message: "Not found" });
+      const patch: any = {};
+      if (promoImagePath !== undefined) patch.promoImagePath = promoImagePath;
+      if (images !== undefined) patch.imagePaths = Array.isArray(images) ? images : [];
+      await p.update(patch);
+      res.json(p);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 type ProductBody = {
   name?: string;
@@ -122,6 +160,7 @@ router.post(
         stock,
         images,
         status,
+        promoImagePath,
       } = req.body;
       const created = await Product.create({
         name,
@@ -135,6 +174,8 @@ router.post(
           : images
           ? [images as string]
           : [],
+        promoImagePath:
+          promoImagePath || (Array.isArray(images) ? images[0] : images || null),
         status: status ?? "draft",
         userId: (req as any).user?.id ?? 0,
         isPublished: false,

@@ -1,13 +1,11 @@
-// d:/ecommerce-react/server/src/server.ts
-import app from "./app"; // Impor konfigurasi Express dari app.ts
-import "./models"; // Import models to ensure they are registered
+import app from "./app";
+import "./models";
+import net from "node:net";
 
-const PORT = process.env.PORT || 3000;
+const BASE_PORT = Number(process.env.PORT) || 3000;
 
 /**
- * Fungsi utama untuk memulai server.
- * Ini akan menginisialisasi database terlebih dahulu,
- * baru kemudian menjalankan server Express.
+ * Start the server: connect DB, sync models, then listen with port retry.
  */
 const startServer = async () => {
   try {
@@ -16,23 +14,46 @@ const startServer = async () => {
     await sequelize.authenticate();
     console.log("Database connected successfully.");
 
-    // --- SINKRONISASI DATABASE ---
-    // Pindahkan logika sinkronisasi ke sini.
-    // `{ alter: true }` akan mencoba mengubah tabel yang ada agar sesuai dengan model.
     console.log("Synchronizing database models...");
     await sequelize.sync({ alter: true });
     console.log("Database synchronized successfully.");
 
-    app.listen(PORT, () => {
-      console.log(
-        `🚀 Server is running on http://localhost:${PORT} with DB sync`
-      );
-    });
+    await listenWithRetry(BASE_PORT, 10);
   } catch (error) {
-    console.error("❌ Failed to start server:", error);
-    process.exit(1); // Keluar dari proses jika gagal memulai
+    console.error("Failed to start server:", error);
+    process.exit(1);
   }
 };
 
-// Panggil fungsi untuk memulai server
 startServer();
+
+// Try to listen on a port; on EADDRINUSE, try the next one up to `retries` times
+function listenWithRetry(port: number, retries: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const server = app
+      .listen(port)
+      .once("listening", () => {
+        console.log(`🚀 Server is running on http://localhost:${port} with DB sync`);
+        if (port !== BASE_PORT) {
+          console.warn(
+            `[server] Note: desired PORT ${BASE_PORT} was busy. Using ${port} instead.`
+          );
+        }
+        resolve();
+      })
+      .once("error", (err: any) => {
+        if (err && err.code === "EADDRINUSE" && retries > 0) {
+          const next = port + 1;
+          console.warn(
+            `[server] Port ${port} in use. Retrying on ${next} (${retries - 1} retries left)...`
+          );
+          setTimeout(() => {
+            listenWithRetry(next, retries - 1).then(resolve).catch(reject);
+          }, 250);
+          return;
+        }
+        reject(err);
+      });
+  });
+}
+

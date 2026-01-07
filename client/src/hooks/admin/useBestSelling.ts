@@ -2,10 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/axios";
 
 export type BestSellingItem = {
-  productId: string;
+  productId: number | string;
   name: string;
-  totalQty: number;
-  totalAmount: number;
+  sales: number;
+  price?: number | string | null;
+  slug?: string | null;
+  mainImageUrl?: string | null;
 };
 
 const EMPTY: BestSellingItem[] = [];

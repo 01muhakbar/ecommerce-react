@@ -18,9 +18,10 @@ const AddProductForm = lazy(
 const ProductDetailsPage = lazy(
   () => import("@/pages/admin/catalog/ProductDetailsPage")
 );
-const CategoriesPage = lazy(
-  () => import("@/pages/admin/catalog/CategoriesPage")
+const AdminCategoriesPage = lazy(
+  () => import("@/pages/admin/AdminCategoriesPage")
 );
+const CategoryForm = lazy(() => import("@/pages/admin/CategoryForm"));
 const AttributesPage = lazy(
   () => import("@/pages/admin/catalog/AttributesPage")
 );
@@ -115,7 +116,23 @@ export default function App() {
             path="categories"
             element={
               <RequireAdmin>
-                <CategoriesPage />
+                <AdminCategoriesPage />
+              </RequireAdmin>
+            }
+          />
+          <Route
+            path="categories/new"
+            element={
+              <RequireAdmin>
+                <CategoryForm mode="create" />
+              </RequireAdmin>
+            }
+          />
+          <Route
+            path="categories/:id/edit"
+            element={
+              <RequireAdmin>
+                <CategoryForm mode="edit" />
               </RequireAdmin>
             }
           />

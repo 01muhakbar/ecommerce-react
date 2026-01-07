@@ -1,48 +1,43 @@
 // server/src/scripts/seedSuperAdmin.ts
 import "dotenv/config";
-import bcrypt from "bcryptjs";
-import sequelize from "../config/database.js";
-import { DataTypes, Model } from "sequelize";
-class User extends Model {
-}
-User.init({
-    id: {
-        type: DataTypes.INTEGER.UNSIGNED,
-        primaryKey: true,
-        autoIncrement: true,
-    },
-    email: { type: DataTypes.STRING(191), allowNull: false, unique: true },
-    password: { type: DataTypes.STRING(191), allowNull: false },
-    role: {
-        type: DataTypes.STRING(32),
-        allowNull: false,
-        defaultValue: "super_admin",
-    },
-    isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
-    createdAt: { type: DataTypes.DATE, allowNull: false, field: "created_at" },
-    updatedAt: { type: DataTypes.DATE, allowNull: false, field: "updated_at" },
-}, { sequelize, modelName: "User", tableName: "users", underscored: true });
+import bcrypt from "bcrypt";
+import { sequelize, User, syncDb } from "../models/index.js";
 async function main() {
-    const email = process.env.SUPER_ADMIN_EMAIL || "admin@local";
-    const rawPass = process.env.SUPER_ADMIN_PASSWORD || "admin123";
-    const hash = await bcrypt.hash(rawPass, 10);
-    await sequelize.authenticate();
-    const existing = await User.findOne({ where: { email } });
-    if (existing) {
-        console.log(`[seed] Super admin already exists: ${email}`);
-        return;
+    try {
+        console.log("[seed] Starting super admin seed script...");
+        // Pastikan konek DB
+        await sequelize.authenticate();
+        console.log("[seed] Database connection authenticated successfully.");
+        // Sync schema → tabel muncul di phpMyAdmin/MySQL
+        await syncDb();
+        console.log("[seed] DB schema synced.");
+        const email = process.env.SEED_SUPER_EMAIL || "superadmin@local.dev";
+        const passwordPlain = process.env.SEED_SUPER_PASS || "supersecure123";
+        const hashed = await bcrypt.hash(passwordPlain, 10);
+        const [user, created] = await User.findOrCreate({
+            where: { email },
+            defaults: {
+                name: "Super Admin",
+                email,
+                password: hashed,
+                role: "super_admin",
+                status: "active",
+            },
+        });
+        if (created) {
+            console.log(`[seed] ✅ Super admin created: ${email} / ${passwordPlain}`);
+        }
+        else {
+            console.log(`[seed] ℹ️ Super admin already exists: ${email}`);
+        }
+        console.log("[seed] Done!");
     }
-    await User.create({
-        email,
-        password: hash,
-        role: "super_admin",
-        isActive: true,
-    });
-    console.log(`[seed] Super admin created: ${email} / ${rawPass}`);
+    catch (err) {
+        console.error("[seed] Error:", err);
+        process.exitCode = 1;
+    }
+    finally {
+        await sequelize.close();
+    }
 }
-main()
-    .then(() => process.exit(0))
-    .catch((e) => {
-    console.error(e);
-    process.exit(1);
-});
+main();

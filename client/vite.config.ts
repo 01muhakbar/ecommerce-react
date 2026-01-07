@@ -13,7 +13,12 @@ export default defineConfig({
     proxy: {
       // Proxy semua request /api ke server dev
       "/api": {
-        target: "http://localhost:3000",
+        target: "http://localhost:3001",
+        changeOrigin: true,
+      },
+      // Proxy uploaded assets too
+      "/uploads": {
+        target: "http://localhost:3001",
         changeOrigin: true,
       },
     },

@@ -1,34 +1,36 @@
+// server/src/middleware/authFromCookie.ts
 import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+
+const COOKIE_NAME = process.env.AUTH_COOKIE_NAME || "token";
 
 function normalizeRole(input: unknown) {
   const raw = String(input ?? "").toLowerCase().trim();
   if (!raw) return null;
-  // ubah spasi, hyphen, dll menjadi underscore
   const snake = raw.replace(/[^a-z0-9]+/g, "_");
-  // pemetaan eksplisit untuk keamanan
   if (["super_admin", "super-admin", "super admin"].includes(raw) || snake === "super_admin") {
     return "super_admin";
   }
   if (["admin", "administrator"].includes(raw) || snake === "admin") {
     return "admin";
   }
-  return snake; // fallback
+  return snake;
 }
 
-export function authFromCookie(req: Request, _res: Response, next: NextFunction) {
-  const token = req.cookies?.access_token; // prefer utama
-  (req as any).user = null;
-
-  if (!token) return next();
-
+export default function authFromCookie(req: Request, _res: Response, next: NextFunction) {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!);
-    if (decoded && typeof decoded === "object") {
-      const payload: any = decoded;
-      const rawRole = payload.role ?? payload.user?.role ?? payload.claims?.role;
-      const role = normalizeRole(rawRole);
+    const token =
+      (req as any).cookies?.[COOKIE_NAME] ||
+      (req.headers.authorization?.startsWith("Bearer ")
+        ? req.headers.authorization.slice(7)
+        : undefined);
 
+    (req as any).user = null;
+
+    if (token) {
+      const payload: any = jwt.verify(token, process.env.JWT_SECRET || "dev-secret");
+      const rawRole = payload.role || payload.userRole || payload["https://example.com/role"];
+      const role = normalizeRole(rawRole);
       (req as any).user = {
         id: payload.id ?? payload.userId ?? payload.sub,
         email: payload.email,
@@ -36,7 +38,6 @@ export function authFromCookie(req: Request, _res: Response, next: NextFunction)
         role,
       };
     }
-
   } catch {
     (req as any).user = null;
   }

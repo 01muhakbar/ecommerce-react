@@ -15,11 +15,17 @@ export default function RequireAdmin({
     return <Navigate to="/admin/login" replace state={{ from: loc }} />;
 
   if (!isAdminRole(user.role)) {
-    // Bisa tampilkan detail saat DEV untuk debug cepat
     if (import.meta.env.DEV) {
       console.warn("[RequireAdmin] Forbidden for role:", user.role);
     }
-    return <div className="p-6">Akses ditolak.</div>;
+    // Redirect non-admin users away from admin routes
+    return (
+      <Navigate
+        to="/admin/login"
+        replace
+        state={{ from: loc, reason: "forbidden" }}
+      />
+    );
   }
   return <>{children}</>;
 }

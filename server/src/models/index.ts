@@ -1,104 +1,36 @@
+// server/src/models/index.ts
+import "dotenv/config";
 import { Sequelize } from "sequelize";
-import sequelize from "./SequelizeInstance";
+import { initUser, User } from "./User.js";
+import { Product } from "./Product.js";
+import { Category } from "./Category.js";
 
-// Import all models
-import { User } from "./User";
-import { Product } from "./Product";
-import { Category } from "./Category";
-import { Order } from "./Order";
-import { OrderItem } from "./OrderItem";
-import { Staff } from "./Staff";
-import { Cart } from "./Cart";
-import { CartItem } from "./CartItem";
-import { Coupon } from "./Coupon";
-import { Attribute } from "./Attribute";
-
-interface ModelType {
-  initModel?(sequelize: Sequelize): void;
-  associate?(db: any): void;
-}
-
-interface DB {
-  sequelize: typeof sequelize;
-  User: typeof User & ModelType;
-  Product: typeof Product & ModelType;
-  Category: typeof Category & ModelType;
-  Order: typeof Order & ModelType;
-  OrderItem: typeof OrderItem & ModelType;
-  Staff: typeof Staff & ModelType;
-  Cart: typeof Cart & ModelType;
-  CartItem: typeof CartItem & ModelType;
-  Coupon: typeof Coupon & ModelType;
-  Attribute: typeof Attribute & ModelType;
-  [key: string]: any;
-}
-
-/**
- * ----------------------------------------------------------------
- * Model Initialization and Export
- * ----------------------------------------------------------------
- */
-
-// Initialize models
-const models = [
-  User,
-  Product,
-  Category,
-  Order,
-  OrderItem,
-  Staff,
-  Cart,
-  CartItem,
-  Coupon,
-  Attribute,
-] as (typeof User & ModelType)[];
-
-// Initialize each model
-models.forEach((model) => {
-  if (model.initModel) {
-    model.initModel(sequelize);
-  }
+// Gunakan ENV agar sinkron dengan phpMyAdmin/MySQL kamu
+const sequelize = new Sequelize({
+  dialect: "mysql",
+  host: process.env.DB_HOST || "localhost",
+  username: process.env.DB_USER || "root",
+  password: process.env.DB_PASS || "",
+  database: process.env.DB_NAME || "ecommerce_dev",
+  logging: false, // set true kalau mau lihat SQL di console
 });
 
-// Create db object with all models
-const db: DB = {
-  sequelize,
-  User,
-  Product,
-  Category,
-  Order,
-  OrderItem,
-  Staff,
-  Cart,
-  CartItem,
-  Coupon,
-  Attribute,
-};
+// Registrasi semua model di sini
+function initModels() {
+  initUser(sequelize);
+  Product.initModel(sequelize);
+  Category.initModel(sequelize);
+  // TODO: init model lain (Product, Order, dsb) jika ada
+  // contoh: initProduct(sequelize); Product.belongsTo(User) ... dst
+}
 
-/**
- * ----------------------------------------------------------------
- * Model Associations
- * ----------------------------------------------------------------
- */
-// Set up associations
-models.forEach((model) => {
-  if (model.associate && typeof model.associate === "function") {
-    model.associate(db);
-  }
-});
+// Jalankan init sekali waktu file ini di-import
+initModels();
 
-export {
-  sequelize,
-  User,
-  Product,
-  Category,
-  Order,
-  OrderItem,
-  Staff,
-  Cart,
-  CartItem,
-  Coupon,
-  Attribute,
-};
+// Helper untuk sync schema → langsung terlihat di phpMyAdmin
+export async function syncDb() {
+  // gunakan alter agar kolom baru otomatis disesuaikan (aman untuk dev)
+  await sequelize.sync({ alter: true });
+}
 
-export default db;
+export { sequelize, User, Product, Category };

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm, Controller, type SubmitHandler, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -94,6 +94,7 @@ type FormValues = z.infer<typeof schema>;
 export default function AddProductForm() {
   const navigate = useNavigate();
   const [images, setImages] = useState<string[]>([]);
+  const [mainImage, setMainImage] = useState<string | null>(null);
   const [hasVariants, setHasVariants] = useState(false);
 
   // API call to fetch categories
@@ -101,7 +102,9 @@ export default function AddProductForm() {
     queryKey: ["adminCategories"],
     queryFn: () => http<any>("/admin/categories"),
   });
-  const categories = categoriesData?.data?.categories || [];
+  const categories = Array.isArray(categoriesData?.data)
+    ? categoriesData?.data
+    : categoriesData?.data?.categories || [];
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema) as Resolver<FormValues>,
@@ -110,6 +113,7 @@ export default function AddProductForm() {
       sku: "",
       price: 0,
       quantity: 0,
+      // leave salePrice undefined so input can appear blank
       slug: "",
       tags: [],
     },
@@ -119,6 +123,8 @@ export default function AddProductForm() {
     control,
     setValue,
     watch,
+    setError,
+    clearErrors,
     formState: { errors, isSubmitting },
   } = form;
 
@@ -146,10 +152,14 @@ export default function AddProductForm() {
     try {
       const res = await http<any>("/admin/products/upload", {
         method: "POST",
-        headers: { "Content-Type": "multipart/form-data" },
+        // Do NOT set Content-Type; browser will set boundary for multipart
         body: formData,
       });
-      setImages((prev) => [...prev, ...res.data.urls]);
+      setImages((prev) => {
+        const merged = [...prev, ...res.urls, ...(res.data?.urls || [])];
+        if (!mainImage && merged.length > 0) setMainImage(merged[0]);
+        return merged;
+      });
       toast.success("Images uploaded successfully!", { id: toastId });
     } catch (err) {
       console.error(err);
@@ -157,8 +167,22 @@ export default function AddProductForm() {
     }
   };
 
+  // Live validate: salePrice should not exceed price
+  const priceVal = watch("price");
+  const salePriceVal = watch("salePrice");
+  useEffect(() => {
+    if (salePriceVal !== undefined && salePriceVal > priceVal) {
+      setError("salePrice", {
+        type: "validate",
+        message: "Sale price cannot be greater than the regular price",
+      });
+    } else {
+      clearErrors("salePrice");
+    }
+  }, [priceVal, salePriceVal, setError, clearErrors]);
+
   const onSubmit: SubmitHandler<FormValues> = async (values) => {
-    const payload = { ...values, images };
+    const payload = { ...values, images, promoImagePath: mainImage || images[0] } as any;
     try {
       await post("/admin/products", payload);
       toast.success("Product created successfully!");
@@ -173,21 +197,57 @@ export default function AddProductForm() {
     e: React.ChangeEvent<HTMLInputElement>,
     field: "price" | "salePrice"
   ) => {
-    const numValue = parseFloat(e.target.value.replace(/[^0-9]/g, ""));
-    if (!isNaN(numValue)) {
-      setValue(field, numValue, { shouldValidate: true });
-    } else {
-      setValue(field, 0, { shouldValidate: true });
+    const raw = e.target.value;
+    const digits = raw.replace(/[^0-9]/g, "");
+    if (digits === "") {
+      // allow blank for salePrice; keep price at 0 when blank
+      if (field === "salePrice") {
+        // @ts-expect-error allow undefined for optional field
+        setValue(field, undefined as any, { shouldValidate: true });
+      } else {
+        setValue(field, 0, { shouldValidate: true });
+      }
+      return;
     }
+    const numValue = parseFloat(digits);
+    setValue(field, isNaN(numValue) ? (field === "salePrice" ? (undefined as any) : 0) : numValue, {
+      shouldValidate: true,
+    });
   };
 
   const formatCurrency = (value: number | undefined) => {
-    if (value === undefined || value === null) return "";
+    if (value === undefined || value === null || !Number.isFinite(value)) {
+      return ""; // show blank when no value
+    }
     return new Intl.NumberFormat("id-ID", {
       style: "currency",
       currency: "IDR",
       minimumFractionDigits: 0,
     }).format(value);
+  };
+
+  // Live numeric formatter (ribuan) tanpa simbol mata uang, untuk input yang diprefix "Rp"
+  const formatNumberID = (value: number | undefined) => {
+    if (value === undefined || value === null || !Number.isFinite(value)) return "";
+    return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(value);
+  };
+
+  // Caret helpers to stabilize cursor when formatting with thousand separators
+  const countDigitsLeft = (text: string, caret: number) => {
+    let count = 0;
+    for (let i = 0; i < Math.min(caret, text.length); i++) {
+      if (/\d/.test(text[i]!)) count++;
+    }
+    return count;
+  };
+  const caretFromDigits = (formatted: string, digitsLeft: number) => {
+    if (digitsLeft <= 0) return 0;
+    let count = 0;
+    for (let i = 0; i < formatted.length; i++) {
+      if (/\d/.test(formatted[i]!)) count++;
+      if (count >= digitsLeft) return i + 1;
+    }
+    return formatted.length;
   };
 
   return (
@@ -293,13 +353,25 @@ export default function AddProductForm() {
                       <img
                         src={url}
                         alt={`preview ${idx}`}
-                        className="h-24 w-24 object-cover rounded-md"
+                        className="h-24 w-24 object-cover rounded-md border"
                       />
+                      <div className="absolute top-1 left-1 bg-white/90 rounded px-1 py-0.5 text-xs">
+                        <label className="inline-flex items-center gap-1 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="main-image"
+                            checked={mainImage === url}
+                            onChange={() => setMainImage(url)}
+                          />
+                          <span>Cover</span>
+                        </label>
+                      </div>
                       <button
                         type="button"
-                        onClick={() =>
-                          setImages(images.filter((i) => i !== url))
-                        }
+                        onClick={() => {
+                          setImages(images.filter((i) => i !== url));
+                          if (mainImage === url) setMainImage(null);
+                        }}
                         className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1"
                       >
                         <FiX size={12} />
@@ -347,12 +419,45 @@ export default function AddProductForm() {
                     >
                       Product Price
                     </label>
-                    <input
-                      id="price"
-                      {...register("price", { valueAsNumber: true })}
-                      onChange={(e) => handlePriceChange(e, "price")}
-                      value={formatCurrency(watch("price"))}
-                      className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    <Controller
+                      name="price"
+                      control={control}
+                      render={({ field }) => {
+                        const priceRef = useRef<HTMLInputElement | null>(null);
+                        return (
+                          <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 select-none">
+                            Rp
+                          </span>
+                          <input
+                            id="price"
+                            inputMode="numeric"
+                            ref={(el) => {
+                              priceRef.current = el;
+                              // keep RHF ref behaviour
+                              (field as any).ref?.(el);
+                            }}
+                            value={formatNumberID(field.value)}
+                            onChange={(e) => {
+                              const input = e.target as HTMLInputElement;
+                              const caret = input.selectionStart ?? input.value.length;
+                              const digitsLeft = countDigitsLeft(input.value, caret);
+                              const digits = input.value.replace(/[^0-9]/g, "");
+                              const num = digits === "" ? 0 : parseFloat(digits);
+                              const next = Number.isFinite(num) ? num : 0;
+                              field.onChange(next);
+                              // stabilize caret after re-render
+                              setTimeout(() => {
+                                const display = formatNumberID(next);
+                                const nextCaret = caretFromDigits(display, digitsLeft);
+                                priceRef.current?.setSelectionRange(nextCaret, nextCaret);
+                              }, 0);
+                            }}
+                            className="w-full rounded-md border pl-10 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                          </div>
+                        );
+                      }}
                     />
                     {errors.price && (
                       <p className="text-red-500 text-sm mt-1">
@@ -367,12 +472,50 @@ export default function AddProductForm() {
                     >
                       Sale Price
                     </label>
-                    <input
-                      id="salePrice"
-                      {...register("salePrice", { valueAsNumber: true })}
-                      onChange={(e) => handlePriceChange(e, "salePrice")}
-                      value={formatCurrency(watch("salePrice"))}
-                      className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    <Controller
+                      name="salePrice"
+                      control={control}
+                      render={({ field }) => {
+                        const saleRef = useRef<HTMLInputElement | null>(null);
+                        return (
+                          <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 select-none">
+                            Rp
+                          </span>
+                          <input
+                            id="salePrice"
+                            inputMode="numeric"
+                            ref={(el) => {
+                              saleRef.current = el;
+                              (field as any).ref?.(el);
+                            }}
+                            value={formatNumberID(field.value as number | undefined)}
+                            onChange={(e) => {
+                              const input = e.target as HTMLInputElement;
+                              const caret = input.selectionStart ?? input.value.length;
+                              const digitsLeft = countDigitsLeft(input.value, caret);
+                              const digits = input.value.replace(/[^0-9]/g, "");
+                              if (digits === "") {
+                                field.onChange(undefined);
+                                setTimeout(() => {
+                                  saleRef.current?.setSelectionRange(0, 0);
+                                }, 0);
+                              } else {
+                                const num = parseFloat(digits);
+                                const next = Number.isFinite(num) ? num : undefined;
+                                field.onChange(next as any);
+                                setTimeout(() => {
+                                  const display = formatNumberID(next as number | undefined);
+                                  const nextCaret = caretFromDigits(display, digitsLeft);
+                                  saleRef.current?.setSelectionRange(nextCaret, nextCaret);
+                                }, 0);
+                              }
+                            }}
+                            className="w-full rounded-md border pl-10 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                          </div>
+                        );
+                      }}
                     />
                     {errors.salePrice && (
                       <p className="text-red-500 text-sm mt-1">
@@ -462,16 +605,28 @@ export default function AddProductForm() {
             <div className="bg-white border rounded-2xl p-6">
               <div className="space-y-4">
                 <div>
-                  <label
-                    htmlFor="categoryId"
-                    className="block text-sm font-medium mb-1"
-                  >
-                    Category
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label
+                      htmlFor="categoryId"
+                      className="block text-sm font-medium"
+                    >
+                      Category
+                    </label>
+                    <a
+                      href="/admin/catalog/categories"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-medium text-emerald-700 hover:text-emerald-800 underline"
+                      title="Buka halaman Categories di tab baru"
+                    >
+                      Buat Kategori
+                    </a>
+                  </div>
                   <select
                     id="categoryId"
                     {...register("categoryId")}
                     className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    disabled={Array.isArray(categories) && categories.length === 0}
                   >
                     <option value="">Select Category</option>
                     {categories.map((cat: any) => (
@@ -480,6 +635,12 @@ export default function AddProductForm() {
                       </option>
                     ))}
                   </select>
+                  {Array.isArray(categories) && categories.length === 0 && (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded mt-2 px-2 py-1">
+                      Belum ada kategori. Buat kategori terlebih dahulu di halaman
+                      <a className="underline ml-1" href="/admin/catalog/categories">Categories</a>.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label
