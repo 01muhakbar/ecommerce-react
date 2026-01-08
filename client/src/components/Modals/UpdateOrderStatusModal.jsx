@@ -64,7 +64,6 @@ export default function UpdateOrderStatusModal({
           >
             <option value="pending">pending</option>
             <option value="processing">processing</option>
-            <option value="shipped">shipped</option>
             <option value="completed">completed</option>
             <option value="cancelled">cancelled</option>
           </select>

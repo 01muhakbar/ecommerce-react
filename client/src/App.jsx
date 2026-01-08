@@ -9,6 +9,7 @@ import Settings from "./pages/Settings.jsx";
 import Login from "./pages/Login.jsx";
 import { AuthProvider } from "./auth/AuthContext.jsx";
 import ProtectedRoute from "./routes/ProtectedRoute.jsx";
+import RoleRoute from "./routes/RoleRoute.jsx";
 import { useAuth } from "./auth/useAuth.js";
 
 function LogoutRoute() {
@@ -34,7 +35,9 @@ export default function App() {
             <Route path="/products" element={<Products />} />
             <Route path="/orders" element={<Orders />} />
             <Route path="/customers" element={<Customers />} />
-            <Route path="/settings" element={<Settings />} />
+            <Route element={<RoleRoute allowedRoles={["admin", "super_admin"]} />}>
+              <Route path="/settings" element={<Settings />} />
+            </Route>
           </Route>
           <Route path="/logout" element={<LogoutRoute />} />
         </Route>

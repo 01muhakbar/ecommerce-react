@@ -9,6 +9,7 @@
     "start:prod": "node dist/app.js",
     "seed": "tsx src/scripts/seed.ts",
     "seed:super": "tsx src/scripts/seedSuperAdmin.ts",
+    "seed:analytics": "tsx src/scripts/seedAnalyticsDemo.ts",
     "db:sync": "tsx -e \"import('./src/models/index.ts').then(m=>m.syncDb())\""
   },
   "dependencies": {

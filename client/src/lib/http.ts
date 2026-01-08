@@ -1,3 +1,4 @@
+// DEPRECATED: Do not use. Use client/src/api/axios.ts + services instead.
 // Always use Vite dev proxy for API in development to avoid port coupling
 const API_BASE = "/api";
 

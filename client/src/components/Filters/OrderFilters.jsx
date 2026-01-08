@@ -23,8 +23,8 @@ export default function OrderFilters({ filters, onChange }) {
           <option value="">Status (All)</option>
           <option value="pending">Pending</option>
           <option value="processing">Processing</option>
-          <option value="delivered">Delivered</option>
-          <option value="cancel">Cancel</option>
+          <option value="completed">Completed</option>
+          <option value="cancelled">Cancelled</option>
         </select>
         <select
           className="order-filters__select"

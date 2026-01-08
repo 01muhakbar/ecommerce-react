@@ -1,8 +1,10 @@
 // server/src/routes/auth.ts
 import { Router } from "express";
-import { User } from "../models/index.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import * as models from "../models/index.ts";
+
+const { User } = models as { User?: any };
 
 const router = Router();
 
@@ -18,6 +20,10 @@ router.get("/me", (_req, res) => {
 
 router.post("/admin/login", async (req, res) => {
   const { email, password } = req.body;
+
+  if (!User) {
+    return res.status(500).json({ message: "User model not loaded" });
+  }
 
   if (!email || !password) {
     return res.status(400).json({ message: "Email and password are required" });

@@ -1,14 +1,16 @@
 .layout {
   display: flex;
   min-height: 100vh;
+  background: #f6f7fb;
 }
 
 .layout__content {
   flex: 1;
   display: flex;
   flex-direction: column;
+  background: #f6f7fb;
 }
 
 .layout__page {
-  padding: 24px;
+  padding: 24px 28px 32px;
 }

@@ -1,69 +1,68 @@
 import { createContext, useEffect, useMemo, useState } from "react";
-import { login as loginRequest } from "../api/auth.service.js";
-import { setAuthToken, setUnauthorizedHandler } from "../api/httpClient.js";
-
-const STORAGE_KEY = "auth_session";
+import {
+  login as loginRequest,
+  logout as logoutRequest,
+  me as meRequest,
+} from "../api/auth.service.js";
+import { onUnauthorized } from "./authEvents.ts";
 
 export const AuthContext = createContext(null);
 
-function getStoredSession() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
 export function AuthProvider({ children }) {
-  const stored = getStoredSession();
-  const [user, setUser] = useState(stored?.user || null);
-  const [role, setRole] = useState(stored?.role || null);
-  const [token, setToken] = useState(stored?.token || "");
+  const [user, setUser] = useState(null);
+  const [role, setRole] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const clearSession = () => {
+    setUser(null);
+    setRole(null);
+    setIsLoading(false);
+  };
+
+  const refreshSession = async () => {
+    setIsLoading(true);
+    try {
+      const response = await meRequest();
+      const nextUser = response?.user || response || null;
+      const nextRole = response?.user?.role || response?.role || null;
+      setUser(nextUser);
+      setRole(nextRole);
+    } catch (error) {
+      clearSession();
+      return;
+    }
+    setIsLoading(false);
+  };
 
   const login = async (email, password) => {
     if (!email || !password) {
       return { ok: false, message: "Email and password are required." };
     }
-
     try {
-      const response = await loginRequest({ email, password });
-      const nextUser = response?.user || { email };
-      const nextToken = response?.token || "";
-      const nextRole = response?.user?.role || response?.role || null;
-
-      if (!nextToken) {
-        return { ok: false, message: "Invalid credentials." };
-      }
-
-      setUser(nextUser);
-      setRole(nextRole);
-      setToken(nextToken);
-      setAuthToken(nextToken);
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ user: nextUser, role: nextRole, token: nextToken })
-      );
+      await loginRequest({ email, password });
+      await refreshSession();
       return { ok: true };
     } catch (error) {
+      clearSession();
       return { ok: false, message: "Login failed." };
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    setRole(null);
-    setToken("");
-    setAuthToken("");
-    localStorage.removeItem(STORAGE_KEY);
+  const logout = async () => {
+    try {
+      await logoutRequest();
+    } catch (error) {
+      // ignore logout errors and clear local session
+    }
+    clearSession();
   };
 
   useEffect(() => {
-    setAuthToken(token);
-  }, [token]);
-
-  useEffect(() => {
-    setUnauthorizedHandler(logout);
+    refreshSession();
+    const unsubscribe = onUnauthorized(() => {
+      clearSession();
+    });
+    return unsubscribe;
   }, []);
 
   const value = useMemo(
@@ -71,10 +70,12 @@ export function AuthProvider({ children }) {
       user,
       role,
       isAuthenticated: Boolean(user),
+      isLoading,
       login,
       logout,
+      refreshSession,
     }),
-    [user, role]
+    [user, role, isLoading]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

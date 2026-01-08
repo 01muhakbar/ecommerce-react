@@ -1,11 +1,9 @@
 // server/src/routes/admin.staff.ts
 import { Router } from "express";
 import { Op } from "sequelize";
-import { createRequire } from "module";
-const require = createRequire(import.meta.url);
-const models = require("../../../models/index.js");
+import * as models from "../models/index.ts";
 
-const { User } = models;
+const { User } = models as { User?: any };
 const router = Router();
 
 // GET /api/admin/staff?page=1&pageSize=10&q=

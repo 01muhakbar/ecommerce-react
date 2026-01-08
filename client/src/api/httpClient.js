@@ -1,3 +1,4 @@
+// DEPRECATED: Do not use. Use client/src/api/axios.ts + services instead.
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 let authToken = "";
 let unauthorizedHandler = null;

@@ -155,6 +155,27 @@ http://localhost:3000
 
 ---
 
+## Analytics API (Dashboard)
+
+Endpoint analytics digunakan oleh dashboard admin (read-only untuk staff/admin).
+
+Contoh curl:
+
+```bash
+curl -i http://localhost:3001/api/admin/analytics/overview
+curl -i "http://localhost:3001/api/admin/analytics/sales?range=7d"
+curl -i "http://localhost:3001/api/admin/analytics/best-selling?range=7d&limit=5"
+curl -i "http://localhost:3001/api/admin/analytics/recent-orders?limit=10"
+```
+
+Seed demo data (agar grafik punya data):
+
+```bash
+pnpm seed:analytics
+```
+
+---
+
 ## 🧠 Catatan untuk Pemula
 
 * Jangan takut mencoba dan error

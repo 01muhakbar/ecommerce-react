@@ -1,58 +1,81 @@
-import { httpGet, httpPut } from "./httpClient.js";
+import { api } from "./axios";
 import { orders as dummyOrders } from "../data/orders.js";
 
-export async function getOrders(filters = {}) {
-  const page = Number(filters.page) || 1;
-  const limit = Number(filters.limit) || 10;
-  const sortBy = filters.sortBy || "";
-  const sortOrder = filters.sortOrder || "asc";
-  const cleanFilters = { ...filters };
-  delete cleanFilters.page;
-  delete cleanFilters.limit;
-  delete cleanFilters.sortBy;
-  delete cleanFilters.sortOrder;
-  delete cleanFilters.refreshKey;
+export async function listOrders(params = {}) {
+  const query = {
+    page: params.page ?? 1,
+    pageSize: params.pageSize ?? 10,
+    q: params.q ?? "",
+    status: params.status ?? "",
+    sort: params.sort ?? "",
+    order: params.order ?? "",
+    method: params.method ?? "",
+    orderLimit: params.orderLimit ?? "",
+    startDate: params.startDate ?? "",
+    endDate: params.endDate ?? "",
+  };
 
   try {
-    const query = new URLSearchParams(
-      Object.entries({
-        ...cleanFilters,
-        page,
-        limit,
-        sort: sortBy,
-        order: sortOrder,
-      }).filter(
-        ([, value]) => value !== ""
-      )
-    ).toString();
-    const response = await httpGet(query ? `/orders?${query}` : "/orders");
-    const payload = response.data ?? response;
+    const response = await api.get("/admin/orders", { params: query });
+    const payload = response?.data;
     if (payload && payload.data && payload.meta) {
       return payload;
     }
     if (Array.isArray(payload)) {
-      const sorted = sortDummy(payload, sortBy, sortOrder);
-      return paginateDummy(sorted, page, limit);
+      return {
+        data: payload,
+        meta: {
+          page: query.page,
+          pageSize: query.pageSize,
+          total: payload.length,
+        },
+      };
     }
-    return { data: [], meta: { page, limit, total: 0 } };
+    return {
+      data: [],
+      meta: { page: query.page, pageSize: query.pageSize, total: 0 },
+    };
   } catch (error) {
-    console.warn("API orders failed, fallback to dummy data");
-    const filtered = filterDummyOrders(dummyOrders, cleanFilters);
-    const sorted = sortDummy(filtered, sortBy, sortOrder);
-    return paginateDummy(sorted, page, limit);
+    const allowDummyFallback =
+      import.meta.env.DEV && import.meta.env.VITE_ALLOW_DUMMY_ORDERS === "true";
+    if (!allowDummyFallback) {
+      throw error;
+    }
+    const filtered = filterDummyOrders(dummyOrders, {
+      search: query.q,
+      status: query.status,
+      method: query.method,
+      orderLimit: query.orderLimit,
+      startDate: query.startDate,
+      endDate: query.endDate,
+    });
+    const sorted = sortDummy(filtered, query.sort, query.order || "asc");
+    return paginateDummy(sorted, query.page, query.pageSize);
   }
 }
 
-export async function updateOrderStatus(id, status) {
+export async function getOrder(id) {
+  const { data } = await api.get(`/admin/orders/${id}`);
+  return data;
+}
+
+export async function updateOrderStatus(id, payload) {
+  const nextStatus = typeof payload === "string" ? payload : payload?.status;
+  const body = typeof payload === "string" ? { status: payload } : payload;
   try {
-    const response = await httpPut(`/orders/${id}/status`, { status });
+    const response = await api.put(`/admin/orders/${id}/status`, body);
     return response?.data ?? response ?? true;
   } catch (error) {
+    const allowDummyFallback =
+      import.meta.env.DEV && import.meta.env.VITE_ALLOW_DUMMY_ORDERS === "true";
+    if (!allowDummyFallback) {
+      throw error;
+    }
     const index = dummyOrders.findIndex((item) => item.id === id);
     if (index >= 0) {
       dummyOrders[index] = {
         ...dummyOrders[index],
-        status,
+        status: nextStatus,
       };
     }
     return true;

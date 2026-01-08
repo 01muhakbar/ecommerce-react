@@ -1,13 +1,13 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/useAuth.js";
-import { useOrders } from "../hooks/useOrders.js";
-import { updateOrderStatus } from "../api/orders.service.js";
+import { orderService } from "../api/index.ts";
 import OrderFilters from "../components/Filters/OrderFilters.jsx";
-import LoadingState from "../components/common/LoadingState.jsx";
 import ErrorState from "../components/common/ErrorState.jsx";
 import DataTable from "../components/Tables/DataTable.jsx";
 import OrderRow from "../components/Tables/OrderRow.jsx";
 import UpdateOrderStatusModal from "../components/Modals/UpdateOrderStatusModal.jsx";
+import OrderTableSkeleton from "../components/Orders/OrderTableSkeleton.jsx";
+import OrderDetailsModal from "../components/Orders/OrderDetailsModal.jsx";
 import "./Orders.css";
 
 const COLUMNS = [
@@ -17,7 +17,7 @@ const COLUMNS = [
     align: "left",
   },
   { key: "invoice", label: "Invoice" },
-  { key: "orderTime", label: "Order Time" },
+  { key: "orderTime", label: "Created At" },
   { key: "customer", label: "Customer" },
   { key: "method", label: "Method" },
   { key: "amount", label: "Amount", align: "right" },
@@ -38,23 +38,87 @@ export default function Orders() {
   // Page-level container for order listing and status updates.
   const { user, role } = useAuth();
   const currentRole = role || user?.role;
-  const isAdmin = currentRole === "admin";
+  const isAdmin = currentRole === "admin" || currentRole === "super_admin";
   const [filters, setFilters] = useState(initialFilters);
   const [page, setPage] = useState(1);
-  const [limit] = useState(10);
+  const [pageSize] = useState(10);
   const [sortBy, setSortBy] = useState("");
   const [sortOrder, setSortOrder] = useState("asc");
   const [refreshKey, setRefreshKey] = useState(0);
   const [editingOrder, setEditingOrder] = useState(null);
   const [isStatusOpen, setIsStatusOpen] = useState(false);
-  const { data, meta, loading, error } = useOrders({
-    ...filters,
-    page,
-    limit,
-    sortBy,
-    sortOrder,
-    refreshKey,
-  });
+  const [viewOrder, setViewOrder] = useState(null);
+  const [isViewOpen, setIsViewOpen] = useState(false);
+  const [data, setData] = useState([]);
+  const [meta, setMeta] = useState({ page: 1, pageSize: 10, total: 0 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState(filters.search);
+
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      setDebouncedSearch(filters.search);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [filters.search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filters.status, filters.method, filters.orderLimit, filters.startDate, filters.endDate]);
+
+  const queryParams = useMemo(
+    () => ({
+      page,
+      pageSize,
+      q: debouncedSearch,
+      status: filters.status,
+      sort: sortBy,
+      order: sortOrder,
+      method: filters.method,
+      orderLimit: filters.orderLimit,
+      startDate: filters.startDate,
+      endDate: filters.endDate,
+    }),
+    [
+      page,
+      pageSize,
+      debouncedSearch,
+      filters.status,
+      sortBy,
+      sortOrder,
+      filters.method,
+      filters.orderLimit,
+      filters.startDate,
+      filters.endDate,
+    ]
+  );
+
+  const loadOrders = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await orderService.listOrders(queryParams);
+      setData(result.data || []);
+      if (result.meta) {
+        setMeta({
+          page: result.meta.page ?? 1,
+          pageSize: result.meta.pageSize ?? result.meta.limit ?? pageSize,
+          total: result.meta.total ?? 0,
+        });
+      } else {
+        setMeta({ page: 1, pageSize, total: 0 });
+      }
+    } catch (err) {
+      setError("Failed to load orders.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadOrders();
+  }, [queryParams, refreshKey]);
   const handleReset = () => {
     setFilters(initialFilters);
     setPage(1);
@@ -72,14 +136,27 @@ export default function Orders() {
     if (!editingOrder) {
       return;
     }
-    await updateOrderStatus(editingOrder.id, status);
+    if (!isAdmin) {
+      return;
+    }
+    await orderService.updateOrderStatus(editingOrder.id, { status });
     setIsStatusOpen(false);
     setEditingOrder(null);
     setPage(1);
     setRefreshKey((prev) => prev + 1);
     window.alert("Order status updated successfully.");
   };
-  const totalPages = Math.max(1, Math.ceil(meta.total / meta.limit));
+  const handleViewOrder = async (order) => {
+    setViewOrder(order);
+    setIsViewOpen(true);
+    try {
+      const detail = await orderService.getOrder(order.id);
+      setViewOrder(detail || order);
+    } catch (err) {
+      // fallback to list item data
+    }
+  };
+  const totalPages = Math.max(1, Math.ceil(meta.total / meta.pageSize));
 
   return (
     <div className="orders-page">
@@ -88,12 +165,8 @@ export default function Orders() {
         <div className="orders-actions">
           <button className="btn btn--ghost">Export</button>
           <button className="btn btn--ghost">Import</button>
-          <button className="btn btn--ghost" disabled={!isAdmin}>
-            Bulk Action
-          </button>
-          <button className="btn btn--primary" disabled={!isAdmin}>
-            Add Order
-          </button>
+          {isAdmin && <button className="btn btn--ghost">Bulk Action</button>}
+          {isAdmin && <button className="btn btn--primary">Add Order</button>}
         </div>
       </div>
 
@@ -129,8 +202,13 @@ export default function Orders() {
         </select>
       </div>
 
-      {loading && <LoadingState message="Loading orders..." />}
-      {error && <ErrorState message={error} />}
+      {loading && <OrderTableSkeleton />}
+      {error && (
+        <ErrorState
+          message={error}
+          onRetry={loadOrders}
+        />
+      )}
       {!loading && !error && data.length === 0 && (
         <div>No data available</div>
       )}
@@ -143,7 +221,9 @@ export default function Orders() {
               key={order.id}
               order={order}
               variant="full"
+              canEdit={isAdmin}
               onEdit={() => handleChangeStatus(order)}
+              onView={() => handleViewOrder(order)}
             />
           )}
         />
@@ -180,6 +260,14 @@ export default function Orders() {
         onCancel={() => {
           setIsStatusOpen(false);
           setEditingOrder(null);
+        }}
+      />
+      <OrderDetailsModal
+        open={isViewOpen}
+        order={viewOrder}
+        onClose={() => {
+          setIsViewOpen(false);
+          setViewOrder(null);
         }}
       />
     </div>

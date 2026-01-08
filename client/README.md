@@ -1,51 +1,51 @@
 # E-Commerce Admin Dashboard (Frontend)
 
-## Project Overview
-This frontend is a React-based admin dashboard for an e-commerce system. It focuses on a clean UI first, with API-ready data flow. The current implementation uses dummy data and mock services so you can work on UI and UX without a backend.
+## Gambaran Proyek
+Frontend ini adalah admin dashboard berbasis React untuk sistem e-commerce. Fokusnya UI yang rapi lebih dulu, dengan alur data yang siap dihubungkan ke API. Implementasi saat ini memakai dummy data dan mock service agar Anda bisa mengerjakan UI/UX tanpa backend.
 
 ## Tech Stack
 - React (JavaScript)
 - React Router v6
 - Vite
-- Plain CSS
+- CSS biasa
 
-## Folder Structure (Brief)
+## Struktur Folder (Ringkas)
 ```
 src/
   api/           // Service layer (API-ready)
-  auth/          // Auth context and helpers
-  components/    // Reusable UI components
+  auth/          // Auth context dan helpers
+  components/    // Komponen UI reusable
   data/          // Dummy data (fallback)
-  hooks/         // Custom hooks (page data orchestration)
-  pages/         // Page-level views
+  hooks/         // Custom hooks (orchestrator data per halaman)
+  pages/         // Halaman utama
   routes/        // Route guards
-  utils/         // Small utilities (formatters, etc.)
-  App.jsx        // Routes and layout
+  utils/         // Util kecil (formatter, dll.)
+  App.jsx        // Routes dan layout
   main.jsx       // Entry point
 ```
 
-## How to Run the Frontend
-From the `client/` folder:
+## Cara Menjalankan Frontend
+Dari folder `client/`:
 ```
 pnpm install
 pnpm dev
 ```
 
-If you use a real API, set:
+Jika menggunakan API nyata, set:
 ```
 VITE_API_BASE_URL=http://localhost:3001/api
 ```
 
-## Data Flow (Simple)
+## Alur Data (Sederhana)
 ```
-Page → Hook → Service → (API or Dummy Data)
+Page -> Hook -> Service -> (API atau Dummy Data)
 ```
-Pages only handle UI state. Services decide whether to call the API or fall back to dummy data.
+Halaman hanya mengelola state UI. Service memutuskan apakah memakai API atau fallback ke dummy data.
 
 ## Role-Based UI (Admin vs Staff)
-- **Admin**: full UI access (add/edit/delete, status updates, toggles).
-- **Staff**: read-only UI (buttons are disabled).
+- **Admin**: akses UI penuh (add/edit/delete, update status, toggle).
+- **Staff**: read-only UI (tombol dinonaktifkan).
 
-## Notes
-- Dummy data is the fallback if the API is unavailable.
-- UI text and layout are stable; API integration can be added later without refactoring the UI.
+## Catatan
+- Dummy data menjadi fallback jika API tidak tersedia.
+- UI text dan layout sudah stabil; integrasi API bisa ditambahkan tanpa refactor UI.

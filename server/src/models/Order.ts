@@ -6,8 +6,8 @@ import {
   BelongsToGetAssociationMixin,
   Optional,
 } from "sequelize";
-import { Product } from "./Product.js";
-import { User } from "./User.js";
+import { Product } from "./Product.ts";
+import { User } from "./User.ts";
 
 export interface OrderAttributes {
   id: number;

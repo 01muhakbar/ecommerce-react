@@ -4,7 +4,7 @@ import ActionButtons from "../UI/ActionButtons.jsx";
 import { formatCurrency } from "../../utils/format.js";
 import "./ProductRow.css";
 
-export default function ProductRow({ product, onDelete, onEdit }) {
+export default function ProductRow({ product, onDelete, onEdit, canEdit }) {
   return (
     <tr className="product-row">
       <td className="product-row__check">
@@ -32,10 +32,12 @@ export default function ProductRow({ product, onDelete, onEdit }) {
         <button className="product-row__view">👁</button>
       </td>
       <td>
-        <ToggleSwitch checked={product.published} />
+        <ToggleSwitch checked={product.published} disabled={!canEdit} />
       </td>
       <td>
-        <ActionButtons onDelete={onDelete} onEdit={onEdit} />
+        {canEdit ? (
+          <ActionButtons onDelete={onDelete} onEdit={onEdit} />
+        ) : null}
       </td>
     </tr>
   );

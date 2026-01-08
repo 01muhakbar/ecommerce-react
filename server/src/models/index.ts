@@ -1,9 +1,13 @@
 // server/src/models/index.ts
 import "dotenv/config";
 import { Sequelize } from "sequelize";
-import { initUser, User } from "./User.js";
-import { Product } from "./Product.js";
-import { Category } from "./Category.js";
+import { initUser, User } from "./User.ts";
+import { Product } from "./Product.ts";
+import { Category } from "./Category.ts";
+import { Cart } from "./Cart.ts";
+import { CartItem } from "./CartItem.ts";
+import { Order } from "./Order.ts";
+import { OrderItem } from "./OrderItem.ts";
 
 // Gunakan ENV agar sinkron dengan phpMyAdmin/MySQL kamu
 const sequelize = new Sequelize({
@@ -20,8 +24,26 @@ function initModels() {
   initUser(sequelize);
   Product.initModel(sequelize);
   Category.initModel(sequelize);
-  // TODO: init model lain (Product, Order, dsb) jika ada
-  // contoh: initProduct(sequelize); Product.belongsTo(User) ... dst
+  Cart.initModel(sequelize);
+  CartItem.initModel(sequelize);
+  Order.initModel(sequelize);
+  OrderItem.initModel(sequelize);
+
+  const models: any = {
+    User,
+    Product,
+    Category,
+    Cart,
+    CartItem,
+    Order,
+    OrderItem,
+  };
+
+  Object.values(models).forEach((model: any) => {
+    if (typeof model.associate === "function") {
+      model.associate(models);
+    }
+  });
 }
 
 // Jalankan init sekali waktu file ini di-import
@@ -33,4 +55,4 @@ export async function syncDb() {
   await sequelize.sync({ alter: true });
 }
 
-export { sequelize, User, Product, Category };
+export { sequelize, User, Product, Category, Cart, CartItem, Order, OrderItem };

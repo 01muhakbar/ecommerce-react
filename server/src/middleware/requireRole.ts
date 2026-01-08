@@ -9,6 +9,21 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+export function requireStaffOrAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  const role = (req as any).user?.role;
+  if (!role) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  if (role !== "staff" && role !== "admin" && role !== "super_admin") {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+  next();
+}
+
 // Contoh lain untuk dipakai nanti:
 export function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
   const role = (req as any).user?.role;

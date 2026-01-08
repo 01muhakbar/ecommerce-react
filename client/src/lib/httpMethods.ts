@@ -1,3 +1,4 @@
+// DEPRECATED: Do not use. Use client/src/api/axios.ts + services instead.
 import { http } from "./http";
 
 export const post = async <T = unknown>(

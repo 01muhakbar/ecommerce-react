@@ -187,4 +187,83 @@ router.post(
   }
 );
 
+router.put(
+  "/:id",
+  async (
+    req: Request<{ id: string }, {}, ProductBody>,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { id } = req.params;
+      const {
+        name,
+        slug,
+        price,
+        categoryId,
+        description,
+        stock,
+        images,
+        status,
+        promoImagePath,
+        salePrice,
+        isPublished,
+      } = req.body as any;
+
+      const product = await Product.findByPk(id as any);
+      if (!product) {
+        return res.status(404).json({ message: "Not found" });
+      }
+
+      const patch: any = {
+        name,
+        slug,
+        price,
+        categoryId,
+        description,
+        stock,
+        status,
+        salePrice,
+      };
+
+      if (typeof isPublished === "boolean") {
+        patch.isPublished = isPublished;
+      }
+
+      if (images !== undefined) {
+        patch.imagePaths = Array.isArray(images)
+          ? images
+          : images
+          ? [images as string]
+          : [];
+      }
+      if (promoImagePath !== undefined) {
+        patch.promoImagePath = promoImagePath;
+      }
+
+      await product.update(patch);
+      return res.json({ ok: true, data: product });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.delete(
+  "/:id",
+  async (req: Request<{ id: string }>, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const product = await Product.findByPk(id as any);
+      if (!product) {
+        return res.status(404).json({ message: "Not found" });
+      }
+      await product.destroy();
+      return res.status(204).end();
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 export default router;

@@ -1,53 +1,90 @@
-import { httpDelete, httpGet, httpPost, httpPut } from "./httpClient.js";
+import { api } from "./axios";
 import { products as dummyProducts } from "../data/products.js";
 
-export async function getProducts(filters = {}) {
-  const page = Number(filters.page) || 1;
-  const limit = Number(filters.limit) || 10;
-  const sortBy = filters.sortBy || "";
-  const sortOrder = filters.sortOrder || "asc";
-  const cleanFilters = { ...filters };
-  delete cleanFilters.page;
-  delete cleanFilters.limit;
-  delete cleanFilters.sortBy;
-  delete cleanFilters.sortOrder;
-  delete cleanFilters.refreshKey;
+export async function listProducts(params = {}) {
+  const query = {
+    page: params.page ?? 1,
+    pageSize: params.pageSize ?? 10,
+    q: params.q ?? "",
+    sort: params.sort ?? "",
+    order: params.order ?? "",
+    category: params.category ?? "",
+    price: params.price ?? "",
+    stockStatus: params.stockStatus ?? "",
+  };
 
   try {
-    const query = new URLSearchParams(
-      Object.entries({
-        ...cleanFilters,
-        page,
-        limit,
-        sort: sortBy,
-        order: sortOrder,
-      }).filter(
-        ([, value]) => value !== ""
-      )
-    ).toString();
-    const response = await httpGet(query ? `/products?${query}` : "/products");
-    const payload = response.data ?? response;
-    if (payload && payload.data && payload.meta) {
+    const response = await api.get("/admin/products", { params: query });
+    const payload = response?.data;
+    if (payload?.items) {
+      return {
+        data: payload.items,
+        meta: {
+          page: payload.page ?? query.page,
+          pageSize: payload.pageSize ?? query.pageSize,
+          total: payload.total ?? 0,
+        },
+      };
+    }
+    if (payload?.data && payload?.meta) {
       return payload;
     }
     if (Array.isArray(payload)) {
-      const sorted = sortDummy(payload, sortBy, sortOrder);
-      return paginateDummy(sorted, page, limit);
+      return {
+        data: payload,
+        meta: {
+          page: query.page,
+          pageSize: query.pageSize,
+          total: payload.length,
+        },
+      };
     }
-    return { data: [], meta: { page, limit, total: 0 } };
+    return { data: [], meta: { page: query.page, pageSize: query.pageSize, total: 0 } };
   } catch (error) {
-    console.warn("API products failed, fallback to dummy data");
-    const filtered = filterDummyProducts(dummyProducts, cleanFilters);
-    const sorted = sortDummy(filtered, sortBy, sortOrder);
-    return paginateDummy(sorted, page, limit);
+    const allowDummyFallback =
+      import.meta.env.DEV && import.meta.env.VITE_ALLOW_DUMMY_PRODUCTS === "true";
+    if (!allowDummyFallback) {
+      throw error;
+    }
+    const filtered = filterDummyProducts(dummyProducts, {
+      search: query.q,
+      category: query.category,
+      price: query.price,
+      stockStatus: query.stockStatus,
+    });
+    const sorted = sortDummy(filtered, query.sort, query.order || "asc");
+    return paginateDummy(sorted, query.page, query.pageSize);
   }
 }
 
+export async function getProduct(id) {
+  const { data } = await api.get(`/admin/products/${id}`);
+  return data;
+}
+
+export async function getProducts(filters = {}) {
+  return listProducts({
+    page: filters.page ?? 1,
+    pageSize: filters.limit ?? 10,
+    q: filters.search ?? "",
+    sort: filters.sortBy ?? "",
+    order: filters.sortOrder ?? "",
+    category: filters.category ?? "",
+    price: filters.price ?? "",
+    stockStatus: filters.stockStatus ?? "",
+  });
+}
+
 export async function createProduct(payload) {
+  const allowDummyFallback =
+    import.meta.env.DEV && import.meta.env.VITE_ALLOW_DUMMY_PRODUCTS === "true";
   try {
-    const response = await httpPost("/products", payload);
+    const response = await api.post("/admin/products", payload);
     return response?.data ?? response;
   } catch (error) {
+    if (!allowDummyFallback) {
+      throw error;
+    }
     const price = Number(payload.price) || 0;
     const nextProduct = {
       id: `prd-${Date.now()}`,
@@ -66,10 +103,15 @@ export async function createProduct(payload) {
 }
 
 export async function deleteProduct(id) {
+  const allowDummyFallback =
+    import.meta.env.DEV && import.meta.env.VITE_ALLOW_DUMMY_PRODUCTS === "true";
   try {
-    await httpDelete(`/products/${id}`);
+    await api.delete(`/admin/products/${id}`);
     return true;
   } catch (error) {
+    if (!allowDummyFallback) {
+      throw error;
+    }
     const index = dummyProducts.findIndex((item) => item.id === id);
     if (index >= 0) {
       dummyProducts.splice(index, 1);
@@ -79,10 +121,15 @@ export async function deleteProduct(id) {
 }
 
 export async function updateProduct(id, payload) {
+  const allowDummyFallback =
+    import.meta.env.DEV && import.meta.env.VITE_ALLOW_DUMMY_PRODUCTS === "true";
   try {
-    const response = await httpPut(`/products/${id}`, payload);
+    const response = await api.put(`/admin/products/${id}`, payload);
     return response?.data ?? response ?? true;
   } catch (error) {
+    if (!allowDummyFallback) {
+      throw error;
+    }
     const index = dummyProducts.findIndex((item) => item.id === id);
     if (index >= 0) {
       dummyProducts[index] = {

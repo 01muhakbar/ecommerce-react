@@ -1,34 +1,550 @@
+/* ========== Sidebar Layout ========== */
 .sidebar {
-  width: 240px;
-  background: #111827;
-  color: #e5e7eb;
-  padding: 20px 16px;
-}
-
-.sidebar__brand {
-  font-size: 18px;
-  font-weight: 700;
-  margin-bottom: 24px;
-}
-
-.sidebar__menu {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  height: 100vh;
+  width: 280px;
+  background: #ffffff;
+  border-right: 1px solid #eef2f6;
 }
 
+/* Brand */
+.sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 18px 10px;
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.sidebar__brand-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: #e9fbf3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+/* Scroll area */
+.sidebar__menu {
+  flex: 1;
+  overflow: auto;
+  padding: 10px 12px 14px;
+}
+
+/* subtle scrollbar (match design) */
+.sidebar__menu::-webkit-scrollbar {
+  width: 8px;
+}
+.sidebar__menu::-webkit-scrollbar-thumb {
+  background: #e5e7eb;
+  border-radius: 10px;
+}
+.sidebar__menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ========== Main Links ========== */
 .sidebar__link {
-  padding: 10px 12px;
-  border-radius: 8px;
-  color: #cbd5f5;
-  transition: background 0.2s ease;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 12px;
+  border-radius: 14px;
+
+  color: #0f172a;
+  text-decoration: none;
+
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+
+  transition: background 150ms ease, color 150ms ease;
 }
 
 .sidebar__link:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: #f4fbf8;
 }
 
+.sidebar__link.is-active,
+.sidebar__link.active {
+  background: #e9fbf3;
+  color: #0f172a;
+}
+
+/* icon container */
+.sidebar__icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 14px;
+  background: #f3f6fb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.sidebar__icon svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  color: #334155;
+}
+
+/* label */
+.sidebar__label {
+  flex: 1;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* caret */
+.sidebar__caret {
+  color: #94a3b8;
+  font-size: 18px;
+  line-height: 1;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ========== SUBMENU Styling (NO JSX CHANGE) ========== */
+/*
+  Karena submenu dibungkus <div className="sidebar__menu"> di dalam menu utama,
+  kita bisa target nested menu seperti ini.
+*/
+.sidebar__menu .sidebar__menu {
+  padding: 4px 0 10px 50px; /* indent sesuai design */
+  overflow: visible; /* biar gak jadi scroll kecil dalam submenu */
+}
+
+.sidebar__menu .sidebar__menu .sidebar__link {
+  padding: 8px 10px;
+  border-radius: 10px;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
+  background: transparent;
+}
+
+.sidebar__menu .sidebar__menu .sidebar__link:hover {
+  background: #f6f8fc;
+  color: #0f172a;
+}
+
+.sidebar__menu .sidebar__menu .sidebar__link.is-active,
+.sidebar__menu .sidebar__menu .sidebar__link.active {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+/* bullet dot like in mockup */
+.sidebar__menu .sidebar__menu .sidebar__link::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #cbd5e1;
+  display: inline-block;
+  flex: 0 0 auto;
+}
+
+/* ========== Bottom Logout ========== */
+.sidebar__logout {
+  margin: 16px 16px 18px;
+  width: calc(100% - 32px);
+  height: 52px;
+
+  border: 0;
+  border-radius: 14px;
+
+  background: #10b981;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 800;
+
+  cursor: pointer;
+  transition: transform 120ms ease, filter 120ms ease;
+}
+
+.sidebar__logout:hover {
+  filter: brightness(0.95);
+  transform: translateY(-1px);
+}
+
+.sidebar__logout:active {
+  transform: translateY(0px);
+}
+
+/* ==============================
+   FIX: Reset default <button>
+   ============================== */
+.sidebar button.sidebar__link {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0 !important;
+  outline: none;
+  background: transparent;
+  font-family: inherit;
+}
+
+/* Jika masih ada border dari browser */
+.sidebar button.sidebar__link:focus {
+  outline: none;
+}
+
+/* ==============================
+   FIX: Submenu must be vertical
+   (prevents "boxed wrapping")
+   ============================== */
+.sidebar__menu .sidebar__menu {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sidebar__menu .sidebar__menu .sidebar__link {
+  display: flex;
+  width: 100%;
+  text-align: left;
+  white-space: nowrap; /* biar gak pecah jadi kotak random */
+}
+
+/* supaya submenu gak "inline-wrapped" */
+.sidebar__menu .sidebar__menu .sidebar__label {
+  white-space: nowrap;
+}
+/* ==============================
+   SIDEBAR - MATCH DESIGN PATCH
+   (safe overrides, no logic change)
+   ============================== */
+
+/* Base */
+.sidebar {
+  width: 280px;
+  background: #ffffff;
+  border-right: 1px solid #eef2f6;
+}
+
+/* Brand */
+.sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 18px 12px;
+  font-weight: 800;
+  font-size: 22px;
+  color: #0f172a;
+}
+
+.sidebar__brand-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #ecfdf5;
+  color: #10b981;
+}
+
+.sidebar__brand-svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Scroll area */
+.sidebar__menu {
+  flex: 1;
+  overflow: auto;
+  padding: 10px 12px 14px;
+}
+
+/* Scrollbar (subtle like mockup) */
+.sidebar__menu::-webkit-scrollbar {
+  width: 8px;
+}
+.sidebar__menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar__menu::-webkit-scrollbar-thumb {
+  background: #e5e7eb;
+  border-radius: 10px;
+}
+.sidebar__menu:hover::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+
+/* Groups spacing */
+.sidebar__group {
+  margin-bottom: 6px;
+}
+
+/* Main link/button */
+.sidebar__link {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 12px;
+  border-radius: 14px;
+
+  color: #0f172a;
+  text-decoration: none;
+
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+
+  transition: background 150ms ease, color 150ms ease;
+}
+
+/* reset button styles properly */
+.sidebar__link--button {
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  text-align: left;
+}
+
+/* Icon wrapper */
+.sidebar__icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: #f8fafc;
+  color: #0f172a;
+  flex: 0 0 auto;
+}
+
+.sidebar__icon-svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+}
+
+/* Label */
+.sidebar__link .sidebar__label {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.1px;
+}
+
+/* Hover */
+.sidebar__link:hover {
+  background: #f8fafc;
+}
+
+/* Active (mint highlight like design) */
 .sidebar__link.is-active {
-  background: rgba(255, 255, 255, 0.2);
-  color: #fff;
+  background: #eafff6;
+  color: #10b981;
+}
+
+.sidebar__link.is-active .sidebar__icon {
+  background: #d9fbee;
+  color: #10b981;
+}
+
+/* Caret */
+.sidebar__caret {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  color: #64748b;
+}
+
+.sidebar__caret-svg {
+  width: 18px;
+  height: 18px;
+  transition: transform 160ms ease;
+}
+
+/* Rotate caret when open (already has .is-open in JSX) */
+.sidebar__link.is-open .sidebar__caret-svg {
+  transform: rotate(180deg);
+}
+
+/* ==============================
+   SUBMENU
+   ============================== */
+
+.sidebar__submenu {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0 8px 52px; /* align with label start */
+}
+
+/* Sub link / sub button */
+.sidebar__sublink {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  padding: 10px 12px;
+  border-radius: 12px;
+
+  color: #64748b;
+  text-decoration: none;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.sidebar__sublink:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.sidebar__sublink.is-active {
+  background: #ecfdf5;
+  color: #10b981;
+}
+
+/* dot */
+.sidebar__subdot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #cbd5e1;
+  flex: 0 0 auto;
+}
+
+.sidebar__sublink.is-active .sidebar__subdot {
+  background: #10b981;
+}
+
+/* smaller submenu text */
+.sidebar__sublink .sidebar__label {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ==============================
+   FOOTER + LOGOUT
+   ============================== */
+
+.sidebar__footer {
+  padding: 14px 14px 18px;
+  border-top: 1px solid #eef2f6;
+  background: #ffffff;
+}
+
+.sidebar__logout {
+  width: 100%;
+  height: 48px;
+  border: 0;
+  border-radius: 14px;
+  background: #10b981;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 15px;
+  cursor: pointer;
+  transition: filter 120ms ease, transform 120ms ease;
+}
+
+.sidebar__logout:hover {
+  filter: brightness(0.96);
+}
+
+.sidebar__logout:active {
+  transform: translateY(1px);
+}
+
+/* ==============================
+   FINAL TUNING - MATCH MOCKUP
+   (safe override)
+   ============================== */
+
+/* ensure sidebar footer always pinned */
+.sidebar {
+  height: 100vh;
+}
+
+/* menu scroll area should take remaining height */
+.sidebar__menu {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* footer pinned at bottom, clean separation like mockup */
+.sidebar__footer {
+  margin-top: auto;
+  padding: 16px 16px 18px;
+  border-top: 0;              /* mockup doesn’t show hard border */
+  background: #ffffff;
+}
+
+/* Log out: slightly larger + softer */
+.sidebar__logout {
+  height: 52px;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+
+/* group spacing a bit tighter */
+.sidebar__group {
+  margin-bottom: 4px;
+}
+
+/* main item spacing */
+.sidebar__link {
+  padding: 12px 12px;
+}
+
+/* submenu: slightly tighter and more “embedded” */
+.sidebar__submenu {
+  padding: 6px 0 8px 52px;
+  gap: 4px;
+}
+
+.sidebar__sublink {
+  padding: 9px 12px;
+  border-radius: 12px;
+}
+
+/* dot slightly smaller like mockup */
+.sidebar__subdot {
+  width: 5px;
+  height: 5px;
+  opacity: 0.7;
+}
+
+/* icon tile: more subtle */
+.sidebar__icon {
+  background: #f6f8fb;
+}
+
+/* hover should not feel too strong */
+.sidebar__link:hover {
+  background: #f6f8fb;
+}
+
+.sidebar__sublink:hover {
+  background: #f3f6fa;
 }

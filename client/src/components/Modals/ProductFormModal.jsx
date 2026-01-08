@@ -8,7 +8,9 @@ export default function ProductFormModal({
 }) {
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
+  const [stock, setStock] = useState("");
   const [category, setCategory] = useState("");
+  const [description, setDescription] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -18,7 +20,11 @@ export default function ProductFormModal({
       setPrice(
         typeof initialData?.price === "number" ? String(initialData.price) : ""
       );
+      setStock(
+        typeof initialData?.stock === "number" ? String(initialData.stock) : ""
+      );
       setCategory(initialData?.category || "");
+      setDescription(initialData?.description || "");
       setError("");
     }
   }, [open, initialData]);
@@ -39,17 +45,26 @@ export default function ProductFormModal({
       setError("Price must be a valid number.");
       return;
     }
+    const numericStock = stock === "" ? 0 : Number(stock);
+    if (!Number.isFinite(numericStock) || numericStock < 0) {
+      setError("Stock must be a valid number.");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
       await onSave?.({
         name: name.trim(),
         price: numericPrice,
+        stock: numericStock,
         category: category.trim(),
+        description: description.trim(),
       });
       setName("");
       setPrice("");
+      setStock("");
       setCategory("");
+      setDescription("");
     } finally {
       setIsSubmitting(false);
     }
@@ -104,6 +119,16 @@ export default function ProductFormModal({
             />
           </label>
           <label style={{ fontSize: 14 }}>
+            Stock
+            <input
+              type="number"
+              value={stock}
+              onChange={(event) => setStock(event.target.value)}
+              disabled={isSubmitting}
+              style={{ width: "100%", padding: 8, marginTop: 4 }}
+            />
+          </label>
+          <label style={{ fontSize: 14 }}>
             Category
             <input
               type="text"
@@ -111,6 +136,20 @@ export default function ProductFormModal({
               onChange={(event) => setCategory(event.target.value)}
               disabled={isSubmitting}
               style={{ width: "100%", padding: 8, marginTop: 4 }}
+            />
+          </label>
+          <label style={{ fontSize: 14 }}>
+            Description
+            <textarea
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              disabled={isSubmitting}
+              style={{
+                width: "100%",
+                padding: 8,
+                marginTop: 4,
+                minHeight: 72,
+              }}
             />
           </label>
           {error && <div style={{ color: "crimson" }}>{error}</div>}

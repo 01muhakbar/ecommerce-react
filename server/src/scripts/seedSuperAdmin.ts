@@ -1,7 +1,7 @@
 // server/src/scripts/seedSuperAdmin.ts
 import "dotenv/config";
 import bcrypt from "bcrypt";
-import { sequelize, User, syncDb } from "../models/index.js";
+import { sequelize, User, syncDb } from "../models/index.ts";
 
 async function main() {
   try {

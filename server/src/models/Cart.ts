@@ -1,5 +1,5 @@
 import { DataTypes, Model, Sequelize, Optional } from "sequelize";
-import { User } from "./User.js"; // Pastikan User diimpor
+import { User } from "./User.ts"; // Pastikan User diimpor
 
 interface CartAttributes {
   id: number;
