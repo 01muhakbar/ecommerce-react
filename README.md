@@ -1,198 +1,51 @@
-# 📦 Proyek E-Commerce Fullstack (React + Node.js)
+# E-Commerce Admin Dashboard (Frontend)
 
-## 👋 Selamat Datang
+## Gambaran Proyek
+Frontend ini adalah admin dashboard berbasis React untuk sistem e-commerce. Fokusnya UI yang rapi lebih dulu, dengan alur data yang siap dihubungkan ke API. Implementasi saat ini memakai dummy data dan mock service agar Anda bisa mengerjakan UI/UX tanpa backend.
 
-Repository ini berisi **aplikasi website e-commerce fullstack** yang dibangun menggunakan **React** untuk frontend dan **Node.js (Express)** untuk backend. Proyek ini ditujukan untuk **pemula** yang ingin belajar membangun aplikasi web modern secara end-to-end.
+## Tech Stack
+- React (JavaScript)
+- React Router v6
+- Vite
+- CSS biasa
 
-README ini akan membantu Anda memahami struktur proyek, cara menjalankan aplikasi, serta alur kerja frontend dan backend.
-
----
-
-## 🎯 Tujuan Proyek
-
-* Mempelajari arsitektur **frontend & backend terpisah**
-* Mengimplementasikan **REST API**
-* Mengelola database menggunakan **ORM (Sequelize)**
-* Memahami alur upload file dan autentikasi dasar
-* Menjadi dasar pengembangan e-commerce skala kecil–menengah
-
----
-
-## ✨ Fitur Utama
-
-* Manajemen produk
-* Upload gambar produk
-* Struktur user & role (dasar)
-* API backend terstruktur
-* Frontend React siap dikembangkan
-
----
-
-## 🧰 Tech Stack
-
-### Frontend
-
-* React
-* JavaScript (ES6)
-* CSS / kemungkinan framework UI
-
-### Backend
-
-* Node.js
-* Express.js
-* Sequelize ORM
-* Database SQL (MySQL / PostgreSQL / SQLite – tergantung konfigurasi)
-
-### Tools Pendukung
-
-* Nodemon
-* PNPM / NPM
-* dotenv
-
----
-
-## 📁 Struktur Folder
-
+## Struktur Folder (Ringkas)
 ```
-ecommerce-react-main/
-├── client/        # Frontend React
-├── server/        # Backend Express API
-├── models/        # Model database (Sequelize)
-├── config/        # Konfigurasi database & server
-├── uploads/       # File upload (gambar, dll)
-├── .env.example   # Contoh environment variable
-├── package.json   # Konfigurasi dependency backend
-├── pnpm-workspace.yaml
-└── nodemon.json
+src/
+  api/           // Service layer (API-ready)
+  auth/          // Auth context dan helpers
+  components/    // Komponen UI reusable
+  data/          // Dummy data (fallback)
+  hooks/         // Custom hooks (orchestrator data per halaman)
+  pages/         // Halaman utama
+  routes/        // Route guards
+  utils/         // Util kecil (formatter, dll.)
+  App.jsx        // Routes dan layout
+  main.jsx       // Entry point
 ```
 
----
-
-## ⚙️ Cara Menjalankan Proyek (Untuk Pemula)
-
-### 1️⃣ Prasyarat
-
-Pastikan sudah terinstall:
-
-* Node.js (disarankan v18+)
-* NPM atau PNPM
-* Database (MySQL / PostgreSQL / SQLite)
-
----
-
-### 2️⃣ Clone Repository
-
-```bash
-git clone <url-repository>
-cd ecommerce-react-main
+## Cara Menjalankan Frontend
+Dari folder `client/`:
 ```
-
----
-
-### 3️⃣ Konfigurasi Environment
-
-Salin file `.env.example` menjadi `.env` lalu sesuaikan:
-
-```env
-DB_HOST=localhost
-DB_USER=root
-DB_PASSWORD=
-DB_NAME=ecommerce_db
-DB_DIALECT=mysql
-PORT=5000
-```
-
----
-
-### 4️⃣ Install Dependency Backend
-
-```bash
-npm install
-# atau
 pnpm install
+pnpm dev
 ```
 
----
-
-### 5️⃣ Jalankan Backend Server
-
-```bash
-npm run dev
+Jika menggunakan API nyata, set:
+```
+VITE_API_BASE_URL=http://localhost:3001/api
 ```
 
-Server akan berjalan di:
-
+## Alur Data (Sederhana)
 ```
-http://localhost:5000
+Page -> Hook -> Service -> (API atau Dummy Data)
 ```
+Halaman hanya mengelola state UI. Service memutuskan apakah memakai API atau fallback ke dummy data.
 
----
+## Role-Based UI (Admin vs Staff)
+- **Admin**: akses UI penuh (add/edit/delete, update status, toggle).
+- **Staff**: read-only UI (tombol dinonaktifkan).
 
-### 6️⃣ Install & Jalankan Frontend
-
-Masuk ke folder client:
-
-```bash
-cd client
-npm install
-npm start
-```
-
-Frontend akan berjalan di:
-
-```
-http://localhost:3000
-```
-
----
-
-## 🔄 Alur Kerja Aplikasi
-
-1. Frontend (React) mengirim request ke Backend (Express)
-2. Backend memproses logic & database
-3. Backend mengembalikan response JSON
-4. Frontend menampilkan data ke user
-
----
-
-## 🧠 Catatan untuk Pemula
-
-* Jangan takut mencoba dan error
-* Baca error log di terminal
-* Periksa request API menggunakan Postman
-* Mulai dari memahami **1 fitur kecil** terlebih dahulu
-
----
-
-## 🚀 Rencana Pengembangan (Roadmap)
-
-* Autentikasi (Login & Register)
-* Keranjang belanja
-* Checkout & pembayaran
-* Admin dashboard
-* Validasi & security (JWT, bcrypt)
-
----
-
-## 🤝 Kontribusi
-
-Kontribusi sangat terbuka!
-
-1. Fork repository
-2. Buat branch baru
-3. Commit perubahan
-4. Buat Pull Request
-
----
-
-## 📄 Lisensi
-
-Proyek ini menggunakan lisensi **MIT** (atau sesuaikan).
-
----
-
-## 📬 Kontak
-
-Jika ada pertanyaan atau saran, silakan buka issue di repository ini.
-
-Selamat belajar dan ngoding 🚀
+## Catatan
+- Dummy data menjadi fallback jika API tidak tersedia.
+- UI text dan layout sudah stabil; integrasi API bisa ditambahkan tanpa refactor UI.
