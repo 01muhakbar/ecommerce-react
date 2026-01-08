@@ -1,0 +1,54 @@
+.data-table {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.data-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 12px 10px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.data-table th {
+  background: #f9fafb;
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.data-table__checkbox {
+  width: 36px;
+}
+
+.table-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+}
+
+.table-pagination__info {
+  font-size: 14px;
+  color: #4b5563;
+}
+
+.table-pagination .btn {
+  padding: 6px 12px;
+}
+
+.table-pagination .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

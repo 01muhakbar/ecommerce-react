@@ -1,0 +1,94 @@
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.dashboard__stats {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+}
+
+.dashboard__grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+}
+
+.status-card-group {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.status-card-group h3 {
+  margin: 0 0 8px;
+}
+
+.status-card-group__items {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.best-selling {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  min-height: 220px;
+}
+
+.best-selling__empty {
+  color: #9ca3af;
+  margin-top: 8px;
+}
+
+.best-selling h3,
+.recent-orders h3 {
+  margin: 0 0 8px;
+}
+
+.recent-orders .table-card__header {
+  display: none;
+}
+
+.dashboard .chart-card__header h3 {
+  color: transparent;
+  position: relative;
+}
+
+.dashboard .chart-card__header h3::after {
+  content: "Weekly Sales";
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: #111827;
+}
+
+.dashboard .chart-card__hint {
+  color: transparent;
+  position: relative;
+}
+
+.dashboard .chart-card__hint::after {
+  content: "Last 7 days";
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: #6b7280;
+}
+
+.dashboard .chart-card__placeholder {
+  color: transparent;
+  position: relative;
+}
+
+.dashboard .chart-card__placeholder::before {
+  content: "No data available.\A The chart will appear once data is available.";
+  white-space: pre-line;
+  color: #9ca3af;
+}

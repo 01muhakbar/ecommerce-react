@@ -1,0 +1,28 @@
+.table-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.table-card__header {
+  margin-bottom: 12px;
+}
+
+.order-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.order-table th,
+.order-table td {
+  text-align: left;
+  padding: 10px 8px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.order-table th {
+  color: #6b7280;
+  font-weight: 600;
+}

@@ -1,0 +1,41 @@
+.products-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.products-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.products-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn {
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn--primary {
+  background: #111827;
+  color: #fff;
+  border-color: #111827;
+}
+
+.btn--danger {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+
+.btn--ghost {
+  background: #f9fafb;
+}

@@ -1,0 +1,16 @@
+.action-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.action-buttons__btn {
+  background: #f3f4f6;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.action-buttons__btn--danger {
+  background: #fee2e2;
+}

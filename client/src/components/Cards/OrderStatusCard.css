@@ -1,0 +1,18 @@
+.order-status-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  flex: 1;
+}
+
+.order-status-card__title {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.order-status-card__value {
+  margin-top: 8px;
+  font-size: 20px;
+  font-weight: 700;
+}

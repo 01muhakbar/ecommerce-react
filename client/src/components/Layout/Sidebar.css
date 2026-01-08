@@ -1,0 +1,34 @@
+.sidebar {
+  width: 240px;
+  background: #111827;
+  color: #e5e7eb;
+  padding: 20px 16px;
+}
+
+.sidebar__brand {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 24px;
+}
+
+.sidebar__menu {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidebar__link {
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: #cbd5f5;
+  transition: background 0.2s ease;
+}
+
+.sidebar__link:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sidebar__link.is-active {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
