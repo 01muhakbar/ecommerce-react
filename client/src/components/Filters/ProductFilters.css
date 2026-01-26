@@ -40,3 +40,113 @@
   background: #f9fafb;
   color: #111827;
 }
+
+/* === MATCH MOCKUP: Filter bar 1 row (Search + Category + Price + Filter + Reset) === */
+
+.product-filters {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.product-filters__row {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+/* row kedua (Filter + Reset) kita gabungkan ke row atas pakai absolute + flex trick */
+.product-filters__row:last-child {
+  margin-top: 0;
+  position: absolute;
+  right: 22px;
+  top: 22px;
+  gap: 10px;
+}
+
+/* Biar row 1 punya padding kanan untuk tombol Filter/Reset */
+.product-filters__row:first-child {
+  padding-right: 170px;
+}
+
+/* INPUT / SELECT styling seperti mockup */
+.product-filters__input,
+.product-filters__select {
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  padding: 0 14px;
+  font-size: 14px;
+  color: #111827;
+  outline: none;
+}
+
+.product-filters__input {
+  flex: 1.2;
+  min-width: 220px;
+}
+
+.product-filters__select {
+  flex: 0.9;
+  min-width: 180px;
+}
+
+.product-filters__input::placeholder {
+  color: #9ca3af;
+}
+
+/* focus state mockup */
+.product-filters__input:focus,
+.product-filters__select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+/* tombol seperti mockup */
+.product-filters__btn {
+  height: 40px;
+  border-radius: 10px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.product-filters__btn:not(.product-filters__btn--ghost) {
+  background: #111827;
+  color: #fff;
+}
+
+.product-filters__btn--ghost {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  color: #111827;
+}
+
+/* === HIDE elemen yang tidak ada di mockup === */
+/* stock status dropdown + tombol download supaya 1 row identik */
+.product-filters__row:first-child > :nth-child(4),
+.product-filters__row:first-child > :nth-child(5) {
+  display: none;
+}
+
+/* Responsif */
+@media (max-width: 1100px) {
+  .product-filters__row:first-child {
+    flex-wrap: wrap;
+    padding-right: 0;
+  }
+
+  .product-filters__row:last-child {
+    position: static;
+    margin-top: 12px;
+  }
+
+  .product-filters__row:first-child > :nth-child(4),
+  .product-filters__row:first-child > :nth-child(5) {
+    display: flex;
+  }
+}

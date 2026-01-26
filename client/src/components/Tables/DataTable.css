@@ -52,3 +52,197 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* =========================
+   DATA TABLE – MATCH MOCKUP
+   (append at bottom)
+   ========================= */
+
+.data-table {
+  border-color: #e6ecf4;
+  border-radius: 14px;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
+}
+
+/* Table layout */
+.data-table table {
+  font-size: 14px;
+  color: #0f172a;
+}
+
+/* HEADER: uppercase + grey background + tighter height */
+.data-table th {
+  background: #f3f4f6;
+  color: #64748b;
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 14px 14px;
+  border-top: 0;
+}
+
+/* BODY CELLS: more spacing like mockup */
+.data-table td {
+  padding: 16px 14px;
+  border-top: 1px solid #eef2f6;
+  vertical-align: middle;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+/* Row hover feel */
+.data-table tbody tr:hover td {
+  background: #fbfdff;
+}
+
+/* Checkbox column alignment */
+.data-table__checkbox {
+  width: 42px;
+}
+
+/* Make checkbox look cleaner */
+.data-table input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #10b981;
+  cursor: pointer;
+}
+
+/* =========================
+   Published toggle (switch look)
+   - works for <input type="checkbox">
+   ========================= */
+
+/* Target checkbox inside Published column (best effort) */
+.data-table td input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 42px;
+  height: 22px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  position: relative;
+  cursor: pointer;
+  transition: background 150ms ease, box-shadow 150ms ease;
+  border: 1px solid #e2e8f0;
+}
+
+/* knob */
+.data-table td input[type="checkbox"]::after {
+  content: "";
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #ffffff;
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  transform: translateY(-50%);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+  transition: left 150ms ease;
+}
+
+/* ON state */
+.data-table td input[type="checkbox"]:checked {
+  background: #16a34a;
+  border-color: #16a34a;
+}
+
+.data-table td input[type="checkbox"]:checked::after {
+  left: 20px;
+}
+
+/* focus */
+.data-table td input[type="checkbox"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);
+}
+
+/* =========================
+   View + Actions column buttons
+   ========================= */
+
+/* View button: square icon like mockup */
+.product-row__view {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: #f3f4f6;
+  border: 1px solid #e6ecf4;
+  transition: background 150ms ease, transform 120ms ease, border-color 150ms ease;
+}
+
+.product-row__view:hover {
+  background: #eef2f6;
+  border-color: #dbe4f0;
+}
+
+.product-row__view:active {
+  transform: translateY(1px);
+}
+
+/* Generic square buttons for edit/delete inside actions column */
+.data-table td:last-child button,
+.data-table td:last-child a {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid #e6ecf4;
+  background: #ffffff;
+  cursor: pointer;
+  transition: background 150ms ease, transform 120ms ease, border-color 150ms ease;
+}
+
+/* spacing between action buttons */
+.data-table td:last-child button + button,
+.data-table td:last-child a + a,
+.data-table td:last-child button + a,
+.data-table td:last-child a + button {
+  margin-left: 10px;
+}
+
+/* hover state */
+.data-table td:last-child button:hover,
+.data-table td:last-child a:hover {
+  background: #f3f4f6;
+  border-color: #dbe4f0;
+}
+
+.data-table td:last-child button:active,
+.data-table td:last-child a:active {
+  transform: translateY(1px);
+}
+
+/* Delete button hint */
+.data-table td:last-child .btn--danger,
+.data-table td:last-child .danger,
+.data-table td:last-child [data-variant="danger"] {
+  background: #fff1f2;
+  border-color: #fecdd3;
+  color: #be123c;
+}
+
+/* =========================
+   Pagination – match mockup
+   ========================= */
+
+.table-pagination {
+  border-color: #e6ecf4;
+  border-radius: 14px;
+  padding: 12px 14px;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
+}
+
+.table-pagination__info {
+  font-weight: 700;
+  color: #475569;
+}

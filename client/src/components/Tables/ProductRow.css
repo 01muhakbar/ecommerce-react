@@ -28,3 +28,227 @@
   padding: 6px 8px;
   cursor: pointer;
 }
+
+/* =========================
+   PRODUCT ROW – MATCH MOCKUP
+   (append at bottom)
+   ========================= */
+
+.product-row__product {
+  gap: 12px;
+}
+
+.product-row__image {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid #eef2f6;
+  background: #f3f4f6;
+}
+
+.product-row__name {
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.product-row__id {
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #94a3b8;
+}
+
+/* View icon button already adjusted in DataTable.css,
+   but we ensure consistency here */
+.product-row__view {
+  font-weight: 700;
+}
+
+/* =========================
+   ProductRow - MATCH MOCKUP (scoped)
+   No nth-child dependency
+   ========================= */
+
+/* -----------------------------------------
+   1) Checkbox "select row" should stay small
+   ----------------------------------------- */
+.product-row__check input[type="checkbox"] {
+  appearance: auto;
+  -webkit-appearance: auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* Make sure checkbox column is narrow + aligned */
+.product-row__check {
+  width: 44px;
+  padding-left: 14px;
+}
+
+/* -----------------------------------------
+   2) Published toggle — ONLY inside ToggleSwitch
+   (assumes ToggleSwitch root has a class)
+   ----------------------------------------- */
+
+/* If ToggleSwitch root uses one of these common class names */
+.product-row td .toggle-switch input[type="checkbox"],
+.product-row td .toggleSwitch input[type="checkbox"],
+.product-row td .switch input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 44px;
+  height: 22px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  position: relative;
+  cursor: pointer;
+  transition: background 150ms ease, box-shadow 150ms ease;
+  border: 1px solid #e2e8f0;
+}
+
+.product-row td .toggle-switch input[type="checkbox"]::after,
+.product-row td .toggleSwitch input[type="checkbox"]::after,
+.product-row td .switch input[type="checkbox"]::after {
+  content: "";
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #ffffff;
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  transform: translateY(-50%);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+  transition: left 150ms ease;
+}
+
+.product-row td .toggle-switch input[type="checkbox"]:checked,
+.product-row td .toggleSwitch input[type="checkbox"]:checked,
+.product-row td .switch input[type="checkbox"]:checked {
+  background: #16a34a;
+  border-color: #16a34a;
+}
+
+.product-row td .toggle-switch input[type="checkbox"]:checked::after,
+.product-row td .toggleSwitch input[type="checkbox"]:checked::after,
+.product-row td .switch input[type="checkbox"]:checked::after {
+  left: 22px;
+}
+
+.product-row td .toggle-switch input[type="checkbox"]:disabled,
+.product-row td .toggleSwitch input[type="checkbox"]:disabled,
+.product-row td .switch input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.product-row td .toggle-switch input[type="checkbox"]:focus-visible,
+.product-row td .toggleSwitch input[type="checkbox"]:focus-visible,
+.product-row td .switch input[type="checkbox"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);
+}
+
+/* -----------------------------------------
+   3) Action buttons (Edit/Delete) — square buttons
+   (assumes ActionButtons root has a class)
+   ----------------------------------------- */
+.product-row td .action-buttons button,
+.product-row td .actionButtons button,
+.product-row td .product-actions button {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, transform 120ms ease;
+}
+
+.product-row td .action-buttons button:hover,
+.product-row td .actionButtons button:hover,
+.product-row td .product-actions button:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.product-row td .action-buttons button:active,
+.product-row td .actionButtons button:active,
+.product-row td .product-actions button:active {
+  transform: translateY(1px);
+}
+
+.product-row td .action-buttons svg,
+.product-row td .actionButtons svg,
+.product-row td .product-actions svg {
+  width: 16px;
+  height: 16px;
+  stroke: #64748b;
+}
+
+/* delete button (if it has data-action or aria-label) */
+.product-row td .action-buttons button[data-action="delete"],
+.product-row td .actionButtons button[data-action="delete"],
+.product-row td .product-actions button[aria-label*="delete"] {
+  background: #fff1f2;
+  border-color: #fecdd3;
+}
+
+.product-row td .action-buttons button[data-action="delete"] svg,
+.product-row td .actionButtons button[data-action="delete"] svg,
+.product-row td .product-actions button[aria-label*="delete"] svg {
+  stroke: #e11d48;
+}
+
+/* -----------------------------------------
+   4) View button style (eye icon mockup)
+   ----------------------------------------- */
+.product-row__view {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.product-row__view:hover {
+  background: #eef2f7;
+  border-color: #cbd5e1;
+}
+
+/* =========================================================
+   FIX: checkbox select (kolom pertama) jangan ikut jadi toggle
+   ========================================================= */
+.product-row__check {
+  width: 46px;
+  padding-left: 18px;
+}
+
+.product-row__check input[type="checkbox"] {
+  /* pastikan selalu checkbox native */
+  -webkit-appearance: checkbox !important;
+  appearance: checkbox !important;
+
+  /* ukuran & posisi seperti mockup */
+  width: 16px !important;
+  height: 16px !important;
+  border-radius: 4px !important;
+
+  /* reset semua style yang mungkin “nyasar” */
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+  transform: none !important;
+  margin: 0 !important;
+  position: static !important;
+}

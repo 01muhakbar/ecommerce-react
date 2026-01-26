@@ -1,16 +1,100 @@
 .action-buttons {
-  display: flex;
-  gap: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: flex-end;
 }
 
 .action-buttons__btn {
-  background: #f3f4f6;
-  border: none;
-  border-radius: 6px;
-  padding: 6px 8px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #94a3b8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease,
+    transform 120ms ease, color 150ms ease;
 }
 
+.action-buttons__btn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #64748b;
+}
+
+.action-buttons__btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.action-buttons__btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.action-buttons__icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+/* Danger button */
 .action-buttons__btn--danger {
-  background: #fee2e2;
+  background: #fff1f2;
+  border-color: #fecaca;
+  color: #fca5a5;
+}
+
+.action-buttons__btn--danger:hover:not(:disabled) {
+  background: #ffe4e6;
+  border-color: #fda4af;
+  color: #fb7185;
+}
+
+/* === PATCH FINAL: match mockup actions button === */
+.action-buttons {
+  gap: 10px; /* sedikit lebih rapat seperti mockup */
+}
+
+.action-buttons__btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border-color: #e5e7eb; /* mockup lebih netral */
+  color: #a3afc2; /* icon lebih terlihat tapi tetap soft */
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
+}
+
+.action-buttons__btn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #d8e1ec;
+  color: #7b8aa3; /* hover icon lebih jelas */
+}
+
+/* icon sizing mockup */
+.action-buttons__icon {
+  width: 17px;
+  height: 17px;
+}
+
+/* Danger tone lebih mirip mockup */
+.action-buttons__btn--danger {
+  background: #fff5f5;
+  border-color: #ffd6d6;
+  color: #f29aa0;
+}
+
+.action-buttons__btn--danger:hover:not(:disabled) {
+  background: #ffeaea;
+  border-color: #ffc7c7;
+  color: #ee6e77;
+}
+
+/* disabled tetap “soft” */
+.action-buttons__btn:disabled {
+  opacity: 0.45;
 }
