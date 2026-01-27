@@ -25,7 +25,10 @@ router.get("/", async (req, res, next) => {
   try {
     const q = String(req.query.q || "").trim();
     const page = Math.max(1, parseInt(String(req.query.page || 1), 10));
-    const pageSize = Math.min(100, Math.max(1, parseInt(String(req.query.pageSize || 10), 10)));
+    const limit = Math.min(
+      100,
+      Math.max(1, parseInt(String(req.query.limit || req.query.pageSize || 10), 10))
+    );
     const parentsOnly = parseBool(req.query.parentsOnly);
     const published = parseBool(req.query.published);
     const sort = String(req.query.sort || "created_at:desc");
@@ -37,15 +40,21 @@ router.get("/", async (req, res, next) => {
     if (parentsOnly === true) where.parent_id = { [Op.is]: null };
     if (published !== undefined) where.published = published;
 
-    const offset = (page - 1) * pageSize;
+    const offset = (page - 1) * limit;
     const { rows, count } = await Category.findAndCountAll({
       where,
-      limit: pageSize,
+      limit,
       offset,
       order: [[sortKey, sortDir]],
       include: [{ model: Category, as: "parent", attributes: ["id", "name", "code"] }],
     });
-    res.json({ data: rows, page, pageSize, total: count });
+    res.json({
+      success: true,
+      data: {
+        items: rows,
+        meta: { page, limit, total: count },
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -75,11 +84,11 @@ router.post("/", async (req, res, next) => {
       parentId: body.parent_id,
       published: body.published ?? true,
     } as any);
-    res.status(201).json({ status: "success", data: created });
+    res.status(201).json({ success: true, data: created });
   } catch (err) {
     // Handle race condition with DB unique constraint
     if ((err as any)?.name === 'SequelizeUniqueConstraintError') {
-      return res.status(409).json({ message: "Category code already exists" });
+      return res.status(409).json({ success: false, message: "Category code already exists" });
     }
     next(err);
   }
@@ -92,8 +101,8 @@ router.get("/:id", async (req, res, next) => {
     const cat = await Category.findByPk(id, {
       include: [{ model: Category, as: "parent", attributes: ["id", "name", "code"] }],
     });
-    if (!cat) return res.status(404).json({ message: "Not found" });
-    res.json({ status: "success", data: cat });
+    if (!cat) return res.status(404).json({ success: false, message: "Not found" });
+    res.json({ success: true, data: cat });
   } catch (err) {
     next(err);
   }
@@ -111,8 +120,8 @@ async function wouldCauseCycle(id: number, parentId?: number | null) {
   return false;
 }
 
-// PUT /api/admin/categories/:id
-router.put("/:id", async (req, res, next) => {
+// PATCH /api/admin/categories/:id
+router.patch("/:id", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const body = z
@@ -126,9 +135,9 @@ router.put("/:id", async (req, res, next) => {
       })
       .parse(req.body);
     const cat = await Category.findByPk(id);
-    if (!cat) return res.status(404).json({ message: "Not found" });
+    if (!cat) return res.status(404).json({ success: false, message: "Not found" });
     if (await wouldCauseCycle(id, body.parent_id as any)) {
-      return res.status(400).json({ message: "Invalid parent_id: cycle detected" });
+      return res.status(400).json({ success: false, message: "Invalid parent_id: cycle detected" });
     }
     await cat.update({
       code: body.code ?? (cat as any).code,
@@ -138,10 +147,10 @@ router.put("/:id", async (req, res, next) => {
       parentId: body.parent_id as any,
       published: body.published ?? (cat as any).published,
     } as any);
-    res.json({ status: "success", data: cat });
+    res.json({ success: true, data: cat });
   } catch (err) {
     if ((err as any)?.name === 'SequelizeUniqueConstraintError') {
-      return res.status(409).json({ message: "Category code already exists" });
+      return res.status(409).json({ success: false, message: "Category code already exists" });
     }
     next(err);
   }
@@ -153,9 +162,9 @@ router.patch("/:id/publish", async (req, res, next) => {
     const id = Number(req.params.id);
     const { published } = z.object({ published: z.boolean() }).parse(req.body);
     const cat = await Category.findByPk(id);
-    if (!cat) return res.status(404).json({ message: "Not found" });
+    if (!cat) return res.status(404).json({ success: false, message: "Not found" });
     await (cat as any).update({ published });
-    res.json({ status: "success", data: cat });
+    res.json({ success: true, data: cat });
   } catch (err) {
     next(err);
   }
@@ -166,9 +175,9 @@ router.delete("/:id", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const cat = await Category.findByPk(id);
-    if (!cat) return res.status(404).json({ message: "Not found" });
+    if (!cat) return res.status(404).json({ success: false, message: "Not found" });
     await cat.destroy();
-    res.status(204).end();
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }
@@ -190,7 +199,7 @@ router.post("/bulk", async (req, res, next) => {
     } else if (body.action === "unpublish") {
       await Category.update({ published: false } as any, { where: { id: { [Op.in]: body.ids } } as any });
     }
-    res.json({ ok: true });
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }
@@ -226,12 +235,12 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 *
 router.post("/import", upload.single("file"), async (req, res, next) => {
   try {
     const buf = req.file?.buffer;
-    if (!buf) return res.status(400).json({ message: "No file uploaded" });
+    if (!buf) return res.status(400).json({ success: false, message: "No file uploaded" });
     const text = buf.toString("utf8").trim();
     const lines = text.split(/\r?\n/);
     const header = lines.shift();
     if (!header || !/^code,?name,?description,?icon,?published,?parent_code/i.test(header.replace(/\s+/g, ""))) {
-      return res.status(400).json({ message: "Invalid CSV header" });
+      return res.status(400).json({ success: false, message: "Invalid CSV header" });
     }
     let created = 0;
     for (const line of lines) {
@@ -251,7 +260,7 @@ router.post("/import", upload.single("file"), async (req, res, next) => {
         // ignore duplicates
       }
     }
-    res.json({ ok: true, created });
+    res.json({ success: true, data: { created } });
   } catch (err) {
     next(err);
   }

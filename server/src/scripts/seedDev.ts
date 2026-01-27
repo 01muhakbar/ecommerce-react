@@ -29,6 +29,8 @@ const PRODUCTS = [
   { name: "Aloe Face Wash", slug: "aloe-face-wash", price: 98000, stock: 28, categoryCode: "beauty" },
 ];
 
+const DEFAULT_PRODUCT_IMAGE = "/uploads/products/demo.svg";
+
 async function seedDev() {
   await sequelize.authenticate();
   await syncDb();
@@ -100,6 +102,7 @@ async function seedDev() {
         price: product.price,
         stock: product.stock,
         categoryId,
+        promoImagePath: DEFAULT_PRODUCT_IMAGE,
         status: "active",
         isPublished: true,
       });
@@ -113,6 +116,7 @@ async function seedDev() {
       price: product.price,
       stock: product.stock,
       categoryId,
+      promoImagePath: DEFAULT_PRODUCT_IMAGE,
       status: "active",
       isPublished: true,
       userId: seller.id,

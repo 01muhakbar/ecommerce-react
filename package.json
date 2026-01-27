@@ -18,7 +18,8 @@
     "dev:client": "pnpm --filter client dev",
     "db:sync": "pnpm --filter server db:sync",
     "seed:super": "pnpm --filter server seed:super",
-    "seed:analytics": "pnpm --filter server seed:analytics"
+    "seed:analytics": "pnpm --filter server seed:analytics",
+    "seed:customers": "pnpm --filter server seed:customers"
   },
   "repository": {
     "type": "git",

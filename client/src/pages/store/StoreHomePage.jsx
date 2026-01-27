@@ -1,143 +1,119 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchStoreCategories, fetchStoreProducts } from "../../api/store.service.ts";
-import { useCartStore } from "../../store/cart.store.ts";
-
-const currency = new Intl.NumberFormat("id-ID", {
-  style: "currency",
-  currency: "IDR",
-});
+import { useCategories, useProducts, CategoryCard, ProductCard } from "../../storefront.jsx";
 
 export default function StoreHomePage() {
-  const [categories, setCategories] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
-  const addItem = useCartStore((state) => state.addItem);
+  const {
+    data: categoriesData,
+    isLoading: categoriesLoading,
+    isError: categoriesError,
+  } = useCategories();
+  const {
+    data: popularData,
+    isLoading: popularLoading,
+    isError: popularError,
+  } = useProducts({ page: 1, limit: 8 });
+  const {
+    data: latestData,
+    isLoading: latestLoading,
+    isError: latestError,
+  } = useProducts({ page: 1, limit: 8 });
 
-  useEffect(() => {
-    let isActive = true;
-    setIsLoading(true);
-    setError("");
+  const categories = categoriesData?.data?.items ?? [];
+  const popularProducts = popularData?.data?.items ?? [];
+  const latestProducts = latestData?.data?.items ?? [];
 
-    Promise.all([fetchStoreCategories(), fetchStoreProducts()])
-      .then(([categoriesResponse, productsResponse]) => {
-        if (!isActive) return;
-        setCategories(categoriesResponse.data || []);
-        setProducts(productsResponse.data || []);
-      })
-      .catch(() => {
-        if (!isActive) return;
-        setError("Failed to load store data.");
-      })
-      .finally(() => {
-        if (!isActive) return;
-        setIsLoading(false);
-      });
+  const loading = categoriesLoading || popularLoading || latestLoading;
+  const error = categoriesError || popularError || latestError;
 
-    return () => {
-      isActive = false;
-    };
-  }, []);
-
-  if (isLoading) {
-    return (
-      <section>
-        <h1>Store Home</h1>
-        <p>Loading storefront...</p>
-      </section>
-    );
+  if (loading) {
+    return <p className="text-sm text-slate-500">Loading storefront...</p>;
   }
 
   if (error) {
     return (
-      <section>
-        <h1>Store Home</h1>
-        <p style={{ color: "crimson" }}>{error}</p>
-      </section>
+      <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+        Failed to load storefront data.
+      </div>
     );
   }
 
   return (
-    <section>
-      <h1>Store Home</h1>
-      <div style={{ marginBottom: "24px" }}>
-        <h2>Categories</h2>
-        {categories.length === 0 ? (
-          <p>No categories available.</p>
-        ) : (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
-            {categories.map((category) => (
-              <Link
-                key={category.id}
-                to={`/category/${encodeURIComponent(category.slug)}`}
-                style={{
-                  padding: "6px 12px",
-                  background: "#ffffff",
-                  borderRadius: "999px",
-                  border: "1px solid #e2e2e2",
-                  textDecoration: "none",
-                  color: "inherit",
-                  fontSize: "0.9rem",
-                }}
-              >
-                {category.name}
-              </Link>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div>
-        <h2>Products</h2>
-        {products.length === 0 ? (
-          <p>No products available.</p>
-        ) : (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-              gap: "16px",
-            }}
+    <div className="space-y-12">
+      <section className="rounded-3xl bg-gradient-to-br from-amber-50 via-white to-slate-50 p-8">
+        <div className="max-w-xl space-y-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">KachaBazaar</p>
+          <h1 className="text-3xl font-semibold text-slate-900 md:text-4xl">
+            Groceries, lifestyle, and everything fresh in one place.
+          </h1>
+          <p className="text-sm text-slate-600">
+            Browse the latest arrivals and curated categories to kick-start your
+            daily essentials.
+          </p>
+          <Link
+            to="/search"
+            className="inline-flex items-center rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
           >
-            {products.map((product) => (
-              <Link
-                key={product.id}
-                to={`/product/${product.id}`}
-                style={{
-                  padding: "12px",
-                  background: "#fff",
-                  textDecoration: "none",
-                  color: "inherit",
-                  border: "1px solid #e2e2e2",
-                  borderRadius: "8px",
-                  display: "block",
-                }}
-              >
-                <div style={{ fontWeight: 600 }}>{product.name}</div>
-                <div style={{ marginBottom: "8px" }}>
-                  {currency.format(Number(product.price || 0))}
-                </div>
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    addItem({
-                      id: product.id,
-                      name: product.name,
-                      price: Number(product.price || 0),
-                      imageUrl: product.imageUrl ?? null,
-                    });
-                  }}
-                >
-                  Add to cart
-                </button>
-              </Link>
+            Browse catalog
+          </Link>
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Featured Categories</h2>
+          <Link to="/search" className="text-sm text-slate-500 hover:text-slate-900">
+            View all
+          </Link>
+        </div>
+        {categories.length === 0 ? (
+          <p className="text-sm text-slate-500">No categories available.</p>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {categories.map((category) => (
+              <CategoryCard key={category.id} category={category} />
             ))}
           </div>
         )}
-      </div>
-    </section>
+      </section>
+
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Popular Products</h2>
+          <Link
+            to="/search"
+            className="text-sm text-slate-500 hover:text-slate-900"
+          >
+            Shop all
+          </Link>
+        </div>
+        {popularProducts.length === 0 ? (
+          <p className="text-sm text-slate-500">No products available.</p>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {popularProducts.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Latest Products</h2>
+          <Link to="/search" className="text-sm text-slate-500 hover:text-slate-900">
+            Discover more
+          </Link>
+        </div>
+        {latestProducts.length === 0 ? (
+          <p className="text-sm text-slate-500">No products available.</p>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {latestProducts.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
   );
 }

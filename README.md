@@ -11,6 +11,10 @@ Frontend ini adalah admin dashboard berbasis React untuk sistem e-commerce. Foku
 - Vite
 - CSS biasa
 
+Dev ports:
+- Server: http://localhost:3001
+- Client: http://localhost:5173
+
 ## Routing Overview
 
 Storefront (public):
@@ -106,7 +110,7 @@ npm start
 Frontend akan berjalan di:
 
 ```
-http://localhost:3000
+http://localhost:5173
 ```
 
 ---
@@ -137,6 +141,44 @@ Seed demo data (agar grafik punya data):
 
 ```bash
 pnpm seed:analytics
+```
+
+---
+
+## Minimum API Contract (Public)
+
+Auth:
+
+```bash
+curl -i -X POST http://localhost:3001/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"admin@local\",\"password\":\"admin123\"}"
+
+curl -i http://localhost:3001/api/auth/me
+
+# Logout (update cookie jar)
+curl -i -c cookies.txt -b cookies.txt -X POST http://localhost:3001/api/auth/logout
+```
+
+Categories:
+
+```bash
+curl -i "http://localhost:3001/api/categories"
+```
+
+Products:
+
+```bash
+curl -i "http://localhost:3001/api/products?page=1&limit=12&q=shoe"
+curl -i "http://localhost:3001/api/products?category=electronics"
+curl -i "http://localhost:3001/api/products/your-product-slug"
+```
+
+Upload:
+
+```bash
+curl -i -X POST http://localhost:3001/api/upload \
+  -F "file=@./path/to/image.jpg"
 ```
 
 ---

@@ -1,68 +1,52 @@
 import { Router, Request, Response, NextFunction } from "express";
-import path from "path";
-import fs from "fs";
-import multer from "multer";
 import { Op } from "sequelize";
-import { requireAdmin } from "../middleware/requireRole";
-import { Product } from "../models";
 import { z } from "zod";
+import { requireAdmin } from "../middleware/requireRole";
+import { Category, Product } from "../models";
 
 const router = Router();
 router.use(requireAdmin);
 
-// ===== Multer (upload images) =====
-const UPLOAD_DIR = path.resolve(process.cwd(), "server/uploads/products");
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+const slugify = (value: string) =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)+/g, "");
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb: any) => cb(null, UPLOAD_DIR),
-  filename: (_req, file, cb: any) => {
-    const ext = path.extname(file.originalname); // keep original ext
-    const base = path.basename(file.originalname, ext).replace(/[^\w-]+/g, "_");
-    cb(null, `${Date.now()}_${base}${ext}`);
-  },
-});
-const fileFilter: multer.Options["fileFilter"] = (_req, file, cb: any) => {
-  const ok = ["image/jpeg", "image/png", "image/webp"].includes(file.mimetype);
-  cb(ok ? null : new Error("Invalid file type"), ok);
+const parseId = (value: string) => {
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? n : null;
 };
-const upload = multer({
-  storage,
-  fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 },
-});
 
-router.post("/upload", upload.array("files", 8), (req, res) => {
-  const files = (req.files as Express.Multer.File[]) || [];
-  const urls = files.map((f) => `/uploads/products/${f.filename}`);
-  res.json({ urls });
-});
+const ALLOWED_SORT = new Set(["createdAt", "updatedAt", "name", "price", "stock"]);
 
-// ===== Validation schema (server-side) =====
 const createSchema = z.object({
   name: z.string().min(1),
-  description: z.string().optional(),
-  images: z.array(z.string()).optional(),
-  sku: z.string().min(1),
-  barcode: z.string().optional(),
-  categoryId: z.number().int().nonnegative().optional(),
-  price: z.number().min(0),
-  salePrice: z.number().min(0).optional(),
-  quantity: z.number().int().min(0),
-  slug: z.string().min(1),
-  tags: z.array(z.string()).optional(),
+  slug: z.string().optional(),
+  price: z.coerce.number().min(0),
+  stock: z.coerce.number().int().min(0).default(0),
+  categoryId: z.coerce.number().int().nonnegative().optional(),
+  imageUrl: z.string().max(255).optional().nullable(),
 });
 
-// GET /api/admin/products?page=&pageSize=&q=&sort=&order=
+const updateSchema = createSchema.partial().extend({
+  isPublished: z.coerce.boolean().optional(),
+  status: z.enum(["active", "inactive", "draft"]).optional(),
+});
+
+// GET /api/admin/products?page=&limit=&q=&category=&sort=&order=
 router.get("/", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
-    const pageSize = Math.min(
+    const limit = Math.min(
       100,
-      Math.max(1, parseInt(String(req.query.pageSize || "10"), 10))
+      Math.max(1, parseInt(String(req.query.limit || req.query.pageSize || "10"), 10))
     );
     const q = String(req.query.q || "").trim();
-    const sort = String(req.query.sort || "createdAt");
+    const categoryParam = String(req.query.category || "").trim();
+    const sortRaw = String(req.query.sort || "createdAt");
+    const sort = ALLOWED_SORT.has(sortRaw) ? sortRaw : "createdAt";
     const order =
       String(req.query.order || "desc").toUpperCase() === "ASC"
         ? "ASC"
@@ -73,22 +57,40 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
       where.name = { [Op.like]: `%${q}%` };
     }
 
-    const offset = (page - 1) * pageSize;
+    if (categoryParam) {
+      const categoryId = Number(categoryParam);
+      if (Number.isFinite(categoryId)) {
+        where.categoryId = categoryId;
+      } else {
+        const category = await Category.findOne({
+          where: { [Op.or]: [{ code: categoryParam }, { name: categoryParam }] },
+        });
+        if (category) {
+          where.categoryId = category.id;
+        }
+      }
+    }
+
+    const offset = (page - 1) * limit;
 
     const { rows, count } = await Product.findAndCountAll({
       where,
-      limit: pageSize,
+      limit,
       offset,
       order: [[sort, order]],
-  });
+    });
 
-  res.json({
-    items: rows,
-    page,
-    pageSize,
-    total: count,
-    totalPages: Math.ceil(count / pageSize),
-  });
+    res.json({
+      success: true,
+      data: {
+        items: rows,
+        meta: {
+          page,
+          limit,
+          total: count,
+        },
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -99,151 +101,85 @@ router.get(
   "/:id",
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const p = await Product.findByPk(req.params.id as any);
-      if (!p) return res.status(404).json({ message: "Not found" });
-      res.json(p);
+      const idNum = parseId(req.params.id);
+      if (!idNum) return res.status(400).json({ success: false, message: "Invalid id" });
+      const p = await Product.findByPk(idNum);
+      if (!p) return res.status(404).json({ success: false, message: "Not found" });
+      res.json({ success: true, data: p });
     } catch (err) {
       next(err);
     }
   }
 );
-
-// PUT /api/admin/products/:id/images — update promoImagePath and imagePaths
-router.put(
-  "/:id/images",
-  async (
-    req: Request<{ id: string }, {}, { promoImagePath?: string | null; images?: string[] }>,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const { id } = req.params;
-      const { promoImagePath, images } = req.body;
-      const p = await Product.findByPk(id as any);
-      if (!p) return res.status(404).json({ message: "Not found" });
-      const patch: any = {};
-      if (promoImagePath !== undefined) patch.promoImagePath = promoImagePath;
-      if (images !== undefined) patch.imagePaths = Array.isArray(images) ? images : [];
-      await p.update(patch);
-      res.json(p);
-    } catch (err) {
-      next(err);
-    }
-  }
-);
-
-type ProductBody = {
-  name?: string;
-  slug?: string;
-  price?: number;
-  categoryId?: number;
-  description?: string;
-  stock?: number;
-  images?: string[] | string;
-  status?: "active" | "inactive" | "draft";
-};
 
 router.post(
   "/",
-  async (
-    req: Request<{}, {}, ProductBody>,
-    res: Response,
-    next: NextFunction
-  ) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const {
-        name,
-        slug,
-        price,
-        categoryId,
-        description,
-        stock,
-        images,
-        status,
-        promoImagePath,
-      } = req.body;
+      const body = createSchema.parse(req.body);
+      const name = body.name.trim();
+      const slug = body.slug?.trim() || slugify(name);
+      const imageUrl = body.imageUrl || null;
       const created = await Product.create({
         name,
-        slug: slug ?? (name || "").toLowerCase().replace(/\s+/g, "-"),
-        price: price ?? 0,
-        categoryId,
-        description,
-        stock: stock ?? 0,
-        imagePaths: Array.isArray(images)
-          ? images
-          : images
-          ? [images as string]
-          : [],
-        promoImagePath:
-          promoImagePath || (Array.isArray(images) ? images[0] : images || null),
-        status: status ?? "draft",
+        slug,
+        price: body.price ?? 0,
+        categoryId: body.categoryId,
+        stock: body.stock ?? 0,
+        promoImagePath: imageUrl,
+        imagePaths: imageUrl ? [imageUrl] : [],
+        status: "active",
         userId: (req as any).user?.id ?? 0,
-        isPublished: false,
+        isPublished: true,
       } as any);
-      return res.status(201).json({ ok: true, data: created });
+      return res.status(201).json({ success: true, data: created });
     } catch (err) {
+      if ((err as any)?.name === "SequelizeUniqueConstraintError") {
+        return res.status(409).json({ success: false, message: "Slug already exists" });
+      }
       next(err);
     }
   }
 );
 
-router.put(
+router.patch(
   "/:id",
-  async (
-    req: Request<{ id: string }, {}, ProductBody>,
-    res: Response,
-    next: NextFunction
-  ) => {
+  async (req: Request<{ id: string }>, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const {
-        name,
-        slug,
-        price,
-        categoryId,
-        description,
-        stock,
-        images,
-        status,
-        promoImagePath,
-        salePrice,
-        isPublished,
-      } = req.body as any;
+      const idNum = parseId(id);
+      if (!idNum) return res.status(400).json({ success: false, message: "Invalid id" });
+      const body = updateSchema.parse(req.body);
 
-      const product = await Product.findByPk(id as any);
+      const product = await Product.findByPk(idNum);
       if (!product) {
-        return res.status(404).json({ message: "Not found" });
+        return res.status(404).json({ success: false, message: "Not found" });
       }
 
-      const patch: any = {
-        name,
-        slug,
-        price,
-        categoryId,
-        description,
-        stock,
-        status,
-        salePrice,
-      };
-
-      if (typeof isPublished === "boolean") {
-        patch.isPublished = isPublished;
+      const patch: any = {};
+      if (body.name) {
+        patch.name = body.name;
+        if (!body.slug) {
+          patch.slug = slugify(body.name);
+        }
       }
-
-      if (images !== undefined) {
-        patch.imagePaths = Array.isArray(images)
-          ? images
-          : images
-          ? [images as string]
-          : [];
+      if (body.slug !== undefined) patch.slug = body.slug;
+      if (body.price !== undefined) patch.price = body.price;
+      if (body.stock !== undefined) patch.stock = body.stock;
+      if (body.categoryId !== undefined) patch.categoryId = body.categoryId;
+      if (body.imageUrl !== undefined) {
+        patch.promoImagePath = body.imageUrl;
+        patch.imagePaths = body.imageUrl ? [body.imageUrl] : [];
       }
-      if (promoImagePath !== undefined) {
-        patch.promoImagePath = promoImagePath;
-      }
+      if (body.isPublished !== undefined) patch.isPublished = body.isPublished;
+      if (body.status !== undefined) patch.status = body.status;
 
       await product.update(patch);
-      return res.json({ ok: true, data: product });
+      return res.json({ success: true, data: product });
     } catch (err) {
+      if ((err as any)?.name === "SequelizeUniqueConstraintError") {
+        return res.status(409).json({ success: false, message: "Slug already exists" });
+      }
       next(err);
     }
   }
@@ -254,12 +190,12 @@ router.delete(
   async (req: Request<{ id: string }>, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const product = await Product.findByPk(id as any);
-      if (!product) {
-        return res.status(404).json({ message: "Not found" });
-      }
+      const idNum = parseId(id);
+      if (!idNum) return res.status(400).json({ success: false, message: "Invalid id" });
+      const product = await Product.findByPk(idNum);
+      if (!product) return res.status(404).json({ success: false, message: "Not found" });
       await product.destroy();
-      return res.status(204).end();
+      return res.json({ success: true });
     } catch (err) {
       next(err);
     }

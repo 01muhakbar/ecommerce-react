@@ -2,7 +2,7 @@ import app from "./app";
 import "./models";
 import net from "node:net";
 
-const BASE_PORT = Number(process.env.PORT) || 3000;
+const BASE_PORT = Number(process.env.PORT) || 3001;
 
 /**
  * Start the server: connect DB, sync models, then listen with port retry.
@@ -56,4 +56,3 @@ function listenWithRetry(port: number, retries: number): Promise<void> {
       });
   });
 }
-

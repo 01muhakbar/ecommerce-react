@@ -16,7 +16,9 @@ import staffRouter from "./routes/admin.staff.js";
 import adminProductsRouter from "./routes/admin.products.js";
 import adminCategoriesRouter from "./routes/admin.categories.js";
 import adminOrdersRouter from "./routes/admin.orders.js";
+import adminCustomersRouter from "./routes/admin.customers.js";
 import storeRouter from "./routes/store.js";
+import publicRouter from "./routes/public.js";
 
 const app = express();
 
@@ -29,11 +31,16 @@ app.use(cors({ origin: ORIGIN, credentials: true }));
 
 app.use(authFromCookie);
 
+app.get("/api/health", (_req, res) => {
+  res.json({ success: true, message: "ok" });
+});
+
 // public
+app.use("/api", publicRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/store", storeRouter);
 // serve uploaded files (products, staff, etc.)
-app.use("/uploads", express.static(path.resolve(process.cwd(), "server/uploads")));
+app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 
 // protected
 app.use("/api/admin/catalog", requireAdmin, catalogRouter);
@@ -43,5 +50,6 @@ app.use("/api/admin/staff", requireAdmin, staffRouter);
 app.use("/api/admin/products", requireAdmin, adminProductsRouter);
 app.use("/api/admin/categories", requireAdmin, adminCategoriesRouter);
 app.use("/api/admin/orders", adminOrdersRouter);
+app.use("/api/admin/customers", adminCustomersRouter);
 
 export default app;

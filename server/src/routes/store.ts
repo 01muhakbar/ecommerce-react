@@ -57,14 +57,15 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
-      const limit = Math.min(
+      const pageSize = Math.min(
         100,
-        Math.max(1, parseInt(String(req.query.limit || "12"), 10))
+        Math.max(1, parseInt(String(req.query.pageSize || req.query.limit || "12"), 10))
       );
+      const limit = pageSize;
       const search = String(req.query.search || "").trim();
       const categoryParam = String(req.query.category || "").trim();
 
-      const where: any = { isPublished: true };
+      const where: any = { isPublished: true, status: "active" };
       if (search) {
         where.name = { [Op.like]: `%${search}%` };
       }
@@ -101,7 +102,12 @@ router.get(
 
       res.json({
         data: rows.map(toProductListItem),
-        meta: { page, limit, total: count },
+        meta: {
+          page,
+          pageSize,
+          total: count,
+          totalPages: Math.max(1, Math.ceil(count / pageSize)),
+        },
       });
     } catch (error) {
       next(error);
@@ -114,7 +120,8 @@ router.get(
   "/products/:id",
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const product = await Product.findByPk(req.params.id, {
+      const product = await Product.findOne({
+        where: { id: Number(req.params.id), isPublished: true, status: "active" },
         include: [{ model: Category, as: "category", attributes: ["id", "name", "code"] }],
       });
 
@@ -261,7 +268,7 @@ router.post(
         const productIds = itemsNorm.map((item) => item.productId);
 
         const products = await Product.findAll({
-          where: { id: { [Op.in]: productIds }, isPublished: true },
+          where: { id: { [Op.in]: productIds }, isPublished: true, status: "active" },
           transaction: tx,
           lock: tx.LOCK.UPDATE,
         });
