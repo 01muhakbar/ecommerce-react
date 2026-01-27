@@ -1,19 +1,28 @@
 import "./StatusBadge.css";
 
-const STATUS_MAP = {
-  pending: "status-badge--pending",
-  processing: "status-badge--processing",
-  delivered: "status-badge--delivered",
-  cancel: "status-badge--cancel",
-  shipped: "status-badge--processing",
-  completed: "status-badge--delivered",
-  cancelled: "status-badge--cancel",
-  selling: "status-badge--selling",
-  soldout: "status-badge--soldout",
+const STATUS_TONE = {
+  pending: "neutral",
+  paid: "info",
+  processing: "info",
+  shipped: "warn",
+  delivered: "success",
+  completed: "success",
+  cancelled: "danger",
+  cancel: "danger",
+  selling: "success",
+  soldout: "danger",
 };
 
+const toTitleCase = (value) =>
+  value
+    .replace(/[_-]/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
 export default function StatusBadge({ status }) {
-  const key = String(status || "").toLowerCase();
-  const cls = STATUS_MAP[key] || "status-badge--pending";
-  return <span className={`status-badge ${cls}`}>{status}</span>;
+  const key = String(status || "pending").toLowerCase();
+  const tone = STATUS_TONE[key] || "neutral";
+  const label = toTitleCase(key);
+  return (
+    <span className={`status-badge status-badge--${tone}`}>{label}</span>
+  );
 }

@@ -23,6 +23,16 @@ export default function KPIOverviewCards({
         const Icon = ICON_MAP[item.id] || Layers;
         const valueClass =
           item.id === "all-time" ? "kpi-card__value--wide" : "";
+        const byMethod =
+          breakdown?.byMethod && typeof breakdown.byMethod === "object"
+            ? breakdown.byMethod
+            : breakdown && typeof breakdown === "object"
+              ? breakdown
+              : null;
+        const methodEntries = byMethod
+          ? Object.entries(byMethod).filter(([, value]) => Number(value) > 0)
+          : [];
+        const methodList = methodEntries.slice(0, 3);
 
         return (
           <div key={item.id} className={`kpi-card kpi-card--${item.variant}`}>
@@ -36,32 +46,21 @@ export default function KPIOverviewCards({
             >
               {value}
             </div>
-            {breakdown ? (
+            {byMethod ? (
               <div className="kpi-card__breakdown">
-                <div>
-                  <span>Cash</span>
-                  <strong>
-                    {typeof breakdown.cash === "string"
-                      ? breakdown.cash
-                      : formatCurrency(breakdown.cash)}
-                  </strong>
-                </div>
-                <div>
-                  <span>Card</span>
-                  <strong>
-                    {typeof breakdown.card === "string"
-                      ? breakdown.card
-                      : formatCurrency(breakdown.card)}
-                  </strong>
-                </div>
-                <div>
-                  <span>Credit</span>
-                  <strong>
-                    {typeof breakdown.credit === "string"
-                      ? breakdown.credit
-                      : formatCurrency(breakdown.credit)}
-                  </strong>
-                </div>
+                {methodList.length === 0 ? (
+                  <div>
+                    <span>—</span>
+                    <strong>—</strong>
+                  </div>
+                ) : (
+                  methodList.map(([method, value]) => (
+                    <div key={method}>
+                      <span>{method}</span>
+                      <strong>{formatCurrency(Number(value) || 0)}</strong>
+                    </div>
+                  ))
+                )}
               </div>
             ) : null}
           </div>

@@ -16,8 +16,10 @@ import type { Product as ProductType } from "../models/Product";
 
 export const OrderStatus = {
   Pending: "pending",
+  Paid: "paid",
   Processing: "processing",
   Shipped: "shipped",
+  Delivered: "delivered",
   Completed: "completed",
   Cancelled: "cancelled",
 } as const;
@@ -274,8 +276,11 @@ export const updateOrderStatus = async (
       return;
     }
 
+    const updatedOrder = await OrderModel.findByPk(id);
+
     res.status(200).json({
       message: `Status pesanan berhasil diperbarui menjadi ${status}.`,
+      data: updatedOrder,
     });
   } catch (error) {
     next(error);

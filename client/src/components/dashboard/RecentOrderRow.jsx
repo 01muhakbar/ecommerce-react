@@ -5,7 +5,10 @@ import { formatCurrency } from "../../utils/format.js";
 
 const STATUS_OPTIONS = [
   "pending",
+  "paid",
   "processing",
+  "shipped",
+  "delivered",
   "completed",
   "cancelled",
 ];
@@ -43,9 +46,9 @@ export default function RecentOrderRow({
   const statusValue = order?.status || "pending";
   const amount =
     order?.totalAmount ?? order?.amount ?? order?.total ?? 0;
-  const method = order?.method || "Cash";
+  const method = order?.method || order?.paymentMethod || "COD";
   const customerName =
-    order?.customer?.name || order?.customerName || order?.customer || "-";
+    order?.customerName || order?.customer?.name || order?.customer || "Guest";
 
   return (
     <tr>

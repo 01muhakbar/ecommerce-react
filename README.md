@@ -11,6 +11,44 @@ Frontend ini adalah admin dashboard berbasis React untuk sistem e-commerce. Foku
 - Vite
 - CSS biasa
 
+## Routing Overview
+
+Storefront (public):
+- `/`
+- `/category/:slug`
+- `/product/:id`
+- `/cart`
+- `/checkout`
+- `/auth/login`
+- `/auth/register`
+
+Admin (protected):
+- `/admin/login`
+- `/admin`
+- `/admin/products`
+- `/admin/orders`
+- `/admin/customers`
+- `/admin/settings`
+
+## Dev Seed (Storefront)
+
+Run a simple dev seed to publish categories and products for the storefront:
+
+```bash
+pnpm -C server seed:dev
+```
+
+## Dev Reset (DB)
+
+If `db:sync` fails on legacy rows (e.g. zero dates), reset the dev schema:
+
+```bash
+pnpm -C server db:reset
+pnpm -C server seed:dev
+pnpm -C server dev
+pnpm -C client dev
+```
+
 ## Struktur Folder (Ringkas)
 
 ```

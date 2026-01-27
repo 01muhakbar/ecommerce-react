@@ -18,14 +18,12 @@ router.get("/", requireStaffOrAdmin, async (req, res) => {
   const dateTo = (req.query.dateTo ?? req.query.endDate) as string | undefined;
 
   let where: any = {};
-  const include: any[] = [
-    { model: User, as: "customer", attributes: ["name", "email"] },
-  ];
+  const include: any[] = [];
 
   if (search) {
     where[Op.or] = [
-      { "$customer.name$": { [Op.like]: `%${search}%` } },
-      { "$customer.email$": { [Op.like]: `%${search}%` } },
+      { customerName: { [Op.like]: `%${search}%` } },
+      { invoiceNo: { [Op.like]: `%${search}%` } },
     ];
   }
 
@@ -47,17 +45,37 @@ router.get("/", requireStaffOrAdmin, async (req, res) => {
     where.createdAt = { [Op.lte]: new Date(dateTo) };
   }
 
+  const sortField =
+    sort === "orderTime" ? "createdAt" : sort === "amount" ? "totalAmount" : sort;
+
   const { rows, count } = await Order.findAndCountAll({
     where,
     include,
-    order: [[sort, order]],
+    order: [[sortField, order]],
     limit: pageSize,
     offset: (page - 1) * pageSize,
     distinct: true, // needed for correct count with includes
   });
 
+  const data = rows.map((orderRow: any) => ({
+    id: orderRow.id,
+    invoiceNo: orderRow.invoiceNo,
+    status: orderRow.status,
+    totalAmount: Number(orderRow.totalAmount || 0),
+    createdAt: orderRow.createdAt,
+    customerName: orderRow.customerName ?? orderRow.customer?.name ?? "Guest",
+    customerPhone: orderRow.customerPhone ?? null,
+    method: orderRow.paymentMethod ?? "COD",
+    customer: orderRow.customer
+      ? {
+          name: orderRow.customer.name,
+          email: orderRow.customer.email,
+        }
+      : null,
+  }));
+
   res.json({
-    data: rows,
+    data,
     meta: {
       page,
       pageSize,
@@ -90,10 +108,39 @@ router.get("/:id", requireStaffOrAdmin, async (req, res) => {
     return res.status(404).json({ message: "Not found" });
   }
 
-  return res.json(orderItem);
+  const items = (orderItem.items || []).map((item: any) => ({
+    id: item.id,
+    productId: item.productId ?? item.get?.("productId") ?? item.product_id,
+    quantity: item.quantity,
+    price: Number(item.price || 0),
+    lineTotal: Number(item.price || 0) * Number(item.quantity || 0),
+    product: item.product
+      ? {
+          id: item.product.id,
+          name: item.product.name,
+        }
+      : null,
+  }));
+
+  return res.json({
+    data: {
+      id: orderItem.id,
+      invoiceNo: orderItem.invoiceNo,
+      status: orderItem.status,
+      totalAmount: Number(orderItem.totalAmount || 0),
+      createdAt: orderItem.createdAt,
+      customerName: orderItem.customerName ?? orderItem.customer?.name ?? null,
+      customerPhone: orderItem.customerPhone ?? null,
+      customerAddress: orderItem.customerAddress ?? null,
+      customerNotes: orderItem.customerNotes ?? null,
+      method: orderItem.paymentMethod ?? "COD",
+      items,
+    },
+  });
 });
 
 router.put("/:id/status", requireAdmin, updateOrderStatus);
+router.patch("/:id/status", requireAdmin, updateOrderStatus);
 
 // Other CRUD endpoints for Orders can be added here following the same pattern as Customers
 

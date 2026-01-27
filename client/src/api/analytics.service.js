@@ -5,6 +5,13 @@ export async function getOverview() {
   return data;
 }
 
+export async function getSummary(days = 7) {
+  const { data } = await api.get("/admin/analytics/summary", {
+    params: { days },
+  });
+  return data;
+}
+
 export async function getSales(range = "7d") {
   const { data } = await api.get("/admin/analytics/sales", {
     params: { range },
@@ -12,9 +19,16 @@ export async function getSales(range = "7d") {
   return data;
 }
 
-export async function getBestSelling(range = "7d", limit = 5) {
+export async function getWeeklySales(days = 7) {
+  const { data } = await api.get("/admin/analytics/weekly-sales", {
+    params: { days },
+  });
+  return data;
+}
+
+export async function getBestSelling(days = 7, limit = 5) {
   const { data } = await api.get("/admin/analytics/best-selling", {
-    params: { range, limit },
+    params: { days, limit },
   });
   return data;
 }

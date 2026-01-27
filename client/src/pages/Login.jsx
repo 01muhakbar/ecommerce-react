@@ -17,7 +17,7 @@ export default function Login() {
       setError(result.message);
       return;
     }
-    navigate("/", { replace: true });
+    navigate("/admin", { replace: true });
   };
 
   if (isAuthenticated) {

@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dayjs from "dayjs";
 import { Toaster, toast } from "react-hot-toast";
 import { statCards, orderStatusStats } from "../data/dashboardStats.js";
-import { analyticsService } from "../api/index.ts";
+import { analyticsService, orderService } from "../api/index.ts";
 import { useAuth } from "../auth/useAuth.js";
 import KPIOverviewCards from "../components/dashboard/KPIOverviewCards.jsx";
 import OrderStatusCards from "../components/dashboard/OrderStatusCards.jsx";
 import WeeklySalesCard from "../components/dashboard/WeeklySalesCard.jsx";
 import BestSellingCard from "../components/dashboard/BestSellingCard.jsx";
 import RecentOrdersTable from "../components/dashboard/RecentOrdersTable.jsx";
+import { formatCurrency } from "../utils/format.js";
 
 import "./Dashboard.css";
 
@@ -23,6 +24,9 @@ export default function Dashboard() {
   const [overview, setOverview] = useState(null);
   const [overviewError, setOverviewError] = useState("");
   const [isLoadingOverview, setIsLoadingOverview] = useState(true);
+  const [summary, setSummary] = useState(null);
+  const [summaryError, setSummaryError] = useState("");
+  const [isLoadingSummary, setIsLoadingSummary] = useState(true);
   const [salesData, setSalesData] = useState({ sales: [], orders: [] });
   const [salesError, setSalesError] = useState("");
   const [isLoadingSales, setIsLoadingSales] = useState(true);
@@ -66,13 +70,40 @@ export default function Dashboard() {
     }
   };
 
+  const loadSummary = async (isActive) => {
+    setIsLoadingSummary(true);
+    setSummaryError("");
+    try {
+      const data = await analyticsService.getSummary(7);
+      if (!isActive()) return;
+      setSummary(data?.data || null);
+    } catch (err) {
+      if (!isActive()) return;
+      setSummaryError("Failed to load summary.");
+    } finally {
+      if (isActive()) {
+        setIsLoadingSummary(false);
+      }
+    }
+  };
+
   const loadSales = async (isActive) => {
     setIsLoadingSales(true);
     setSalesError("");
     try {
-      const data = await analyticsService.getSales("7d");
+      const data = await analyticsService.getWeeklySales(7);
       if (!isActive()) return;
-      setSalesData(data || { sales: [], orders: [] });
+      const series = data?.data || [];
+      setSalesData({
+        sales: series.map((item) => ({
+          date: item.date,
+          value: Number(item.sales) || 0,
+        })),
+        orders: series.map((item) => ({
+          date: item.date,
+          value: Number(item.orders) || 0,
+        })),
+      });
     } catch (err) {
       if (!isActive()) return;
       setSalesError("Failed to load sales data.");
@@ -87,9 +118,9 @@ export default function Dashboard() {
     setIsLoadingBestSelling(true);
     setBestSellingError("");
     try {
-      const data = await analyticsService.getBestSelling("7d", 5);
+      const data = await analyticsService.getBestSelling(7, 5);
       if (!isActive()) return;
-      setBestSelling(data?.items || []);
+      setBestSelling(data?.data || []);
     } catch (err) {
       if (!isActive()) return;
       setBestSellingError("Failed to load best selling.");
@@ -104,9 +135,14 @@ export default function Dashboard() {
     setIsLoadingOrders(true);
     setOrderError("");
     try {
-      const result = await analyticsService.getRecentOrders(10);
+      const result = await orderService.listOrders({
+        page: 1,
+        pageSize: 10,
+        sort: "createdAt",
+        order: "desc",
+      });
       if (!isActive()) return;
-      setRecentOrders(result?.items || []);
+      setRecentOrders(result?.data || []);
     } catch (err) {
       if (!isActive()) return;
       setOrderError("Failed to load recent orders.");
@@ -130,6 +166,7 @@ export default function Dashboard() {
     let active = true;
     const isActive = () => active;
     loadOverview(isActive);
+    loadSummary(isActive);
     loadSales(isActive);
     loadBestSelling(isActive);
     return () => {
@@ -142,7 +179,7 @@ export default function Dashboard() {
       return;
     }
     try {
-      await analyticsService.updateOrderStatus(order.id, { status });
+      await orderService.updateOrderStatus(order.id, { status });
       setRecentOrders((prev) =>
         prev.map((item) =>
           item.id === order.id ? { ...item, status } : item
@@ -161,103 +198,43 @@ export default function Dashboard() {
     toast("Not implemented yet");
   };
 
-  const overviewMap = useMemo(() => {
-    return overview?.kpis || {};
-  }, [overview]);
-
   const breakdowns = useMemo(() => {
-    const salesSeries = salesData?.sales || [];
-    const lastIndex = salesSeries.length - 1;
-    const todaySales =
-      lastIndex >= 0 ? Number(salesSeries[lastIndex]?.value) || 0 : 0;
-    const yesterdaySales =
-      lastIndex > 0 ? Number(salesSeries[lastIndex - 1]?.value) || 0 : 0;
-    const formatUSD = (value) =>
-      new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: "USD",
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      }).format(value);
-
-    if (overviewMap.breakdown) {
+    if (summary?.today || summary?.yesterday) {
       return {
-        today: {
-          cash: formatUSD(overviewMap.breakdown.cash || 0),
-          card: formatUSD(overviewMap.breakdown.card || 0),
-          credit: formatUSD(overviewMap.breakdown.credit || 0),
-        },
-        yesterday: {
-          cash: formatUSD(overviewMap.breakdown.cash || 0),
-          card: formatUSD(overviewMap.breakdown.card || 0),
-          credit: formatUSD(overviewMap.breakdown.credit || 0),
-        },
+        today: { byMethod: summary?.today?.byMethod || {} },
+        yesterday: { byMethod: summary?.yesterday?.byMethod || {} },
       };
     }
-    return {
-      today: {
-        cash: formatUSD(todaySales),
-        card: formatUSD(0),
-        credit: formatUSD(0),
-      },
-      yesterday: {
-        cash: formatUSD(yesterdaySales),
-        card: formatUSD(0),
-        credit: formatUSD(0),
-      },
-    };
-  }, [overviewMap, salesData]);
+    return {};
+  }, [summary]);
 
   const kpiItems = useMemo(() => {
-    const salesSeries = salesData?.sales || [];
-    const salesLookup = new Map(
-      salesSeries.map((item) => [item.date, Number(item.value) || 0])
-    );
-    const todayKey = dayjs().format("YYYY-MM-DD");
-    const yesterdayKey = dayjs().subtract(1, "day").format("YYYY-MM-DD");
-    const lastIndex = salesSeries.length - 1;
-    const todaySales =
-      salesLookup.has(todayKey)
-        ? salesLookup.get(todayKey)
-        : lastIndex >= 0
-          ? Number(salesSeries[lastIndex]?.value) || 0
-          : 0;
-    const yesterdaySales =
-      salesLookup.has(yesterdayKey)
-        ? salesLookup.get(yesterdayKey)
-        : lastIndex > 0
-          ? Number(salesSeries[lastIndex - 1]?.value) || 0
-          : 0;
-    const formatUSD = (value) =>
-      new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: "USD",
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      }).format(value);
+    const todayTotal = Number(summary?.today?.total) || 0;
+    const yesterdayTotal = Number(summary?.yesterday?.total) || 0;
+    const thisMonthTotal = Number(summary?.thisMonth?.total) || 0;
+    const lastMonthTotal = Number(summary?.lastMonth?.total) || 0;
+    const allTimeTotal = Number(summary?.allTime?.total) || 0;
 
     return statCards.map((card) => {
       const rawValue =
         card.id === "today"
-          ? todaySales
+          ? todayTotal
           : card.id === "yesterday"
-            ? yesterdaySales
-            : overviewMap?.[
-                {
-                  today: "todayOrders",
-                  yesterday: "yesterdayOrders",
-                  "this-month": "thisMonthSales",
-                  "last-month": "lastMonthSales",
-                  "all-time": "allTimeSales",
-                }[card.id]
-              ] ?? 0;
+            ? yesterdayTotal
+            : card.id === "this-month"
+              ? thisMonthTotal
+              : card.id === "last-month"
+                ? lastMonthTotal
+                : card.id === "all-time"
+                  ? allTimeTotal
+                  : 0;
       return {
         ...card,
         value: rawValue,
-        displayValue: formatUSD(rawValue),
+        displayValue: formatCurrency(rawValue),
       };
     });
-  }, [overviewMap, salesData]);
+  }, [summary]);
 
   const statusCounts = overview?.statusCounts || {};
   const pendingAmount = overview?.kpis?.pendingAmount ?? 0;
@@ -290,7 +267,8 @@ export default function Dashboard() {
   const bestSellingItems = useMemo(() => {
     return bestSelling.map((item) => ({
       name: item.name || "Unknown",
-      value: Number(item.qty) || 0,
+      value: Number(item.soldQty ?? item.qty) || 0,
+      revenue: Number(item.revenue) || 0,
     }));
   }, [bestSelling]);
 
@@ -301,7 +279,7 @@ export default function Dashboard() {
         <h1>Dashboard Overview</h1>
       </div>
       <KPIOverviewCards
-        items={isLoadingOverview || overviewError ? statCards : kpiItems}
+        items={isLoadingSummary || summaryError ? statCards : kpiItems}
         labelMap={statLabelMap}
         breakdowns={breakdowns}
       />

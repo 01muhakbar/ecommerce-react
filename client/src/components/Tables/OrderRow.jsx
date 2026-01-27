@@ -11,7 +11,14 @@ export default function OrderRow({
   canEdit,
 }) {
   const invoice = order.invoice || order.id;
-  const orderTime = order.createdAt || order.orderTime || order.date;
+  const orderTimeRaw = order.createdAt || order.orderTime || order.date;
+  const orderTime =
+    orderTimeRaw
+      ? new Date(orderTimeRaw).toLocaleString("id-ID", {
+          dateStyle: "medium",
+          timeStyle: "short",
+        })
+      : "—";
   const customerName =
     order.customer?.name || order.customerName || order.customer || "";
   const customerEmail = order.customer?.email || order.customerEmail || "";
@@ -28,23 +35,24 @@ export default function OrderRow({
         <td className="data-table__checkbox">
           <input type="checkbox" />
         </td>
-        <td>{invoice}</td>
+        <td>
+          {onView ? (
+            <button type="button" className="order-row__link" onClick={onView}>
+              {invoice}
+            </button>
+          ) : (
+            invoice
+          )}
+        </td>
         <td>{orderTime}</td>
         <td>{customerText || "—"}</td>
-        <td>{order.method}</td>
+        <td>{order.method || order.paymentMethod || "COD"}</td>
         <td style={{ textAlign: "right" }}>{amountText}</td>
         <td>
           <StatusBadge status={order.status} />
         </td>
         <td>
           <div style={{ display: "flex", gap: 6 }}>
-            <button
-              className="product-row__view"
-              type="button"
-              onClick={onView}
-            >
-              View
-            </button>
             {canEdit ? <ActionButtons onEdit={onEdit} /> : null}
           </div>
         </td>

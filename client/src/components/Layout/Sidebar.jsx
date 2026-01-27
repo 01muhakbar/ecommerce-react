@@ -107,22 +107,22 @@ const ChevronDown = (props) => (
 );
 
 const MENU = [
-  { label: "Dashboard", to: "/", icon: IconGrid },
+  { label: "Dashboard", to: "/admin", icon: IconGrid },
   {
     label: "Catalog",
     icon: IconBoxes,
     hasCaret: true,
     children: [
-      { label: "Products", to: "/products" },
+      { label: "Products", to: "/admin/products" },
       { label: "Categories" },
       { label: "Attributes" },
       { label: "Coupons" },
     ],
   },
-  { label: "Customers", to: "/customers", icon: IconUsers },
-  { label: "Orders", to: "/orders", icon: IconReceipt },
+  { label: "Customers", to: "/admin/customers", icon: IconUsers },
+  { label: "Orders", to: "/admin/orders", icon: IconReceipt },
   { label: "Our Staff", icon: IconStaff },
-  { label: "Settings", to: "/settings", icon: IconSettings },
+  { label: "Settings", to: "/admin/settings", icon: IconSettings },
   {
     label: "International",
     icon: IconGlobe,

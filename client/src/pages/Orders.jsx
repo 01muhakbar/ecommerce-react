@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth.js";
 import { orderService } from "../api/index.ts";
 import OrderFilters from "../components/Filters/OrderFilters.jsx";
@@ -7,7 +8,6 @@ import DataTable from "../components/Tables/DataTable.jsx";
 import OrderRow from "../components/Tables/OrderRow.jsx";
 import UpdateOrderStatusModal from "../components/Modals/UpdateOrderStatusModal.jsx";
 import OrderTableSkeleton from "../components/Orders/OrderTableSkeleton.jsx";
-import OrderDetailsModal from "../components/Orders/OrderDetailsModal.jsx";
 import "./Orders.css";
 
 const COLUMNS = [
@@ -47,13 +47,12 @@ export default function Orders() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [editingOrder, setEditingOrder] = useState(null);
   const [isStatusOpen, setIsStatusOpen] = useState(false);
-  const [viewOrder, setViewOrder] = useState(null);
-  const [isViewOpen, setIsViewOpen] = useState(false);
   const [data, setData] = useState([]);
   const [meta, setMeta] = useState({ page: 1, pageSize: 10, total: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState(filters.search);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -146,15 +145,8 @@ export default function Orders() {
     setRefreshKey((prev) => prev + 1);
     window.alert("Order status updated successfully.");
   };
-  const handleViewOrder = async (order) => {
-    setViewOrder(order);
-    setIsViewOpen(true);
-    try {
-      const detail = await orderService.getOrder(order.id);
-      setViewOrder(detail || order);
-    } catch (err) {
-      // fallback to list item data
-    }
+  const handleViewOrder = (order) => {
+    navigate(`/admin/orders/${order.id}`);
   };
   const totalPages = Math.max(1, Math.ceil(meta.total / meta.pageSize));
 
@@ -260,14 +252,6 @@ export default function Orders() {
         onCancel={() => {
           setIsStatusOpen(false);
           setEditingOrder(null);
-        }}
-      />
-      <OrderDetailsModal
-        open={isViewOpen}
-        order={viewOrder}
-        onClose={() => {
-          setIsViewOpen(false);
-          setViewOrder(null);
         }}
       />
     </div>

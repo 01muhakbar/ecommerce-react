@@ -63,7 +63,10 @@ export default function UpdateOrderStatusModal({
             style={{ width: "100%", padding: 8, marginTop: 6 }}
           >
             <option value="pending">pending</option>
+            <option value="paid">paid</option>
             <option value="processing">processing</option>
+            <option value="shipped">shipped</option>
+            <option value="delivered">delivered</option>
             <option value="completed">completed</option>
             <option value="cancelled">cancelled</option>
           </select>

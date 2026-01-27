@@ -29,8 +29,8 @@ export class Category
   public readonly updatedAt!: Date;
 
   static associate(_models: any) {
-    Category.hasMany(Category, { as: "children", foreignKey: "parent_id" });
-    Category.belongsTo(Category, { as: "parent", foreignKey: "parent_id" });
+    Category.hasMany(Category, { as: "children", foreignKey: "parentId" });
+    Category.belongsTo(Category, { as: "parent", foreignKey: "parentId" });
   }
 
   static initModel(sequelize: Sequelize): typeof Category {

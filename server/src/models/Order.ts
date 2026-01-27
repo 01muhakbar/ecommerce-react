@@ -13,8 +13,20 @@ export interface OrderAttributes {
   id: number;
   invoiceNo: string;
   userId: number;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  customerAddress?: string | null;
+  customerNotes?: string | null;
+  paymentMethod?: string | null;
   totalAmount: number;
-  status: "pending" | "processing" | "shipped" | "completed" | "cancelled";
+  status:
+    | "pending"
+    | "paid"
+    | "processing"
+    | "shipped"
+    | "delivered"
+    | "completed"
+    | "cancelled";
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -28,11 +40,18 @@ export class Order
   public id!: number;
   public invoiceNo!: string;
   public userId!: number;
+  public customerName?: string | null;
+  public customerPhone?: string | null;
+  public customerAddress?: string | null;
+  public customerNotes?: string | null;
+  public paymentMethod?: string | null;
   public totalAmount!: number;
   public status!:
     | "pending"
+    | "paid"
     | "processing"
     | "shipped"
+    | "delivered"
     | "completed"
     | "cancelled";
 
@@ -73,6 +92,31 @@ export class Order
           allowNull: false,
           references: { model: "Users", key: "id" },
         },
+        customerName: {
+          type: DataTypes.STRING(120),
+          allowNull: true,
+          field: "customer_name",
+        },
+        customerPhone: {
+          type: DataTypes.STRING(30),
+          allowNull: true,
+          field: "customer_phone",
+        },
+        customerAddress: {
+          type: DataTypes.TEXT,
+          allowNull: true,
+          field: "customer_address",
+        },
+        customerNotes: {
+          type: DataTypes.TEXT,
+          allowNull: true,
+          field: "customer_notes",
+        },
+        paymentMethod: {
+          type: DataTypes.STRING(30),
+          allowNull: true,
+          field: "payment_method",
+        },
         totalAmount: {
           type: DataTypes.DECIMAL(10, 2),
           allowNull: false,
@@ -80,8 +124,10 @@ export class Order
         status: {
           type: DataTypes.ENUM(
             "pending",
+            "paid",
             "processing",
             "shipped",
+            "delivered",
             "completed",
             "cancelled"
           ),

@@ -16,21 +16,22 @@ import staffRouter from "./routes/admin.staff.js";
 import adminProductsRouter from "./routes/admin.products.js";
 import adminCategoriesRouter from "./routes/admin.categories.js";
 import adminOrdersRouter from "./routes/admin.orders.js";
+import storeRouter from "./routes/store.js";
 
 const app = express();
 
 app.use(cookieParser());
 app.use(express.json());
 
-const ORIGIN = process.env.CLIENT_URL || process.env.CORS_ORIGIN;
-if (ORIGIN) {
-  app.use(cors({ origin: ORIGIN, credentials: true }));
-}
+const ORIGIN =
+  process.env.CLIENT_URL || process.env.CORS_ORIGIN || "http://localhost:5173";
+app.use(cors({ origin: ORIGIN, credentials: true }));
 
 app.use(authFromCookie);
 
 // public
 app.use("/api/auth", authRouter);
+app.use("/api/store", storeRouter);
 // serve uploaded files (products, staff, etc.)
 app.use("/uploads", express.static(path.resolve(process.cwd(), "server/uploads")));
 

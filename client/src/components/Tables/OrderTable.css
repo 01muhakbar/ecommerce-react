@@ -26,3 +26,13 @@
   color: #6b7280;
   font-weight: 600;
 }
+
+.order-row__link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #2563eb;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}

@@ -55,4 +55,19 @@ export async function syncDb() {
   await sequelize.sync({ alter: true });
 }
 
+// Dev-only reset: drop & recreate tables to clean legacy data issues.
+export async function resetDbDev() {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("resetDbDev is disabled in production.");
+  }
+  await sequelize.authenticate();
+  await sequelize.query("SET FOREIGN_KEY_CHECKS = 0;");
+  try {
+    await sequelize.drop();
+    await sequelize.sync({ force: true });
+  } finally {
+    await sequelize.query("SET FOREIGN_KEY_CHECKS = 1;");
+  }
+}
+
 export { sequelize, User, Product, Category, Cart, CartItem, Order, OrderItem };

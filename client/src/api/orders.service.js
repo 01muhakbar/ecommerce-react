@@ -19,11 +19,32 @@ export async function listOrders(params = {}) {
     const response = await api.get("/admin/orders", { params: query });
     const payload = response?.data;
     if (payload && payload.data && payload.meta) {
-      return payload;
+      const mapped = payload.data.map((order) => ({
+        ...order,
+        invoice: order.invoice || order.invoiceNo,
+        orderTime: order.orderTime || order.createdAt,
+        amount: typeof order.amount === "number" ? order.amount : order.totalAmount,
+        customer:
+          order.customerName ||
+          order.customer?.name ||
+          order.customer ||
+          "Guest",
+      }));
+      return { ...payload, data: mapped };
     }
     if (Array.isArray(payload)) {
       return {
-        data: payload,
+        data: payload.map((order) => ({
+          ...order,
+          invoice: order.invoice || order.invoiceNo,
+          orderTime: order.orderTime || order.createdAt,
+          amount: typeof order.amount === "number" ? order.amount : order.totalAmount,
+          customer:
+            order.customerName ||
+            order.customer?.name ||
+            order.customer ||
+            "Guest",
+        })),
         meta: {
           page: query.page,
           pageSize: query.pageSize,
@@ -56,7 +77,7 @@ export async function listOrders(params = {}) {
 
 export async function getOrder(id) {
   const { data } = await api.get(`/admin/orders/${id}`);
-  return data;
+  return data?.data ?? data;
 }
 
 export async function updateOrderStatus(id, payload) {
