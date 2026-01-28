@@ -18,6 +18,8 @@ export interface OrderAttributes {
   customerAddress?: string | null;
   customerNotes?: string | null;
   paymentMethod?: string | null;
+  couponCode?: string | null;
+  discountAmount?: number | null;
   totalAmount: number;
   status:
     | "pending"
@@ -45,6 +47,8 @@ export class Order
   public customerAddress?: string | null;
   public customerNotes?: string | null;
   public paymentMethod?: string | null;
+  public couponCode?: string | null;
+  public discountAmount?: number | null;
   public totalAmount!: number;
   public status!:
     | "pending"
@@ -116,6 +120,16 @@ export class Order
           type: DataTypes.STRING(30),
           allowNull: true,
           field: "payment_method",
+        },
+        couponCode: {
+          type: DataTypes.STRING(50),
+          allowNull: true,
+          field: "coupon_code",
+        },
+        discountAmount: {
+          type: DataTypes.DECIMAL(10, 2),
+          allowNull: true,
+          field: "discount_amount",
         },
         totalAmount: {
           type: DataTypes.DECIMAL(10, 2),

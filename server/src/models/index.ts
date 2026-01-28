@@ -8,6 +8,7 @@ import { Cart } from "./Cart.ts";
 import { CartItem } from "./CartItem.ts";
 import { Order } from "./Order.ts";
 import { OrderItem } from "./OrderItem.ts";
+import { Coupon } from "./Coupon.ts";
 
 // Gunakan ENV agar sinkron dengan phpMyAdmin/MySQL kamu
 const sequelize = new Sequelize({
@@ -28,6 +29,7 @@ function initModels() {
   CartItem.initModel(sequelize);
   Order.initModel(sequelize);
   OrderItem.initModel(sequelize);
+  Coupon.initModel(sequelize);
 
   const models: any = {
     User,
@@ -37,6 +39,7 @@ function initModels() {
     CartItem,
     Order,
     OrderItem,
+    Coupon,
   };
 
   Object.values(models).forEach((model: any) => {
@@ -70,4 +73,4 @@ export async function resetDbDev() {
   }
 }
 
-export { sequelize, User, Product, Category, Cart, CartItem, Order, OrderItem };
+export { sequelize, User, Product, Category, Cart, CartItem, Order, OrderItem, Coupon };

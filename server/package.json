@@ -14,7 +14,7 @@
     "seed:analytics": "tsx src/scripts/seedAnalyticsDemo.ts",
     "seed:customers": "tsx src/scripts/seedCustomers.ts",
     "db:sync": "tsx -e \"import('./src/models/index.ts').then(m=>m.syncDb())\"",
-    "db:reset": "tsx -e \"import('./src/models/index.ts').then(m=>m.resetDbDev())\""
+    "db:reset": "tsx src/scripts/reset-db.ts"
   },
   "dependencies": {
     "@ecommerce/schemas": "workspace:*",

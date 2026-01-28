@@ -1,10 +1,12 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { Op } from "sequelize";
 import { Category, Order, OrderItem, Product, User, sequelize } from "../models";
+import { validateCoupon } from "../services/coupon.service";
 
 const router = Router();
 
 const toNumber = (value: any) => (value == null ? null : Number(value));
+const normalizeCouponCode = (value: any) => String(value || "").trim().toUpperCase();
 
 const toProductListItem = (product: any) => {
   const imageUrl = product.promoImagePath || product.imagePaths?.[0] || null;
@@ -143,6 +145,7 @@ router.get(
   }
 );
 
+
 // GET /api/store/orders/:ref
 router.get(
   "/orders/:ref",
@@ -163,6 +166,8 @@ router.get(
           "invoiceNo",
           "status",
           "totalAmount",
+          "couponCode",
+          "discountAmount",
           "paymentMethod",
           "createdAt",
           "customerName",
@@ -197,6 +202,10 @@ router.get(
         price: Number(item.price || 0),
         lineTotal: Number(item.price || 0) * Number(item.quantity || 0),
       }));
+      const subtotal = items.reduce((sum, item) => sum + Number(item.lineTotal || 0), 0);
+      const discountAmount = Number((order as any).discountAmount || 0);
+      const tax = 0;
+      const shipping = 0;
 
       return res.json({
         data: {
@@ -205,6 +214,11 @@ router.get(
           invoiceNo: order.invoiceNo,
           status: order.status,
           totalAmount: Number(order.totalAmount || 0),
+          subtotal,
+          discount: discountAmount,
+          tax,
+          shipping,
+          couponCode: (order as any).couponCode ?? null,
           paymentMethod: order.paymentMethod ?? "COD",
           createdAt: order.createdAt,
           customerName: order.customerName ?? null,
@@ -226,6 +240,7 @@ router.post(
     try {
       const customer = req.body?.customer;
       const items = Array.isArray(req.body?.items) ? req.body.items : [];
+      const couponCode = normalizeCouponCode(req.body?.couponCode);
       const PAYMENT_METHODS = ["COD", "TRANSFER", "EWALLET"] as const;
       const rawPaymentMethod = req.body?.paymentMethod;
       let paymentMethod = "COD";
@@ -314,17 +329,35 @@ router.post(
           transaction: tx,
         });
 
-        let totalAmount = 0;
+        let subtotal = 0;
         const orderItemsPayload = itemsNorm.map((item) => {
           const product = byId.get(item.productId)!;
           const unitPrice = Number(product.salePrice ?? product.price ?? 0);
-          totalAmount += unitPrice * item.qty;
+          subtotal += unitPrice * item.qty;
           return {
             productId: product.id,
             quantity: item.qty,
             price: unitPrice,
           };
         });
+
+        let discountAmount = 0;
+        let appliedCouponCode: string | null = null;
+        if (couponCode) {
+          const result = await validateCoupon(couponCode, subtotal);
+          if (!result.valid) {
+            await tx.rollback();
+            return res.status(400).json({
+              message: result.message || "Coupon invalid/expired/min spend not met",
+            });
+          }
+          discountAmount = result.discountAmount;
+          appliedCouponCode = result.code || couponCode;
+        }
+
+        const tax = 0;
+        const shipping = 0;
+        const totalAmount = Math.max(0, subtotal - discountAmount + tax + shipping);
 
         const order = await Order.create(
           {
@@ -336,6 +369,8 @@ router.post(
             customerNotes: customer.notes ?? null,
             paymentMethod,
             totalAmount,
+            couponCode: appliedCouponCode,
+            discountAmount,
             status: "pending",
           } as any,
           { transaction: tx }
@@ -355,9 +390,14 @@ router.post(
         await tx.commit();
 
         return res.status(201).json({
+          success: true,
           data: {
             orderId: order.id,
             invoiceNo: order.invoiceNo,
+            subtotal,
+            discount: discountAmount,
+            tax,
+            shipping,
             total: totalAmount,
             paymentMethod,
           },

@@ -17,7 +17,9 @@ import adminProductsRouter from "./routes/admin.products.js";
 import adminCategoriesRouter from "./routes/admin.categories.js";
 import adminOrdersRouter from "./routes/admin.orders.js";
 import adminCustomersRouter from "./routes/admin.customers.js";
+import adminCouponsRouter from "./routes/admin.coupons.js";
 import storeRouter from "./routes/store.js";
+import storeCouponsRouter from "./routes/store.coupons.js";
 import publicRouter from "./routes/public.js";
 
 const app = express();
@@ -39,6 +41,7 @@ app.get("/api/health", (_req, res) => {
 app.use("/api", publicRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/store", storeRouter);
+app.use("/api/store/coupons", storeCouponsRouter);
 // serve uploaded files (products, staff, etc.)
 app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 
@@ -51,5 +54,6 @@ app.use("/api/admin/products", requireAdmin, adminProductsRouter);
 app.use("/api/admin/categories", requireAdmin, adminCategoriesRouter);
 app.use("/api/admin/orders", adminOrdersRouter);
 app.use("/api/admin/customers", adminCustomersRouter);
+app.use("/api/admin/coupons", requireAdmin, adminCouponsRouter);
 
 export default app;

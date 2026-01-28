@@ -1,12 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useCartStore } from "../../store/cart.store.ts";
-import { createStoreOrder } from "../../api/store.service.ts";
-
-const currency = new Intl.NumberFormat("id-ID", {
-  style: "currency",
-  currency: "IDR",
-});
+import { createStoreOrder, validateStoreCoupon } from "../../api/store.service.ts";
+import { formatCurrency } from "../../utils/format.js";
 
 export default function StoreCheckoutPage() {
   const navigate = useNavigate();
@@ -20,6 +16,10 @@ export default function StoreCheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState("COD");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [couponCode, setCouponCode] = useState("");
+  const [couponMessage, setCouponMessage] = useState("");
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
 
   if (items.length === 0) {
     return (
@@ -30,6 +30,53 @@ export default function StoreCheckoutPage() {
       </section>
     );
   }
+
+  const discountAmount = Number(appliedCoupon?.discountAmount || 0);
+  const total = useMemo(
+    () => Math.max(0, Number(subtotal || 0) - discountAmount),
+    [subtotal, discountAmount]
+  );
+
+  const applyCoupon = async () => {
+    if (items.length === 0) {
+      setCouponMessage("Cart kosong.");
+      setAppliedCoupon(null);
+      return;
+    }
+    const code = couponCode.trim().toUpperCase();
+    if (!code) {
+      setCouponMessage("Masukkan kode kupon.");
+      setAppliedCoupon(null);
+      return;
+    }
+    setIsApplyingCoupon(true);
+    setCouponMessage("");
+    try {
+      const response = await validateStoreCoupon({
+        code,
+        subtotal: Number(subtotal || 0),
+      });
+      const result = response.data;
+      if (result?.valid) {
+        setAppliedCoupon(result);
+        setCouponMessage(result.message || "Kupon diterapkan.");
+        setCouponCode(result.code || code);
+      } else {
+        setAppliedCoupon(null);
+        setCouponMessage(result?.message || "Kupon tidak valid.");
+      }
+    } catch (err) {
+      setAppliedCoupon(null);
+      setCouponMessage("Gagal menerapkan kupon.");
+    } finally {
+      setIsApplyingCoupon(false);
+    }
+  };
+
+  const removeCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponMessage("");
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -50,6 +97,7 @@ export default function StoreCheckoutPage() {
           notes: notes.trim() ? notes.trim() : undefined,
         },
         paymentMethod,
+        couponCode: appliedCoupon?.code || undefined,
         items: items.map((item) => ({
           productId: item.productId,
           qty: item.qty,
@@ -75,7 +123,7 @@ export default function StoreCheckoutPage() {
   return (
     <section>
       <h1>Checkout</h1>
-      <p>Subtotal: {currency.format(Number(subtotal || 0))}</p>
+      <p>Subtotal: {formatCurrency(Number(subtotal || 0))}</p>
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: "12px" }}>
           <label htmlFor="checkout-name">Name</label>
@@ -129,6 +177,45 @@ export default function StoreCheckoutPage() {
             rows={2}
             style={{ display: "block", width: "100%", padding: "8px" }}
           />
+        </div>
+        <div style={{ marginBottom: "12px" }}>
+          <label htmlFor="checkout-coupon">Coupon Code</label>
+          <div style={{ display: "flex", gap: "8px", marginTop: "6px" }}>
+            <input
+              id="checkout-coupon"
+              type="text"
+              value={couponCode}
+              onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
+              placeholder="Masukkan kode kupon"
+              style={{ flex: 1, padding: "8px" }}
+            />
+            <button
+              type="button"
+              onClick={applyCoupon}
+              disabled={isApplyingCoupon || items.length === 0}
+            >
+              {isApplyingCoupon ? "Applying..." : "Apply"}
+            </button>
+            {appliedCoupon ? (
+              <button type="button" onClick={removeCoupon}>
+                Remove
+              </button>
+            ) : null}
+          </div>
+          {appliedCoupon ? (
+            <p style={{ marginTop: "6px", fontSize: "12px" }}>
+              Applied: {appliedCoupon.code}
+            </p>
+          ) : null}
+          {couponMessage ? (
+            <p style={{ marginTop: "6px", fontSize: "12px" }}>{couponMessage}</p>
+          ) : null}
+        </div>
+        <div style={{ marginBottom: "12px" }}>
+          <div>
+            Discount: {discountAmount > 0 ? `- ${formatCurrency(discountAmount)}` : "-"}
+          </div>
+          <div style={{ fontWeight: 600 }}>Total: {formatCurrency(total)}</div>
         </div>
         {error ? <p style={{ color: "crimson" }}>{error}</p> : null}
         <button type="submit" disabled={isSubmitting}>

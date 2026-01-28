@@ -3,23 +3,24 @@ import { DataTypes, Model, Sequelize, Optional } from "sequelize";
 interface CouponAttributes {
   id: number;
   code: string;
-  type: "percent" | "fixed";
-  value: number;
+  discountType: "percent" | "fixed";
+  amount: number;
+  minSpend: number;
   active: boolean;
-  startsAt?: Date;
-  endsAt?: Date;
+  expiresAt?: Date | null;
 }
 
-interface CouponCreationAttributes extends Optional<CouponAttributes, "id" | "active" | "type"> {}
+interface CouponCreationAttributes
+  extends Optional<CouponAttributes, "id" | "active" | "discountType" | "minSpend" | "expiresAt"> {}
 
 export class Coupon extends Model<CouponAttributes, CouponCreationAttributes> implements CouponAttributes {
   public id!: number;
   public code!: string;
-  public type!: "percent" | "fixed";
-  public value!: number;
+  public discountType!: "percent" | "fixed";
+  public amount!: number;
+  public minSpend!: number;
   public active!: boolean;
-  public startsAt?: Date;
-  public endsAt?: Date;
+  public expiresAt?: Date | null;
 
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -37,20 +38,23 @@ export class Coupon extends Model<CouponAttributes, CouponCreationAttributes> im
           unique: true,
           allowNull: false,
         },
-        type: {
+        discountType: {
           type: DataTypes.ENUM("percent", "fixed"),
           defaultValue: "percent",
         },
-        value: {
-          type: DataTypes.INTEGER.UNSIGNED,
+        amount: {
+          type: DataTypes.DECIMAL(10, 2),
           allowNull: false,
+        },
+        minSpend: {
+          type: DataTypes.DECIMAL(10, 2),
+          defaultValue: 0,
         },
         active: {
           type: DataTypes.BOOLEAN,
           defaultValue: true,
         },
-        startsAt: DataTypes.DATE,
-        endsAt: DataTypes.DATE,
+        expiresAt: DataTypes.DATE,
       },
       {
         sequelize,

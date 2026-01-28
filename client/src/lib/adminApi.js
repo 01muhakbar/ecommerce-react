@@ -102,3 +102,23 @@ export const fetchAdminCustomerOrders = async (customerId, params) => {
   const { data } = await adminApi.get("/admin/orders", { params: mergedParams });
   return data;
 };
+
+export const fetchAdminCoupons = async (params) => {
+  const { data } = await adminApi.get("/admin/coupons", { params });
+  return data;
+};
+
+export const createAdminCoupon = async (payload) => {
+  const { data } = await adminApi.post("/admin/coupons", payload);
+  return data;
+};
+
+export const updateAdminCoupon = async (id, payload) => {
+  const { data } = await adminApi.patch(`/admin/coupons/${id}`, payload);
+  return data;
+};
+
+export const deleteAdminCoupon = async (id) => {
+  const { data } = await adminApi.delete(`/admin/coupons/${id}`);
+  return data;
+};

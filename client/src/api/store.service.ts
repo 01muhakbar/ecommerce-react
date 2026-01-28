@@ -29,6 +29,15 @@ export type StoreProductDetail = StoreProduct & {
   salePrice?: number | null;
 };
 
+export type StoreCoupon = {
+  id: number;
+  code: string;
+  discountType: "percent" | "fixed";
+  amount: number;
+  minSpend: number;
+  expiresAt?: string | null;
+};
+
 export type StoreProductsResponse = {
   data: StoreProduct[];
   meta: {
@@ -67,6 +76,11 @@ export const fetchStoreOrder = async (ref: string) => {
       status: string;
       totalAmount: number;
       paymentMethod?: string | null;
+      subtotal?: number;
+      discount?: number;
+      tax?: number;
+      shipping?: number;
+      couponCode?: string | null;
       createdAt: string;
       customerName?: string | null;
       customerPhone?: string | null;
@@ -88,9 +102,36 @@ export const createStoreOrder = async (payload: {
   customer: { name: string; phone: string; address: string; notes?: string };
   paymentMethod?: string;
   items: { productId: number; qty: number }[];
+  couponCode?: string;
 }) => {
   const { data } = await api.post<{
-    data: { orderId: number; invoiceNo?: string | null; total: number; paymentMethod?: string };
+    data: {
+      orderId: number;
+      invoiceNo?: string | null;
+      subtotal?: number;
+      discount?: number;
+      tax?: number;
+      shipping?: number;
+      total: number;
+      paymentMethod?: string;
+    };
   }>("/store/orders", payload);
+  return data;
+};
+
+export const fetchStoreCoupons = async () => {
+  const { data } = await api.get<{ data: StoreCoupon[] }>("/store/coupons");
+  return data;
+};
+
+export const validateStoreCoupon = async (payload: { code: string; subtotal: number }) => {
+  const { data } = await api.post<{
+    data: {
+      valid: boolean;
+      code: string | null;
+      discountAmount: number;
+      message: string;
+    };
+  }>("/store/coupons/validate", payload);
   return data;
 };

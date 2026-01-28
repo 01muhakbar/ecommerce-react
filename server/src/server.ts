@@ -1,6 +1,5 @@
 import app from "./app";
-import "./models";
-import net from "node:net";
+import { sequelize, syncDb } from "./models/index.ts";
 
 const BASE_PORT = Number(process.env.PORT) || 3001;
 
@@ -10,12 +9,11 @@ const BASE_PORT = Number(process.env.PORT) || 3001;
 const startServer = async () => {
   try {
     console.log("Attempting to connect to the database...");
-    const sequelize = (await import("./config/database")).default;
     await sequelize.authenticate();
     console.log("Database connected successfully.");
 
     console.log("Synchronizing database models...");
-    await sequelize.sync({ alter: true });
+    await syncDb();
     console.log("Database synchronized successfully.");
 
     await listenWithRetry(BASE_PORT, 10);
