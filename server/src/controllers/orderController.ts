@@ -253,15 +253,19 @@ export const updateOrderStatus = async (
   try {
     const { id } = req.params;
     const { status } = req.body;
+    const allowedStatuses = [
+      "pending",
+      "processing",
+      "shipped",
+      "delivered",
+      "cancelled",
+    ] as const;
 
-    if (
-      !status ||
-      !Object.values(OrderStatus).includes(status as OrderStatusType)
-    ) {
+    if (!status || !allowedStatuses.includes(status as (typeof allowedStatuses)[number])) {
       res.status(400).json({
-        message: `Status tidak valid. Gunakan salah satu dari: ${Object.values(
-          OrderStatus
-        ).join(", ")}`,
+        message: `Status tidak valid. Gunakan salah satu dari: ${allowedStatuses.join(
+          ", "
+        )}`,
       });
       return;
     }

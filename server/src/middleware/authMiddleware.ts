@@ -1,15 +1,14 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import { User as UserModel } from "../models/User";
-import { AppError } from "./errorMiddleware";
+
+const COOKIE_NAME = process.env.AUTH_COOKIE_NAME || "token";
 
 export const protect = (
   req: Request,
   res: Response,
   next: NextFunction
 ): void | Response => {
-  console.log("Cookies received by protect middleware:", req.cookies);
-  const token = req.cookies?.token;
+  const token = req.cookies?.[COOKIE_NAME];
   if (!token) return res.sendStatus(401);
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET!) as any;

@@ -2,11 +2,21 @@ import { Router, Request, Response, NextFunction } from "express";
 import { Op } from "sequelize";
 import { Category, Order, OrderItem, Product, User, sequelize } from "../models";
 import { validateCoupon } from "../services/coupon.service";
+import { protect } from "../middleware/authMiddleware.js";
 
 const router = Router();
 
 const toNumber = (value: any) => (value == null ? null : Number(value));
 const normalizeCouponCode = (value: any) => String(value || "").trim().toUpperCase();
+const getAuthUserId = (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const userId = Number(user?.id);
+  if (!user || !Number.isFinite(userId)) {
+    res.status(401).json({ message: "Unauthorized" });
+    return null;
+  }
+  return userId;
+};
 
 const toProductListItem = (product: any) => {
   const imageUrl = product.promoImagePath || product.imagePaths?.[0] || null;
@@ -145,6 +155,179 @@ router.get(
   }
 );
 
+// GET /api/store/orders (auth)
+router.get(
+  "/orders",
+  protect,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = getAuthUserId(req, res);
+      if (!userId) return;
+
+      const page = Math.max(1, Number(req.query.page || 1));
+      const rawLimit = Number(req.query.limit || 10);
+      const limit = Math.min(50, Math.max(1, rawLimit || 10));
+      const offset = (page - 1) * limit;
+
+      const { rows, count } = await Order.findAndCountAll({
+        where: { userId },
+        attributes: ["id", "invoiceNo", "status", "totalAmount", "createdAt"],
+        order: [["createdAt", "DESC"]],
+        limit,
+        offset,
+      });
+
+      res.json({
+        data: rows.map((order: any) => ({
+          id: order.id,
+          ref: order.invoiceNo || String(order.id),
+          status: order.status,
+          totalAmount: Number(order.totalAmount || 0),
+          createdAt: order.createdAt,
+        })),
+        meta: {
+          page,
+          limit,
+          total: count,
+          totalPages: Math.max(1, Math.ceil(count / limit)),
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// GET /api/store/orders/my/:id (auth)
+router.get(
+  "/orders/my/:id",
+  protect,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = getAuthUserId(req, res);
+      if (!userId) return;
+
+      const orderId = Number(req.params.id);
+      if (!Number.isFinite(orderId)) {
+        return res.status(400).json({ message: "Invalid order id." });
+      }
+
+      const order = await Order.findOne({
+        where: { id: orderId, userId },
+        attributes: [
+          "id",
+          "invoiceNo",
+          "status",
+          "totalAmount",
+          "couponCode",
+          "discountAmount",
+          "paymentMethod",
+          "createdAt",
+          "customerName",
+          "customerPhone",
+          "customerAddress",
+        ],
+        include: [
+          {
+            model: OrderItem,
+            as: "items",
+            attributes: ["id", "quantity", "price", ["product_id", "productId"]],
+            include: [
+              {
+                model: Product,
+                as: "product",
+                attributes: ["id", "name"],
+              },
+            ],
+          },
+        ],
+      });
+
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+
+      const items = (order.items || []).map((item: any) => ({
+        id: item.id,
+        productId: item.productId ?? item.get?.("productId") ?? item.product_id,
+        name: item.product?.name ?? `Product #${item.productId || item.product_id || "-"}`,
+        quantity: Number(item.quantity || 0),
+        price: Number(item.price || 0),
+        lineTotal: Number(item.price || 0) * Number(item.quantity || 0),
+      }));
+      const subtotal = items.reduce((sum, item) => sum + Number(item.lineTotal || 0), 0);
+      const discountAmount = Number((order as any).discountAmount || 0);
+      const tax = 0;
+      const shipping = 0;
+
+      return res.json({
+        data: {
+          id: order.id,
+          ref: order.invoiceNo || String(order.id),
+          invoiceNo: order.invoiceNo,
+          status: order.status,
+          totalAmount: Number(order.totalAmount || 0),
+          subtotal,
+          discount: discountAmount,
+          tax,
+          shipping,
+          couponCode: (order as any).couponCode ?? null,
+          paymentMethod: order.paymentMethod ?? "COD",
+          createdAt: order.createdAt,
+          customerName: order.customerName ?? null,
+          customerPhone: order.customerPhone ?? null,
+          customerAddress: order.customerAddress ?? null,
+          items,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// PUT /api/store/profile (auth)
+router.put(
+  "/profile",
+  protect,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = getAuthUserId(req, res);
+      if (!userId) return;
+
+      const name = typeof req.body?.name === "string" ? req.body.name.trim() : null;
+      const email = typeof req.body?.email === "string" ? req.body.email.trim() : null;
+
+      if (!name && !email) {
+        return res.status(400).json({ message: "No updates provided." });
+      }
+
+      const user = await User.findByPk(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found." });
+      }
+
+      if (name) user.name = name;
+      if (email) user.email = email;
+
+      await user.save();
+
+      return res.json({
+        data: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: (user as any).role,
+        },
+      });
+    } catch (error: any) {
+      if (error?.name === "SequelizeUniqueConstraintError") {
+        return res.status(409).json({ message: "Email already in use." });
+      }
+      next(error);
+    }
+  }
+);
 
 // GET /api/store/orders/:ref
 router.get(

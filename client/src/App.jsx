@@ -13,18 +13,24 @@ import StoreSearchPage from "./pages/store/StoreSearchPage.jsx";
 import StoreOffersPage from "./pages/store/StoreOffersPage.jsx";
 import KachaBazarDemoHomePage from "./pages/store/KachaBazarDemoHomePage.jsx";
 import AdminGuard from "./components/AdminGuard.jsx";
-import AdminLayout from "./layouts/AdminLayout.jsx";
+import AdminLayout from "./components/layouts/AdminLayout.jsx";
 import AdminLoginPage from "./pages/admin/AdminLoginPage.jsx";
-import AdminDashboardPage from "./pages/admin/AdminDashboardPage.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
-import Products from "./pages/Products.jsx";
-import Orders from "./pages/Orders.jsx";
+import AdminProductsPage from "./pages/admin/Products.jsx";
+import AdminProductForm from "./pages/admin/ProductForm.jsx";
+import AdminOrdersPage from "./pages/admin/Orders.jsx";
 import Customers from "./pages/Customers.jsx";
 import Settings from "./pages/Settings.jsx";
 import AdminOrderDetail from "./pages/admin/OrderDetail.jsx";
 import AdminCategoriesPage from "./pages/admin/AdminCategoriesPage.jsx";
 import AdminCustomerDetailPage from "./pages/admin/AdminCustomerDetailPage.jsx";
 import AdminCouponsPage from "./pages/admin/AdminCouponsPage.jsx";
+import AccountGuard from "./components/AccountGuard.jsx";
+import AccountLayout from "./layouts/AccountLayout.jsx";
+import AccountDashboardPage from "./pages/account/AccountDashboardPage.jsx";
+import AccountOrdersPage from "./pages/account/AccountOrdersPage.jsx";
+import AccountOrderDetailPage from "./pages/account/AccountOrderDetailPage.jsx";
+import AccountProfilePage from "./pages/account/AccountProfilePage.jsx";
 
 export default function App() {
   return (
@@ -43,6 +49,15 @@ export default function App() {
           <Route path="offers" element={<StoreOffersPage />} />
           <Route path="auth/login" element={<StoreLoginPage />} />
           <Route path="auth/register" element={<StoreRegisterPage />} />
+          <Route path="account" element={<AccountGuard />}>
+            <Route element={<AccountLayout />}>
+              <Route index element={<AccountDashboardPage />} />
+              <Route path="dashboard" element={<AccountDashboardPage />} />
+              <Route path="orders" element={<AccountOrdersPage />} />
+              <Route path="orders/:id" element={<AccountOrderDetailPage />} />
+              <Route path="profile" element={<AccountProfilePage />} />
+            </Route>
+          </Route>
         </Route>
 
         <Route path="/admin/login" element={<AdminLoginPage />} />
@@ -50,8 +65,10 @@ export default function App() {
           <Route element={<AdminLayout />}>
             <Route index element={<Dashboard />} />
             <Route path="dashboard" element={<Dashboard />} />
-            <Route path="products" element={<Products />} />
-            <Route path="orders" element={<Orders />} />
+            <Route path="products" element={<AdminProductsPage />} />
+            <Route path="products/new" element={<AdminProductForm />} />
+            <Route path="products/:id" element={<AdminProductForm />} />
+            <Route path="orders" element={<AdminOrdersPage />} />
             <Route path="orders/:id" element={<AdminOrderDetail />} />
             <Route path="customers" element={<Customers />} />
             <Route path="customers/:id" element={<AdminCustomerDetailPage />} />

@@ -2,6 +2,7 @@
 import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
+// Canonical auth cookie name via AUTH_COOKIE_NAME.
 const COOKIE_NAME = process.env.AUTH_COOKIE_NAME || "token";
 
 function normalizeRole(input: unknown) {

@@ -12,9 +12,14 @@ const startServer = async () => {
     await sequelize.authenticate();
     console.log("Database connected successfully.");
 
-    console.log("Synchronizing database models...");
-    await syncDb();
-    console.log("Database synchronized successfully.");
+    const shouldSync = process.env.DB_SYNC === "true";
+    if (shouldSync) {
+      console.log("Synchronizing database models...");
+      await syncDb();
+      console.log("Database synchronized successfully.");
+    } else {
+      console.log("Skipping database sync (set DB_SYNC=true to enable).");
+    }
 
     await listenWithRetry(BASE_PORT, 10);
   } catch (error) {

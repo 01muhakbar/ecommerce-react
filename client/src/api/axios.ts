@@ -19,7 +19,9 @@ api.interceptors.response.use(
       triggerUnauthorized();
     }
     // eslint-disable-next-line no-console
-    console.error("[api error]", status, msg);
+    if (!status || status >= 500) {
+      console.error("[api error]", status, msg);
+    }
     return Promise.reject(err);
   }
 );

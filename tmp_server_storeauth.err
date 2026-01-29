@@ -1,0 +1,67 @@
+[server] Port 3001 in use. Retrying on 3002 (9 retries left)...
+[server] Note: desired PORT 3001 was busy. Using 3002 instead.
+Failed to start server: UnknownConstraintError [SequelizeUnknownConstraintError]: Constraint products_ibfk_55 on table products does not exist
+    at MySQLQueryInterface.removeConstraint (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\sequelize@6.37.7_mysql2@3.15.2\node_modules\sequelize\src\dialects\mysql\query-interface.js:72:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async Function.sync (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\sequelize@6.37.7_mysql2@3.15.2\node_modules\sequelize\src\model.js:1402:17)
+    at async Sequelize.sync (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\sequelize@6.37.7_mysql2@3.15.2\node_modules\sequelize\src\sequelize.js:825:9)
+    at async syncDb (C:\Users\user\Documents\ecommerce-react\server\src\models\index.ts:48:3)
+    at async startServer (C:\Users\user\Documents\ecommerce-react\server\src\server.ts:16:5) {
+  parent: { sql: '', name: '', message: '' },
+  original: { sql: '', name: '', message: '' },
+  sql: '',
+  parameters: {},
+  constraint: 'products_ibfk_55',
+  fields: undefined,
+  table: 'products'
+}
+Failed to start server: Error
+    at Query.run (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\sequelize@6.37.7_mysql2@3.15.2\node_modules\sequelize\src\dialects\mysql\query.js:46:25)
+    at <anonymous> (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\sequelize@6.37.7_mysql2@3.15.2\node_modules\sequelize\src\sequelize.js:650:28)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async Function.sync (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\sequelize@6.37.7_mysql2@3.15.2\node_modules\sequelize\src\model.js:1408:11)
+    at async Sequelize.sync (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\sequelize@6.37.7_mysql2@3.15.2\node_modules\sequelize\src\sequelize.js:825:9)
+    at async syncDb (C:\Users\user\Documents\ecommerce-react\server\src\models\index.ts:48:3)
+    at async startServer (C:\Users\user\Documents\ecommerce-react\server\src\server.ts:16:5) {
+  name: 'SequelizeDatabaseError',
+  parent: Error: Too many keys specified; max 64 keys allowed
+      at Packet.asError (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\mysql2@3.15.2\node_modules\mysql2\lib\packets\packet.js:740:17)
+      at Query.execute (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\mysql2@3.15.2\node_modules\mysql2\lib\commands\command.js:29:26)
+      at Connection.handlePacket (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\mysql2@3.15.2\node_modules\mysql2\lib\base\connection.js:475:34)
+      at PacketParser.onPacket (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\mysql2@3.15.2\node_modules\mysql2\lib\base\connection.js:93:12)
+      at PacketParser.executeStart (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\mysql2@3.15.2\node_modules\mysql2\lib\packet_parser.js:75:16)
+      at Socket.<anonymous> (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\mysql2@3.15.2\node_modules\mysql2\lib\base\connection.js:100:25)
+      at Socket.emit (node:events:519:28)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5) {
+    code: 'ER_TOO_MANY_KEYS',
+    errno: 1069,
+    sqlState: '42000',
+    sqlMessage: 'Too many keys specified; max 64 keys allowed',
+    sql: 'ALTER TABLE `products` CHANGE `slug` `slug` VARCHAR(255) NOT NULL UNIQUE;',
+    parameters: undefined
+  },
+  original: Error: Too many keys specified; max 64 keys allowed
+      at Packet.asError (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\mysql2@3.15.2\node_modules\mysql2\lib\packets\packet.js:740:17)
+      at Query.execute (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\mysql2@3.15.2\node_modules\mysql2\lib\commands\command.js:29:26)
+      at Connection.handlePacket (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\mysql2@3.15.2\node_modules\mysql2\lib\base\connection.js:475:34)
+      at PacketParser.onPacket (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\mysql2@3.15.2\node_modules\mysql2\lib\base\connection.js:93:12)
+      at PacketParser.executeStart (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\mysql2@3.15.2\node_modules\mysql2\lib\packet_parser.js:75:16)
+      at Socket.<anonymous> (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\mysql2@3.15.2\node_modules\mysql2\lib\base\connection.js:100:25)
+      at Socket.emit (node:events:519:28)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5) {
+    code: 'ER_TOO_MANY_KEYS',
+    errno: 1069,
+    sqlState: '42000',
+    sqlMessage: 'Too many keys specified; max 64 keys allowed',
+    sql: 'ALTER TABLE `products` CHANGE `slug` `slug` VARCHAR(255) NOT NULL UNIQUE;',
+    parameters: undefined
+  },
+  sql: 'ALTER TABLE `products` CHANGE `slug` `slug` VARCHAR(255) NOT NULL UNIQUE;',
+  parameters: {}
+}
+[server] Port 3001 in use. Retrying on 3002 (9 retries left)...
+[server] Note: desired PORT 3001 was busy. Using 3002 instead.

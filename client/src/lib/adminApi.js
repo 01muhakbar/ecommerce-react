@@ -23,6 +23,11 @@ export const fetchAdminProducts = async (params) => {
   return data;
 };
 
+export const fetchAdminProduct = async (id) => {
+  const { data } = await adminApi.get(`/admin/products/${id}`);
+  return data;
+};
+
 export const fetchAdminCategories = async (params) => {
   const { data } = await adminApi.get("/admin/categories", { params });
   return data;
@@ -66,7 +71,7 @@ export const deleteAdminProduct = async (id) => {
 export const uploadAdminImage = async (file) => {
   const formData = new FormData();
   formData.append("file", file);
-  const { data } = await adminApi.post("/upload", formData, {
+  const { data } = await adminApi.post("/admin/uploads", formData, {
     headers: { "Content-Type": "multipart/form-data" },
   });
   return data;

@@ -1,6 +1,5 @@
 import { Router } from "express";
 import { Op } from "sequelize";
-import { parseListQuery } from "../utils/pagination.js";
 import { updateOrderStatus } from "../controllers/orderController.js";
 import { requireAdmin, requireStaffOrAdmin } from "../middleware/requireRole.js";
 import { Order } from "../models/Order.js";
@@ -12,18 +11,19 @@ const router = Router();
 
 // GET list with pagination, search, and filtering
 router.get("/", requireStaffOrAdmin, async (req, res) => {
-  const { page, pageSize, sort, order, search } = parseListQuery(req.query);
-  const { status, userId } = req.query;
-  const dateFrom = (req.query.dateFrom ?? req.query.startDate) as string | undefined;
-  const dateTo = (req.query.dateTo ?? req.query.endDate) as string | undefined;
+  const page = Math.max(1, Number(req.query.page || 1));
+  const rawLimit = Number(req.query.limit || 10);
+  const limit = Math.min(50, Math.max(1, rawLimit || 10));
+  const status = typeof req.query.status === "string" ? req.query.status.trim() : "";
+  const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
 
-  let where: any = {};
-  const include: any[] = [];
+  const where: any = {};
 
-  if (search) {
+  if (q) {
     where[Op.or] = [
-      { customerName: { [Op.like]: `%${search}%` } },
-      { invoiceNo: { [Op.like]: `%${search}%` } },
+      { invoiceNo: { [Op.like]: `%${q}%` } },
+      { customerName: { [Op.like]: `%${q}%` } },
+      { customerPhone: { [Op.like]: `%${q}%` } },
     ];
   }
 
@@ -31,30 +31,20 @@ router.get("/", requireStaffOrAdmin, async (req, res) => {
     where.status = status as string;
   }
 
-  if (userId) {
-    where.userId = userId;
-  }
-
-  if (dateFrom && dateTo) {
-    where.createdAt = {
-      [Op.between]: [new Date(dateFrom), new Date(dateTo)],
-    };
-  } else if (dateFrom) {
-    where.createdAt = { [Op.gte]: new Date(dateFrom) };
-  } else if (dateTo) {
-    where.createdAt = { [Op.lte]: new Date(dateTo) };
-  }
-
-  const sortField =
-    sort === "orderTime" ? "createdAt" : sort === "amount" ? "totalAmount" : sort;
-
   const { rows, count } = await Order.findAndCountAll({
     where,
-    include,
-    order: [[sortField, order]],
-    limit: pageSize,
-    offset: (page - 1) * pageSize,
-    distinct: true, // needed for correct count with includes
+    attributes: [
+      "id",
+      "invoiceNo",
+      "status",
+      "totalAmount",
+      "customerName",
+      "customerPhone",
+      "createdAt",
+    ],
+    order: [["createdAt", "DESC"]],
+    limit,
+    offset: (page - 1) * limit,
   });
 
   const data = rows.map((orderRow: any) => ({
@@ -63,24 +53,17 @@ router.get("/", requireStaffOrAdmin, async (req, res) => {
     status: orderRow.status,
     totalAmount: Number(orderRow.totalAmount || 0),
     createdAt: orderRow.createdAt,
-    customerName: orderRow.customerName ?? orderRow.customer?.name ?? "Guest",
+    customerName: orderRow.customerName ?? "Guest",
     customerPhone: orderRow.customerPhone ?? null,
-    method: orderRow.paymentMethod ?? "COD",
-    customer: orderRow.customer
-      ? {
-          name: orderRow.customer.name,
-          email: orderRow.customer.email,
-        }
-      : null,
   }));
 
   res.json({
     data,
     meta: {
       page,
-      pageSize,
+      limit,
       total: count,
-      totalPages: Math.ceil(count / pageSize),
+      totalPages: Math.max(1, Math.ceil(count / limit)),
     },
   });
 });
@@ -139,7 +122,6 @@ router.get("/:id", requireStaffOrAdmin, async (req, res) => {
   });
 });
 
-router.put("/:id/status", requireAdmin, updateOrderStatus);
 router.patch("/:id/status", requireAdmin, updateOrderStatus);
 
 // Other CRUD endpoints for Orders can be added here following the same pattern as Customers

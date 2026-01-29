@@ -8,7 +8,7 @@ const currency = new Intl.NumberFormat("id-ID", {
   currency: "IDR",
 });
 
-const STATUS_OPTIONS = ["pending", "paid", "processing", "completed", "cancelled", "refunded"];
+const STATUS_OPTIONS = ["pending", "processing", "shipped", "delivered", "cancelled"];
 
 const labelize = (value) =>
   value ? value.charAt(0).toUpperCase() + value.slice(1) : "";
@@ -173,7 +173,7 @@ export default function OrderDetail() {
             disabled={updateMutation.isPending || !status || status === currentStatus}
             className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
           >
-            {updateMutation.isPending ? "Updating..." : "Update"}
+            {updateMutation.isPending ? "Saving..." : "Save"}
           </button>
         </div>
       </div>

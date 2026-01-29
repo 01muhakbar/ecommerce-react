@@ -1,16 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { fetchAdminOrders } from "../lib/adminApi.js";
-
-const currency = new Intl.NumberFormat("id-ID", {
-  style: "currency",
-  currency: "IDR",
-});
+import { fetchAdminOrders } from "../../lib/adminApi.js";
+import { moneyIDR } from "../../utils/money.js";
 
 export default function Orders() {
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(10);
+  const [limit] = useState(10);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -26,22 +22,22 @@ export default function Orders() {
   const params = useMemo(
     () => ({
       page,
-      pageSize,
+      limit,
       q: debouncedSearch || undefined,
       status: status || undefined,
     }),
-    [page, pageSize, debouncedSearch, status]
+    [page, limit, debouncedSearch, status]
   );
 
   const ordersQuery = useQuery({
-    queryKey: ["admin-orders", params],
+    queryKey: ["admin-orders", page, limit, status, debouncedSearch],
     queryFn: () => fetchAdminOrders(params),
     keepPreviousData: true,
   });
 
   const items = ordersQuery.data?.data || [];
-  const meta = ordersQuery.data?.meta || { page: 1, pageSize, total: 0 };
-  const totalPages = Math.max(1, Math.ceil(meta.total / meta.pageSize));
+  const meta = ordersQuery.data?.meta || { page: 1, limit, total: 0, totalPages: 1 };
+  const totalPages = Math.max(1, Number(meta.totalPages || 1));
 
   return (
     <div className="space-y-6">
@@ -69,7 +65,8 @@ export default function Orders() {
           <option value="">All Status</option>
           <option value="pending">Pending</option>
           <option value="processing">Processing</option>
-          <option value="completed">Completed</option>
+          <option value="shipped">Shipped</option>
+          <option value="delivered">Delivered</option>
           <option value="cancelled">Cancelled</option>
         </select>
       </div>
@@ -111,7 +108,7 @@ export default function Orders() {
                       <div className="text-xs text-slate-400">{order.customer.email}</div>
                     ) : null}
                   </td>
-                  <td className="px-4 py-3">{currency.format(order.totalAmount || 0)}</td>
+                  <td className="px-4 py-3">{moneyIDR(order.totalAmount || 0)}</td>
                   <td className="px-4 py-3 capitalize">{order.status || "-"}</td>
                   <td className="px-4 py-3 text-slate-500">
                     {order.createdAt ? new Date(order.createdAt).toLocaleString("id-ID") : "-"}

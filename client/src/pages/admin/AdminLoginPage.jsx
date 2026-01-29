@@ -9,14 +9,20 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState("");
 
   const mutation = useMutation({
-    mutationFn: async () => {
-      const { data } = await api.post("/auth/login", { email, password });
-      return data;
-    },
+    mutationFn: () =>
+      api.post("/auth/admin/login", { email, password }).then((r) => r.data),
     onSuccess: () => {
-      navigate("/admin/dashboard", { replace: true });
+      navigate("/admin", { replace: true });
+    },
+    onError: (error) => {
+      // Intentionally silent; UI shows error message.
     },
   });
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    mutation.mutate();
+  };
 
   const errorMsg =
     mutation.error?.response?.data?.message ||
@@ -28,13 +34,7 @@ export default function AdminLoginPage() {
         <h1 className="text-2xl font-semibold">Admin Login</h1>
         <p className="mt-2 text-sm text-slate-500">Sign in to manage products.</p>
 
-        <form
-          className="mt-6 space-y-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            mutation.mutate();
-          }}
-        >
+        <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
           <div>
             <label className="text-sm font-medium text-slate-600">Email</label>
             <input

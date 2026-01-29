@@ -1,0 +1,7 @@
+
+> server@1.0.0 dev C:\Users\user\Documents\ecommerce-react\server
+> tsx watch src/server.ts
+
+Attempting to connect to the database...
+Database connected successfully.
+Skipping database sync (set DB_SYNC=true to enable).

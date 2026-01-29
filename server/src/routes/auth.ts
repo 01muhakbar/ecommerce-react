@@ -77,8 +77,23 @@ router.get("/me", (req, res) => {
   if (!user) {
     return res.status(401).json({ success: false, message: "Unauthorized" });
   }
+  if (!User) {
+    return res.status(500).json({ success: false, message: "User model not loaded" });
+  }
 
-  return res.json({ success: true, data: { user } });
+  return User.findByPk(user.id, {
+    attributes: ["id", "email", "name", "role"],
+  })
+    .then((dbUser) => {
+      if (!dbUser) {
+        return res.status(404).json({ success: false, message: "User not found" });
+      }
+      return res.json({ success: true, data: { user: dbUser } });
+    })
+    .catch((error) => {
+      console.error(error);
+      return res.status(500).json({ success: false, message: "Internal server error" });
+    });
 });
 
 router.post("/logout", (_req, res) => {

@@ -21,6 +21,7 @@ import adminCouponsRouter from "./routes/admin.coupons.js";
 import storeRouter from "./routes/store.js";
 import storeCouponsRouter from "./routes/store.coupons.js";
 import publicRouter from "./routes/public.js";
+import healthRouter from "./routes/health.js";
 
 const app = express();
 
@@ -33,9 +34,7 @@ app.use(cors({ origin: ORIGIN, credentials: true }));
 
 app.use(authFromCookie);
 
-app.get("/api/health", (_req, res) => {
-  res.json({ success: true, message: "ok" });
-});
+app.use("/api", healthRouter);
 
 // public
 app.use("/api", publicRouter);

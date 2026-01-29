@@ -1,11 +1,11 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { Op } from "sequelize";
 import { z } from "zod";
-import { requireAdmin } from "../middleware/requireRole";
-import { Category, Product } from "../models";
+import { requireStaffOrAdmin } from "../middleware/requireRole.js";
+import { Product } from "../models/Product.js";
 
 const router = Router();
-router.use(requireAdmin);
+router.use(requireStaffOrAdmin);
 
 const slugify = (value: string) =>
   value
@@ -19,55 +19,40 @@ const parseId = (value: string) => {
   return Number.isInteger(n) && n > 0 ? n : null;
 };
 
-const ALLOWED_SORT = new Set(["createdAt", "updatedAt", "name", "price", "stock"]);
 
 const createSchema = z.object({
   name: z.string().min(1),
-  slug: z.string().optional(),
+  description: z.string().optional(),
   price: z.coerce.number().min(0),
-  stock: z.coerce.number().int().min(0).default(0),
+  stock: z.coerce.number().int().min(0).optional(),
   categoryId: z.coerce.number().int().nonnegative().optional(),
+  status: z.enum(["active", "inactive"]).optional(),
   imageUrl: z.string().max(255).optional().nullable(),
+  imageUrls: z.array(z.string().max(255)).optional(),
 });
 
-const updateSchema = createSchema.partial().extend({
-  isPublished: z.coerce.boolean().optional(),
-  status: z.enum(["active", "inactive", "draft"]).optional(),
-});
+const updateSchema = createSchema.partial();
 
-// GET /api/admin/products?page=&limit=&q=&category=&sort=&order=
+// GET /api/admin/products?page=&limit=&q=&categoryId=
 router.get("/", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
     const limit = Math.min(
-      100,
-      Math.max(1, parseInt(String(req.query.limit || req.query.pageSize || "10"), 10))
+      50,
+      Math.max(1, parseInt(String(req.query.limit || "10"), 10))
     );
     const q = String(req.query.q || "").trim();
-    const categoryParam = String(req.query.category || "").trim();
-    const sortRaw = String(req.query.sort || "createdAt");
-    const sort = ALLOWED_SORT.has(sortRaw) ? sortRaw : "createdAt";
-    const order =
-      String(req.query.order || "desc").toUpperCase() === "ASC"
-        ? "ASC"
-        : "DESC";
+    const categoryIdParam = String(req.query.categoryId || "").trim();
 
     const where: any = {};
     if (q) {
       where.name = { [Op.like]: `%${q}%` };
     }
 
-    if (categoryParam) {
-      const categoryId = Number(categoryParam);
+    if (categoryIdParam) {
+      const categoryId = Number(categoryIdParam);
       if (Number.isFinite(categoryId)) {
         where.categoryId = categoryId;
-      } else {
-        const category = await Category.findOne({
-          where: { [Op.or]: [{ code: categoryParam }, { name: categoryParam }] },
-        });
-        if (category) {
-          where.categoryId = category.id;
-        }
       }
     }
 
@@ -77,18 +62,16 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
       where,
       limit,
       offset,
-      order: [[sort, order]],
+      order: [["createdAt", "DESC"]],
     });
 
     res.json({
-      success: true,
-      data: {
-        items: rows,
-        meta: {
-          page,
-          limit,
-          total: count,
-        },
+      data: rows,
+      meta: {
+        page,
+        limit,
+        total: count,
+        totalPages: Math.max(1, Math.ceil(count / limit)),
       },
     });
   } catch (err) {
@@ -105,7 +88,7 @@ router.get(
       if (!idNum) return res.status(400).json({ success: false, message: "Invalid id" });
       const p = await Product.findByPk(idNum);
       if (!p) return res.status(404).json({ success: false, message: "Not found" });
-      res.json({ success: true, data: p });
+      res.json({ data: p });
     } catch (err) {
       next(err);
     }
@@ -118,24 +101,29 @@ router.post(
     try {
       const body = createSchema.parse(req.body);
       const name = body.name.trim();
-      const slug = body.slug?.trim() || slugify(name);
-      const imageUrl = body.imageUrl || null;
+      const slug = slugify(name);
+      const imageUrls = body.imageUrls?.length
+        ? body.imageUrls
+        : body.imageUrl
+        ? [body.imageUrl]
+        : [];
       const created = await Product.create({
         name,
         slug,
-        price: body.price ?? 0,
+        description: body.description,
+        price: body.price,
         categoryId: body.categoryId,
         stock: body.stock ?? 0,
-        promoImagePath: imageUrl,
-        imagePaths: imageUrl ? [imageUrl] : [],
-        status: "active",
+        promoImagePath: imageUrls[0] || null,
+        imagePaths: imageUrls,
+        status: body.status || "active",
         userId: (req as any).user?.id ?? 0,
         isPublished: true,
       } as any);
-      return res.status(201).json({ success: true, data: created });
+      return res.status(201).json({ data: created });
     } catch (err) {
       if ((err as any)?.name === "SequelizeUniqueConstraintError") {
-        return res.status(409).json({ success: false, message: "Slug already exists" });
+        return res.status(409).json({ message: "Slug already exists" });
       }
       next(err);
     }
@@ -148,37 +136,37 @@ router.patch(
     try {
       const { id } = req.params;
       const idNum = parseId(id);
-      if (!idNum) return res.status(400).json({ success: false, message: "Invalid id" });
+      if (!idNum) return res.status(400).json({ message: "Invalid id" });
       const body = updateSchema.parse(req.body);
 
       const product = await Product.findByPk(idNum);
       if (!product) {
-        return res.status(404).json({ success: false, message: "Not found" });
+        return res.status(404).json({ message: "Not found" });
       }
 
       const patch: any = {};
       if (body.name) {
         patch.name = body.name;
-        if (!body.slug) {
-          patch.slug = slugify(body.name);
-        }
       }
-      if (body.slug !== undefined) patch.slug = body.slug;
+      if (body.name) patch.slug = slugify(body.name);
       if (body.price !== undefined) patch.price = body.price;
       if (body.stock !== undefined) patch.stock = body.stock;
       if (body.categoryId !== undefined) patch.categoryId = body.categoryId;
-      if (body.imageUrl !== undefined) {
+      if (body.description !== undefined) patch.description = body.description;
+      if (body.imageUrls !== undefined) {
+        patch.imagePaths = body.imageUrls;
+        patch.promoImagePath = body.imageUrls?.[0] || null;
+      } else if (body.imageUrl !== undefined) {
         patch.promoImagePath = body.imageUrl;
         patch.imagePaths = body.imageUrl ? [body.imageUrl] : [];
       }
-      if (body.isPublished !== undefined) patch.isPublished = body.isPublished;
       if (body.status !== undefined) patch.status = body.status;
 
       await product.update(patch);
-      return res.json({ success: true, data: product });
+      return res.json({ data: product });
     } catch (err) {
       if ((err as any)?.name === "SequelizeUniqueConstraintError") {
-        return res.status(409).json({ success: false, message: "Slug already exists" });
+        return res.status(409).json({ message: "Slug already exists" });
       }
       next(err);
     }
@@ -191,11 +179,11 @@ router.delete(
     try {
       const { id } = req.params;
       const idNum = parseId(id);
-      if (!idNum) return res.status(400).json({ success: false, message: "Invalid id" });
+      if (!idNum) return res.status(400).json({ message: "Invalid id" });
       const product = await Product.findByPk(idNum);
-      if (!product) return res.status(404).json({ success: false, message: "Not found" });
+      if (!product) return res.status(404).json({ message: "Not found" });
       await product.destroy();
-      return res.json({ success: true });
+      return res.json({ ok: true });
     } catch (err) {
       next(err);
     }

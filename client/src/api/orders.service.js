@@ -4,7 +4,7 @@ import { orders as dummyOrders } from "../data/orders.js";
 export async function listOrders(params = {}) {
   const query = {
     page: params.page ?? 1,
-    pageSize: params.pageSize ?? 10,
+    limit: params.pageSize ?? 10,
     q: params.q ?? "",
     status: params.status ?? "",
     sort: params.sort ?? "",
@@ -21,6 +21,7 @@ export async function listOrders(params = {}) {
     if (payload && payload.data && payload.meta) {
       const mapped = payload.data.map((order) => ({
         ...order,
+        status: order.status === "delivered" ? "completed" : order.status,
         invoice: order.invoice || order.invoiceNo,
         orderTime: order.orderTime || order.createdAt,
         amount: typeof order.amount === "number" ? order.amount : order.totalAmount,
@@ -36,6 +37,7 @@ export async function listOrders(params = {}) {
       return {
         data: payload.map((order) => ({
           ...order,
+          status: order.status === "delivered" ? "completed" : order.status,
           invoice: order.invoice || order.invoiceNo,
           orderTime: order.orderTime || order.createdAt,
           amount: typeof order.amount === "number" ? order.amount : order.totalAmount,
@@ -47,14 +49,14 @@ export async function listOrders(params = {}) {
         })),
         meta: {
           page: query.page,
-          pageSize: query.pageSize,
+          limit: query.limit,
           total: payload.length,
         },
       };
     }
     return {
       data: [],
-      meta: { page: query.page, pageSize: query.pageSize, total: 0 },
+      meta: { page: query.page, limit: query.limit, total: 0 },
     };
   } catch (error) {
     const allowDummyFallback =
@@ -71,7 +73,7 @@ export async function listOrders(params = {}) {
       endDate: query.endDate,
     });
     const sorted = sortDummy(filtered, query.sort, query.order || "asc");
-    return paginateDummy(sorted, query.page, query.pageSize);
+    return paginateDummy(sorted, query.page, query.limit);
   }
 }
 
@@ -84,7 +86,7 @@ export async function updateOrderStatus(id, payload) {
   const nextStatus = typeof payload === "string" ? payload : payload?.status;
   const body = typeof payload === "string" ? { status: payload } : payload;
   try {
-    const response = await api.put(`/admin/orders/${id}/status`, body);
+    const response = await api.patch(`/admin/orders/${id}/status`, body);
     return response?.data ?? response ?? true;
   } catch (error) {
     const allowDummyFallback =

@@ -22,7 +22,7 @@ type JwtExpiresIn = string | number;
 const jwtConfig = {
   secret: process.env.JWT_SECRET,
   expiresIn: process.env.JWT_EXPIRES || "7d",
-  cookieName: process.env.JWT_COOKIE_NAME || "token",
+  cookieName: process.env.AUTH_COOKIE_NAME || "token",
 } as const;
 
 const noop = (..._args: any[]) => Promise.resolve();
@@ -54,7 +54,7 @@ export const createAndSendToken = (
   statusCode: number,
   res: Response
 ): void => {
-  const cookieName = process.env.JWT_COOKIE_NAME || "token"; // Use JWT_COOKIE_NAME
+  const cookieName = process.env.AUTH_COOKIE_NAME || "token"; // Canonical auth cookie name via AUTH_COOKIE_NAME
   const token = signToken(user.id, user.role); // This token is for the user, not admin
 
   const cookieOptions = {
@@ -136,7 +136,7 @@ export const login = async (
 };
 
 export const logout = (req: Request, res: Response): void => {
-  const cookieName = process.env.JWT_COOKIE_NAME || "token"; // Use JWT_COOKIE_NAME
+  const cookieName = process.env.AUTH_COOKIE_NAME || "token"; // Canonical auth cookie name via AUTH_COOKIE_NAME
   res.clearCookie(cookieName, {
     path: "/",
     sameSite: "lax",
@@ -151,8 +151,9 @@ export const logout = (req: Request, res: Response): void => {
 };
 
 export const adminLogout = (req: Request, res: Response): void => {
-  res.clearCookie("access_token", { path: "/" });
-  res.clearCookie("token", { path: "/" }); // legacy
+  const cookieName = process.env.AUTH_COOKIE_NAME || "token";
+  res.clearCookie(cookieName, { path: "/" });
+  res.clearCookie("access_token", { path: "/" }); // legacy
   res.status(200).json({ ok: true, message: "logged out" });
 };
 
@@ -277,17 +278,19 @@ export const adminLogin = async (req: Request, res: Response) => {
   }
 
   const token = signToken(staff.id, normalizedRole); // bersihkan sisa cookie lama
-  res.clearCookie("token", { path: "/" });
+  const cookieName = process.env.AUTH_COOKIE_NAME || "token";
+  res.clearCookie(cookieName, { path: "/" });
   res.clearCookie("access_token", { path: "/" });
 
   const isProd = process.env.NODE_ENV === "production";
+  const isHttps = process.env.COOKIE_SECURE === "true";
   // set cookie fresh
-  res.cookie("access_token", token, {
+  res.cookie(cookieName, token, {
     httpOnly: true, // Always httpOnly for security
-    sameSite: isProd ? "none" : "lax",
-    secure: isProd,
-    maxAge: 7 * 24 * 60 * 60 * 1000,
+    sameSite: isProd && isHttps ? "none" : "lax",
+    secure: isProd && isHttps,
     path: "/",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 
   return res.status(200).json({
