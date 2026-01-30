@@ -28,10 +28,9 @@ export default function Customers() {
     keepPreviousData: true,
   });
 
-  const payload = customersQuery.data?.data || {};
-  const items = payload.items || [];
-  const meta = payload.meta || { page, limit, total: items.length };
-  const totalPages = Math.max(1, Math.ceil((meta.total || 0) / limit));
+  const items = customersQuery.data?.data || [];
+  const meta = customersQuery.data?.meta || { page, limit, total: 0, totalPages: 1 };
+  const totalPages = Math.max(1, Number(meta.totalPages || 1));
 
   return (
     <div className="space-y-6">

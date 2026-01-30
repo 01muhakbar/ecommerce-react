@@ -14,7 +14,8 @@
     "seed:analytics": "tsx src/scripts/seedAnalyticsDemo.ts",
     "seed:customers": "tsx src/scripts/seedCustomers.ts",
     "db:sync": "tsx -e \"import('./src/models/index.ts').then(m=>m.syncDb())\"",
-    "db:reset": "tsx src/scripts/reset-db.ts"
+    "db:reset": "tsx src/scripts/reset-db.ts",
+    "smoke:orders": "node scripts/smoke-orders-admin.mjs"
   },
   "dependencies": {
     "@ecommerce/schemas": "workspace:*",

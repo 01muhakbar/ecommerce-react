@@ -30,7 +30,7 @@ export default function Orders() {
   );
 
   const ordersQuery = useQuery({
-    queryKey: ["admin-orders", page, limit, status, debouncedSearch],
+    queryKey: ["admin-orders", params],
     queryFn: () => fetchAdminOrders(params),
     keepPreviousData: true,
   });
@@ -66,7 +66,7 @@ export default function Orders() {
           <option value="pending">Pending</option>
           <option value="processing">Processing</option>
           <option value="shipped">Shipped</option>
-          <option value="delivered">Delivered</option>
+          <option value="completed">Completed</option>
           <option value="cancelled">Cancelled</option>
         </select>
       </div>

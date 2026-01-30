@@ -1,5 +1,23 @@
 import { api } from "./axios";
 
+const toYmd = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const getLastSevenDates = () => {
+  const today = new Date();
+  const dates = [];
+  for (let offset = 6; offset >= 0; offset -= 1) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - offset);
+    dates.push(toYmd(d));
+  }
+  return dates;
+};
+
 export async function getOverview() {
   const { data } = await api.get("/admin/stats/overview");
   const statusCounts = data?.statusCounts || {};
@@ -46,12 +64,21 @@ export async function getSummary(_days = 7) {
 export async function getWeeklySales(_days = 7) {
   const { data } = await api.get("/admin/stats/weekly");
   const rows = Array.isArray(data?.data) ? data.data : [];
+  const rowByDate = new Map(
+    rows.map((item) => [
+      item.day || item.date,
+      {
+        sales: Number(item.sales || 0),
+        orders: Number(item.orders || 0),
+      },
+    ])
+  );
+  const normalized = getLastSevenDates().map((date) => {
+    const match = rowByDate.get(date) || { sales: 0, orders: 0 };
+    return { date, sales: match.sales, orders: match.orders };
+  });
   return {
-    data: rows.map((item) => ({
-      date: item.day,
-      sales: Number(item.sales || 0),
-      orders: Number(item.orders || 0),
-    })),
+    data: normalized,
   };
 }
 
@@ -59,10 +86,12 @@ export async function getBestSelling(_days = 7, _limit = 5) {
   const { data } = await api.get("/admin/stats/best-sellers");
   const rows = Array.isArray(data?.data) ? data.data : [];
   return {
-    data: rows.map((item) => ({
-      name: item.name,
-      qty: Number(item.qty || 0),
-      revenue: 0,
-    })),
+    data: rows
+      .map((item) => ({
+        name: item.name,
+        qty: Number(item.qty || 0),
+        revenue: 0,
+      }))
+      .slice(0, _limit),
   };
 }

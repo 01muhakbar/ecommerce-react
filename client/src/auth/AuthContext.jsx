@@ -4,11 +4,14 @@ import {
   logout as logoutRequest,
   me as meRequest,
 } from "../api/auth.service.js";
+import { api } from "../api/axios.ts";
 import { onUnauthorized } from "./authEvents.ts";
+import { useQueryClient } from "@tanstack/react-query";
 
 export const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -17,6 +20,12 @@ export function AuthProvider({ children }) {
     setUser(null);
     setRole(null);
     setIsLoading(false);
+    try {
+      localStorage.removeItem("authToken");
+    } catch (_) {
+      // ignore storage errors
+    }
+    delete api.defaults.headers.common.Authorization;
   };
 
   const refreshSession = async () => {
@@ -38,9 +47,28 @@ export function AuthProvider({ children }) {
     if (!email || !password) {
       return { ok: false, message: "Email and password are required." };
     }
+    setIsLoading(true);
     try {
-      await loginRequest({ email, password });
-      await refreshSession();
+      const response = await loginRequest({ email, password });
+      const nextUser = response?.user || response?.data?.user || null;
+      const nextRole = nextUser?.role || response?.role || response?.data?.role || null;
+      const token = response?.token || response?.data?.token || null;
+      if (token) {
+        try {
+          localStorage.setItem("authToken", token);
+        } catch (_) {
+          // ignore storage errors
+        }
+        api.defaults.headers.common.Authorization = `Bearer ${token}`;
+      }
+      if (nextUser) {
+        setUser(nextUser);
+        setRole(nextRole);
+        setIsLoading(false);
+      } else {
+        await refreshSession();
+      }
+      queryClient.invalidateQueries({ queryKey: ["admin", "me"] });
       return { ok: true };
     } catch (error) {
       clearSession();
@@ -52,9 +80,11 @@ export function AuthProvider({ children }) {
     try {
       await logoutRequest();
     } catch (error) {
-      // ignore logout errors and clear local session
+      // ignore logout errors
+    } finally {
+      clearSession();
+      queryClient.removeQueries({ queryKey: ["admin", "me"], exact: true });
     }
-    clearSession();
   };
 
   useEffect(() => {

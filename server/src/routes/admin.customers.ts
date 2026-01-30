@@ -1,10 +1,9 @@
 import { Router } from "express";
 import { Op } from "sequelize";
-import { requireAdmin } from "../middleware/requireRole.js";
+import { requireAdmin, requireStaffOrAdmin } from "../middleware/requireRole.js";
 import { User } from "../models/User.js";
 
 const router = Router();
-router.use(requireAdmin);
 
 const ALLOWED_SORT = new Set(["createdAt", "name", "email"]);
 const parseId = (value: string) => {
@@ -13,7 +12,7 @@ const parseId = (value: string) => {
 };
 
 // GET list dengan paginasi & search
-router.get("/", async (req, res) => {
+router.get("/", requireStaffOrAdmin, async (req, res) => {
   const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
   const limit = Math.min(
     100,
@@ -41,20 +40,18 @@ router.get("/", async (req, res) => {
     offset: (page - 1) * limit,
   });
   res.json({
-    success: true,
-    data: {
-      items: rows,
-      meta: {
-        page,
-        limit,
-        total: count,
-      },
+    data: rows,
+    meta: {
+      page,
+      limit,
+      total: count,
+      totalPages: Math.max(1, Math.ceil(count / limit)),
     },
   });
 });
 
 // GET detail
-router.get("/:id", async (req, res) => {
+router.get("/:id", requireStaffOrAdmin, async (req, res) => {
   const idNum = parseId(req.params.id);
   if (!idNum) {
     return res.status(400).json({ success: false, message: "Invalid id" });
@@ -64,7 +61,6 @@ router.get("/:id", async (req, res) => {
   });
   if (!c) return res.status(404).json({ success: false, message: "Not found" });
   res.json({
-    success: true,
     data: {
       id: c.id,
       name: c.name,
@@ -78,7 +74,7 @@ router.get("/:id", async (req, res) => {
 });
 
 // POST create
-router.post("/", async (req, res) => {
+router.post("/", requireAdmin, async (req, res) => {
   // Creation of users/customers should likely go through a more robust registration flow
   // For this admin CRUD, we'll assume updates and deletions are more common.
   // A simple creation is omitted to prevent creating users without passwords.
@@ -90,23 +86,23 @@ router.post("/", async (req, res) => {
 });
 
 // PUT update
-router.put("/:id", async (req, res) => {
+router.put("/:id", requireAdmin, async (req, res) => {
   const c = await User.findOne({
     where: { id: req.params.id, role: "customer" },
   });
   if (!c) return res.status(404).json({ message: "Customer not found" });
   await c.update(req.body);
-  res.json(c);
+  res.json({ data: c });
 });
 
 // DELETE
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", requireAdmin, async (req, res) => {
   const c = await User.findOne({
     where: { id: req.params.id, role: "customer" },
   });
   if (!c) return res.status(404).json({ message: "Customer not found" });
   await c.destroy();
-  res.json({ message: "deleted" });
+  res.json({ ok: true });
 });
 
 export default router;

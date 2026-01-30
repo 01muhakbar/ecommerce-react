@@ -1,6 +1,7 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/axios.ts";
+import { useAuth } from "../auth/useAuth.js";
 
 const fetchMe = async () => {
   const { data } = await api.get("/auth/me");
@@ -9,11 +10,25 @@ const fetchMe = async () => {
 
 export default function AdminGuard() {
   const location = useLocation();
+  const { isLoading: authLoading, isAuthenticated } = useAuth();
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["admin", "me"],
     queryFn: fetchMe,
     retry: false,
+    enabled: !authLoading && isAuthenticated,
   });
+
+  if (authLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
+        Checking admin session...
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/admin/login" replace state={{ from: location }} />;
+  }
 
   if (isLoading) {
     return (

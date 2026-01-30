@@ -8,7 +8,13 @@ const currency = new Intl.NumberFormat("id-ID", {
   currency: "IDR",
 });
 
-const STATUS_OPTIONS = ["pending", "processing", "shipped", "delivered", "cancelled"];
+const STATUS_OPTIONS = [
+  "pending",
+  "processing",
+  "shipped",
+  "completed",
+  "cancelled",
+];
 
 const labelize = (value) =>
   value ? value.charAt(0).toUpperCase() + value.slice(1) : "";
@@ -30,6 +36,7 @@ export default function OrderDetail() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-order", id] });
       qc.invalidateQueries({ queryKey: ["admin-orders"], exact: false });
+      orderQuery.refetch();
       setNotice({ type: "success", message: "Status updated." });
     },
     onError: (err) => {

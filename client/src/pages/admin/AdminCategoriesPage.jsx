@@ -65,9 +65,9 @@ export default function AdminCategoriesPage() {
     },
   });
 
-  const items = categoriesQuery.data?.data?.items || [];
-  const meta = categoriesQuery.data?.data?.meta || { page: 1, limit, total: 0 };
-  const totalPages = Math.max(1, Math.ceil(meta.total / meta.limit));
+  const items = categoriesQuery.data?.data || [];
+  const meta = categoriesQuery.data?.meta || { page: 1, limit, total: 0, totalPages: 1 };
+  const totalPages = Math.max(1, Number(meta.totalPages || 1));
 
   const openCreate = () => {
     setEditing(null);

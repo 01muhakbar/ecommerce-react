@@ -1,17 +1,25 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { api } from "../../api/axios.ts";
+import { useAuth } from "../../auth/useAuth.js";
 
 export default function AdminLoginPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   const mutation = useMutation({
-    mutationFn: () =>
-      api.post("/auth/admin/login", { email, password }).then((r) => r.data),
-    onSuccess: () => {
+    mutationFn: async () => {
+      const result = await login(email, password);
+      if (!result?.ok) {
+        throw new Error(result?.message || "Login failed.");
+      }
+      return result;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["admin", "me"], exact: true });
       navigate("/admin", { replace: true });
     },
     onError: (error) => {

@@ -16,7 +16,6 @@ const STATUS_OPTIONS = [
   "pending",
   "paid",
   "processing",
-  "completed",
   "cancelled",
   "refunded",
 ];
@@ -25,7 +24,6 @@ const STATUS_CLASS = {
   pending: "bg-slate-100 text-slate-700",
   paid: "bg-emerald-100 text-emerald-700",
   processing: "bg-amber-100 text-amber-700",
-  completed: "bg-blue-100 text-blue-700",
   cancelled: "bg-rose-100 text-rose-700",
   refunded: "bg-violet-100 text-violet-700",
 };

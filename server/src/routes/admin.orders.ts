@@ -12,9 +12,11 @@ const router = Router();
 // GET list with pagination, search, and filtering
 router.get("/", requireStaffOrAdmin, async (req, res) => {
   const page = Math.max(1, Number(req.query.page || 1));
-  const rawLimit = Number(req.query.limit || 10);
+  const rawLimit = Number(req.query.limit || req.query.pageSize || 10);
   const limit = Math.min(50, Math.max(1, rawLimit || 10));
-  const status = typeof req.query.status === "string" ? req.query.status.trim() : "";
+  const rawStatus =
+    typeof req.query.status === "string" ? req.query.status.trim().toLowerCase() : "";
+  const status = rawStatus === "completed" ? "delivered" : rawStatus;
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
 
   const where: any = {};

@@ -1,12 +1,23 @@
 import { api } from "./axios";
 import { orders as dummyOrders } from "../data/orders.js";
+import { toBackendStatus, toUIStatus } from "../utils/orderStatus.js";
+
+const mapOrderForUi = (order) => ({
+  ...order,
+  status: toUIStatus(order.status),
+  invoice: order.invoice || order.invoiceNo,
+  orderTime: order.orderTime || order.createdAt,
+  amount: typeof order.amount === "number" ? order.amount : order.totalAmount,
+  customer:
+    order.customerName || order.customer?.name || order.customer || "Guest",
+});
 
 export async function listOrders(params = {}) {
   const query = {
     page: params.page ?? 1,
     limit: params.pageSize ?? 10,
     q: params.q ?? "",
-    status: params.status ?? "",
+    status: params.status ? toBackendStatus(params.status) : "",
     sort: params.sort ?? "",
     order: params.order ?? "",
     method: params.method ?? "",
@@ -19,34 +30,12 @@ export async function listOrders(params = {}) {
     const response = await api.get("/admin/orders", { params: query });
     const payload = response?.data;
     if (payload && payload.data && payload.meta) {
-      const mapped = payload.data.map((order) => ({
-        ...order,
-        status: order.status === "delivered" ? "completed" : order.status,
-        invoice: order.invoice || order.invoiceNo,
-        orderTime: order.orderTime || order.createdAt,
-        amount: typeof order.amount === "number" ? order.amount : order.totalAmount,
-        customer:
-          order.customerName ||
-          order.customer?.name ||
-          order.customer ||
-          "Guest",
-      }));
+      const mapped = payload.data.map(mapOrderForUi);
       return { ...payload, data: mapped };
     }
     if (Array.isArray(payload)) {
       return {
-        data: payload.map((order) => ({
-          ...order,
-          status: order.status === "delivered" ? "completed" : order.status,
-          invoice: order.invoice || order.invoiceNo,
-          orderTime: order.orderTime || order.createdAt,
-          amount: typeof order.amount === "number" ? order.amount : order.totalAmount,
-          customer:
-            order.customerName ||
-            order.customer?.name ||
-            order.customer ||
-            "Guest",
-        })),
+        data: payload.map(mapOrderForUi),
         meta: {
           page: query.page,
           limit: query.limit,
@@ -73,7 +62,8 @@ export async function listOrders(params = {}) {
       endDate: query.endDate,
     });
     const sorted = sortDummy(filtered, query.sort, query.order || "asc");
-    return paginateDummy(sorted, query.page, query.limit);
+    const paged = paginateDummy(sorted, query.page, query.limit);
+    return { ...paged, data: paged.data.map(mapOrderForUi) };
   }
 }
 
@@ -84,7 +74,11 @@ export async function getOrder(id) {
 
 export async function updateOrderStatus(id, payload) {
   const nextStatus = typeof payload === "string" ? payload : payload?.status;
-  const body = typeof payload === "string" ? { status: payload } : payload;
+  const apiStatus = toBackendStatus(nextStatus);
+  const body =
+    typeof payload === "string"
+      ? { status: apiStatus }
+      : { ...payload, status: apiStatus ?? payload?.status };
   try {
     const response = await api.patch(`/admin/orders/${id}/status`, body);
     return response?.data ?? response ?? true;
@@ -98,7 +92,7 @@ export async function updateOrderStatus(id, payload) {
     if (index >= 0) {
       dummyOrders[index] = {
         ...dummyOrders[index],
-        status: nextStatus,
+        status: toUIStatus(nextStatus),
       };
     }
     return true;
@@ -114,7 +108,8 @@ function filterDummyOrders(data, filters) {
       return false;
     }
 
-    if (filters.status && item.status !== filters.status) {
+    const uiStatus = toUIStatus(item.status);
+    if (filters.status && uiStatus !== filters.status) {
       return false;
     }
 

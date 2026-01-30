@@ -10,6 +10,26 @@ export const api = axios.create({
   },
 });
 
+api.interceptors.request.use((config) => {
+  let token = null;
+  try {
+    token = localStorage.getItem("authToken");
+  } catch (_) {
+    token = null;
+  }
+
+  if (token) {
+    config.headers = {
+      ...config.headers,
+      Authorization: `Bearer ${token}`,
+    };
+  } else if (config.headers && "Authorization" in config.headers) {
+    delete config.headers.Authorization;
+  }
+
+  return config;
+});
+
 api.interceptors.response.use(
   (res) => res,
   (err) => {

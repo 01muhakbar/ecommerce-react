@@ -1,14 +1,11 @@
 import { Router } from "express";
-import { requireAdmin } from "../middleware/requireRole";
+import { requireAdmin, requireStaffOrAdmin } from "../middleware/requireRole.js";
 import { Category } from "../models";
 import { z } from "zod";
 import multer from "multer";
 import { Op } from "sequelize";
 
 const router = Router();
-
-// Lindungi semua rute di file ini agar hanya bisa diakses oleh admin
-router.use(requireAdmin);
 
 // helpers
 function parseBool(v: any): boolean | undefined {
@@ -21,7 +18,7 @@ function parseBool(v: any): boolean | undefined {
 
 // GET /api/admin/categories
 // supports: q, page, pageSize, parentsOnly, published, sort (e.g. "created_at:desc")
-router.get("/", async (req, res, next) => {
+router.get("/", requireStaffOrAdmin, async (req, res, next) => {
   try {
     const q = String(req.query.q || "").trim();
     const page = Math.max(1, parseInt(String(req.query.page || 1), 10));
@@ -49,11 +46,8 @@ router.get("/", async (req, res, next) => {
       include: [{ model: Category, as: "parent", attributes: ["id", "name", "code"] }],
     });
     res.json({
-      success: true,
-      data: {
-        items: rows,
-        meta: { page, limit, total: count },
-      },
+      data: rows,
+      meta: { page, limit, total: count, totalPages: Math.max(1, Math.ceil(count / limit)) },
     });
   } catch (err) {
     next(err);
@@ -61,7 +55,7 @@ router.get("/", async (req, res, next) => {
 });
 
 // POST /api/admin/categories
-router.post("/", async (req, res, next) => {
+router.post("/", requireAdmin, async (req, res, next) => {
   try {
     const body = z
       .object({
@@ -84,7 +78,7 @@ router.post("/", async (req, res, next) => {
       parentId: body.parent_id,
       published: body.published ?? true,
     } as any);
-    res.status(201).json({ success: true, data: created });
+    res.status(201).json({ data: created });
   } catch (err) {
     // Handle race condition with DB unique constraint
     if ((err as any)?.name === 'SequelizeUniqueConstraintError') {
@@ -95,14 +89,14 @@ router.post("/", async (req, res, next) => {
 });
 
 // GET /api/admin/categories/:id
-router.get("/:id", async (req, res, next) => {
+router.get("/:id", requireStaffOrAdmin, async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const cat = await Category.findByPk(id, {
       include: [{ model: Category, as: "parent", attributes: ["id", "name", "code"] }],
     });
     if (!cat) return res.status(404).json({ success: false, message: "Not found" });
-    res.json({ success: true, data: cat });
+    res.json({ data: cat });
   } catch (err) {
     next(err);
   }
@@ -121,7 +115,7 @@ async function wouldCauseCycle(id: number, parentId?: number | null) {
 }
 
 // PATCH /api/admin/categories/:id
-router.patch("/:id", async (req, res, next) => {
+router.patch("/:id", requireAdmin, async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const body = z
@@ -147,7 +141,7 @@ router.patch("/:id", async (req, res, next) => {
       parentId: body.parent_id as any,
       published: body.published ?? (cat as any).published,
     } as any);
-    res.json({ success: true, data: cat });
+    res.json({ data: cat });
   } catch (err) {
     if ((err as any)?.name === 'SequelizeUniqueConstraintError') {
       return res.status(409).json({ success: false, message: "Category code already exists" });
@@ -157,34 +151,34 @@ router.patch("/:id", async (req, res, next) => {
 });
 
 // PATCH /api/admin/categories/:id/publish
-router.patch("/:id/publish", async (req, res, next) => {
+router.patch("/:id/publish", requireAdmin, async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const { published } = z.object({ published: z.boolean() }).parse(req.body);
     const cat = await Category.findByPk(id);
     if (!cat) return res.status(404).json({ success: false, message: "Not found" });
     await (cat as any).update({ published });
-    res.json({ success: true, data: cat });
+    res.json({ data: cat });
   } catch (err) {
     next(err);
   }
 });
 
 // DELETE /api/admin/categories/:id
-router.delete("/:id", async (req, res, next) => {
+router.delete("/:id", requireAdmin, async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const cat = await Category.findByPk(id);
     if (!cat) return res.status(404).json({ success: false, message: "Not found" });
     await cat.destroy();
-    res.json({ success: true });
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }
 });
 
 // POST /api/admin/categories/bulk
-router.post("/bulk", async (req, res, next) => {
+router.post("/bulk", requireAdmin, async (req, res, next) => {
   try {
     const body = z
       .object({
@@ -199,7 +193,7 @@ router.post("/bulk", async (req, res, next) => {
     } else if (body.action === "unpublish") {
       await Category.update({ published: false } as any, { where: { id: { [Op.in]: body.ids } } as any });
     }
-    res.json({ success: true });
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }
@@ -260,7 +254,7 @@ router.post("/import", upload.single("file"), async (req, res, next) => {
         // ignore duplicates
       }
     }
-    res.json({ success: true, data: { created } });
+    res.json({ data: { created } });
   } catch (err) {
     next(err);
   }

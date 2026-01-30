@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../../auth/useAuth.js";
 import "./Sidebar.css";
 
@@ -84,15 +85,6 @@ const IconStore = (props) => (
   </svg>
 );
 
-const IconPages = (props) => (
-  <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
-    <rect x="4" y="4" width="8" height="8" rx="2" />
-    <rect x="12" y="4" width="8" height="8" rx="2" />
-    <rect x="4" y="12" width="8" height="8" rx="2" />
-    <rect x="12" y="12" width="8" height="8" rx="2" />
-  </svg>
-);
-
 const ChevronDown = (props) => (
   <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
     <path
@@ -114,45 +106,52 @@ const MENU = [
     hasCaret: true,
     children: [
       { label: "Products", to: "/admin/products" },
-      { label: "Categories" },
-      { label: "Attributes" },
-      { label: "Coupons" },
+      { label: "Categories", to: "/admin/categories" },
+      { label: "Attributes", to: "/admin/attributes" },
+      { label: "Coupons", to: "/admin/coupons" },
     ],
   },
   { label: "Customers", to: "/admin/customers", icon: IconUsers },
   { label: "Orders", to: "/admin/orders", icon: IconReceipt },
-  { label: "Our Staff", icon: IconStaff },
+  { label: "Our Staff", to: "/admin/staff", icon: IconStaff },
   { label: "Settings", to: "/admin/settings", icon: IconSettings },
   {
     label: "International",
     icon: IconGlobe,
     hasCaret: true,
-    children: [{ label: "Languages" }],
+    children: [{ label: "Languages", to: "/admin/languages" }],
   },
   {
     label: "Online Store",
     icon: IconStore,
     hasCaret: true,
     children: [
-      { label: "View Store" },
-      { label: "Store Customization" },
-      { label: "Store Settings" },
+      { label: "View Store", to: "/" },
+      { label: "Store Customization", to: "/admin/store-customization" },
+      { label: "Store Settings", to: "/admin/store-settings" },
     ],
   },
-  { label: "Pages", icon: IconPages, hasCaret: true, children: [] },
 ];
 
 export default function Sidebar() {
   const { logout } = useAuth();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [openMenus, setOpenMenus] = useState({
     Catalog: true,
     International: false,
     "Online Store": false,
-    Pages: false,
   });
 
   const toggleMenu = (label) => {
     setOpenMenus((prev) => ({ ...prev, [label]: !prev[label] }));
+  };
+
+  const handleLogout = async () => {
+    await logout?.();
+    queryClient.removeQueries({ queryKey: ["admin", "me"], exact: true });
+    queryClient.invalidateQueries({ queryKey: ["admin-orders"], exact: false });
+    navigate("/admin/login", { replace: true });
   };
 
   return (
@@ -245,7 +244,7 @@ export default function Sidebar() {
       </nav>
 
       <div className="sidebar__footer">
-        <button type="button" className="sidebar__logout" onClick={() => logout?.()}>
+        <button type="button" className="sidebar__logout" onClick={handleLogout}>
           Log Out
         </button>
       </div>

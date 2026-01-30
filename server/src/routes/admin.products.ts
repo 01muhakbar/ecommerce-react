@@ -39,7 +39,7 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
     const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
     const limit = Math.min(
       50,
-      Math.max(1, parseInt(String(req.query.limit || "10"), 10))
+      Math.max(1, parseInt(String(req.query.limit || req.query.pageSize || "10"), 10))
     );
     const q = String(req.query.q || "").trim();
     const categoryIdParam = String(req.query.categoryId || "").trim();

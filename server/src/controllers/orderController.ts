@@ -253,6 +253,9 @@ export const updateOrderStatus = async (
   try {
     const { id } = req.params;
     const { status } = req.body;
+    const rawStatus =
+      typeof status === "string" ? status.trim().toLowerCase() : "";
+    const normalizedStatus = rawStatus === "completed" ? "delivered" : rawStatus;
     const allowedStatuses = [
       "pending",
       "processing",
@@ -261,7 +264,10 @@ export const updateOrderStatus = async (
       "cancelled",
     ] as const;
 
-    if (!status || !allowedStatuses.includes(status as (typeof allowedStatuses)[number])) {
+    if (
+      !normalizedStatus ||
+      !allowedStatuses.includes(normalizedStatus as (typeof allowedStatuses)[number])
+    ) {
       res.status(400).json({
         message: `Status tidak valid. Gunakan salah satu dari: ${allowedStatuses.join(
           ", "
@@ -271,7 +277,7 @@ export const updateOrderStatus = async (
     }
 
     const [updatedRows] = await OrderModel.update(
-      { status },
+      { status: normalizedStatus },
       { where: { id } }
     );
 
@@ -283,7 +289,7 @@ export const updateOrderStatus = async (
     const updatedOrder = await OrderModel.findByPk(id);
 
     res.status(200).json({
-      message: `Status pesanan berhasil diperbarui menjadi ${status}.`,
+      message: `Status pesanan berhasil diperbarui menjadi ${normalizedStatus}.`,
       data: updatedOrder,
     });
   } catch (error) {

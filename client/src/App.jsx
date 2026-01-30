@@ -25,6 +25,7 @@ import AdminOrderDetail from "./pages/admin/OrderDetail.jsx";
 import AdminCategoriesPage from "./pages/admin/AdminCategoriesPage.jsx";
 import AdminCustomerDetailPage from "./pages/admin/AdminCustomerDetailPage.jsx";
 import AdminCouponsPage from "./pages/admin/AdminCouponsPage.jsx";
+import ComingSoon from "./pages/admin/ComingSoon.jsx";
 import AccountGuard from "./components/AccountGuard.jsx";
 import AccountLayout from "./layouts/AccountLayout.jsx";
 import AccountDashboardPage from "./pages/account/AccountDashboardPage.jsx";
@@ -74,6 +75,14 @@ export default function App() {
             <Route path="customers/:id" element={<AdminCustomerDetailPage />} />
             <Route path="categories" element={<AdminCategoriesPage />} />
             <Route path="coupons" element={<AdminCouponsPage />} />
+            <Route path="attributes" element={<ComingSoon title="Attributes" />} />
+            <Route path="staff" element={<ComingSoon title="Our Staff" />} />
+            <Route path="languages" element={<ComingSoon title="Languages" />} />
+            <Route
+              path="store-customization"
+              element={<ComingSoon title="Store Customization" />}
+            />
+            <Route path="store-settings" element={<ComingSoon title="Store Settings" />} />
             <Route path="settings" element={<Settings />} />
           </Route>
         </Route>
