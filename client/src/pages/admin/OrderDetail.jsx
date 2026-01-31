@@ -2,19 +2,12 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchAdminOrder, updateAdminOrderStatus } from "../../lib/adminApi.js";
+import { ORDER_STATUS_OPTIONS } from "../../constants/orderStatus.js";
 
 const currency = new Intl.NumberFormat("id-ID", {
   style: "currency",
   currency: "IDR",
 });
-
-const STATUS_OPTIONS = [
-  "pending",
-  "processing",
-  "shipped",
-  "completed",
-  "cancelled",
-];
 
 const labelize = (value) =>
   value ? value.charAt(0).toUpperCase() + value.slice(1) : "";
@@ -168,7 +161,7 @@ export default function OrderDetail() {
             className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
           >
             <option value="">Select status</option>
-            {STATUS_OPTIONS.map((value) => (
+            {ORDER_STATUS_OPTIONS.map((value) => (
               <option key={value} value={value}>
                 {labelize(value)}
               </option>

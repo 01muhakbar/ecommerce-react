@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { resetDbDev } from "../models/index.ts";
+import { resetDbDev } from "../models/index.js";
 
 async function main() {
   if (process.env.NODE_ENV === "production") {

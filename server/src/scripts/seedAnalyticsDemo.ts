@@ -1,5 +1,5 @@
 import { Op } from "sequelize";
-import { sequelize, User, Product, Order, OrderItem } from "../models/index.ts";
+import { sequelize, User, Product, Order, OrderItem } from "../models/index.js";
 
 const DEMO_PREFIX = "demo-";
 const SELLER_EMAIL = "demo-seller@example.com";
@@ -138,7 +138,7 @@ async function seedAnalyticsDemo() {
           {
             invoiceNo: `${DEMO_PREFIX}${createdAt.getTime()}-${day}${i}`,
             userId: customer.id,
-            status,
+            status: status as any,
             totalAmount: 0,
             createdAt,
             updatedAt: createdAt,

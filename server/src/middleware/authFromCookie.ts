@@ -9,11 +9,14 @@ function normalizeRole(input: unknown) {
   const raw = String(input ?? "").toLowerCase().trim();
   if (!raw) return null;
   const snake = raw.replace(/[^a-z0-9]+/g, "_");
-  if (["super_admin", "super-admin", "super admin"].includes(raw) || snake === "super_admin") {
+  if (["super_admin", "super-admin", "super admin", "superadmin"].includes(raw) || snake === "super_admin") {
     return "super_admin";
   }
   if (["admin", "administrator"].includes(raw) || snake === "admin") {
     return "admin";
+  }
+  if (["staf", "staff"].includes(raw) || snake === "staf" || snake === "staff") {
+    return "staff";
   }
   return snake;
 }

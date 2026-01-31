@@ -1,5 +1,5 @@
-import app from "./app";
-import { sequelize, syncDb } from "./models/index.ts";
+import app from "./app.js";
+import { sequelize, syncDb } from "./models/index.js";
 
 const BASE_PORT = Number(process.env.PORT) || 3001;
 
@@ -21,7 +21,7 @@ const startServer = async () => {
       console.log("Skipping database sync (set DB_SYNC=true to enable).");
     }
 
-    await listenWithRetry(BASE_PORT, 10);
+    await listenOnce(BASE_PORT);
   } catch (error) {
     console.error("Failed to start server:", error);
     process.exit(1);
@@ -31,31 +31,23 @@ const startServer = async () => {
 startServer();
 
 // Try to listen on a port; on EADDRINUSE, try the next one up to `retries` times
-function listenWithRetry(port: number, retries: number): Promise<void> {
+function listenOnce(port: number): Promise<void> {
   return new Promise((resolve, reject) => {
-    const server = app
+    app
       .listen(port)
       .once("listening", () => {
         console.log(`🚀 Server is running on http://localhost:${port} with DB sync`);
-        if (port !== BASE_PORT) {
-          console.warn(
-            `[server] Note: desired PORT ${BASE_PORT} was busy. Using ${port} instead.`
-          );
-        }
         resolve();
       })
       .once("error", (err: any) => {
-        if (err && err.code === "EADDRINUSE" && retries > 0) {
-          const next = port + 1;
-          console.warn(
-            `[server] Port ${port} in use. Retrying on ${next} (${retries - 1} retries left)...`
+        if (err && err.code === "EADDRINUSE") {
+          console.error(
+            `[server] Port ${port} already in use. Stop the other process or set PORT to a free port.`
           );
-          setTimeout(() => {
-            listenWithRetry(next, retries - 1).then(resolve).catch(reject);
-          }, 250);
-          return;
+          process.exit(1);
         }
         reject(err);
       });
   });
 }
+

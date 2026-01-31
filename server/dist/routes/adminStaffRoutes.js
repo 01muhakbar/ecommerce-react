@@ -2,8 +2,8 @@ import { Router } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { createStaff, listStaff, updateStatus, updatePublishedStatus, getStaff, updateStaff, deleteStaff, changePassword, } from "../controllers/adminStaffController";
-import { protect, restrictTo } from "../middleware/authMiddleware";
+import { createStaff, listStaff, updateStatus, updatePublishedStatus, getStaff, updateStaff, deleteStaff, changePassword, } from "../controllers/adminStaffController.js";
+import { protect, restrictTo } from "../middleware/authMiddleware.js";
 const uploadDir = path.resolve(process.cwd(), process.env.UPLOAD_DIR ?? "uploads/staff");
 fs.mkdirSync(uploadDir, { recursive: true });
 const storage = multer.diskStorage({

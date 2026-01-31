@@ -11,8 +11,8 @@ import {
   updateStaff,
   deleteStaff,
   changePassword,
-} from "../controllers/adminStaffController";
-import { protect, restrictTo } from "../middleware/authMiddleware";
+} from "../controllers/adminStaffController.js";
+import { protect, restrictTo } from "../middleware/authMiddleware.js";
 
 const uploadDir = path.resolve(
   process.cwd(),
@@ -55,3 +55,4 @@ r.delete("/:id", protect, adminOnly, deleteStaff);
 r.patch("/:id/password", protect, adminOnly, changePassword);
 
 export default r;
+

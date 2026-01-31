@@ -1,14 +1,14 @@
 // server/src/models/index.ts
 import "dotenv/config";
 import sequelize from "../config/database.js";
-import { initUser, User } from "./User.ts";
-import { Product } from "./Product.ts";
-import { Category } from "./Category.ts";
-import { Cart } from "./Cart.ts";
-import { CartItem } from "./CartItem.ts";
-import { Order } from "./Order.ts";
-import { OrderItem } from "./OrderItem.ts";
-import { Coupon } from "./Coupon.ts";
+import { initUser, User } from "./User.js";
+import { Product } from "./Product.js";
+import { Category } from "./Category.js";
+import { Cart } from "./Cart.js";
+import { CartItem } from "./CartItem.js";
+import { Order } from "./Order.js";
+import { OrderItem } from "./OrderItem.js";
+import { Coupon } from "./Coupon.js";
 
 // Registrasi semua model di sini
 function initModels() {

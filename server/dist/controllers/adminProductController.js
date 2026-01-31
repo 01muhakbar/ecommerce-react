@@ -1,6 +1,12 @@
 import { Op } from "sequelize";
-import { Product, Category, User } from "../models";
-import { AppError } from "../middleware/errorMiddleware";
+import { Product, Category, User } from "../models/index.js";
+import { AppError } from "../middleware/errorMiddleware.js";
+const asSingle = (v) => (Array.isArray(v) ? v[0] : v);
+const toId = (v) => {
+    const raw = asSingle(v);
+    const id = typeof raw === "string" ? Number(raw) : Number(raw);
+    return Number.isFinite(id) ? id : null;
+};
 // Helper function to generate a unique slug
 const generateUniqueSlug = async (name) => {
     let slug = name
@@ -86,7 +92,11 @@ export const getAllProducts = async (req, res, next) => {
  */
 export const getProductById = async (req, res, next) => {
     try {
-        const product = await Product.findByPk(req.params.id, {
+        const id = toId(req.params.id);
+        if (id === null) {
+            return res.status(400).json({ message: "Invalid id" });
+        }
+        const product = await Product.findByPk(id, {
             include: [{ model: Category, as: "category" }],
         });
         if (!product) {
@@ -150,7 +160,10 @@ export const createProduct = async (req, res, next) => {
  */
 export const updateProduct = async (req, res, next) => {
     try {
-        const { id } = req.params;
+        const id = toId(req.params.id);
+        if (id === null) {
+            return res.status(400).json({ message: "Invalid id" });
+        }
         const product = await Product.findByPk(id);
         if (!product) {
             return next(new AppError("Produk tidak ditemukan.", 404));
@@ -205,7 +218,10 @@ export const updateProduct = async (req, res, next) => {
  */
 export const deleteProduct = async (req, res, next) => {
     try {
-        const { id } = req.params;
+        const id = toId(req.params.id);
+        if (id === null) {
+            return res.status(400).json({ message: "Invalid id" });
+        }
         const deletedRows = await Product.destroy({ where: { id } });
         if (deletedRows === 0) {
             return next(new AppError("Produk tidak ditemukan.", 404));
@@ -222,7 +238,10 @@ export const deleteProduct = async (req, res, next) => {
  */
 export const togglePublishStatus = async (req, res, next) => {
     try {
-        const { id } = req.params;
+        const id = toId(req.params.id);
+        if (id === null) {
+            return res.status(400).json({ message: "Invalid id" });
+        }
         const product = await Product.findByPk(id);
         if (!product) {
             return next(new AppError("Produk tidak ditemukan.", 404));

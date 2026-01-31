@@ -12,20 +12,23 @@ export class Coupon extends Model {
                 unique: true,
                 allowNull: false,
             },
-            type: {
+            discountType: {
                 type: DataTypes.ENUM("percent", "fixed"),
                 defaultValue: "percent",
             },
-            value: {
-                type: DataTypes.INTEGER.UNSIGNED,
+            amount: {
+                type: DataTypes.DECIMAL(10, 2),
                 allowNull: false,
+            },
+            minSpend: {
+                type: DataTypes.DECIMAL(10, 2),
+                defaultValue: 0,
             },
             active: {
                 type: DataTypes.BOOLEAN,
                 defaultValue: true,
             },
-            startsAt: DataTypes.DATE,
-            endsAt: DataTypes.DATE,
+            expiresAt: DataTypes.DATE,
         }, {
             sequelize,
             modelName: "Coupon",

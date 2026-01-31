@@ -2,10 +2,10 @@ import { Request, Response, NextFunction } from "express";
 import bcrypt from "bcryptjs";
 import jwt, { Secret, SignOptions, JwtPayload } from "jsonwebtoken";
 import crypto from "crypto";
-import { Staff } from "../models/Staff";
-import { User } from "../models/User";
+import { Staff } from "../models/Staff.js";
+import { User } from "../models/User.js";
 import { Op } from "sequelize";
-import { normalizeRoleServer } from "../utils/role";
+import { normalizeRoleServer } from "../utils/role.js";
 
 // JWT Types and Constants
 interface TokenPayload extends JwtPayload {
@@ -30,6 +30,8 @@ const allowedAdminRoles = ["Admin", "Super Admin"] as const;
 
 // Default JWT expiration format
 const DEFAULT_EXPIRES = "7d" as const;
+
+const asSingle = (v: unknown) => (Array.isArray(v) ? v[0] : v);
 
 // Helper function to sign JWT
 const signToken = (id: number, role: string): string => {
@@ -96,6 +98,7 @@ export const register = async (
       email,
       password: hashedPassword,
       role: role || "pembeli",
+      status: "active",
     });
     createAndSendToken(newUser, 201, res);
   } catch (error) {
@@ -209,14 +212,14 @@ export const resetPassword = async (
   try {
     const hashedToken = crypto
       .createHash("sha256")
-      .update(req.params.token)
+      .update(String(asSingle(req.params.token) ?? ""))
       .digest("hex");
     const user = await User.findOne({
       where: {
         resetToken: hashedToken,
         resetTokenExpires: { [Op.gt]: new Date() },
       },
-    });
+    } as any);
     if (!user) {
       res.status(400).json({
         status: "fail",
@@ -358,7 +361,7 @@ export const resetPasswordAdmin = async (
   try {
     const hashedToken = crypto
       .createHash("sha256")
-      .update(req.params.token)
+      .update(String(asSingle(req.params.token) ?? ""))
       .digest("hex");
     const user = await User.findOne({
       where: {
@@ -366,7 +369,7 @@ export const resetPasswordAdmin = async (
         passwordResetExpires: { [Op.gt]: Date.now() },
         role: { [Op.in]: [...allowedAdminRoles] },
       },
-    });
+    } as any);
     if (!user) {
       res.status(400).json({
         status: "fail",
@@ -425,3 +428,4 @@ export const getMe = async (
     next(error);
   }
 };
+

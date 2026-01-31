@@ -1,57 +1,123 @@
 import { Router } from "express";
 import { Op } from "sequelize";
-import { parseListQuery } from "../utils/pagination.js";
+import { updateOrderStatus } from "../controllers/orderController.js";
+import { requireStaffOrAdmin } from "../middleware/requireRole.js";
 import { Order } from "../models/Order.js";
 import { User } from "../models/User.js";
+import { OrderItem } from "../models/OrderItem.js";
+import { Product } from "../models/Product.js";
 const router = Router();
+const asSingle = (v) => (Array.isArray(v) ? v[0] : v);
 // GET list with pagination, search, and filtering
-router.get("/", async (req, res) => {
-    const { page, pageSize, sort, order, search } = parseListQuery(req.query);
-    const { status, userId, dateFrom, dateTo } = req.query;
-    let where = {};
-    const include = [
-        { model: User, as: "customer", attributes: ["name", "email"] },
-    ];
-    if (search) {
+router.get("/", requireStaffOrAdmin, async (req, res) => {
+    const page = Math.max(1, Number(asSingle(req.query.page) ?? 1));
+    const rawLimit = Number(asSingle(req.query.limit) ?? asSingle(req.query.pageSize) ?? 10);
+    const limit = Math.min(50, Math.max(1, rawLimit || 10));
+    const rawStatus = String(asSingle(req.query.status) ?? "").trim().toLowerCase();
+    const status = rawStatus === "completed" ? "delivered" : rawStatus;
+    const q = String(asSingle(req.query.q) ?? "").trim();
+    const where = {};
+    if (q) {
         where[Op.or] = [
-            { "$customer.name$": { [Op.like]: `%${search}%` } },
-            { "$customer.email$": { [Op.like]: `%${search}%` } },
+            { invoiceNo: { [Op.like]: `%${q}%` } },
+            { customerName: { [Op.like]: `%${q}%` } },
+            { customerPhone: { [Op.like]: `%${q}%` } },
         ];
     }
     if (status) {
         where.status = status;
     }
-    if (userId) {
-        where.userId = userId;
-    }
-    if (dateFrom && dateTo) {
-        where.createdAt = {
-            [Op.between]: [new Date(dateFrom), new Date(dateTo)],
-        };
-    }
-    else if (dateFrom) {
-        where.createdAt = { [Op.gte]: new Date(dateFrom) };
-    }
-    else if (dateTo) {
-        where.createdAt = { [Op.lte]: new Date(dateTo) };
-    }
     const { rows, count } = await Order.findAndCountAll({
         where,
-        include,
-        order: [[sort, order]],
-        limit: pageSize,
-        offset: (page - 1) * pageSize,
-        distinct: true, // needed for correct count with includes
+        attributes: [
+            "id",
+            "invoiceNo",
+            "status",
+            "totalAmount",
+            "customerName",
+            "customerPhone",
+            "createdAt",
+        ],
+        order: [["createdAt", "DESC"]],
+        limit,
+        offset: (page - 1) * limit,
     });
+    const data = rows.map((orderRow) => ({
+        id: orderRow.id,
+        invoiceNo: orderRow.invoiceNo,
+        status: orderRow.status,
+        totalAmount: Number(orderRow.totalAmount || 0),
+        createdAt: orderRow.createdAt,
+        customerName: orderRow.customerName ?? "Guest",
+        customerPhone: orderRow.customerPhone ?? null,
+    }));
     res.json({
-        data: rows,
+        data,
         meta: {
             page,
-            pageSize,
+            limit,
             total: count,
-            totalPages: Math.ceil(count / pageSize),
+            totalPages: Math.max(1, Math.ceil(count / limit)),
         },
     });
 });
+router.get("/:id", requireStaffOrAdmin, async (req, res) => {
+    const idStr = String(asSingle(req.params.id) ?? "");
+    const idNum = Number(idStr);
+    if (!Number.isInteger(idNum) || idNum <= 0) {
+        return res.status(400).json({ message: "Invalid id" });
+    }
+    const orderItem = await Order.findByPk(idNum, {
+        include: [
+            { model: User, as: "customer", attributes: ["name", "email"] },
+            {
+                model: OrderItem,
+                as: "items",
+                attributes: ["id", "quantity", "price", ["product_id", "productId"]],
+                include: [
+                    {
+                        model: Product,
+                        as: "product",
+                        attributes: ["id", "name"],
+                    },
+                ],
+            },
+        ],
+    });
+    if (!orderItem) {
+        return res.status(404).json({ message: "Not found" });
+    }
+    const items = (orderItem.items ?? []).map((item) => ({
+        id: item.id,
+        productId: item.productId ?? item.get?.("productId") ?? item.product_id,
+        quantity: item.quantity,
+        price: Number(item.price || 0),
+        lineTotal: Number(item.price || 0) * Number(item.quantity || 0),
+        product: item.product
+            ? {
+                id: item.product.id,
+                name: item.product.name,
+            }
+            : null,
+    }));
+    const customer = orderItem.customer ?? null;
+    return res.json({
+        data: {
+            id: orderItem.id,
+            invoiceNo: orderItem.invoiceNo,
+            status: orderItem.status,
+            totalAmount: Number(orderItem.totalAmount || 0),
+            createdAt: orderItem.createdAt,
+            customerName: orderItem.customerName ?? customer?.name ?? null,
+            customerPhone: orderItem.customerPhone ?? null,
+            customerAddress: orderItem.customerAddress ?? null,
+            customerNotes: orderItem.customerNotes ?? null,
+            paymentMethod: orderItem.paymentMethod ?? "COD",
+            method: orderItem.paymentMethod ?? "COD",
+            items,
+        },
+    });
+});
+router.patch("/:id/status", requireStaffOrAdmin, updateOrderStatus);
 // Other CRUD endpoints for Orders can be added here following the same pattern as Customers
 export default router;

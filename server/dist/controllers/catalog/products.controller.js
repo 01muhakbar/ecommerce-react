@@ -1,5 +1,11 @@
 import { Op } from "sequelize";
-import { Product, Category } from "../../models";
+import { Product, Category } from "../../models/index.js";
+const asSingle = (v) => (Array.isArray(v) ? v[0] : v);
+const toId = (v) => {
+    const raw = asSingle(v);
+    const id = typeof raw === "string" ? Number(raw) : Number(raw);
+    return Number.isFinite(id) ? id : null;
+};
 const mapStatus = {
     selling: "active",
     soldout: "inactive",
@@ -52,7 +58,10 @@ export async function listProducts(req, res) {
     });
 }
 export async function getProduct(req, res) {
-    const p = await Product.findByPk(req.params.id, {
+    const id = toId(req.params.id);
+    if (id === null)
+        return res.status(400).json({ message: "Invalid id" });
+    const p = await Product.findByPk(id, {
         include: [{ model: Category, as: "category" }],
     });
     if (!p)
@@ -79,7 +88,10 @@ export async function createProduct(req, res) {
 }
 export async function updateProduct(req, res) {
     const body = ProductUpdateSchema.parse(req.body);
-    const p = await Product.findByPk(req.params.id);
+    const id = toId(req.params.id);
+    if (id === null)
+        return res.status(400).json({ message: "Invalid id" });
+    const p = await Product.findByPk(id);
     if (!p)
         return res.status(404).json({ message: "Not found" });
     // whitelist update fields
@@ -101,7 +113,10 @@ export async function updateProduct(req, res) {
     res.json(p);
 }
 export async function deleteProduct(req, res) {
-    const p = await Product.findByPk(req.params.id);
+    const id = toId(req.params.id);
+    if (id === null)
+        return res.status(400).json({ message: "Invalid id" });
+    const p = await Product.findByPk(id);
     if (!p)
         return res.status(404).json({ message: "Not found" });
     await p.destroy();
@@ -109,7 +124,10 @@ export async function deleteProduct(req, res) {
 }
 export async function togglePublish(req, res) {
     const { published } = TogglePublishSchema.parse(req.body);
-    const p = await Product.findByPk(req.params.id);
+    const id = toId(req.params.id);
+    if (id === null)
+        return res.status(400).json({ message: "Invalid id" });
+    const p = await Product.findByPk(id);
     if (!p)
         return res.status(404).json({ message: "Not found" });
     await p.update({ isPublished: published });
@@ -117,7 +135,10 @@ export async function togglePublish(req, res) {
 }
 export async function changeStatus(req, res) {
     const { status } = req.body;
-    const p = await Product.findByPk(req.params.id);
+    const id = toId(req.params.id);
+    if (id === null)
+        return res.status(400).json({ message: "Invalid id" });
+    const p = await Product.findByPk(id);
     if (!p)
         return res.status(404).json({ message: "Not found" });
     const normalized = toModelStatus(status);

@@ -1,7 +1,8 @@
 import { DataTypes, Model } from "sequelize";
 export class Category extends Model {
-    static associate(models) {
-        Category.hasMany(models.Product, { foreignKey: "categoryId" });
+    static associate(_models) {
+        Category.hasMany(Category, { as: "children", foreignKey: "parentId" });
+        Category.belongsTo(Category, { as: "parent", foreignKey: "parentId" });
     }
     static initModel(sequelize) {
         Category.init({
@@ -10,12 +11,31 @@ export class Category extends Model {
                 autoIncrement: true,
                 primaryKey: true,
             },
+            code: {
+                type: DataTypes.STRING(32),
+                allowNull: false,
+                unique: true,
+            },
             name: {
-                type: DataTypes.STRING,
+                type: DataTypes.STRING(120),
                 allowNull: false,
             },
             description: {
-                type: DataTypes.TEXT,
+                type: DataTypes.STRING(255),
+                allowNull: true,
+            },
+            icon: {
+                type: DataTypes.STRING(255),
+                allowNull: true,
+            },
+            published: {
+                type: DataTypes.BOOLEAN,
+                allowNull: false,
+                defaultValue: true,
+            },
+            parentId: {
+                field: "parent_id",
+                type: DataTypes.INTEGER.UNSIGNED,
                 allowNull: true,
             },
         }, {

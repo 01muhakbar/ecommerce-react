@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { validateCoupon } from "../services/coupon.service";
-import { Coupon } from "../models";
+import { validateCoupon } from "../services/coupon.service.js";
+import { Coupon } from "../models/index.js";
 import { Op } from "sequelize";
 
 const router = Router();
@@ -77,3 +77,5 @@ router.post("/validate", async (req, res, next) => {
 });
 
 export default router;
+
+

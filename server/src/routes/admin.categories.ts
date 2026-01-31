@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { requireAdmin, requireStaffOrAdmin } from "../middleware/requireRole.js";
-import { Category } from "../models";
+import { Category } from "../models/index.js";
 import { z } from "zod";
 import multer from "multer";
 import { Op } from "sequelize";
@@ -293,3 +293,5 @@ function parseCsvLine(line: string): string[] {
 }
 
 export default router;
+
+

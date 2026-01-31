@@ -1,11 +1,32 @@
-import { sequelize, User as UserModel, Cart as CartModel, Product as ProductModel, Order as OrderModel, OrderItem as OrderItemModel, } from "../models";
+import { sequelize, User as UserModel, Cart as CartModel, Product as ProductModel, Order as OrderModel, OrderItem as OrderItemModel, } from "../models/index.js";
+const asSingle = (v) => (Array.isArray(v) ? v[0] : v);
+const toId = (v) => {
+    const raw = asSingle(v);
+    const id = typeof raw === "string" ? Number(raw) : Number(raw);
+    return Number.isFinite(id) ? id : null;
+};
 // --- ENUMS & TYPES ---
 export const OrderStatus = {
     Pending: "pending",
+    Paid: "paid",
     Processing: "processing",
     Shipped: "shipped",
+    Delivered: "delivered",
     Completed: "completed",
     Cancelled: "cancelled",
+};
+const normalizeStatus = (v) => {
+    const s = String(v ?? "pending").toLowerCase();
+    if (s === "pending" ||
+        s === "paid" ||
+        s === "processing" ||
+        s === "shipped" ||
+        s === "delivered" ||
+        s === "completed" ||
+        s === "cancelled") {
+        return s;
+    }
+    return "pending";
 };
 // --- CONTROLLER FUNCTIONS ---
 /**
@@ -95,7 +116,11 @@ export const getUserOrders = async (req, res, next) => {
  */
 export const getOrderById = async (req, res, next) => {
     try {
-        const { id } = req.params;
+        const id = toId(req.params.id);
+        if (id === null) {
+            res.status(400).json({ message: "Invalid id" });
+            return;
+        }
         const userId = req.user?.id;
         const order = await OrderModel.findOne({
             where: { id, userId },
@@ -181,22 +206,37 @@ export const getAllOrders = async (req, res, next) => {
  */
 export const updateOrderStatus = async (req, res, next) => {
     try {
-        const { id } = req.params;
+        const id = toId(req.params.id);
+        if (id === null) {
+            res.status(400).json({ message: "Invalid id" });
+            return;
+        }
         const { status } = req.body;
-        if (!status ||
-            !Object.values(OrderStatus).includes(status)) {
+        const rawStatus = typeof status === "string" ? status.trim().toLowerCase() : "";
+        const normalizedStatus = normalizeStatus(rawStatus === "completed" ? "delivered" : rawStatus);
+        const allowedStatuses = [
+            "pending",
+            "processing",
+            "shipped",
+            "delivered",
+            "cancelled",
+        ];
+        if (!normalizedStatus ||
+            !allowedStatuses.includes(normalizedStatus)) {
             res.status(400).json({
-                message: `Status tidak valid. Gunakan salah satu dari: ${Object.values(OrderStatus).join(", ")}`,
+                message: `Status tidak valid. Gunakan salah satu dari: ${allowedStatuses.join(", ")}`,
             });
             return;
         }
-        const [updatedRows] = await OrderModel.update({ status }, { where: { id } });
+        const [updatedRows] = await OrderModel.update({ status: normalizedStatus }, { where: { id } });
         if (updatedRows === 0) {
             res.status(404).json({ message: "Pesanan tidak ditemukan." });
             return;
         }
+        const updatedOrder = await OrderModel.findByPk(id);
         res.status(200).json({
-            message: `Status pesanan berhasil diperbarui menjadi ${status}.`,
+            message: `Status pesanan berhasil diperbarui menjadi ${normalizedStatus}.`,
+            data: updatedOrder,
         });
     }
     catch (error) {

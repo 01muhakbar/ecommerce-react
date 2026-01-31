@@ -1,5 +1,5 @@
 import express, { Request, Response, NextFunction } from "express";
-import { sequelize } from "../models";
+import { sequelize } from "../models/index.js";
 
 /**
  * Synchronizes the database.
@@ -28,3 +28,5 @@ export const syncDatabase = async (
     next(error);
   }
 };
+
+

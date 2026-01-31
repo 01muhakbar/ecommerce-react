@@ -1,4 +1,4 @@
-import { sequelize } from "../models";
+import { sequelize } from "../models/index.js";
 /**
  * Synchronizes the database.
  * Use query params `?force=true` or `?alter=true`.

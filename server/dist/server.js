@@ -1,32 +1,46 @@
-// d:/ecommerce-react/server/src/server.ts
-import app from "./app"; // Impor konfigurasi Express dari app.ts
-import "./models"; // Import models to ensure they are registered
-const PORT = process.env.PORT || 3000;
+import app from "./app.js";
+import { sequelize, syncDb } from "./models/index.js";
+const BASE_PORT = Number(process.env.PORT) || 3001;
 /**
- * Fungsi utama untuk memulai server.
- * Ini akan menginisialisasi database terlebih dahulu,
- * baru kemudian menjalankan server Express.
+ * Start the server: connect DB, sync models, then listen with port retry.
  */
 const startServer = async () => {
     try {
         console.log("Attempting to connect to the database...");
-        const sequelize = (await import("./config/database")).default;
         await sequelize.authenticate();
         console.log("Database connected successfully.");
-        // --- SINKRONISASI DATABASE ---
-        // Pindahkan logika sinkronisasi ke sini.
-        // `{ alter: true }` akan mencoba mengubah tabel yang ada agar sesuai dengan model.
-        console.log("Synchronizing database models...");
-        await sequelize.sync({ alter: true });
-        console.log("Database synchronized successfully.");
-        app.listen(PORT, () => {
-            console.log(`🚀 Server is running on http://localhost:${PORT} with DB sync`);
-        });
+        const shouldSync = process.env.DB_SYNC === "true";
+        if (shouldSync) {
+            console.log("Synchronizing database models...");
+            await syncDb();
+            console.log("Database synchronized successfully.");
+        }
+        else {
+            console.log("Skipping database sync (set DB_SYNC=true to enable).");
+        }
+        await listenOnce(BASE_PORT);
     }
     catch (error) {
-        console.error("❌ Failed to start server:", error);
-        process.exit(1); // Keluar dari proses jika gagal memulai
+        console.error("Failed to start server:", error);
+        process.exit(1);
     }
 };
-// Panggil fungsi untuk memulai server
 startServer();
+// Try to listen on a port; on EADDRINUSE, try the next one up to `retries` times
+function listenOnce(port) {
+    return new Promise((resolve, reject) => {
+        app
+            .listen(port)
+            .once("listening", () => {
+            console.log(`🚀 Server is running on http://localhost:${port} with DB sync`);
+            resolve();
+        })
+            .once("error", (err) => {
+            if (err && err.code === "EADDRINUSE") {
+                console.error(`[server] Port ${port} already in use. Stop the other process or set PORT to a free port.`);
+                process.exit(1);
+            }
+            reject(err);
+        });
+    });
+}

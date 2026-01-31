@@ -12,14 +12,14 @@ export const getCustomers = async (req, res) => {
         const limit = Math.max(parseInt(req.query.limit) || 10, 1);
         const offset = (page - 1) * limit;
         const q = req.query.q?.trim();
-        const sortBy = req.query.sortBy || "createdAt";
+        const sortBy = req.query.sortBy || "created_at";
         const sort = (req.query.sort || "DESC").toUpperCase() === "ASC"
             ? "ASC"
             : "DESC";
         const from = req.query.from; // ISO date
         const to = req.query.to;
         const sortMap = {
-            createdAt: "created_at",
+            created_at: "created_at",
             name: "name",
             email: "email",
         };
@@ -31,13 +31,12 @@ export const getCustomers = async (req, res) => {
                     [Op.or]: [
                         { name: { [Op.like]: `%${q}%` } },
                         { email: { [Op.like]: `%${q}%` } },
-                        { phoneNumber: { [Op.like]: `%${q}%` } },
                     ],
                 }
                 : {}),
             ...(from || to
                 ? {
-                    createdAt: {
+                    created_at: {
                         ...(from ? { [Op.gte]: new Date(from) } : {}),
                         ...(to ? { [Op.lte]: new Date(to) } : {}),
                     },
@@ -45,7 +44,7 @@ export const getCustomers = async (req, res) => {
                 : {}),
         };
         const { rows, count } = await User.findAndCountAll({
-            attributes: ["id", "name", "email", "phoneNumber", "createdAt"],
+            attributes: ["id", "name", "email", "created_at"],
             where,
             limit,
             offset,
@@ -56,13 +55,16 @@ export const getCustomers = async (req, res) => {
             limit,
             total: count,
             totalPages: Math.ceil(count / limit),
-            data: rows.map((u) => ({
-                id: u.id,
-                name: u.name,
-                email: u.email,
-                phone: u.phoneNumber,
-                joiningDate: u.createdAt,
-            })),
+            data: rows.map((u) => {
+                const phoneNumber = u.phoneNumber ?? null;
+                return {
+                    id: u.id,
+                    name: u.name,
+                    email: u.email,
+                    phone: phoneNumber,
+                    joiningDate: u.created_at,
+                };
+            }),
         });
     }
     catch (err) {
@@ -82,11 +84,18 @@ export const getCustomerById = async (req, res) => {
     try {
         const customer = await User.findOne({
             where: { id: req.params.id, role: "customer" },
-            attributes: ["id", "name", "email", "phoneNumber", "createdAt"],
+            attributes: ["id", "name", "email", "created_at"],
         });
         if (!customer)
             return res.status(404).json({ message: "Customer not found" });
-        res.json(customer);
+        const phoneNumber = customer.phoneNumber ?? null;
+        res.json({
+            id: customer.id,
+            name: customer.name,
+            email: customer.email,
+            phone: phoneNumber,
+            joiningDate: customer.created_at,
+        });
     }
     catch (error) {
         res
@@ -103,8 +112,8 @@ export const getCustomerById = async (req, res) => {
  */
 export const updateCustomer = async (req, res) => {
     try {
-        const { name, email, phone } = req.body;
-        const [count] = await User.update({ name, email, phoneNumber: phone }, { where: { id: req.params.id, role: "customer" } });
+        const { name, email } = req.body;
+        const [count] = await User.update({ name, email }, { where: { id: req.params.id, role: "customer" } });
         if (!count)
             return res.status(404).json({ message: "Customer not found" });
         res.json({ message: "Customer updated successfully" });
@@ -147,13 +156,13 @@ export const deleteCustomer = async (req, res) => {
 export const exportCustomersCsv = async (_, res) => {
     try {
         const rows = await User.findAll({
-            attributes: ["id", "name", "email", "phoneNumber", "createdAt"],
+            attributes: ["id", "name", "email", "created_at"],
             where: { role: "customer" },
             order: [["created_at", "DESC"]],
         });
         const header = "id,joiningDate,name,email,phone\n";
         const body = rows
-            .map((r) => `${r.id},${r.createdAt.toISOString()},${csv(r.name)},${csv(r.email)},${csv(r.phoneNumber)}`)
+            .map((r) => `${r.id},${r.created_at.toISOString()},${csv(r.name)},${csv(r.email)},${csv(r.phoneNumber ?? null)}`)
             .join("\n");
         res.setHeader("Content-Type", "text/csv");
         res.setHeader("Content-Disposition", 'attachment; filename="customers.csv"');

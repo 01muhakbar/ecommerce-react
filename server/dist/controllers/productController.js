@@ -1,7 +1,13 @@
 import { Op } from "sequelize";
-import { Product } from "../models/Product";
-import { User } from "../models/User";
-import { Category } from "../models/Category";
+import { Product } from "../models/Product.js";
+import { User } from "../models/User.js";
+import { Category } from "../models/Category.js";
+const asSingle = (v) => (Array.isArray(v) ? v[0] : v);
+const toId = (v) => {
+    const raw = asSingle(v);
+    const id = typeof raw === "string" ? Number(raw) : Number(raw);
+    return Number.isFinite(id) ? id : null;
+};
 // Fungsi untuk membuat produk baru
 export const createProduct = async (req, res) => {
     try {
@@ -113,7 +119,11 @@ export const getAllProducts = async (req, res) => {
 // Fungsi untuk mengambil detail satu produk berdasarkan ID
 export const getProductById = async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = toId(req.params.id);
+        if (id === null) {
+            res.status(400).json({ message: "Invalid id" });
+            return;
+        }
         const product = await Product.findByPk(id);
         if (!product) {
             res.status(404).json({ message: "Product not found." });
@@ -157,8 +167,13 @@ export const getEditProductPage = async (req, res) => {
             res.status(401).json({ message: "Unauthorized" });
             return;
         }
+        const id = toId(req.params.id);
+        if (id === null) {
+            res.status(400).json({ message: "Invalid id" });
+            return;
+        }
         const product = await Product.findOne({
-            where: { id: req.params.id, userId: user.id },
+            where: { id, userId: user.id },
         });
         if (!product) {
             res.status(404).json({
@@ -206,7 +221,11 @@ export const renderAdminEditProductPage = async (req, res) => {
 // Update a product
 export const updateProduct = async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = toId(req.params.id);
+        if (id === null) {
+            res.status(400).json({ message: "Invalid id" });
+            return;
+        }
         const { name, description, price, stock, categoryId } = req.body;
         const product = await Product.findByPk(id);
         if (!product) {
@@ -233,7 +252,11 @@ export const updateProduct = async (req, res) => {
 // Delete a product
 export const deleteProduct = async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = toId(req.params.id);
+        if (id === null) {
+            res.status(400).json({ message: "Invalid id" });
+            return;
+        }
         const product = await Product.findByPk(id);
         if (!product) {
             res.status(404).json({ message: "Product not found." });
@@ -283,7 +306,11 @@ export const renderAddProductPageAdmin = async (req, res) => {
 // Fungsi untuk mengambil detail satu produk untuk preview
 export const getProductDetailsForPreview = async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = toId(req.params.id);
+        if (id === null) {
+            res.status(400).json({ message: "Invalid id" });
+            return;
+        }
         const product = await Product.findByPk(id, {
             include: [
                 { model: User, as: "seller", attributes: ["name", "storeName"] },

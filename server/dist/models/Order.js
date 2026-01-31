@@ -27,12 +27,47 @@ export class Order extends Model {
                 allowNull: false,
                 references: { model: "Users", key: "id" },
             },
+            customerName: {
+                type: DataTypes.STRING(120),
+                allowNull: true,
+                field: "customer_name",
+            },
+            customerPhone: {
+                type: DataTypes.STRING(30),
+                allowNull: true,
+                field: "customer_phone",
+            },
+            customerAddress: {
+                type: DataTypes.TEXT,
+                allowNull: true,
+                field: "customer_address",
+            },
+            customerNotes: {
+                type: DataTypes.TEXT,
+                allowNull: true,
+                field: "customer_notes",
+            },
+            paymentMethod: {
+                type: DataTypes.STRING(30),
+                allowNull: true,
+                field: "payment_method",
+            },
+            couponCode: {
+                type: DataTypes.STRING(50),
+                allowNull: true,
+                field: "coupon_code",
+            },
+            discountAmount: {
+                type: DataTypes.DECIMAL(10, 2),
+                allowNull: true,
+                field: "discount_amount",
+            },
             totalAmount: {
                 type: DataTypes.DECIMAL(10, 2),
                 allowNull: false,
             },
             status: {
-                type: DataTypes.ENUM("pending", "processing", "shipped", "completed", "cancelled"),
+                type: DataTypes.ENUM("pending", "paid", "processing", "shipped", "delivered", "completed", "cancelled"),
                 defaultValue: "pending",
                 allowNull: false,
             },

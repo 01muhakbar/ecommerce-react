@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
+const COOKIE_NAME = process.env.AUTH_COOKIE_NAME || "token";
 export const protect = (req, res, next) => {
-    console.log("Cookies received by protect middleware:", req.cookies);
-    const token = req.cookies?.token;
+    const token = req.cookies?.[COOKIE_NAME];
     if (!token)
         return res.sendStatus(401);
     try {

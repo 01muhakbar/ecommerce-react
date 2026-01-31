@@ -61,8 +61,8 @@ export async function getSummary(_days = 7) {
   };
 }
 
-export async function getWeeklySales(_days = 7) {
-  const { data } = await api.get("/admin/stats/weekly");
+export async function getWeeklySales(days = 7) {
+  const { data } = await api.get("/admin/stats/weekly", { params: { days } });
   const rows = Array.isArray(data?.data) ? data.data : [];
   const rowByDate = new Map(
     rows.map((item) => [
@@ -82,8 +82,10 @@ export async function getWeeklySales(_days = 7) {
   };
 }
 
-export async function getBestSelling(_days = 7, _limit = 5) {
-  const { data } = await api.get("/admin/stats/best-sellers");
+export async function getBestSelling(days = 7, limit = 5) {
+  const { data } = await api.get("/admin/stats/best-sellers", {
+    params: { days, limit },
+  });
   const rows = Array.isArray(data?.data) ? data.data : [];
   return {
     data: rows
@@ -92,6 +94,6 @@ export async function getBestSelling(_days = 7, _limit = 5) {
         qty: Number(item.qty || 0),
         revenue: 0,
       }))
-      .slice(0, _limit),
+      .slice(0, limit),
   };
 }

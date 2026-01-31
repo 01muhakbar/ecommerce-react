@@ -17,7 +17,6 @@ export function initUser(sequelize) {
         email: {
             type: DataTypes.STRING(160),
             allowNull: false,
-            unique: true,
             validate: { isEmail: true },
         },
         password: {

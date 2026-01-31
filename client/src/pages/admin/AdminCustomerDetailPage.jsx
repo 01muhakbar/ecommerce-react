@@ -6,19 +6,14 @@ import {
   fetchAdminCustomerOrders,
   fetchAdminOrders,
 } from "../../lib/adminApi.js";
+import { ORDER_STATUS_OPTIONS } from "../../constants/orderStatus.js";
 
 const currency = new Intl.NumberFormat("id-ID", {
   style: "currency",
   currency: "IDR",
 });
 
-const STATUS_OPTIONS = [
-  "pending",
-  "paid",
-  "processing",
-  "cancelled",
-  "refunded",
-];
+const STATUS_OPTIONS = ORDER_STATUS_OPTIONS;
 
 const STATUS_CLASS = {
   pending: "bg-slate-100 text-slate-700",

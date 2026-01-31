@@ -5,6 +5,7 @@ import { User } from "../models/User.js";
 
 const router = Router();
 
+const asSingle = (v: unknown) => (Array.isArray(v) ? v[0] : v);
 const ALLOWED_SORT = new Set(["createdAt", "name", "email"]);
 const parseId = (value: string) => {
   const n = Number(value);
@@ -18,7 +19,7 @@ router.get("/", requireStaffOrAdmin, async (req, res) => {
     100,
     Math.max(1, parseInt(String(req.query.limit || req.query.pageSize || "10"), 10))
   );
-  const q = String(req.query.q || "").trim();
+  const q = String(asSingle(req.query.q) ?? "").trim();
   const sortRaw = String(req.query.sort || "createdAt");
   const sort = ALLOWED_SORT.has(sortRaw) ? sortRaw : "createdAt";
   const order =
@@ -52,7 +53,7 @@ router.get("/", requireStaffOrAdmin, async (req, res) => {
 
 // GET detail
 router.get("/:id", requireStaffOrAdmin, async (req, res) => {
-  const idNum = parseId(req.params.id);
+  const idNum = parseId(String(asSingle(req.params.id) ?? ""));
   if (!idNum) {
     return res.status(400).json({ success: false, message: "Invalid id" });
   }
@@ -87,8 +88,10 @@ router.post("/", requireAdmin, async (req, res) => {
 
 // PUT update
 router.put("/:id", requireAdmin, async (req, res) => {
+  const idNum = parseId(String(asSingle(req.params.id) ?? ""));
+  if (!idNum) return res.status(400).json({ message: "Invalid id" });
   const c = await User.findOne({
-    where: { id: req.params.id, role: "customer" },
+    where: { id: idNum, role: "customer" },
   });
   if (!c) return res.status(404).json({ message: "Customer not found" });
   await c.update(req.body);
@@ -97,8 +100,10 @@ router.put("/:id", requireAdmin, async (req, res) => {
 
 // DELETE
 router.delete("/:id", requireAdmin, async (req, res) => {
+  const idNum = parseId(String(asSingle(req.params.id) ?? ""));
+  if (!idNum) return res.status(400).json({ message: "Invalid id" });
   const c = await User.findOne({
-    where: { id: req.params.id, role: "customer" },
+    where: { id: idNum, role: "customer" },
   });
   if (!c) return res.status(404).json({ message: "Customer not found" });
   await c.destroy();

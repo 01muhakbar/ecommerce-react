@@ -1,4 +1,4 @@
-import { Product } from "../models";
+import { Product } from "../models/index.js";
 export async function listProducts(req, res) {
     const limit = Math.min(Number(req.query.limit) || 20, 100);
     const offset = Number(req.query.offset) || 0;

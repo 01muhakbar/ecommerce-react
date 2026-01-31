@@ -5,7 +5,7 @@ export function useCategories(params: Parameters<typeof svc.listCategories>[0]) 
   return useQuery({
     queryKey: ["categories", params],
     queryFn: () => svc.listCategories(params),
-    keepPreviousData: true,
+    placeholderData: (prev) => prev,
   });
 }
 export function useCreateCategory() {
@@ -43,4 +43,3 @@ export function useSetPublish() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["categories"] }),
   });
 }
-

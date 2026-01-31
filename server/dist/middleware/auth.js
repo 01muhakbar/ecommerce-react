@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+const COOKIE_NAME = process.env.AUTH_COOKIE_NAME || "token";
 function normalize(v) {
     return String(v || "")
         .trim()
@@ -21,7 +22,7 @@ export function attachUserFromAuth(req, _res, next) {
             };
             return next();
         }
-        const token = req.cookies?.access_token;
+        const token = req.cookies?.[COOKIE_NAME];
         if (!token)
             return next(); // tidak 401 di sini—biarkan guard yang mengurus
         const secret = process.env.JWT_SECRET || "dev-secret";

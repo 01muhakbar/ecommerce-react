@@ -1,13 +1,20 @@
 import express from "express";
 import { Category } from '../models/Category.js';
 
+const asSingle = (v: unknown) => (Array.isArray(v) ? v[0] : v);
+const toId = (v: unknown): number | null => {
+  const raw = asSingle(v);
+  const id = typeof raw === "string" ? Number(raw) : Number(raw as any);
+  return Number.isFinite(id) ? id : null;
+};
+
 export const createCategory = async (
   req: express.Request,
   res: express.Response
 ): Promise<void> => {
   try {
-    const { name, description }: { name: string; description?: string } =
-      req.body;
+    const { description }: { name: string; description?: string } = req.body;
+    const name = String(req.body.name ?? "").trim();
     if (!name) {
       res.status(400).json({
         status: "fail",
@@ -16,7 +23,18 @@ export const createCategory = async (
       return;
     }
 
-    const newCategory = await Category.create({ name, description });
+    const code =
+      name
+        .toLowerCase()
+        .replace(/\s+/g, "-")
+        .replace(/[^a-z0-9-]/g, "")
+        .slice(0, 40) || `cat-${Date.now()}`;
+    const newCategory = await Category.create({
+      name,
+      description,
+      code,
+      published: true,
+    } as any);
 
     res.status(201).json({
       status: "success",
@@ -61,7 +79,11 @@ export const getCategoryById = async (
   res: express.Response
 ): Promise<void> => {
   try {
-    const { id } = req.params;
+    const id = toId(req.params.id);
+    if (id === null) {
+      res.status(400).json({ message: "Invalid id" });
+      return;
+    }
     const category = await Category.findByPk(id);
 
     if (!category) {

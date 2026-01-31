@@ -1,19 +1,20 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import { Staff } from "../models/Staff";
-import { User } from "../models/User";
+import { Staff } from "../models/Staff.js";
+import { User } from "../models/User.js";
 import { Op } from "sequelize";
-import { normalizeRoleServer } from "../utils/role";
+import { normalizeRoleServer } from "../utils/role.js";
 const jwtConfig = {
     secret: process.env.JWT_SECRET,
     expiresIn: process.env.JWT_EXPIRES || "7d",
-    cookieName: process.env.JWT_COOKIE_NAME || "token",
+    cookieName: process.env.AUTH_COOKIE_NAME || "token",
 };
 const noop = (..._args) => Promise.resolve();
 const allowedAdminRoles = ["Admin", "Super Admin"];
 // Default JWT expiration format
 const DEFAULT_EXPIRES = "7d";
+const asSingle = (v) => (Array.isArray(v) ? v[0] : v);
 // Helper function to sign JWT
 const signToken = (id, role) => {
     if (!jwtConfig.secret) {
@@ -29,7 +30,7 @@ const signToken = (id, role) => {
 };
 // Helper function to create a token, set a cookie, and send the response
 export const createAndSendToken = (user, statusCode, res) => {
-    const cookieName = process.env.JWT_COOKIE_NAME || "token"; // Use JWT_COOKIE_NAME
+    const cookieName = process.env.AUTH_COOKIE_NAME || "token"; // Canonical auth cookie name via AUTH_COOKIE_NAME
     const token = signToken(user.id, user.role); // This token is for the user, not admin
     const cookieOptions = {
         maxAge: 7 * 24 * 60 * 60 * 1000,
@@ -62,6 +63,7 @@ export const register = async (req, res, next) => {
             email,
             password: hashedPassword,
             role: role || "pembeli",
+            status: "active",
         });
         createAndSendToken(newUser, 201, res);
     }
@@ -98,7 +100,7 @@ export const login = async (req, res, next) => {
     }
 };
 export const logout = (req, res) => {
-    const cookieName = process.env.JWT_COOKIE_NAME || "token"; // Use JWT_COOKIE_NAME
+    const cookieName = process.env.AUTH_COOKIE_NAME || "token"; // Canonical auth cookie name via AUTH_COOKIE_NAME
     res.clearCookie(cookieName, {
         path: "/",
         sameSite: "lax",
@@ -111,8 +113,9 @@ export const logout = (req, res) => {
         .json({ status: "success", message: "Logged out successfully" });
 };
 export const adminLogout = (req, res) => {
-    res.clearCookie("access_token", { path: "/" });
-    res.clearCookie("token", { path: "/" }); // legacy
+    const cookieName = process.env.AUTH_COOKIE_NAME || "token";
+    res.clearCookie(cookieName, { path: "/" });
+    res.clearCookie("access_token", { path: "/" }); // legacy
     res.status(200).json({ ok: true, message: "logged out" });
 };
 export const forgotPassword = async (req, res, next) => {
@@ -158,7 +161,7 @@ export const resetPassword = async (req, res, next) => {
     try {
         const hashedToken = crypto
             .createHash("sha256")
-            .update(req.params.token)
+            .update(String(asSingle(req.params.token) ?? ""))
             .digest("hex");
         const user = await User.findOne({
             where: {
@@ -221,16 +224,18 @@ export const adminLogin = async (req, res) => {
         return res.status(500).json({ message: "JWT secret not configured" });
     }
     const token = signToken(staff.id, normalizedRole); // bersihkan sisa cookie lama
-    res.clearCookie("token", { path: "/" });
+    const cookieName = process.env.AUTH_COOKIE_NAME || "token";
+    res.clearCookie(cookieName, { path: "/" });
     res.clearCookie("access_token", { path: "/" });
     const isProd = process.env.NODE_ENV === "production";
+    const isHttps = process.env.COOKIE_SECURE === "true";
     // set cookie fresh
-    res.cookie("access_token", token, {
+    res.cookie(cookieName, token, {
         httpOnly: true, // Always httpOnly for security
-        sameSite: isProd ? "none" : "lax",
-        secure: isProd,
-        maxAge: 7 * 24 * 60 * 60 * 1000,
+        sameSite: isProd && isHttps ? "none" : "lax",
+        secure: isProd && isHttps,
         path: "/",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
     });
     return res.status(200).json({
         ok: true,
@@ -281,7 +286,7 @@ export const resetPasswordAdmin = async (req, res, next) => {
     try {
         const hashedToken = crypto
             .createHash("sha256")
-            .update(req.params.token)
+            .update(String(asSingle(req.params.token) ?? ""))
             .digest("hex");
         const user = await User.findOne({
             where: {

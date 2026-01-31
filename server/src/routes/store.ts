@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { Op } from "sequelize";
-import { Category, Order, OrderItem, Product, User, sequelize } from "../models";
-import { validateCoupon } from "../services/coupon.service";
+import { Category, Order, OrderItem, Product, User, sequelize } from "../models/index.js";
+import { validateCoupon } from "../services/coupon.service.js";
 import { protect } from "../middleware/authMiddleware.js";
 
 const router = Router();
@@ -247,7 +247,7 @@ router.get(
         return res.status(404).json({ message: "Order not found" });
       }
 
-      const items = (order.items || []).map((item: any) => ({
+      const items = ((order as any).items ?? []).map((item: any) => ({
         id: item.id,
         productId: item.productId ?? item.get?.("productId") ?? item.product_id,
         name: item.product?.name ?? `Product #${item.productId || item.product_id || "-"}`,
@@ -255,7 +255,10 @@ router.get(
         price: Number(item.price || 0),
         lineTotal: Number(item.price || 0) * Number(item.quantity || 0),
       }));
-      const subtotal = items.reduce((sum, item) => sum + Number(item.lineTotal || 0), 0);
+      const subtotal = items.reduce(
+        (sum: number, item: any) => sum + Number(item.lineTotal || 0),
+        0
+      );
       const discountAmount = Number((order as any).discountAmount || 0);
       const tax = 0;
       const shipping = 0;
@@ -377,7 +380,7 @@ router.get(
         return res.status(404).json({ message: "Order not found" });
       }
 
-      const items = (order.items || []).map((item: any) => ({
+      const items = ((order as any).items ?? []).map((item: any) => ({
         id: item.id,
         productId: item.productId ?? item.get?.("productId") ?? item.product_id,
         name: item.product?.name ?? `Product #${item.productId || item.product_id || "-"}`,
@@ -385,7 +388,10 @@ router.get(
         price: Number(item.price || 0),
         lineTotal: Number(item.price || 0) * Number(item.quantity || 0),
       }));
-      const subtotal = items.reduce((sum, item) => sum + Number(item.lineTotal || 0), 0);
+      const subtotal = items.reduce(
+        (sum: number, item: any) => sum + Number(item.lineTotal || 0),
+        0
+      );
       const discountAmount = Number((order as any).discountAmount || 0);
       const tax = 0;
       const shipping = 0;
@@ -596,3 +602,5 @@ router.post(
 );
 
 export default router;
+
+

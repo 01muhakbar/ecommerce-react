@@ -115,8 +115,8 @@ router.get("/weekly", requireStaffOrAdmin, async (_req, res) => {
       [fn("SUM", col("total_amount")), "sales"],
     ],
     where: { createdAt: range(start, end) },
-    group: [literal("day")],
-    order: [[literal("day"), "ASC"]],
+    group: [literal("day") as any],
+    order: [[literal("day") as any, "ASC"]],
   });
 
   const map = new Map<string, { day: string; orders: number; sales: number }>();

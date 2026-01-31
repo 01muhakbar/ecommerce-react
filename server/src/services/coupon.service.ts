@@ -1,5 +1,5 @@
 import { Op } from "sequelize";
-import { Coupon } from "../models";
+import { Coupon } from "../models/index.js";
 
 const normalizeCode = (value: any) => String(value || "").trim().toUpperCase();
 
@@ -77,3 +77,5 @@ export const validateCoupon = async (codeRaw: any, subtotalRaw: any) => {
     discountAmount,
   };
 };
+
+

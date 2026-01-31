@@ -1,7 +1,14 @@
 import { Request, Response } from 'express';
-import { Cart } from '../models/Cart';
-import { CartItem } from '../models/CartItem';
-import { Product } from '../models/Product';
+import { Cart } from '../models/Cart.js';
+import { CartItem } from '../models/CartItem.js';
+import { Product } from '../models/Product.js';
+
+const asSingle = (v: unknown) => (Array.isArray(v) ? v[0] : v);
+const toId = (v: unknown): number | null => {
+  const raw = asSingle(v);
+  const id = typeof raw === "string" ? Number(raw) : Number(raw as any);
+  return Number.isFinite(id) ? id : null;
+};
 
 // --- CONTROLLER FUNCTIONS ---
 
@@ -97,7 +104,11 @@ export const removeFromCart = async (
 ): Promise<void> => {
   try {
     const userId = (req as any).user?.id;
-    const { productId } = req.params;
+    const id = toId(req.params.productId);
+    if (id === null) {
+      res.status(400).json({ message: "Invalid id" });
+      return;
+    }
 
     if (!userId) {
       res.status(401).json({ message: "Unauthorized" });
@@ -113,7 +124,7 @@ export const removeFromCart = async (
     const deletedRows = await CartItem.destroy({
       where: {
         cartId: cart.id,
-        productId: Number(productId),
+        productId: id,
       },
     });
 
@@ -140,7 +151,11 @@ export const updateCartItem = async (
 ): Promise<void> => {
   try {
     const userId = (req as any).user?.id;
-    const { productId } = req.params;
+    const id = toId(req.params.productId);
+    if (id === null) {
+      res.status(400).json({ message: "Invalid id" });
+      return;
+    }
     const { quantity }: { quantity: number } = req.body;
 
     if (!userId) {
@@ -161,13 +176,13 @@ export const updateCartItem = async (
 
     if (quantity === 0) {
       await CartItem.destroy({
-        where: { cartId: cart.id, productId: Number(productId) },
+        where: { cartId: cart.id, productId: id },
       });
       res.status(200).json({ message: "Item removed from cart." });
       return;
     }
 
-    const product = await Product.findByPk(productId);
+    const product = await Product.findByPk(id);
     if (!product) {
       res.status(404).json({ message: "Product not found." });
       return;
@@ -183,7 +198,7 @@ export const updateCartItem = async (
 
     await CartItem.update(
       { quantity },
-      { where: { cartId: cart.id, productId: Number(productId) } }
+      { where: { cartId: cart.id, productId: id } }
     );
 
     res.status(200).json({ message: "Cart updated successfully." });
@@ -197,3 +212,4 @@ export const updateCartItem = async (
       });
   }
 };
+

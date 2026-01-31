@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { AxiosHeaders } from "axios";
 import { triggerUnauthorized } from "../auth/authEvents.ts";
 
 export const api = axios.create({
@@ -18,14 +18,13 @@ api.interceptors.request.use((config) => {
     token = null;
   }
 
+  const headers = AxiosHeaders.from(config.headers);
   if (token) {
-    config.headers = {
-      ...config.headers,
-      Authorization: `Bearer ${token}`,
-    };
-  } else if (config.headers && "Authorization" in config.headers) {
-    delete config.headers.Authorization;
+    headers.set("Authorization", `Bearer ${token}`);
+  } else {
+    headers.delete("Authorization");
   }
+  config.headers = headers;
 
   return config;
 });

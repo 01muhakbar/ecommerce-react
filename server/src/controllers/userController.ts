@@ -1,7 +1,15 @@
 import { Request, Response, NextFunction } from "express";
 import bcrypt from "bcryptjs";
-import { User } from "../models";
-import type { StaffRole } from "../models/User";
+import { User } from "../models/index.js";
+
+type StaffRole = string;
+
+const asSingle = (v: unknown) => (Array.isArray(v) ? v[0] : v);
+const toId = (v: unknown): number | null => {
+  const raw = asSingle(v);
+  const id = typeof raw === "string" ? Number(raw) : Number(raw as any);
+  return Number.isFinite(id) ? id : null;
+};
 
 export const getMe = async (
   req: Request,
@@ -60,7 +68,9 @@ export const getUserById = async (
   next: NextFunction
 ) => {
   try {
-    const user = await User.findByPk(req.params.id, {
+    const id = toId(req.params.id);
+    if (id === null) return res.status(400).json({ message: "Invalid id" });
+    const user = await User.findByPk(id, {
       attributes: { exclude: ["password"] },
     });
     if (!user) {
@@ -88,6 +98,7 @@ export const createUser = async (
       email,
       password: hashedPassword,
       role: role || "pembeli",
+      status: "active",
     });
     (newUser as any).password = undefined;
     res.status(201).json({ status: "success", data: newUser });
@@ -123,13 +134,15 @@ export const updateUser = async (
       updateData.role = role;
     }
 
+    const id = toId(req.params.id);
+    if (id === null) return res.status(400).json({ message: "Invalid id" });
     const [updatedRows] = await User.update(updateData, {
-      where: { id: req.params.id },
+      where: { id },
     });
     if (updatedRows === 0) {
       return res.status(404).json({ message: "User not found to update." });
     }
-    const updatedUser = await User.findByPk(req.params.id, {
+    const updatedUser = await User.findByPk(id, {
       attributes: { exclude: ["password"] },
     });
     res.status(200).json({ status: "success", data: updatedUser });
@@ -147,7 +160,9 @@ export const deleteUser = async (
   next: NextFunction
 ) => {
   try {
-    const deletedRows = await User.destroy({ where: { id: req.params.id } });
+    const id = toId(req.params.id);
+    if (id === null) return res.status(400).json({ message: "Invalid id" });
+    const deletedRows = await User.destroy({ where: { id } });
     if (deletedRows === 0) {
       return res.status(404).json({ message: "User not found to delete." });
     }
@@ -184,3 +199,5 @@ export const updateMe = async (
     next(error);
   }
 };
+
+

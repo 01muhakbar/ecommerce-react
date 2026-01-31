@@ -1,17 +1,17 @@
 import "dotenv/config";
 import bcrypt from "bcrypt";
 import { Op } from "sequelize";
-import { Category, Product, User, sequelize, syncDb } from "../models/index.ts";
+import { Category, Product, User, sequelize, syncDb } from "../models/index.js";
 
 const SEED_EMAIL = "store-seed@local.dev";
 const SUPER_ADMIN_EMAIL = process.env.SEED_SUPER_EMAIL || "superadmin@local.dev";
 const SEED_PASSWORD = "seedstore123";
 
 const CATEGORIES = [
-  { code: "apparel", name: "Apparel", icon: null },
-  { code: "electronics", name: "Electronics", icon: null },
-  { code: "home", name: "Home & Living", icon: null },
-  { code: "beauty", name: "Beauty", icon: null },
+  { code: "apparel", name: "Apparel", icon: null as any },
+  { code: "electronics", name: "Electronics", icon: null as any },
+  { code: "home", name: "Home & Living", icon: null as any },
+  { code: "beauty", name: "Beauty", icon: null as any },
 ];
 
 const PRODUCTS = [

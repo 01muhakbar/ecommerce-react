@@ -1,8 +1,15 @@
 import { Request, Response } from "express";
 import { Op } from "sequelize";
-import { Product } from "../models/Product";
-import { User } from "../models/User";
-import { Category } from "../models/Category";
+import { Product } from "../models/Product.js";
+import { User } from "../models/User.js";
+import { Category } from "../models/Category.js";
+
+const asSingle = (v: unknown) => (Array.isArray(v) ? v[0] : v);
+const toId = (v: unknown): number | null => {
+  const raw = asSingle(v);
+  const id = typeof raw === "string" ? Number(raw) : Number(raw as any);
+  return Number.isFinite(id) ? id : null;
+};
 
 // Fungsi untuk membuat produk baru
 export const createProduct = async (
@@ -165,7 +172,11 @@ export const getProductById = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { id } = req.params;
+    const id = toId(req.params.id);
+    if (id === null) {
+      res.status(400).json({ message: "Invalid id" });
+      return;
+    }
     const product = await Product.findByPk(id);
 
     if (!product) {
@@ -217,8 +228,13 @@ export const getEditProductPage = async (
       res.status(401).json({ message: "Unauthorized" });
       return;
     }
+    const id = toId(req.params.id);
+    if (id === null) {
+      res.status(400).json({ message: "Invalid id" });
+      return;
+    }
     const product = await Product.findOne({
-      where: { id: req.params.id, userId: user.id },
+      where: { id, userId: user.id },
     });
 
     if (!product) {
@@ -276,7 +292,11 @@ export const updateProduct = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { id } = req.params;
+    const id = toId(req.params.id);
+    if (id === null) {
+      res.status(400).json({ message: "Invalid id" });
+      return;
+    }
     const { name, description, price, stock, categoryId } = req.body;
     const product = await Product.findByPk(id);
 
@@ -317,7 +337,11 @@ export const deleteProduct = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { id } = req.params;
+    const id = toId(req.params.id);
+    if (id === null) {
+      res.status(400).json({ message: "Invalid id" });
+      return;
+    }
     const product = await Product.findByPk(id);
 
     if (!product) {
@@ -378,7 +402,11 @@ export const getProductDetailsForPreview = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { id } = req.params;
+    const id = toId(req.params.id);
+    if (id === null) {
+      res.status(400).json({ message: "Invalid id" });
+      return;
+    }
     const product = await Product.findByPk(id, {
       include: [
         { model: User, as: "seller", attributes: ["name", "storeName"] },
@@ -420,3 +448,4 @@ export const renderAllProducts = async (
     });
   }
 };
+

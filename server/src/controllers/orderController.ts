@@ -7,10 +7,17 @@ import {
   Product as ProductModel,
   Order as OrderModel,
   OrderItem as OrderItemModel,
-} from "../models";
-import type { User as UserType } from "../models/User";
-import type { Cart as CartType } from "../models/Cart";
-import type { Product as ProductType } from "../models/Product";
+} from "../models/index.js";
+import type { User as UserType } from "../models/User.js";
+import type { Cart as CartType } from "../models/Cart.js";
+import type { Product as ProductType } from "../models/Product.js";
+
+const asSingle = (v: unknown) => (Array.isArray(v) ? v[0] : v);
+const toId = (v: unknown): number | null => {
+  const raw = asSingle(v);
+  const id = typeof raw === "string" ? Number(raw) : Number(raw as any);
+  return Number.isFinite(id) ? id : null;
+};
 
 // --- ENUMS & TYPES ---
 
@@ -25,6 +32,31 @@ export const OrderStatus = {
 } as const;
 
 type OrderStatusType = (typeof OrderStatus)[keyof typeof OrderStatus];
+
+type OrderStatusValue =
+  | "pending"
+  | "paid"
+  | "processing"
+  | "shipped"
+  | "delivered"
+  | "completed"
+  | "cancelled";
+
+const normalizeStatus = (v: unknown): OrderStatusValue => {
+  const s = String(v ?? "pending").toLowerCase();
+  if (
+    s === "pending" ||
+    s === "paid" ||
+    s === "processing" ||
+    s === "shipped" ||
+    s === "delivered" ||
+    s === "completed" ||
+    s === "cancelled"
+  ) {
+    return s;
+  }
+  return "pending";
+};
 
 // --- INTERFACES ---
 
@@ -150,7 +182,11 @@ export const getOrderById = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { id } = req.params;
+    const id = toId(req.params.id);
+    if (id === null) {
+      res.status(400).json({ message: "Invalid id" });
+      return;
+    }
     const userId = (req as any).user?.id;
 
     const order = await OrderModel.findOne({
@@ -251,11 +287,17 @@ export const updateOrderStatus = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { id } = req.params;
+    const id = toId(req.params.id);
+    if (id === null) {
+      res.status(400).json({ message: "Invalid id" });
+      return;
+    }
     const { status } = req.body;
     const rawStatus =
       typeof status === "string" ? status.trim().toLowerCase() : "";
-    const normalizedStatus = rawStatus === "completed" ? "delivered" : rawStatus;
+    const normalizedStatus = normalizeStatus(
+      rawStatus === "completed" ? "delivered" : rawStatus
+    );
     const allowedStatuses = [
       "pending",
       "processing",
@@ -296,3 +338,5 @@ export const updateOrderStatus = async (
     next(error);
   }
 };
+
+

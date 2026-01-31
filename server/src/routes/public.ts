@@ -4,7 +4,7 @@ import { z } from "zod";
 import path from "path";
 import fs from "fs";
 import multer from "multer";
-import { Category, Product } from "../models";
+import { Category, Product } from "../models/index.js";
 
 const router = Router();
 
@@ -195,3 +195,5 @@ router.post("/upload", upload.single("file"), (req: Request, res: Response) => {
 });
 
 export default router;
+
+

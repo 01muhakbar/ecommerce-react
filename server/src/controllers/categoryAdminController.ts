@@ -1,6 +1,13 @@
 import express from 'express';
 import { Category } from '../models/Category.js';
 
+const asSingle = (v: unknown) => (Array.isArray(v) ? v[0] : v);
+const toId = (v: unknown): number | null => {
+  const raw = asSingle(v);
+  const id = typeof raw === "string" ? Number(raw) : Number(raw as any);
+  return Number.isFinite(id) ? id : null;
+};
+
 // [REFACTORED] Menggantikan renderManageCategoriesPage
 export const getAllCategories = async (
   req: express.Request,
@@ -26,12 +33,19 @@ export const createCategory = async (
   res: express.Response
 ): Promise<void> => {
   try {
-    const { name } = req.body;
+    const name = String(req.body.name ?? "").trim();
     if (!name) {
       res.status(400).json({ message: "Nama kategori tidak boleh kosong" });
       return;
     }
-    const newCategory = await Category.create({ name });
+    const code =
+      name
+        .toLowerCase()
+        .replace(/\s+/g, "-")
+        .replace(/[^a-z0-9-]/g, "")
+        .slice(0, 40) || `cat-${Date.now()}`;
+    const published = true;
+    const newCategory = await Category.create({ name, code, published } as any);
     res
       .status(201)
       .json({
@@ -55,7 +69,12 @@ export const getCategoryById = async (
   res: express.Response
 ): Promise<void> => {
   try {
-    const category = await Category.findByPk(req.params.id);
+    const id = toId(req.params.id);
+    if (id === null) {
+      res.status(400).json({ message: "Invalid id" });
+      return;
+    }
+    const category = await Category.findByPk(id);
     if (!category) {
       res.status(404).send("Kategori tidak ditemukan");
       return;
@@ -79,7 +98,12 @@ export const updateCategory = async (
 ): Promise<void> => {
   try {
     const { name } = req.body;
-    const category = await Category.findByPk(req.params.id);
+    const id = toId(req.params.id);
+    if (id === null) {
+      res.status(400).json({ message: "Invalid id" });
+      return;
+    }
+    const category = await Category.findByPk(id);
     if (!category) {
       res.status(404).json({ message: "Kategori tidak ditemukan" });
       return;
@@ -106,7 +130,12 @@ export const deleteCategory = async (
   res: express.Response
 ): Promise<void> => {
   try {
-    const category = await Category.findByPk(req.params.id);
+    const id = toId(req.params.id);
+    if (id === null) {
+      res.status(400).json({ message: "Invalid id" });
+      return;
+    }
+    const category = await Category.findByPk(id);
     if (!category) {
       res.status(404).json({ message: "Kategori tidak ditemukan" });
       return;

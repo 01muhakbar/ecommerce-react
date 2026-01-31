@@ -1,5 +1,5 @@
 import axios from "axios";
-import { toBackendStatus, toUIStatus } from "../utils/orderStatus.js";
+import { toBackendStatus, toUIStatus } from "../constants/orderStatus.js";
 
 const adminApi = axios.create({
   baseURL: "/api",

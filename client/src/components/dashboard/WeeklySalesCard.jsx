@@ -8,6 +8,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
+import { moneyIDR } from "../../utils/money.js";
 
 export default function WeeklySalesCard({
   salesData = [],
@@ -18,8 +19,15 @@ export default function WeeklySalesCard({
   const [activeTab, setActiveTab] = useState("sales");
 
   const data = useMemo(() => {
-    return activeTab === "orders" ? ordersData : salesData;
+    const raw = activeTab === "orders" ? ordersData : salesData;
+    return raw.map((item) => ({
+      ...item,
+      label: item.label || item.name || item.date || "",
+    }));
   }, [activeTab, ordersData, salesData]);
+
+  const formatValue = (value) =>
+    activeTab === "sales" ? moneyIDR(Number(value || 0)) : value;
 
   return (
     <div className="dashboard-card dashboard-card--chart">
@@ -69,12 +77,13 @@ export default function WeeklySalesCard({
               margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis
-                dataKey="name"
-                tick={{ fill: "#6b7280", fontSize: 12 }}
-              />
+              <XAxis dataKey="label" tick={{ fill: "#6b7280", fontSize: 12 }} />
               <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} />
-              <Tooltip cursor={{ stroke: "#cbd5f5", strokeWidth: 1 }} />
+              <Tooltip
+                cursor={{ stroke: "#cbd5f5", strokeWidth: 1 }}
+                formatter={(value) => formatValue(value)}
+                labelFormatter={(label) => label}
+              />
               <Line
                 type="monotone"
                 dataKey="value"

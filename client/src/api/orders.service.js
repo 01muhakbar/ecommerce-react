@@ -1,6 +1,6 @@
 import { api } from "./axios";
 import { orders as dummyOrders } from "../data/orders.js";
-import { toBackendStatus, toUIStatus } from "../utils/orderStatus.js";
+import { toBackendStatus, toUIStatus } from "../constants/orderStatus.js";
 
 const mapOrderForUi = (order) => ({
   ...order,

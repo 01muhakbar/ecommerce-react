@@ -26,3 +26,45 @@ input,
 select {
   font: inherit;
 }
+
+.status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1.2;
+  text-transform: capitalize;
+  border: 1px solid #e5e7eb;
+  background: #f8fafc;
+  color: #475569;
+}
+
+.status-badge--pending {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  color: #c2410c;
+}
+
+.status-badge--processing {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+
+.status-badge--shipped {
+  background: #f0f9ff;
+  border-color: #bae6fd;
+  color: #0369a1;
+}
+
+.status-badge--completed {
+  background: #ecfdf3;
+  border-color: #bbf7d0;
+  color: #15803d;
+}
+
+.status-badge--cancelled {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}

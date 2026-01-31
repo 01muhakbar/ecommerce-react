@@ -37,7 +37,7 @@ const computeTotals = (items: CartItem[]) => {
 
 export const useCartStore = create<CartState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       items: [],
       totalQty: 0,
       subtotal: 0,

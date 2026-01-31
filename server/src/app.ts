@@ -6,7 +6,12 @@ import cors from "cors";
 import path from "path";
 
 import authFromCookie from "./middleware/authFromCookie.js";
-import { requireAdmin, requireStaffOrAdmin } from "./middleware/requireRole.js";
+import requireAuth from "./middleware/requireAuth.js";
+import {
+  requireAdmin,
+  requireStaffOrAdmin,
+  requireSuperAdmin,
+} from "./middleware/requireRole.js";
 
 import authRouter from "./routes/auth.js";
 import catalogRouter from "./routes/admin.catalog.js";
@@ -25,6 +30,8 @@ import publicRouter from "./routes/public.js";
 import healthRouter from "./routes/health.js";
 
 const app = express();
+// If behind a reverse proxy (nginx/vercel), allow req.secure via X-Forwarded-Proto
+app.set("trust proxy", 1);
 
 app.use(cookieParser());
 app.use(express.json());
@@ -33,6 +40,7 @@ const ORIGIN =
   process.env.CLIENT_URL || process.env.CORS_ORIGIN || "http://localhost:5173";
 app.use(cors({ origin: ORIGIN, credentials: true }));
 
+// optional: boleh tetap dipakai, tapi pastikan tidak konflik dengan requireAuth
 app.use(authFromCookie);
 
 app.use("/api", healthRouter);
@@ -42,19 +50,29 @@ app.use("/api", publicRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/store", storeRouter);
 app.use("/api/store/coupons", storeCouponsRouter);
-// serve uploaded files (products, staff, etc.)
+
+// serve uploaded files
 app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 
-// protected
+// protected baseline
+app.use("/api/admin", requireAuth);
+
+// admin routes (matrix)
 app.use("/api/admin/catalog", requireAdmin, catalogRouter);
-app.use("/api/admin/stats", requireAdmin, statsRouter);
+app.use("/api/admin/stats", requireStaffOrAdmin, statsRouter);
 app.use("/api/admin/analytics", requireStaffOrAdmin, analyticsRouter);
-app.use("/api/admin/staff", requireAdmin, staffRouter);
+
 app.use("/api/admin/products", requireStaffOrAdmin, adminProductsRouter);
-app.use("/api/admin", requireStaffOrAdmin, adminUploadsRouter);
-app.use("/api/admin/categories", adminCategoriesRouter);
-app.use("/api/admin/orders", adminOrdersRouter);
-app.use("/api/admin/customers", adminCustomersRouter);
+app.use("/api/admin/orders", requireStaffOrAdmin, adminOrdersRouter);
+app.use("/api/admin/customers", requireStaffOrAdmin, adminCustomersRouter);
+
+app.use("/api/admin/categories", requireAdmin, adminCategoriesRouter);
 app.use("/api/admin/coupons", requireAdmin, adminCouponsRouter);
+
+// super admin only
+app.use("/api/admin/staff", requireSuperAdmin, staffRouter);
+
+// uploads (tentukan kebijakan; ini aku set staff+)
+app.use("/api/admin", requireStaffOrAdmin, adminUploadsRouter);
 
 export default app;

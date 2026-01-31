@@ -1,6 +1,6 @@
 // server/src/controllers/product.controller.ts
 import { Request, Response } from "express";
-import { Product } from "../models";
+import { Product } from "../models/index.js";
 
 export async function listProducts(req: Request, res: Response) {
   const limit = Math.min(Number(req.query.limit) || 20, 100);
@@ -72,3 +72,5 @@ export async function deleteProduct(req: Request, res: Response) {
   await item.destroy();
   res.json({ message: "deleted" });
 }
+
+

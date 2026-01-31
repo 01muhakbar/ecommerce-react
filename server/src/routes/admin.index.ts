@@ -8,7 +8,6 @@ import customersRouter from "./admin.customers.js";
 import ordersRouter from "./admin.orders.js";
 import settingsRouter from "./admin.settings.js";
 import adminUploadsRouter from "./admin.uploads.js";
-import adminUploadsRouter from "./admin.uploads";
 
 const router = Router();
 
@@ -27,3 +26,4 @@ router.use("/settings", settingsRouter);
 router.use("/", adminUploadsRouter);
 
 export default router;
+

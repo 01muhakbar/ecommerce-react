@@ -1,6 +1,6 @@
 // server/src/routes/admin.catalog.ts
 import { Router } from "express";
-import { Product } from "../models";
+import { Product } from "../models/index.js";
 
 const router = Router();
 
@@ -77,3 +77,5 @@ router.delete("/products/:id", async (req, res, next) => {
 });
 
 export default router;
+
+

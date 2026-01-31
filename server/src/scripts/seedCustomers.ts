@@ -1,7 +1,7 @@
 import "dotenv/config";
 import bcrypt from "bcrypt";
 import { Op } from "sequelize";
-import { User, sequelize } from "../models/index.ts";
+import { User, sequelize } from "../models/index.js";
 
 const PASSWORD = "customer123";
 const TOTAL = 12;

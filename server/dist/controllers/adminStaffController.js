@@ -1,5 +1,11 @@
 import bcrypt from "bcryptjs";
-import { Staff } from "../models";
+import { User } from "../models/index.js";
+const asSingle = (v) => (Array.isArray(v) ? v[0] : v);
+const toId = (v) => {
+    const raw = asSingle(v);
+    const id = typeof raw === "string" ? Number(raw) : Number(raw);
+    return Number.isFinite(id) ? id : null;
+};
 const toAvatarUrl = (req, filename) => {
     if (!filename)
         return undefined;
@@ -27,7 +33,11 @@ const norm = (v) => {
 };
 export async function listStaff(req, res) {
     const q = req.query.q?.trim().toLowerCase() ?? "";
-    const all = await Staff.findAll({ order: [["id", "DESC"]] });
+    const all = await User.findAll({
+        where: { role: ["staff", "admin", "super_admin"] },
+        order: [["id", "DESC"]],
+        attributes: ["id", "name", "email", "role"],
+    });
     const filtered = q
         ? all.filter((s) => [s.name, s.email].some((v) => (v ?? "").toLowerCase().includes(q)))
         : all;
@@ -58,27 +68,26 @@ export async function createStaff(req, res) {
             super_admin: "super_admin",
             admin: "admin",
             administrator: "admin",
-            manager: "editor",
-            staff: "viewer",
+            manager: "staff",
+            staff: "staff",
         };
-        const normalizedRole = roleMap[roleRaw.toLowerCase().trim()] ?? "viewer";
-        const exists = await Staff.findOne({ where: { email } });
+        const normalizedRole = roleMap[roleRaw.toLowerCase().trim()] ?? "staff";
+        const exists = await User.findOne({ where: { email } });
         if (exists)
             return res.status(409).json({ message: "email already exists" });
         const passwordHash = await bcrypt.hash(password, 10);
-        const staff = await Staff.create({
+        const staff = await User.create({
             name,
             email,
-            passwordHash,
+            password: passwordHash,
             role: normalizedRole,
-            routes,
+            status: "active",
         });
         res.status(201).json({
             id: staff.id,
             name: staff.name,
             email: staff.email,
             role: staff.role,
-            routes: norm(staff.routes),
         });
     }
     catch (e) {
@@ -87,27 +96,39 @@ export async function createStaff(req, res) {
     }
 }
 export async function updateStatus(req, res) {
-    const s = await Staff.findByPk(req.params.id);
+    const id = toId(req.params.id);
+    if (id === null)
+        return res.status(400).json({ message: "Invalid id" });
+    const s = await User.findByPk(id);
     if (!s)
         return res.status(404).json({ message: "Not found" });
     // status handling removed (not present on model)
     res.json(s);
 }
 export async function updatePublishedStatus(req, res) {
-    const s = await Staff.findByPk(req.params.id);
+    const id = toId(req.params.id);
+    if (id === null)
+        return res.status(400).json({ message: "Invalid id" });
+    const s = await User.findByPk(id);
     if (!s)
         return res.status(404).json({ message: "Not found" });
     // published handling removed (not present on model)
     return res.json(s);
 }
 export async function getStaff(req, res) {
-    const staff = await Staff.findByPk(req.params.id);
+    const id = toId(req.params.id);
+    if (id === null)
+        return res.status(400).json({ message: "Invalid id" });
+    const staff = await User.findByPk(id);
     if (!staff)
         return res.status(404).json({ message: "Not found" });
     res.json(staff.toJSON());
 }
 export async function updateStaff(req, res) {
-    const s = await Staff.findByPk(req.params.id);
+    const id = toId(req.params.id);
+    if (id === null)
+        return res.status(400).json({ message: "Invalid id" });
+    const s = await User.findByPk(id);
     if (!s)
         return res.status(404).json({ message: "Not found" });
     const { name, email, role } = req.body;
@@ -121,29 +142,34 @@ export async function updateStaff(req, res) {
     res.json(s.toJSON());
 }
 export async function deleteStaff(req, res) {
-    const count = await Staff.destroy({ where: { id: req.params.id } });
+    const id = toId(req.params.id);
+    if (id === null)
+        return res.status(400).json({ message: "Invalid id" });
+    const count = await User.destroy({ where: { id } });
     if (!count)
         return res.status(404).json({ message: "Not found" });
     res.json({ ok: true });
 }
 export async function changePassword(req, res) {
     try {
-        const { id } = req.params;
+        const id = toId(req.params.id);
+        if (id === null)
+            return res.status(400).json({ message: "Invalid id" });
         const { oldPassword, newPassword } = req.body;
         if (!oldPassword || !newPassword) {
             return res
                 .status(400)
                 .json({ message: "Old password and new password are required." });
         }
-        const staff = await Staff.findByPk(id);
+        const staff = await User.findByPk(id);
         if (!staff) {
             return res.status(404).json({ message: "Staff not found" });
         }
-        const isMatch = await bcrypt.compare(oldPassword, staff.passwordHash);
+        const isMatch = await bcrypt.compare(oldPassword, staff.password);
         if (!isMatch) {
             return res.status(401).json({ message: "Incorrect old password." });
         }
-        staff.passwordHash = await bcrypt.hash(newPassword, 10);
+        staff.password = await bcrypt.hash(newPassword, 10);
         await staff.save();
         res.status(200).json({ message: "Password updated successfully." });
     }

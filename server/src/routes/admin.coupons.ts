@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { Op } from "sequelize";
 import { z } from "zod";
-import { requireAdmin } from "../middleware/requireRole";
-import { Coupon } from "../models";
+import { requireAdmin } from "../middleware/requireRole.js";
+import { Coupon } from "../models/index.js";
 
 const router = Router();
 
@@ -137,3 +137,5 @@ router.delete("/:id", async (req, res, next) => {
 });
 
 export default router;
+
+

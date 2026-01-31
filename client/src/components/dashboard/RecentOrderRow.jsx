@@ -2,16 +2,26 @@ import dayjs from "dayjs";
 import { Eye, Printer } from "lucide-react";
 import StatusBadge from "../UI/StatusBadge.jsx";
 import { formatCurrency } from "../../utils/format.js";
+import { ORDER_STATUS_OPTIONS, toUIStatus } from "../../constants/orderStatus.js";
 
-const STATUS_OPTIONS = [
-  "pending",
-  "paid",
-  "processing",
-  "shipped",
-  "delivered",
-  "completed",
-  "cancelled",
-];
+const getStatusBadgeClass = (status) => {
+  switch (String(status || "").toLowerCase()) {
+    case "pending":
+      return "status-badge status-badge--pending";
+    case "processing":
+      return "status-badge status-badge--processing";
+    case "shipped":
+      return "status-badge status-badge--shipped";
+    case "completed":
+      return "status-badge status-badge--completed";
+    case "cancelled":
+      return "status-badge status-badge--cancelled";
+    default:
+      return "status-badge";
+  }
+};
+
+const STATUS_OPTIONS = ORDER_STATUS_OPTIONS;
 
 
 const formatInvoice = (order) => {
@@ -43,7 +53,7 @@ export default function RecentOrderRow({
   onStatusChange,
   onInvoiceAction,
 }) {
-  const statusValue = order?.status || "pending";
+  const statusValue = toUIStatus(order?.status || "pending");
   const amount =
     order?.totalAmount ?? order?.amount ?? order?.total ?? 0;
   const method = order?.method || order?.paymentMethod || "COD";
@@ -60,7 +70,7 @@ export default function RecentOrderRow({
         {formatCurrency(amount)}
       </td>
       <td>
-        <StatusBadge status={statusValue} />
+        <span className={getStatusBadgeClass(statusValue)}>{statusValue}</span>
       </td>
       <td>
         <select

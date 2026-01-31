@@ -1,6 +1,6 @@
 import { Router } from "express";
-import * as productController from "../controllers/productController";
-import { requireAdmin } from "../middleware/requireRole";
+import * as productController from "../controllers/productController.js";
+import { requireAdmin } from "../middleware/requireRole.js";
 
 const router = Router();
 
@@ -8,3 +8,4 @@ const router = Router();
 router.get("/products", productController.getAllProducts);
 
 export default router;
+

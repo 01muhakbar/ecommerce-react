@@ -1,7 +1,14 @@
 import { Category } from '../models/Category.js';
+const asSingle = (v) => (Array.isArray(v) ? v[0] : v);
+const toId = (v) => {
+    const raw = asSingle(v);
+    const id = typeof raw === "string" ? Number(raw) : Number(raw);
+    return Number.isFinite(id) ? id : null;
+};
 export const createCategory = async (req, res) => {
     try {
-        const { name, description } = req.body;
+        const { description } = req.body;
+        const name = String(req.body.name ?? "").trim();
         if (!name) {
             res.status(400).json({
                 status: "fail",
@@ -9,7 +16,17 @@ export const createCategory = async (req, res) => {
             });
             return;
         }
-        const newCategory = await Category.create({ name, description });
+        const code = name
+            .toLowerCase()
+            .replace(/\s+/g, "-")
+            .replace(/[^a-z0-9-]/g, "")
+            .slice(0, 40) || `cat-${Date.now()}`;
+        const newCategory = await Category.create({
+            name,
+            description,
+            code,
+            published: true,
+        });
         res.status(201).json({
             status: "success",
             data: {
@@ -46,7 +63,11 @@ export const getAllCategories = async (req, res) => {
 };
 export const getCategoryById = async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = toId(req.params.id);
+        if (id === null) {
+            res.status(400).json({ message: "Invalid id" });
+            return;
+        }
         const category = await Category.findByPk(id);
         if (!category) {
             res.status(404).json({

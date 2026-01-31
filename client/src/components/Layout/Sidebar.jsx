@@ -2,6 +2,7 @@ import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../../auth/useAuth.js";
+import { can } from "../../constants/permissions.js";
 import "./Sidebar.css";
 
 const BrandBagIcon = () => (
@@ -99,42 +100,42 @@ const ChevronDown = (props) => (
 );
 
 const MENU = [
-  { label: "Dashboard", to: "/admin", icon: IconGrid },
+  { label: "Dashboard", to: "/admin", icon: IconGrid, perm: "DASHBOARD_VIEW" },
   {
     label: "Catalog",
     icon: IconBoxes,
     hasCaret: true,
     children: [
-      { label: "Products", to: "/admin/products" },
-      { label: "Categories", to: "/admin/categories" },
-      { label: "Attributes", to: "/admin/attributes" },
-      { label: "Coupons", to: "/admin/coupons" },
+      { label: "Products", to: "/admin/products", perm: "PRODUCTS_VIEW" },
+      { label: "Categories", to: "/admin/categories", perm: "CATEGORIES_CRUD" },
+      { label: "Attributes", to: "/admin/attributes", perm: "ATTRIBUTES_CRUD" },
+      { label: "Coupons", to: "/admin/coupons", perm: "COUPONS_CRUD" },
     ],
   },
-  { label: "Customers", to: "/admin/customers", icon: IconUsers },
-  { label: "Orders", to: "/admin/orders", icon: IconReceipt },
-  { label: "Our Staff", to: "/admin/staff", icon: IconStaff },
-  { label: "Settings", to: "/admin/settings", icon: IconSettings },
+  { label: "Customers", to: "/admin/customers", icon: IconUsers, perm: "CUSTOMERS_VIEW" },
+  { label: "Orders", to: "/admin/orders", icon: IconReceipt, perm: "ORDERS_VIEW" },
+  { label: "Our Staff", to: "/admin/staff", icon: IconStaff, perm: "STAFF_MANAGE" },
+  { label: "Settings", to: "/admin/settings", icon: IconSettings, perm: "SETTINGS_MANAGE" },
   {
     label: "International",
     icon: IconGlobe,
     hasCaret: true,
-    children: [{ label: "Languages", to: "/admin/languages" }],
+    children: [{ label: "Languages", to: "/admin/languages", perm: "SETTINGS_MANAGE" }],
   },
   {
     label: "Online Store",
     icon: IconStore,
     hasCaret: true,
     children: [
-      { label: "View Store", to: "/" },
-      { label: "Store Customization", to: "/admin/store-customization" },
-      { label: "Store Settings", to: "/admin/store-settings" },
+      { label: "View Store", to: "/", perm: "DASHBOARD_VIEW" },
+      { label: "Store Customization", to: "/admin/store-customization", perm: "SETTINGS_MANAGE" },
+      { label: "Store Settings", to: "/admin/store-settings", perm: "SETTINGS_MANAGE" },
     ],
   },
 ];
 
 export default function Sidebar() {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [openMenus, setOpenMenus] = useState({
@@ -154,6 +155,19 @@ export default function Sidebar() {
     navigate("/admin/login", { replace: true });
   };
 
+  const allowedMenu = MENU.map((item) => {
+    if (!item.children) {
+      return item.perm ? (can(user, item.perm) ? item : null) : item;
+    }
+    const children = item.children.filter((child) =>
+      child.perm ? can(user, child.perm) : true
+    );
+    if (children.length === 0) {
+      return null;
+    }
+    return { ...item, children };
+  }).filter(Boolean);
+
   return (
     <aside className="sidebar">
       <div className="sidebar__brand">
@@ -164,7 +178,7 @@ export default function Sidebar() {
       </div>
 
       <nav className="sidebar__menu" aria-label="Sidebar">
-        {MENU.map((item) => {
+        {allowedMenu.map((item) => {
           const hasChildren = Array.isArray(item.children);
           const isOpen = !!openMenus[item.label];
           const canToggle = item.hasCaret && hasChildren;

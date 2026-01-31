@@ -1,7 +1,14 @@
 import { Request, Response, NextFunction } from "express";
 import { Op } from "sequelize";
-import { Product, Category, User } from "../models";
-import { AppError } from "../middleware/errorMiddleware";
+import { Product, Category, User } from "../models/index.js";
+import { AppError } from "../middleware/errorMiddleware.js";
+
+const asSingle = (v: unknown) => (Array.isArray(v) ? v[0] : v);
+const toId = (v: unknown): number | null => {
+  const raw = asSingle(v);
+  const id = typeof raw === "string" ? Number(raw) : Number(raw as any);
+  return Number.isFinite(id) ? id : null;
+};
 
 // Helper function to generate a unique slug
 const generateUniqueSlug = async (name: string): Promise<string> => {
@@ -106,7 +113,11 @@ export const getProductById = async (
   next: NextFunction
 ) => {
   try {
-    const product = await Product.findByPk(req.params.id, {
+    const id = toId(req.params.id);
+    if (id === null) {
+      return res.status(400).json({ message: "Invalid id" });
+    }
+    const product = await Product.findByPk(id, {
       include: [{ model: Category, as: "category" }],
     });
     if (!product) {
@@ -200,7 +211,10 @@ export const updateProduct = async (
   next: NextFunction
 ) => {
   try {
-    const { id } = req.params;
+    const id = toId(req.params.id);
+    if (id === null) {
+      return res.status(400).json({ message: "Invalid id" });
+    }
     const product = await Product.findByPk(id);
 
     if (!product) {
@@ -271,7 +285,10 @@ export const deleteProduct = async (
   next: NextFunction
 ) => {
   try {
-    const { id } = req.params;
+    const id = toId(req.params.id);
+    if (id === null) {
+      return res.status(400).json({ message: "Invalid id" });
+    }
     const deletedRows = await Product.destroy({ where: { id } });
     if (deletedRows === 0) {
       return next(new AppError("Produk tidak ditemukan.", 404));
@@ -292,7 +309,10 @@ export const togglePublishStatus = async (
   next: NextFunction
 ) => {
   try {
-    const { id } = req.params;
+    const id = toId(req.params.id);
+    if (id === null) {
+      return res.status(400).json({ message: "Invalid id" });
+    }
     const product = await Product.findByPk(id);
     if (!product) {
       return next(new AppError("Produk tidak ditemukan.", 404));
@@ -311,3 +331,5 @@ export const togglePublishStatus = async (
     next(error);
   }
 };
+
+

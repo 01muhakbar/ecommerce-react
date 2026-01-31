@@ -1,0 +1,47 @@
+[server] Port 3001 already in use. Stop the other process or set PORT to a free port.
+[server] Port 3001 already in use. Stop the other process or set PORT to a free port.
+[server] Port 3001 already in use. Stop the other process or set PORT to a free port.
+
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module 'C:\Users\user\Documents\ecommerce-react\server\src\models.js' imported from C:\Users\user\Documents\ecommerce-react\server\src\routes\admin.catalog.ts
+    at finalizeResolution (node:internal/modules/esm/resolve:274:11)
+    at moduleResolve (node:internal/modules/esm/resolve:859:10)
+    at defaultResolve (node:internal/modules/esm/resolve:983:11)
+    at nextResolve (node:internal/modules/esm/hooks:748:28)
+    at resolveBase (file:///C:/Users/user/Documents/ecommerce-react/node_modules/.pnpm/tsx@4.20.6/node_modules/tsx/dist/esm/index.mjs?1769786981065:2:3744)
+    at async resolveDirectory (file:///C:/Users/user/Documents/ecommerce-react/node_modules/.pnpm/tsx@4.20.6/node_modules/tsx/dist/esm/index.mjs?1769786981065:2:4237)
+    at async resolve (file:///C:/Users/user/Documents/ecommerce-react/node_modules/.pnpm/tsx@4.20.6/node_modules/tsx/dist/esm/index.mjs?1769786981065:2:5355)
+    at async nextResolve (node:internal/modules/esm/hooks:748:22)
+    at async Hooks.resolve (node:internal/modules/esm/hooks:240:24)
+    at async handleMessage (node:internal/modules/esm/worker:199:18) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///C:/Users/user/Documents/ecommerce-react/server/src/models.js'
+}
+
+Node.js v22.19.0
+
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module 'C:\Users\user\Documents\ecommerce-react\server\src\models.js' imported from C:\Users\user\Documents\ecommerce-react\server\src\routes\admin.catalog.ts
+    at finalizeResolution (node:internal/modules/esm/resolve:274:11)
+    at moduleResolve (node:internal/modules/esm/resolve:859:10)
+    at defaultResolve (node:internal/modules/esm/resolve:983:11)
+    at nextResolve (node:internal/modules/esm/hooks:748:28)
+    at resolveBase (file:///C:/Users/user/Documents/ecommerce-react/node_modules/.pnpm/tsx@4.20.6/node_modules/tsx/dist/esm/index.mjs?1769787001466:2:3744)
+    at async resolveDirectory (file:///C:/Users/user/Documents/ecommerce-react/node_modules/.pnpm/tsx@4.20.6/node_modules/tsx/dist/esm/index.mjs?1769787001466:2:4237)
+    at async resolve (file:///C:/Users/user/Documents/ecommerce-react/node_modules/.pnpm/tsx@4.20.6/node_modules/tsx/dist/esm/index.mjs?1769787001466:2:5355)
+    at async nextResolve (node:internal/modules/esm/hooks:748:22)
+    at async Hooks.resolve (node:internal/modules/esm/hooks:240:24)
+    at async handleMessage (node:internal/modules/esm/worker:199:18) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///C:/Users/user/Documents/ecommerce-react/server/src/models.js'
+}
+
+Node.js v22.19.0
+[server] Port 3001 already in use. Stop the other process or set PORT to a free port.
+[server] Port 3001 already in use. Stop the other process or set PORT to a free port.
+[server] Port 3001 already in use. Stop the other process or set PORT to a free port.
+[server] Port 3001 already in use. Stop the other process or set PORT to a free port.

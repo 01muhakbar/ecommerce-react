@@ -1,6 +1,12 @@
-import { Cart } from '../models/Cart';
-import { CartItem } from '../models/CartItem';
-import { Product } from '../models/Product';
+import { Cart } from '../models/Cart.js';
+import { CartItem } from '../models/CartItem.js';
+import { Product } from '../models/Product.js';
+const asSingle = (v) => (Array.isArray(v) ? v[0] : v);
+const toId = (v) => {
+    const raw = asSingle(v);
+    const id = typeof raw === "string" ? Number(raw) : Number(raw);
+    return Number.isFinite(id) ? id : null;
+};
 // --- CONTROLLER FUNCTIONS ---
 export const addToCart = async (req, res) => {
     try {
@@ -75,7 +81,11 @@ export const getCart = async (req, res) => {
 export const removeFromCart = async (req, res) => {
     try {
         const userId = req.user?.id;
-        const { productId } = req.params;
+        const id = toId(req.params.productId);
+        if (id === null) {
+            res.status(400).json({ message: "Invalid id" });
+            return;
+        }
         if (!userId) {
             res.status(401).json({ message: "Unauthorized" });
             return;
@@ -88,7 +98,7 @@ export const removeFromCart = async (req, res) => {
         const deletedRows = await CartItem.destroy({
             where: {
                 cartId: cart.id,
-                productId: Number(productId),
+                productId: id,
             },
         });
         if (deletedRows === 0) {
@@ -110,7 +120,11 @@ export const removeFromCart = async (req, res) => {
 export const updateCartItem = async (req, res) => {
     try {
         const userId = req.user?.id;
-        const { productId } = req.params;
+        const id = toId(req.params.productId);
+        if (id === null) {
+            res.status(400).json({ message: "Invalid id" });
+            return;
+        }
         const { quantity } = req.body;
         if (!userId) {
             res.status(401).json({ message: "Unauthorized" });
@@ -127,12 +141,12 @@ export const updateCartItem = async (req, res) => {
         }
         if (quantity === 0) {
             await CartItem.destroy({
-                where: { cartId: cart.id, productId: Number(productId) },
+                where: { cartId: cart.id, productId: id },
             });
             res.status(200).json({ message: "Item removed from cart." });
             return;
         }
-        const product = await Product.findByPk(productId);
+        const product = await Product.findByPk(id);
         if (!product) {
             res.status(404).json({ message: "Product not found." });
             return;
@@ -145,7 +159,7 @@ export const updateCartItem = async (req, res) => {
             });
             return;
         }
-        await CartItem.update({ quantity }, { where: { cartId: cart.id, productId: Number(productId) } });
+        await CartItem.update({ quantity }, { where: { cartId: cart.id, productId: id } });
         res.status(200).json({ message: "Cart updated successfully." });
     }
     catch (error) {

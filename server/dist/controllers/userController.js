@@ -1,5 +1,11 @@
 import bcrypt from "bcryptjs";
-import { User } from "../models";
+import { User } from "../models/index.js";
+const asSingle = (v) => (Array.isArray(v) ? v[0] : v);
+const toId = (v) => {
+    const raw = asSingle(v);
+    const id = typeof raw === "string" ? Number(raw) : Number(raw);
+    return Number.isFinite(id) ? id : null;
+};
 export const getMe = async (req, res, next) => {
     try {
         const userId = req.user?.id;
@@ -41,7 +47,10 @@ export const getAllUsers = async (req, res, next) => {
  */
 export const getUserById = async (req, res, next) => {
     try {
-        const user = await User.findByPk(req.params.id, {
+        const id = toId(req.params.id);
+        if (id === null)
+            return res.status(400).json({ message: "Invalid id" });
+        const user = await User.findByPk(id, {
             attributes: { exclude: ["password"] },
         });
         if (!user) {
@@ -65,6 +74,7 @@ export const createUser = async (req, res, next) => {
             email,
             password: hashedPassword,
             role: role || "pembeli",
+            status: "active",
         });
         newUser.password = undefined;
         res.status(201).json({ status: "success", data: newUser });
@@ -92,13 +102,16 @@ export const updateUser = async (req, res, next) => {
         if (role && isValidRole(role)) {
             updateData.role = role;
         }
+        const id = toId(req.params.id);
+        if (id === null)
+            return res.status(400).json({ message: "Invalid id" });
         const [updatedRows] = await User.update(updateData, {
-            where: { id: req.params.id },
+            where: { id },
         });
         if (updatedRows === 0) {
             return res.status(404).json({ message: "User not found to update." });
         }
-        const updatedUser = await User.findByPk(req.params.id, {
+        const updatedUser = await User.findByPk(id, {
             attributes: { exclude: ["password"] },
         });
         res.status(200).json({ status: "success", data: updatedUser });
@@ -112,7 +125,10 @@ export const updateUser = async (req, res, next) => {
  */
 export const deleteUser = async (req, res, next) => {
     try {
-        const deletedRows = await User.destroy({ where: { id: req.params.id } });
+        const id = toId(req.params.id);
+        if (id === null)
+            return res.status(400).json({ message: "Invalid id" });
+        const deletedRows = await User.destroy({ where: { id } });
         if (deletedRows === 0) {
             return res.status(404).json({ message: "User not found to delete." });
         }

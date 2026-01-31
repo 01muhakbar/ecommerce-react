@@ -1,11 +1,13 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { Op } from "sequelize";
 import { z } from "zod";
-import { requireStaffOrAdmin } from "../middleware/requireRole.js";
+import { requireAdmin, requireStaffOrAdmin } from "../middleware/requireRole.js";
 import { Product } from "../models/Product.js";
 
 const router = Router();
 router.use(requireStaffOrAdmin);
+
+const asSingle = (v: unknown) => (Array.isArray(v) ? v[0] : v);
 
 const slugify = (value: string) =>
   value
@@ -41,8 +43,8 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
       50,
       Math.max(1, parseInt(String(req.query.limit || req.query.pageSize || "10"), 10))
     );
-    const q = String(req.query.q || "").trim();
-    const categoryIdParam = String(req.query.categoryId || "").trim();
+    const q = String(asSingle(req.query.q) ?? "").trim();
+    const categoryIdParam = String(asSingle(req.query.categoryId) ?? "").trim();
 
     const where: any = {};
     if (q) {
@@ -84,7 +86,7 @@ router.get(
   "/:id",
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const idNum = parseId(req.params.id);
+      const idNum = parseId(String(asSingle(req.params.id) ?? ""));
       if (!idNum) return res.status(400).json({ success: false, message: "Invalid id" });
       const p = await Product.findByPk(idNum);
       if (!p) return res.status(404).json({ success: false, message: "Not found" });
@@ -97,6 +99,7 @@ router.get(
 
 router.post(
   "/",
+  requireAdmin,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const body = createSchema.parse(req.body);
@@ -132,6 +135,7 @@ router.post(
 
 router.patch(
   "/:id",
+  requireAdmin,
   async (req: Request<{ id: string }>, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
@@ -175,6 +179,7 @@ router.patch(
 
 router.delete(
   "/:id",
+  requireAdmin,
   async (req: Request<{ id: string }>, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;

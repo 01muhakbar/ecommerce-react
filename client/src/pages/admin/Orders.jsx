@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { fetchAdminOrders } from "../../lib/adminApi.js";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchAdminOrders, updateAdminOrderStatus } from "../../lib/adminApi.js";
+import { ORDER_STATUS_OPTIONS, toUIStatus } from "../../constants/orderStatus.js";
 import { moneyIDR } from "../../utils/money.js";
 
 export default function Orders() {
@@ -10,6 +11,9 @@ export default function Orders() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState("");
+  const [pendingUpdateId, setPendingUpdateId] = useState(null);
+  const [rowError, setRowError] = useState("");
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -35,9 +39,38 @@ export default function Orders() {
     keepPreviousData: true,
   });
 
+  const updateMutation = useMutation({
+    mutationFn: ({ orderId, payload }) => updateAdminOrderStatus(orderId, payload),
+    onSuccess: () => {
+      setRowError("");
+      queryClient.invalidateQueries({ queryKey: ["admin-orders"], exact: false });
+    },
+    onSettled: () => {
+      setPendingUpdateId(null);
+    },
+    onError: (error) => {
+      setRowError(
+        error?.response?.data?.message ?? error?.message ?? "Failed to update status."
+      );
+    },
+  });
+
   const items = ordersQuery.data?.data || [];
   const meta = ordersQuery.data?.meta || { page: 1, limit, total: 0, totalPages: 1 };
   const totalPages = Math.max(1, Number(meta.totalPages || 1));
+
+  const onSearchSubmit = (event) => {
+    event.preventDefault();
+    setDebouncedSearch(search.trim());
+    setPage(1);
+  };
+
+  const onUpdateStatus = (order, nextStatus) => {
+    if (!nextStatus) return;
+    setRowError("");
+    setPendingUpdateId(order.id);
+    updateMutation.mutate({ orderId: order.id, payload: { status: nextStatus } });
+  };
 
   return (
     <div className="space-y-6">
@@ -46,7 +79,10 @@ export default function Orders() {
         <p className="text-sm text-slate-500">Track and manage order flow.</p>
       </div>
 
-      <div className="flex flex-wrap gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+      <form
+        onSubmit={onSearchSubmit}
+        className="flex flex-wrap gap-3 rounded-2xl border border-slate-200 bg-white p-4"
+      >
         <input
           type="search"
           value={search}
@@ -63,13 +99,19 @@ export default function Orders() {
           className="rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
         >
           <option value="">All Status</option>
-          <option value="pending">Pending</option>
-          <option value="processing">Processing</option>
-          <option value="shipped">Shipped</option>
-          <option value="completed">Completed</option>
-          <option value="cancelled">Cancelled</option>
+          {ORDER_STATUS_OPTIONS.map((value) => (
+            <option key={value} value={value}>
+              {value.charAt(0).toUpperCase() + value.slice(1)}
+            </option>
+          ))}
         </select>
-      </div>
+        <button
+          type="submit"
+          className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+        >
+          Search
+        </button>
+      </form>
 
       {ordersQuery.isLoading ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
@@ -97,7 +139,10 @@ export default function Orders() {
               </tr>
             </thead>
             <tbody>
-              {items.map((order) => (
+              {items.map((order) => {
+                const uiStatus = toUIStatus(order.status || "pending");
+                const isUpdating = pendingUpdateId === order.id;
+                return (
                 <tr key={order.id} className="border-t border-slate-100">
                   <td className="px-4 py-3 font-medium text-slate-900">
                     {order.invoiceNo || `#${order.id}`}
@@ -109,7 +154,25 @@ export default function Orders() {
                     ) : null}
                   </td>
                   <td className="px-4 py-3">{moneyIDR(order.totalAmount || 0)}</td>
-                  <td className="px-4 py-3 capitalize">{order.status || "-"}</td>
+                  <td className="px-4 py-3">
+                    <span className="rounded-full border border-slate-200 px-2 py-0.5 text-xs capitalize">
+                      {uiStatus || "-"}
+                    </span>
+                    <div className="mt-2">
+                      <select
+                        value={uiStatus}
+                        onChange={(event) => onUpdateStatus(order, event.target.value)}
+                        disabled={isUpdating}
+                        className="rounded-full border border-slate-200 px-2 py-1 text-xs"
+                      >
+                        {ORDER_STATUS_OPTIONS.map((value) => (
+                          <option key={value} value={value}>
+                            {value.charAt(0).toUpperCase() + value.slice(1)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-slate-500">
                     {order.createdAt ? new Date(order.createdAt).toLocaleString("id-ID") : "-"}
                   </td>
@@ -122,11 +185,18 @@ export default function Orders() {
                     </Link>
                   </td>
                 </tr>
-              ))}
+              );
+              })}
             </tbody>
           </table>
         </div>
       )}
+
+      {rowError ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-600">
+          {rowError}
+        </div>
+      ) : null}
 
       <div className="flex items-center justify-between text-sm">
         <button

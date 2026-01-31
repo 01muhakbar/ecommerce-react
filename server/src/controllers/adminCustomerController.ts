@@ -17,7 +17,7 @@ export const getCustomers = async (req: Request, res: Response) => {
     const offset = (page - 1) * limit;
 
     const q = (req.query.q as string)?.trim();
-    const sortBy = (req.query.sortBy as string) || "createdAt";
+    const sortBy = (req.query.sortBy as string) || "created_at";
     const sort =
       ((req.query.sort as string) || "DESC").toUpperCase() === "ASC"
         ? "ASC"
@@ -26,7 +26,7 @@ export const getCustomers = async (req: Request, res: Response) => {
     const to = req.query.to as string | undefined;
 
     const sortMap: Record<string, string> = {
-      createdAt: "created_at",
+      created_at: "created_at",
       name: "name",
       email: "email",
     };
@@ -39,13 +39,12 @@ export const getCustomers = async (req: Request, res: Response) => {
             [Op.or]: [
               { name: { [Op.like]: `%${q}%` } },
               { email: { [Op.like]: `%${q}%` } },
-              { phoneNumber: { [Op.like]: `%${q}%` } },
             ],
           }
         : {}),
       ...(from || to
         ? {
-            createdAt: {
+            created_at: {
               ...(from ? { [Op.gte]: new Date(from) } : {}),
               ...(to ? { [Op.lte]: new Date(to) } : {}),
             },
@@ -54,7 +53,7 @@ export const getCustomers = async (req: Request, res: Response) => {
     };
 
     const { rows, count } = await User.findAndCountAll({
-      attributes: ["id", "name", "email", "phoneNumber", "createdAt"],
+      attributes: ["id", "name", "email", "created_at"],
       where,
       limit,
       offset,
@@ -66,13 +65,16 @@ export const getCustomers = async (req: Request, res: Response) => {
       limit,
       total: count,
       totalPages: Math.ceil(count / limit),
-      data: rows.map((u) => ({
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        phone: u.phoneNumber,
-        joiningDate: u.createdAt,
-      })),
+      data: rows.map((u) => {
+        const phoneNumber = (u as any).phoneNumber ?? null;
+        return {
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          phone: phoneNumber,
+          joiningDate: u.created_at,
+        };
+      }),
     });
   } catch (err: any) {
     console.error("ADMIN CUSTOMERS ERROR:", err);
@@ -90,11 +92,18 @@ export const getCustomerById = async (req: Request, res: Response) => {
   try {
     const customer = await User.findOne({
       where: { id: req.params.id, role: "customer" },
-      attributes: ["id", "name", "email", "phoneNumber", "createdAt"],
+      attributes: ["id", "name", "email", "created_at"],
     });
     if (!customer)
       return res.status(404).json({ message: "Customer not found" });
-    res.json(customer);
+    const phoneNumber = (customer as any).phoneNumber ?? null;
+    res.json({
+      id: customer.id,
+      name: customer.name,
+      email: customer.email,
+      phone: phoneNumber,
+      joiningDate: customer.created_at,
+    });
   } catch (error) {
     res
       .status(500)
@@ -111,9 +120,9 @@ export const getCustomerById = async (req: Request, res: Response) => {
  */
 export const updateCustomer = async (req: Request, res: Response) => {
   try {
-    const { name, email, phone } = req.body;
+    const { name, email } = req.body;
     const [count] = await User.update(
-      { name, email, phoneNumber: phone },
+      { name, email },
       { where: { id: req.params.id, role: "customer" } }
     );
     if (!count) return res.status(404).json({ message: "Customer not found" });
@@ -156,7 +165,7 @@ export const deleteCustomer = async (req: Request, res: Response) => {
 export const exportCustomersCsv = async (_: Request, res: Response) => {
   try {
     const rows = await User.findAll({
-      attributes: ["id", "name", "email", "phoneNumber", "createdAt"],
+      attributes: ["id", "name", "email", "created_at"],
       where: { role: "customer" },
       order: [["created_at", "DESC"]],
     });
@@ -164,9 +173,9 @@ export const exportCustomersCsv = async (_: Request, res: Response) => {
     const body = rows
       .map(
         (r) =>
-          `${r.id},${r.createdAt.toISOString()},${csv(r.name)},${csv(
+          `${r.id},${r.created_at.toISOString()},${csv(r.name)},${csv(
             r.email
-          )},${csv(r.phoneNumber)}`
+          )},${csv((r as any).phoneNumber ?? null)}`
       )
       .join("\n");
     res.setHeader("Content-Type", "text/csv");

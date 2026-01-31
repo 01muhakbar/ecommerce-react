@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { Op, QueryTypes, fn, col, literal } from "sequelize";
 import { requireAdmin } from "../middleware/requireRole.js";
-import * as models from "../models/index.ts";
+import * as models from "../models/index.js";
 
 const { Order, OrderItem, Product, User, sequelize } = models as {
   Order: any;
@@ -332,7 +332,7 @@ router.get("/sales", requireAdmin, async (req, res) => {
       raw: true as true,
     });
 
-    const byDate = new Map(
+    const byDate = new Map<string, { sales: number; orders: number }>(
       rows.map((row: any) => [
         String(row.date),
         {
@@ -459,7 +459,9 @@ router.get("/best-selling", requireAdmin, async (req, res) => {
           raw: true as true,
         })
       : [];
-    const byId = new Map(products.map((product: any) => [Number(product.id), product]));
+    const byId = new Map<number, { id: number; name: string }>(
+      products.map((product: any) => [Number(product.id), product as { id: number; name: string }])
+    );
 
     const items = (rows as any[]).map((row: any) => {
       const product = byId.get(Number(row.productId));

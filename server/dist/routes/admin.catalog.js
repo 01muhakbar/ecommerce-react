@@ -1,6 +1,6 @@
 // server/src/routes/admin.catalog.ts
 import { Router } from "express";
-import { Product } from "../models";
+import { Product } from "../models/index.js";
 const router = Router();
 /**
  * Semua endpoint di sini sengaja dibuat sederhana & self-contained,

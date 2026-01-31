@@ -40,22 +40,33 @@ export interface StaffQuery {
   sort?: "ASC" | "DESC";
 }
 
+export interface CreateStaffPayload {
+  name: string;
+  email: string;
+  role?: string;
+  isActive?: boolean;
+  password: string;
+}
+
 export async function fetchStaff(params: StaffQuery = {}): Promise<StaffListResponse> {
   const { data } = await api.get("/admin/staff", { params });
   return data;
 }
 
-export async function createStaff(payload: Omit<StaffItem, "id" | "createdAt" | "updatedAt">) {
+export async function createStaff(payload: CreateStaffPayload): Promise<StaffItem> {
   const { data } = await api.post("/admin/staff", payload);
   return data as StaffItem;
 }
 
-export async function updateStaff(id: number, payload: Partial<StaffItem>) {
+export async function updateStaff(
+  id: string | number,
+  payload: Partial<StaffItem> & { password?: string }
+): Promise<StaffItem> {
   const { data } = await api.patch(`/admin/staff/${id}`, payload);
   return data as StaffItem;
 }
 
-export async function deleteStaff(id: number) {
+export async function deleteStaff(id: string | number): Promise<{ success: true }> {
   const { data } = await api.delete(`/admin/staff/${id}`);
   return data as { success: true };
 }

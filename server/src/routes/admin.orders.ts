@@ -8,16 +8,16 @@ import { OrderItem } from "../models/OrderItem.js";
 import { Product } from "../models/Product.js";
 
 const router = Router();
+const asSingle = (v: unknown) => (Array.isArray(v) ? v[0] : v);
 
 // GET list with pagination, search, and filtering
 router.get("/", requireStaffOrAdmin, async (req, res) => {
-  const page = Math.max(1, Number(req.query.page || 1));
-  const rawLimit = Number(req.query.limit || req.query.pageSize || 10);
+  const page = Math.max(1, Number(asSingle(req.query.page) ?? 1));
+  const rawLimit = Number(asSingle(req.query.limit) ?? asSingle(req.query.pageSize) ?? 10);
   const limit = Math.min(50, Math.max(1, rawLimit || 10));
-  const rawStatus =
-    typeof req.query.status === "string" ? req.query.status.trim().toLowerCase() : "";
+  const rawStatus = String(asSingle(req.query.status) ?? "").trim().toLowerCase();
   const status = rawStatus === "completed" ? "delivered" : rawStatus;
-  const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  const q = String(asSingle(req.query.q) ?? "").trim();
 
   const where: any = {};
 
@@ -71,7 +71,13 @@ router.get("/", requireStaffOrAdmin, async (req, res) => {
 });
 
 router.get("/:id", requireStaffOrAdmin, async (req, res) => {
-  const orderItem = await Order.findByPk(req.params.id as any, {
+  const idStr = String(asSingle(req.params.id) ?? "");
+  const idNum = Number(idStr);
+  if (!Number.isInteger(idNum) || idNum <= 0) {
+    return res.status(400).json({ message: "Invalid id" });
+  }
+
+  const orderItem = await Order.findByPk(idNum, {
     include: [
       { model: User, as: "customer", attributes: ["name", "email"] },
       {
@@ -93,7 +99,7 @@ router.get("/:id", requireStaffOrAdmin, async (req, res) => {
     return res.status(404).json({ message: "Not found" });
   }
 
-  const items = (orderItem.items || []).map((item: any) => ({
+  const items = ((orderItem as any).items ?? []).map((item: any) => ({
     id: item.id,
     productId: item.productId ?? item.get?.("productId") ?? item.product_id,
     quantity: item.quantity,
@@ -107,6 +113,8 @@ router.get("/:id", requireStaffOrAdmin, async (req, res) => {
       : null,
   }));
 
+  const customer = (orderItem as any).customer ?? null;
+
   return res.json({
     data: {
       id: orderItem.id,
@@ -114,17 +122,18 @@ router.get("/:id", requireStaffOrAdmin, async (req, res) => {
       status: orderItem.status,
       totalAmount: Number(orderItem.totalAmount || 0),
       createdAt: orderItem.createdAt,
-      customerName: orderItem.customerName ?? orderItem.customer?.name ?? null,
+      customerName: orderItem.customerName ?? customer?.name ?? null,
       customerPhone: orderItem.customerPhone ?? null,
       customerAddress: orderItem.customerAddress ?? null,
       customerNotes: orderItem.customerNotes ?? null,
+      paymentMethod: orderItem.paymentMethod ?? "COD",
       method: orderItem.paymentMethod ?? "COD",
       items,
     },
   });
 });
 
-router.patch("/:id/status", requireAdmin, updateOrderStatus);
+router.patch("/:id/status", requireStaffOrAdmin, updateOrderStatus);
 
 // Other CRUD endpoints for Orders can be added here following the same pattern as Customers
 

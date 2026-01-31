@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { syncDatabase } from "../controllers/devController";
+import { syncDatabase } from "../controllers/devController.js";
 
 const router = Router();
 
@@ -7,3 +7,4 @@ const router = Router();
 router.get("/sync-db", syncDatabase);
 
 export default router;
+

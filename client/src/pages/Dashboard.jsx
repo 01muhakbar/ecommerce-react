@@ -27,6 +27,7 @@ export default function Dashboard() {
   const [summary, setSummary] = useState(null);
   const [summaryError, setSummaryError] = useState("");
   const [isLoadingSummary, setIsLoadingSummary] = useState(true);
+  const [limitedAccess, setLimitedAccess] = useState(false);
   const [salesData, setSalesData] = useState({ sales: [], orders: [] });
   const [salesError, setSalesError] = useState("");
   const [isLoadingSales, setIsLoadingSales] = useState(true);
@@ -58,10 +59,18 @@ export default function Dashboard() {
       setOverview(data);
     } catch (err) {
       if (!isActive()) return;
-      setOverviewError("Failed to load overview.");
-      if (!overviewToastShown.current) {
-        toast.error("Failed to load dashboard data.");
-        overviewToastShown.current = true;
+      const status = err?.response?.status;
+      if (status === 403) {
+        setLimitedAccess(true);
+        setOverviewError("Limited access.");
+      } else if (status === 401) {
+        setOverviewError("Unauthorized.");
+      } else {
+        setOverviewError("Failed to load overview.");
+        if (!overviewToastShown.current) {
+          toast.error("Failed to load dashboard data.");
+          overviewToastShown.current = true;
+        }
       }
     } finally {
       if (isActive()) {
@@ -79,7 +88,15 @@ export default function Dashboard() {
       setSummary(data?.data || null);
     } catch (err) {
       if (!isActive()) return;
-      setSummaryError("Failed to load summary.");
+      const status = err?.response?.status;
+      if (status === 403) {
+        setLimitedAccess(true);
+        setSummaryError("Limited access.");
+      } else if (status === 401) {
+        setSummaryError("Unauthorized.");
+      } else {
+        setSummaryError("Failed to load summary.");
+      }
     } finally {
       if (isActive()) {
         setIsLoadingSummary(false);
@@ -106,7 +123,15 @@ export default function Dashboard() {
       });
     } catch (err) {
       if (!isActive()) return;
-      setSalesError("Failed to load sales data.");
+      const status = err?.response?.status;
+      if (status === 403) {
+        setLimitedAccess(true);
+        setSalesError("Limited access.");
+      } else if (status === 401) {
+        setSalesError("Unauthorized.");
+      } else {
+        setSalesError("Failed to load sales data.");
+      }
     } finally {
       if (isActive()) {
         setIsLoadingSales(false);
@@ -123,7 +148,15 @@ export default function Dashboard() {
       setBestSelling(data?.data || []);
     } catch (err) {
       if (!isActive()) return;
-      setBestSellingError("Failed to load best selling.");
+      const status = err?.response?.status;
+      if (status === 403) {
+        setLimitedAccess(true);
+        setBestSellingError("Limited access.");
+      } else if (status === 401) {
+        setBestSellingError("Unauthorized.");
+      } else {
+        setBestSellingError("Failed to load best selling.");
+      }
     } finally {
       if (isActive()) {
         setIsLoadingBestSelling(false);
@@ -145,7 +178,15 @@ export default function Dashboard() {
       setRecentOrders(result?.data || []);
     } catch (err) {
       if (!isActive()) return;
-      setOrderError("Failed to load recent orders.");
+      const status = err?.response?.status;
+      if (status === 403) {
+        setLimitedAccess(true);
+        setOrderError("Limited access.");
+      } else if (status === 401) {
+        setOrderError("Unauthorized.");
+      } else {
+        setOrderError("Failed to load recent orders.");
+      }
     } finally {
       if (isActive()) {
         setIsLoadingOrders(false);
@@ -248,18 +289,16 @@ export default function Dashboard() {
 
   const chartSales = useMemo(() => {
     return (salesData?.sales || []).map((item) => ({
-      name: dayjs(item.date).isValid()
-        ? dayjs(item.date).format("ddd")
-        : item.date,
+      name: item.date,
+      label: dayjs(item.date).isValid() ? dayjs(item.date).format("ddd") : item.date,
       value: Number(item.value) || 0,
     }));
   }, [salesData]);
 
   const chartOrders = useMemo(() => {
     return (salesData?.orders || []).map((item) => ({
-      name: dayjs(item.date).isValid()
-        ? dayjs(item.date).format("ddd")
-        : item.date,
+      name: item.date,
+      label: dayjs(item.date).isValid() ? dayjs(item.date).format("ddd") : item.date,
       value: Number(item.value) || 0,
     }));
   }, [salesData]);
@@ -277,6 +316,9 @@ export default function Dashboard() {
       <Toaster position="top-right" />
       <div className="dashboard__header">
         <h1>Dashboard Overview</h1>
+        {limitedAccess && (
+          <span className="text-xs text-slate-500">Limited access</span>
+        )}
       </div>
       <KPIOverviewCards
         items={isLoadingSummary || summaryError ? statCards : kpiItems}
@@ -306,7 +348,8 @@ export default function Dashboard() {
 
       {isLoadingOrders && (
         <div className="dashboard-recent dashboard-recent--loading">
-          Loading recent orders...
+          <div className="h-6 w-32 rounded bg-slate-100 animate-pulse" />
+          <div className="mt-3 h-32 rounded bg-slate-100 animate-pulse" />
         </div>
       )}
       {!isLoadingOrders && orderError && (
@@ -316,7 +359,7 @@ export default function Dashboard() {
       )}
       {!isLoadingOrders && !orderError && recentOrders.length === 0 && (
         <div className="dashboard-recent dashboard-recent--empty">
-          No data available
+          No orders yet
         </div>
       )}
       {!isLoadingOrders && !orderError && recentOrders.length > 0 && (
