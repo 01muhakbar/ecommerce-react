@@ -5,6 +5,7 @@ import { can } from "../../constants/permissions.js";
 export default function RequirePerm({ perm, children }) {
   const location = useLocation();
   const { user, isLoading, isAuthenticated } = useAuth();
+  const resolvedUser = user?.user ?? user?.data?.user ?? user ?? null;
 
   if (isLoading) {
     return (
@@ -14,11 +15,11 @@ export default function RequirePerm({ perm, children }) {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || !resolvedUser) {
     return <Navigate to="/admin/login" replace state={{ from: location }} />;
   }
 
-  if (!can(user, perm)) {
+  if (!can(resolvedUser, perm)) {
     return <Navigate to="/admin/forbidden" replace state={{ from: location }} />;
   }
 

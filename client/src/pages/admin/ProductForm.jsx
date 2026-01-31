@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/axios.ts";
 import {
   createAdminProduct,
+  fetchAdminCategories,
   fetchAdminProduct,
   updateAdminProduct,
 } from "../../lib/adminApi.js";
@@ -32,6 +33,11 @@ export default function ProductForm() {
     queryFn: () => fetchAdminProduct(id),
     enabled: isEdit,
   });
+  const categoriesQuery = useQuery({
+    queryKey: ["admin-categories"],
+    queryFn: () => fetchAdminCategories({ page: 1, limit: 200 }),
+  });
+  const categories = categoriesQuery.data?.data || [];
 
   useEffect(() => {
     if (!isEdit) return;
@@ -197,14 +203,25 @@ export default function ProductForm() {
             </select>
           </div>
           <div>
-            <label className="text-sm font-medium text-slate-600">Category ID</label>
-            <input
-              type="number"
-              min="1"
+            <label className="text-sm font-medium text-slate-600">Category</label>
+            <select
               value={form.categoryId}
               onChange={(event) => setForm((prev) => ({ ...prev, categoryId: event.target.value }))}
-              className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-slate-400 focus:outline-none"
-            />
+              disabled={categoriesQuery.isLoading || categoriesQuery.isError}
+              className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-slate-400 focus:outline-none disabled:bg-slate-50"
+            >
+              <option value="">
+                {categoriesQuery.isLoading ? "Loading..." : "Uncategorized"}
+              </option>
+              {categories.map((category) => (
+                <option key={category.id} value={String(category.id)}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+            {categoriesQuery.isError ? (
+              <p className="mt-1 text-xs text-slate-400">Failed to load categories.</p>
+            ) : null}
           </div>
           <div>
             <label className="text-sm font-medium text-slate-600">Image</label>

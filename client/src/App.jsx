@@ -5,10 +5,10 @@ import { AuthProvider } from "./auth/AuthContext.jsx";
 import StoreCategoryPage from "./pages/store/StoreCategoryPage.jsx";
 import StoreProductDetailPage from "./pages/store/StoreProductDetailPage.jsx";
 import StoreCartPage from "./pages/store/StoreCartPage.jsx";
-import StoreCheckoutPage from "./pages/store/StoreCheckoutPage.jsx";
+import CheckoutPage from "./pages/store/Checkout.jsx";
 import StoreLoginPage from "./pages/store/StoreLoginPage.jsx";
 import StoreRegisterPage from "./pages/store/StoreRegisterPage.jsx";
-import StoreCheckoutSuccessPage from "./pages/store/StoreCheckoutSuccessPage.jsx";
+import CheckoutSuccess from "./pages/store/CheckoutSuccess.jsx";
 import StoreOrderTrackingPage from "./pages/store/StoreOrderTrackingPage.jsx";
 import StoreSearchPage from "./pages/store/StoreSearchPage.jsx";
 import StoreOffersPage from "./pages/store/StoreOffersPage.jsx";
@@ -55,8 +55,8 @@ export default function App() {
             <Route path="category/:slug" element={<StoreCategoryPage />} />
             <Route path="product/:slug" element={<StoreProductDetailPage />} />
             <Route path="cart" element={<StoreCartPage />} />
-            <Route path="checkout" element={<StoreCheckoutPage />} />
-            <Route path="checkout/success" element={<StoreCheckoutSuccessPage />} />
+            <Route path="checkout" element={<CheckoutPage />} />
+            <Route path="checkout/success" element={<CheckoutSuccess />} />
             <Route path="order/:ref" element={<StoreOrderTrackingPage />} />
             <Route path="offers" element={<StoreOffersPage />} />
             <Route path="auth/login" element={<StoreLoginPage />} />

@@ -12,6 +12,8 @@
     "seed:admin": "tsx src/scripts/seedAdmin.ts",
     "seed:dev": "tsx src/scripts/seedDev.ts",
     "seed:all": "pnpm seed:super && pnpm seed:dev",
+    "seed:kacha": "tsx src/scripts/seedKachaDemo.ts",
+    "seed:demo": "pnpm seed:super && pnpm seed:kacha",
     "seed:analytics": "tsx src/scripts/seedAnalyticsDemo.ts",
     "seed:customers": "tsx src/scripts/seedCustomers.ts",
     "db:sync": "tsx -e \"import('./src/models/index.ts').then(m=>m.syncDb())\"",

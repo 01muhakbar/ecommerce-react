@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { fetchAdminProducts } from "../../lib/adminApi.js";
+import { fetchAdminCategories, fetchAdminProducts } from "../../lib/adminApi.js";
 import { moneyIDR } from "../../utils/money.js";
 
 export default function AdminProductsPage() {
@@ -34,8 +34,13 @@ export default function AdminProductsPage() {
     queryFn: () => fetchAdminProducts(params),
     keepPreviousData: true,
   });
+  const categoriesQuery = useQuery({
+    queryKey: ["admin-categories-filter"],
+    queryFn: () => fetchAdminCategories({ page: 1, limit: 200 }),
+  });
 
   const items = productsQuery.data?.data || [];
+  const categories = categoriesQuery.data?.data || [];
   const meta = productsQuery.data?.meta || { page: 1, limit, total: 0, totalPages: 1 };
   const totalPages = Math.max(1, Number(meta.totalPages || 1));
 
@@ -62,17 +67,29 @@ export default function AdminProductsPage() {
           placeholder="Search products"
           className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none md:w-64"
         />
-        <input
-          type="number"
-          min="1"
-          value={categoryId}
-          onChange={(event) => {
-            setCategoryId(event.target.value);
-            setPage(1);
-          }}
-          placeholder="Category ID"
-          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none md:w-40"
-        />
+        <div className="w-full md:w-56">
+          <select
+            value={categoryId}
+            onChange={(event) => {
+              setCategoryId(event.target.value);
+              setPage(1);
+            }}
+            disabled={categoriesQuery.isLoading || categoriesQuery.isError}
+            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none disabled:bg-slate-50 md:w-56"
+          >
+            <option value="">
+              {categoriesQuery.isLoading ? "Loading..." : "All categories"}
+            </option>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </select>
+          {categoriesQuery.isError ? (
+            <p className="mt-1 text-xs text-slate-400">Failed to load categories.</p>
+          ) : null}
+        </div>
       </div>
 
       {productsQuery.isLoading ? (

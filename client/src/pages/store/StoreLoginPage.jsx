@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/useAuth.js";
 import { api } from "../../api/axios.ts";
@@ -6,18 +6,38 @@ import { api } from "../../api/axios.ts";
 export default function StoreLoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { refreshSession } = useAuth();
+  const { refreshSession, isAuthenticated } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate("/account", { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
     setIsSubmitting(true);
     try {
-      await api.post("/auth/login", { email, password });
+      const response = await api.post("/auth/login", { email, password });
+      if (import.meta.env.DEV) {
+        console.log("[store-login] login ok", {
+          url: "/api/auth/login",
+          status: response?.status,
+        });
+        console.log("[store-login] document.cookie", document.cookie);
+        fetch("/api/auth/me", { credentials: "include" })
+          .then((res) =>
+            console.log("[store-login] me status", res.status)
+          )
+          .catch((err) =>
+            console.log("[store-login] me status error", err)
+          );
+      }
       await refreshSession();
       // Redirect back to intended page if present; avoid looping to login.
       const from = location.state?.from;

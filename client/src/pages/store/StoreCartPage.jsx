@@ -91,12 +91,12 @@ export default function StoreCartPage() {
         <div className="text-xl font-semibold text-slate-900">
           {currency.format(Number(subtotal || 0))}
         </div>
-        <button
-          type="button"
+        <Link
+          to="/checkout"
           className="rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
         >
           Proceed to Checkout
-        </button>
+        </Link>
       </div>
     </section>
   );

@@ -109,10 +109,30 @@ export default function KachaBazarDemoHomePage() {
   const totalQty = useCartStore((state) => state.totalQty);
   const subtotal = useCartStore((state) => state.subtotal);
   const { data: categoriesData } = useCategories();
-  const { data: productsData } = useProducts({ page: 1, limit: 10 });
-
+  const {
+    data: productsData,
+    isLoading,
+    isError,
+  } = useProducts({ page: 1, limit: 10 });
   const categories = categoriesData?.data?.items ?? [];
-  const products = productsData?.data?.items ?? [];
+  const categoriesById = useMemo(() => {
+    const map = new Map();
+    (categories || []).forEach((category) => {
+      if (category?.id != null) {
+        map.set(Number(category.id), category);
+      }
+    });
+    return map;
+  }, [categories]);
+  const rawProductsCandidate =
+    productsData?.data?.items ??
+    productsData?.data?.products ??
+    productsData?.data?.data ??
+    productsData?.data ??
+    productsData?.items ??
+    productsData?.products ??
+    [];
+  const rawProducts = Array.isArray(rawProductsCandidate) ? rawProductsCandidate : [];
 
   const [activeSlide, setActiveSlide] = useState(0);
   const [copiedCode, setCopiedCode] = useState("");
@@ -151,7 +171,7 @@ export default function KachaBazarDemoHomePage() {
           ],
         }))
       : dummyCategories;
-  const popularProducts = products.length > 0 ? products : dummyProducts;
+  const popularProducts = rawProducts.length > 0 ? rawProducts : dummyProducts;
   const couponList =
     coupons.length > 0
       ? coupons.map((coupon) => ({
@@ -175,15 +195,31 @@ export default function KachaBazarDemoHomePage() {
 
   const safeProducts = useMemo(
     () =>
-      popularProducts.map((product) => ({
-        ...product,
-        slug: product.slug || String(product.id),
-        image: product.image || null,
-        images: product.images || [],
-        salePrice: product.salePrice ?? product.sale_price ?? null,
-        category: product.category || { name: "General" },
-      })),
-    [popularProducts]
+      popularProducts.map((raw) => {
+        const title = raw?.title ?? raw?.name ?? "";
+        const price = Number(raw?.price ?? raw?.sellingPrice ?? raw?.salePrice ?? 0);
+        const categoryObj =
+          raw?.category ??
+          raw?.Category ??
+          (raw?.categoryId != null ? categoriesById.get(Number(raw.categoryId)) : null) ??
+          (raw?.categoryName ? { name: raw.categoryName } : null) ??
+          { name: "Uncategorized" };
+        const imageUrl = raw?.promoImagePath ?? raw?.imageUrl ?? raw?.image ?? null;
+        const slug = raw?.slug ?? String(raw?.id ?? "");
+
+        return {
+          id: raw?.id,
+          title,
+          name: raw?.name ?? title,
+          price,
+          salePrice: raw?.salePrice ?? null,
+          category: categoryObj,
+          imageUrl,
+          image: imageUrl,
+          slug,
+        };
+      }),
+    [popularProducts, categoriesById]
   );
 
   const handleCopyCoupon = async (code) => {
@@ -245,7 +281,17 @@ export default function KachaBazarDemoHomePage() {
         </section>
 
         <FeaturedCategoriesMega featuredCategories={featuredCategories} />
-        <PopularProductsGrid safeProducts={safeProducts} ProductCard={ProductCard} />
+        {isLoading ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
+            Loading products...
+          </div>
+        ) : isError ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-600">
+            Failed to load products.
+          </div>
+        ) : (
+          <PopularProductsGrid safeProducts={safeProducts} ProductCard={ProductCard} />
+        )}
       </main>
     </div>
   );

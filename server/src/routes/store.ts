@@ -19,23 +19,28 @@ const getAuthUserId = (req: Request, res: Response) => {
 };
 
 const toProductListItem = (product: any) => {
-  const imageUrl = product.promoImagePath || product.imagePaths?.[0] || null;
-  const category = product.category
+  const plain = product?.get ? product.get({ plain: true }) : product;
+  const imageUrl = plain?.promoImagePath || plain?.imagePaths?.[0] || null;
+  const category = plain?.category
     ? {
-        id: product.category.id,
-        name: product.category.name,
-        slug: product.category.code,
+        id: plain.category.id,
+        name: plain.category.name,
+        slug: plain.category.code,
       }
     : null;
 
   return {
-    id: product.id,
-    name: product.name,
-    price: toNumber(product.price) ?? 0,
+    id: plain?.id,
+    name: plain?.name,
+    slug: plain?.slug,
+    price: Number(plain?.price ?? 0),
     imageUrl,
-    categoryId: product.categoryId ?? null,
+    categoryId: plain?.categoryId ?? null,
     category,
-    stock: product.stock ?? null,
+    stock: plain?.stock ?? null,
+    status: plain?.status,
+    published: plain?.published,
+    updatedAt: plain?.updatedAt,
   };
 };
 
@@ -77,7 +82,10 @@ router.get(
       const search = String(req.query.search || "").trim();
       const categoryParam = String(req.query.category || "").trim();
 
-      const where: any = { isPublished: true, status: "active" };
+      const where: any = {
+        status: "active",
+        published: { [Op.in]: [1, true] },
+      };
       if (search) {
         where.name = { [Op.like]: `%${search}%` };
       }
@@ -106,11 +114,30 @@ router.get(
 
       const { rows, count } = await Product.findAndCountAll({
         where,
+        attributes: [
+          "id",
+          "name",
+          "slug",
+          "price",
+          "stock",
+          "categoryId",
+          "promoImagePath",
+          "imagePaths",
+          "status",
+          "published",
+          "updatedAt",
+        ],
         include: [{ model: Category, as: "category", attributes: ["id", "name", "code"] }],
         order: [["createdAt", "DESC"]],
         limit,
         offset,
       });
+      if (process.env.NODE_ENV !== "production") {
+        console.log(
+          "[store/products] sample",
+          rows?.[0]?.toJSON?.() ?? rows?.[0]
+        );
+      }
 
       res.json({
         data: rows.map(toProductListItem),
@@ -133,7 +160,11 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const product = await Product.findOne({
-        where: { id: Number(req.params.id), isPublished: true, status: "active" },
+        where: {
+          id: Number(req.params.id),
+          status: "active",
+          published: { [Op.in]: [1, true] },
+        },
         include: [{ model: Category, as: "category", attributes: ["id", "name", "code"] }],
       });
 
@@ -425,8 +456,18 @@ router.get(
 // POST /api/store/orders
 router.post(
   "/orders",
+  protect,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      console.log("[store] POST /orders hit", new Date().toISOString());
+      console.log("[store/orders] payload", {
+        customer: req.body?.customer,
+        paymentMethod: req.body?.paymentMethod,
+        itemsCount: Array.isArray(req.body?.items) ? req.body.items.length : 0,
+        firstItem: Array.isArray(req.body?.items) ? req.body.items[0] : null,
+      });
+      const userId = getAuthUserId(req, res);
+      if (!userId) return;
       const customer = req.body?.customer;
       const items = Array.isArray(req.body?.items) ? req.body.items : [];
       const couponCode = normalizeCouponCode(req.body?.couponCode);
@@ -449,18 +490,17 @@ router.post(
         return res.status(400).json({ message: "Invalid customer details." });
       }
 
-      if (items.length === 0) {
-        return res.status(400).json({ message: "Cart items are required." });
-      }
-
       const normalizedItems = new Map<number, number>();
       for (const item of items) {
         const productId = Number(item?.productId);
         const qty = Number(item?.qty);
         if (!Number.isFinite(productId) || productId <= 0 || !Number.isFinite(qty) || qty < 1) {
-          return res.status(400).json({ message: "Invalid cart items." });
+          continue;
         }
         normalizedItems.set(productId, (normalizedItems.get(productId) || 0) + qty);
+      }
+      if (normalizedItems.size === 0) {
+        return res.status(400).json({ message: "Invalid cart items." });
       }
 
       const tx = await sequelize.transaction();
@@ -469,19 +509,31 @@ router.post(
           productId: Number(productId),
           qty: Number(qty),
         }));
-        const productIds = itemsNorm.map((item) => item.productId);
+        const productIds = [
+          ...new Set(itemsNorm.map((item) => Number(item.productId))),
+        ].filter((id) => Number.isFinite(id) && id > 0);
+        if (process.env.NODE_ENV !== "production") {
+          console.log("[store/orders] requestedIds", productIds);
+        }
 
         const products = await Product.findAll({
-          where: { id: { [Op.in]: productIds }, isPublished: true, status: "active" },
+          where: {
+            id: { [Op.in]: productIds },
+            status: "active",
+            [Op.or]: [{ isPublished: true }, { published: { [Op.in]: [1, true] } }],
+          },
           transaction: tx,
           lock: tx.LOCK.UPDATE,
         });
+        if (process.env.NODE_ENV !== "production") {
+          console.log("[store/orders] foundIds", products.map((p) => p.id));
+        }
 
+        const foundIds = new Set(products.map((product) => product.id));
         if (products.length !== productIds.length) {
-          const foundIds = new Set(products.map((product) => product.id));
           const missing = productIds.filter((id) => !foundIds.has(id));
           await tx.rollback();
-          return res.status(404).json({
+          return res.status(400).json({
             message: "Some products are missing.",
             missing,
           });
@@ -490,7 +542,14 @@ router.post(
         const byId = new Map(products.map((product) => [product.id, product]));
 
         for (const item of itemsNorm) {
-          const product = byId.get(item.productId)!;
+          const product = byId.get(item.productId);
+          if (!product) {
+            await tx.rollback();
+            return res.status(400).json({
+              message: "Some products are missing.",
+              missing: [item.productId],
+            });
+          }
           const stock = Number(product.stock || 0);
           if (stock < item.qty) {
             await tx.rollback();
@@ -505,18 +564,6 @@ router.post(
             });
           }
         }
-
-        const [guestUser] = await User.findOrCreate({
-          where: { email: "guest@store.local" },
-          defaults: {
-            name: "Store Guest",
-            email: "guest@store.local",
-            password: "guest",
-            role: "user",
-            status: "active",
-          } as any,
-          transaction: tx,
-        });
 
         let subtotal = 0;
         const orderItemsPayload = itemsNorm.map((item) => {
@@ -551,7 +598,7 @@ router.post(
         const order = await Order.create(
           {
             invoiceNo: `STORE-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-            userId: guestUser.id,
+            userId,
             customerName: customer.name,
             customerPhone: customer.phone,
             customerAddress: customer.address,
@@ -593,10 +640,16 @@ router.post(
         });
       } catch (error) {
         await tx.rollback();
-        return res.status(500).json({ message: "Failed to create order" });
+        console.error("[store/orders] error", error);
+        return res
+          .status(500)
+          .json({ message: error?.message || "Failed to create order" });
       }
     } catch (error) {
-      next(error);
+      console.error("[store/orders] error", error);
+      return res
+        .status(500)
+        .json({ message: error?.message || "Failed to create order" });
     }
   }
 );

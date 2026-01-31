@@ -16,7 +16,7 @@ export default function StoreSearchPage() {
   const limit = Math.max(1, Number(searchParams.get("limit") || 12));
 
   useEffect(() => {
-    setQuery(searchParams.get("q") ?? "");
+    setQuery(searchParams.get("search") ?? "");
     setCategory(searchParams.get("category") ?? "");
   }, [searchParams]);
 
@@ -31,18 +31,28 @@ export default function StoreSearchPage() {
     data: productsData,
     isLoading: productsLoading,
     isError: productsError,
-  } = useProducts({ q: query || undefined, category: category || undefined, page, limit });
+  } = useProducts({ search: query || undefined, category: category || undefined, page, limit });
 
-  const products = productsData?.data?.items ?? [];
-  const meta = productsData?.data?.meta;
+  const rawCandidate =
+    productsData?.data?.items ??
+    productsData?.data ??
+    productsData?.items ??
+    productsData?.products ??
+    productsData ??
+    [];
+  const normalizedProducts = Array.isArray(rawCandidate) ? rawCandidate : [];
+  if (import.meta.env.DEV) {
+    console.log("[search] products len", normalizedProducts.length, productsData);
+  }
+  const meta = productsData?.meta ?? productsData?.data?.meta;
 
   const updateParams = (next) => {
     const params = new URLSearchParams(searchParams);
-    if (next.q !== undefined) {
-      if (next.q) {
-        params.set("q", next.q);
+    if (next.search !== undefined) {
+      if (next.search) {
+        params.set("search", next.search);
       } else {
-        params.delete("q");
+        params.delete("search");
       }
     }
     if (next.category !== undefined) {
@@ -64,7 +74,7 @@ export default function StoreSearchPage() {
   const handleQueryChange = (event) => {
     const value = event.target.value;
     setQuery(value);
-    updateParams({ q: value.trim(), page: 1 });
+    updateParams({ search: value.trim(), page: 1 });
   };
 
   const handleCategoryChange = (value) => {
@@ -113,20 +123,43 @@ export default function StoreSearchPage() {
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
           Failed to load products.
         </div>
-      ) : products.length === 0 ? (
+      ) : normalizedProducts.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500">
           No products found.
         </div>
       ) : (
         <div className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {products.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
+            {normalizedProducts.map((product, index) => {
+              const title = product?.title ?? product?.name ?? "";
+              const category =
+                product?.category ??
+                (product?.categoryName ? { name: product.categoryName } : { name: "Uncategorized" });
+              const imageUrl =
+                product?.promoImagePath ?? product?.imageUrl ?? product?.image ?? null;
+              return (
+                <ProductCard
+                  key={
+                    product?.id ??
+                    product?.slug ??
+                    `${product?.name || product?.title || "product"}-${index}`
+                  }
+                  product={{
+                    ...product,
+                    id: product?.id,
+                    name: product?.name ?? title,
+                    title,
+                    price: Number(product?.price ?? product?.salePrice ?? 0),
+                    category,
+                    imageUrl,
+                  }}
+                />
+              );
+            })}
           </div>
           <Pagination
             page={meta?.page ?? page}
-            total={meta?.total ?? products.length}
+            total={meta?.total ?? normalizedProducts.length}
             limit={meta?.limit ?? limit}
             onPageChange={(nextPage) => updateParams({ page: nextPage })}
           />

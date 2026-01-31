@@ -12,25 +12,26 @@ const getImageSrc = (product) =>
   product?.imageUrl || product?.image || product?.thumbnail || null;
 
 const fetchCategories = async () => {
-  const { data } = await api.get("/categories");
+  const { data } = await api.get("/store/categories");
   return data;
 };
 
-const fetchProducts = async ({ q, category, page, limit }) => {
+const fetchProducts = async ({ q, search, category, page, limit }) => {
   const params = {};
-  if (q) params.q = q;
+  const keyword = search ?? q;
+  if (keyword) params.search = keyword;
   if (category) params.category = category;
   if (page) params.page = page;
   if (limit) {
     params.limit = limit;
     params.pageSize = limit;
   }
-  const { data } = await api.get("/products", { params });
+  const { data } = await api.get("/store/products", { params });
   return data;
 };
 
 const fetchProduct = async (slug) => {
-  const { data } = await api.get(`/products/${encodeURIComponent(slug)}`);
+  const { data } = await api.get(`/store/products/${encodeURIComponent(slug)}`);
   return data;
 };
 
@@ -41,10 +42,17 @@ export const useCategories = () =>
     staleTime: 1000 * 60 * 5,
   });
 
-export const useProducts = ({ q, category, page, limit }) =>
+export const useProducts = ({ q, search, category, page, limit }) =>
   useQuery({
-    queryKey: ["storefront", "products", q || "", category || "", page || 1, limit || 12],
-    queryFn: () => fetchProducts({ q, category, page, limit }),
+    queryKey: [
+      "storefront",
+      "products",
+      search || q || "",
+      category || "",
+      page || 1,
+      limit || 12,
+    ],
+    queryFn: () => fetchProducts({ q, search, category, page, limit }),
     staleTime: 1000 * 30,
   });
 

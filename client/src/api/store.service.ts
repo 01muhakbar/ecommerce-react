@@ -104,6 +104,10 @@ export const createStoreOrder = async (payload: {
   items: { productId: number; qty: number }[];
   couponCode?: string;
 }) => {
+  const url = "/store/orders";
+  if (import.meta.env.DEV) {
+    console.log("[createStoreOrder] url", url);
+  }
   const { data } = await api.post<{
     data: {
       orderId: number;
@@ -115,7 +119,7 @@ export const createStoreOrder = async (payload: {
       total: number;
       paymentMethod?: string;
     };
-  }>("/store/orders", payload);
+  }>(url, payload, { withCredentials: true });
   return data;
 };
 

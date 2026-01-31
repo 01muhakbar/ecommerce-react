@@ -32,15 +32,27 @@ export function AuthProvider({ children }) {
     setIsLoading(true);
     try {
       const response = await meRequest();
-      const nextUser = response?.user || response || null;
-      const nextRole = response?.user?.role || response?.role || null;
+      const nextUser =
+        response?.data?.user ??
+        response?.user ??
+        response?.data ??
+        (response && response.id ? response : null);
+      if (!nextUser) {
+        clearSession();
+        return;
+      }
+      const nextRole = String(nextUser?.role ?? "").toLowerCase() || null;
       setUser(nextUser);
       setRole(nextRole);
+      if (import.meta.env.DEV) {
+        console.log("[auth] refreshSession user", nextUser);
+      }
     } catch (error) {
       clearSession();
       return;
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   const login = async (email, password) => {
