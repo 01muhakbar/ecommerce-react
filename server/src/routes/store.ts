@@ -18,6 +18,12 @@ const getAuthUserId = (req: Request, res: Response) => {
   return userId;
 };
 
+const getAttr = (row: any, key: string) =>
+  row?.getDataValue?.(key) ??
+  row?.get?.(key) ??
+  row?.dataValues?.[key] ??
+  undefined;
+
 function getProductId(product: any): number {
   const raw =
     product?.getDataValue?.("id") ??
@@ -67,6 +73,7 @@ router.get(
           id: category.id,
           name: category.name,
           slug: category.code,
+          code: category.code,
           image: category.icon ?? null,
         })),
       });
@@ -167,14 +174,22 @@ router.get(
   "/products/:id",
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const rawParam = String(req.params.id || "").trim();
+      const isNumeric = /^\d+$/.test(rawParam);
+      const where = isNumeric
+        ? { id: Number(rawParam) }
+        : { slug: rawParam };
       const product = await Product.findOne({
         where: {
-          id: Number(req.params.id),
+          ...where,
           status: "active",
           published: { [Op.in]: [1, true] },
         },
         include: [{ model: Category, as: "category", attributes: ["id", "name", "code"] }],
       });
+      if (process.env.NODE_ENV !== "production" && !isNumeric) {
+        console.debug("[store/products/:id] lookup by slug", rawParam);
+      }
 
       if (!product) {
         return res.status(404).json({ message: "Not found" });
@@ -217,13 +232,19 @@ router.get(
       });
 
       res.json({
-        data: rows.map((order: any) => ({
-          id: order.id,
-          ref: order.invoiceNo || String(order.id),
-          status: order.status,
-          totalAmount: Number(order.totalAmount || 0),
-          createdAt: order.createdAt,
-        })),
+        data: rows.map((order: any) => {
+          const id = getAttr(order, "id");
+          return {
+            id,
+            ref:
+              getAttr(order, "invoiceNo") ??
+              getAttr(order, "ref") ??
+              String(id ?? ""),
+            status: getAttr(order, "status"),
+            totalAmount: Number(getAttr(order, "totalAmount") || 0),
+            createdAt: getAttr(order, "createdAt"),
+          };
+        }),
         meta: {
           page,
           limit,
@@ -561,7 +582,7 @@ router.post(
           const missing = productIds.filter((id) => !foundIds.has(id));
           await tx.rollback();
           return res.status(400).json({
-            message: "Some products are missing.",
+            message: "Invalid productId",
             missing,
           });
         }
@@ -572,13 +593,34 @@ router.post(
             return [id, product];
           })
         );
+        const getUnitPrice = (product: any) => {
+          const rawSale =
+            product?.getDataValue?.("salePrice") ??
+            product?.get?.("salePrice") ??
+            product?.salePrice;
+          const rawPrice =
+            product?.getDataValue?.("price") ??
+            product?.get?.("price") ??
+            product?.price;
+          const rawOriginal =
+            product?.getDataValue?.("originalPrice") ??
+            product?.get?.("originalPrice") ??
+            product?.originalPrice;
+          const sale = Number(rawSale ?? 0);
+          const price = Number(rawPrice ?? 0);
+          const original = Number(rawOriginal ?? 0);
+          if (Number.isFinite(sale) && sale > 0) return sale;
+          if (Number.isFinite(price) && price > 0) return price;
+          if (Number.isFinite(original) && original > 0) return original;
+          return 0;
+        };
 
         for (const item of itemsNorm) {
           const product = byId.get(item.productId);
           if (!product) {
             await tx.rollback();
             return res.status(400).json({
-              message: "Some products are missing.",
+              message: "Invalid productId",
               missing: [item.productId],
             });
           }
@@ -621,9 +663,7 @@ router.post(
         let subtotal = 0;
         const orderItemsPayload = itemsNorm.map((item) => {
           const product = byId.get(item.productId)!;
-          const sale = Number(product.salePrice ?? 0);
-          const price = Number(product.price ?? 0);
-          const unitPrice = sale > 0 ? sale : price;
+          const unitPrice = getUnitPrice(product);
           subtotal += unitPrice * item.qty;
           const pid = getProductId(product);
         if (!Number.isFinite(pid)) {
@@ -661,6 +701,13 @@ router.post(
       const tax = 0;
       const shipping = 0;
       const totalAmount = Math.max(0, subtotal - discountAmount + tax + shipping);
+      if (process.env.NODE_ENV !== "production") {
+        console.debug("create order totals", {
+          subtotal,
+          total: totalAmount,
+          totalAmount,
+        });
+      }
 
       const order = await Order.create(
           {
@@ -695,11 +742,17 @@ router.post(
 
         await tx.commit();
 
+        const invoiceNo =
+          order?.getDataValue?.("invoiceNo") ??
+          order?.get?.("invoiceNo") ??
+          (order as any)?.dataValues?.invoiceNo ??
+          (order as any)?.invoiceNo ??
+          null;
         return res.status(201).json({
           success: true,
           data: {
             orderId: order.id,
-            invoiceNo: order.invoiceNo,
+            invoiceNo,
             subtotal,
             discount: discountAmount,
             tax,

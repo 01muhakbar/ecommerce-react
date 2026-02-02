@@ -108,9 +108,11 @@ export default function StoreCheckoutPage() {
       const invoiceNo = response?.data?.invoiceNo;
       const ref = invoiceNo || String(response.data.orderId);
       navigate(
-        `/checkout/success?ref=${encodeURIComponent(ref)}&method=${encodeURIComponent(
-          response.data.paymentMethod || paymentMethod
-        )}`
+        `/checkout/success?ref=${encodeURIComponent(ref)}&invoiceNo=${encodeURIComponent(
+          invoiceNo || ""
+        )}&total=${encodeURIComponent(
+          String(response?.data?.total ?? total ?? "")
+        )}&method=${encodeURIComponent(response.data.paymentMethod || paymentMethod)}`
       );
     } catch (err) {
       const data = err?.response?.data;

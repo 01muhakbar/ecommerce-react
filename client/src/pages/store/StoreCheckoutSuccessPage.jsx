@@ -4,6 +4,8 @@ import { Link, useSearchParams } from "react-router-dom";
 export default function StoreCheckoutSuccessPage() {
   const [params] = useSearchParams();
   const ref = params.get("ref") || params.get("orderId");
+  const invoiceNo = params.get("invoiceNo") || ref;
+  const total = params.get("total");
   const method = params.get("method");
   const [copyStatus, setCopyStatus] = useState("");
   const resetTimerRef = useRef(null);
@@ -43,11 +45,11 @@ export default function StoreCheckoutSuccessPage() {
     <section>
       <h1>Checkout Success</h1>
       <p>Your order has been placed successfully.</p>
-      {ref ? (
+      {invoiceNo ? (
         <div style={{ marginBottom: "8px" }}>
-          <div>Order Ref: {ref}</div>
+          <div>Invoice: {invoiceNo}</div>
           <div style={{ marginTop: "6px" }}>
-            <button type="button" onClick={() => copyToClipboard(ref)}>
+            <button type="button" onClick={() => copyToClipboard(invoiceNo)}>
               {copyStatus === "success" ? "Copied!" : "Copy Invoice"}
             </button>
             {copyStatus === "error" ? (
@@ -58,6 +60,7 @@ export default function StoreCheckoutSuccessPage() {
           </div>
         </div>
       ) : null}
+      {total ? <p>Total: {total}</p> : null}
       <p>Payment Method: {method || "COD"}</p>
       {ref ? (
         <Link to={`/order/${encodeURIComponent(ref)}`}>View Order</Link>

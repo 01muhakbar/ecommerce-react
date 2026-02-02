@@ -1,5 +1,5 @@
 import { Suspense, lazy } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import StoreLayout from "./components/Layout/StoreLayout.jsx";
 import { AuthProvider } from "./auth/AuthContext.jsx";
 import StoreCategoryPage from "./pages/store/StoreCategoryPage.jsx";
@@ -61,6 +61,7 @@ export default function App() {
             <Route path="offers" element={<StoreOffersPage />} />
             <Route path="auth/login" element={<StoreLoginPage />} />
             <Route path="auth/register" element={<StoreRegisterPage />} />
+            <Route path="my-orders" element={<Navigate to="/account/orders" replace />} />
             <Route path="account" element={<AccountGuard />}>
               <Route element={<AccountLayout />}>
                 <Route index element={<AccountDashboardPage />} />

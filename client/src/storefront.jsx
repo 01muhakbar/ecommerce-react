@@ -13,7 +13,20 @@ const getImageSrc = (product) =>
 
 const fetchCategories = async () => {
   const { data } = await api.get("/store/categories");
-  return data;
+  const items = Array.isArray(data?.data)
+    ? data.data
+    : data?.data?.items || [];
+  const normalized = {
+    ...data,
+    data: {
+      ...(data?.data && !Array.isArray(data.data) ? data.data : {}),
+      items,
+    },
+  };
+  if (process.env.NODE_ENV !== "production" && Array.isArray(data?.data)) {
+    console.debug("[storefront] normalized categories response");
+  }
+  return normalized;
 };
 
 const fetchProducts = async ({ q, search, category, page, limit }) => {
@@ -27,7 +40,29 @@ const fetchProducts = async ({ q, search, category, page, limit }) => {
     params.pageSize = limit;
   }
   const { data } = await api.get("/store/products", { params });
-  return data;
+  const items = Array.isArray(data?.data)
+    ? data.data
+    : data?.data?.items || [];
+  const meta = data?.meta || {};
+  const resolvedLimit = meta.pageSize ?? meta.limit ?? limit;
+  const normalized = {
+    ...data,
+    data: {
+      ...(data?.data && !Array.isArray(data.data) ? data.data : {}),
+      items,
+    },
+    meta: {
+      ...meta,
+      page: meta.page ?? page,
+      limit: resolvedLimit,
+      total: meta.total,
+      totalPages: meta.totalPages,
+    },
+  };
+  if (process.env.NODE_ENV !== "production" && Array.isArray(data?.data)) {
+    console.debug("[storefront] normalized products response");
+  }
+  return normalized;
 };
 
 const fetchProduct = async (slug) => {

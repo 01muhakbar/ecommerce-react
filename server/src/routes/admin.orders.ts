@@ -9,6 +9,11 @@ import { Product } from "../models/Product.js";
 
 const router = Router();
 const asSingle = (v: unknown) => (Array.isArray(v) ? v[0] : v);
+const getAttr = (row: any, key: string) =>
+  row?.getDataValue?.(key) ??
+  row?.get?.(key) ??
+  row?.dataValues?.[key] ??
+  undefined;
 
 // GET list with pagination, search, and filtering
 router.get("/", requireStaffOrAdmin, async (req, res) => {
@@ -39,25 +44,52 @@ router.get("/", requireStaffOrAdmin, async (req, res) => {
       "id",
       "invoiceNo",
       "status",
+      "createdAt",
       "totalAmount",
       "customerName",
       "customerPhone",
-      "createdAt",
     ],
     order: [["createdAt", "DESC"]],
     limit,
     offset: (page - 1) * limit,
   });
 
-  const data = rows.map((orderRow: any) => ({
-    id: orderRow.id,
-    invoiceNo: orderRow.invoiceNo,
-    status: orderRow.status,
-    totalAmount: Number(orderRow.totalAmount || 0),
-    createdAt: orderRow.createdAt,
-    customerName: orderRow.customerName ?? "Guest",
-    customerPhone: orderRow.customerPhone ?? null,
-  }));
+  const data = rows.map((orderRow: any) => {
+    const customer =
+      orderRow?.customer ??
+      orderRow?.get?.("customer") ??
+      orderRow?.dataValues?.customer ??
+      null;
+    const id = getAttr(orderRow, "id");
+    const invoiceNo = getAttr(orderRow, "invoiceNo");
+    const status = getAttr(orderRow, "status");
+    const createdAt = getAttr(orderRow, "createdAt");
+    const customerName = getAttr(orderRow, "customerName");
+    const customerPhone = getAttr(orderRow, "customerPhone");
+    return {
+      id,
+      orderId: id,
+      invoiceNo,
+      status,
+      createdAt,
+      totalAmount: Number(
+        getAttr(orderRow, "totalAmount") ??
+          getAttr(orderRow, "total") ??
+          getAttr(orderRow, "grandTotal") ??
+          0
+      ),
+      customerName:
+        customerName ??
+        getAttr(orderRow, "shippingName") ??
+        customer?.name ??
+        "Guest",
+      customerPhone:
+        customerPhone ??
+        getAttr(orderRow, "shippingPhone") ??
+        customer?.phone ??
+        null,
+    };
+  });
 
   res.json({
     data,
@@ -100,15 +132,18 @@ router.get("/:id", requireStaffOrAdmin, async (req, res) => {
   }
 
   const items = ((orderItem as any).items ?? []).map((item: any) => ({
-    id: item.id,
-    productId: item.productId ?? item.get?.("productId") ?? item.product_id,
-    quantity: item.quantity,
-    price: Number(item.price || 0),
-    lineTotal: Number(item.price || 0) * Number(item.quantity || 0),
+    id: getAttr(item, "id"),
+    productId:
+      getAttr(item, "productId") ?? item.get?.("productId") ?? item.product_id,
+    quantity: getAttr(item, "quantity"),
+    price: Number(getAttr(item, "price") || 0),
+    lineTotal:
+      Number(getAttr(item, "price") || 0) *
+      Number(getAttr(item, "quantity") || 0),
     product: item.product
       ? {
-          id: item.product.id,
-          name: item.product.name,
+          id: getAttr(item.product, "id"),
+          name: getAttr(item.product, "name"),
         }
       : null,
   }));
@@ -117,17 +152,17 @@ router.get("/:id", requireStaffOrAdmin, async (req, res) => {
 
   return res.json({
     data: {
-      id: orderItem.id,
-      invoiceNo: orderItem.invoiceNo,
-      status: orderItem.status,
-      totalAmount: Number(orderItem.totalAmount || 0),
-      createdAt: orderItem.createdAt,
-      customerName: orderItem.customerName ?? customer?.name ?? null,
-      customerPhone: orderItem.customerPhone ?? null,
-      customerAddress: orderItem.customerAddress ?? null,
-      customerNotes: orderItem.customerNotes ?? null,
-      paymentMethod: orderItem.paymentMethod ?? "COD",
-      method: orderItem.paymentMethod ?? "COD",
+      id: getAttr(orderItem, "id"),
+      invoiceNo: getAttr(orderItem, "invoiceNo"),
+      status: getAttr(orderItem, "status"),
+      totalAmount: Number(getAttr(orderItem, "totalAmount") || 0),
+      createdAt: getAttr(orderItem, "createdAt"),
+      customerName: getAttr(orderItem, "customerName") ?? customer?.name ?? null,
+      customerPhone: getAttr(orderItem, "customerPhone") ?? null,
+      customerAddress: getAttr(orderItem, "customerAddress") ?? null,
+      customerNotes: getAttr(orderItem, "customerNotes") ?? null,
+      paymentMethod: getAttr(orderItem, "paymentMethod") ?? "COD",
+      method: getAttr(orderItem, "paymentMethod") ?? "COD",
       items,
     },
   });
