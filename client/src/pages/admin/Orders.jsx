@@ -38,6 +38,9 @@ export default function Orders() {
     queryFn: () => fetchAdminOrders(params),
     keepPreviousData: true,
   });
+  if (import.meta.env.DEV && ordersQuery.data?.data?.[0]) {
+    console.log("[admin/orders] sample", ordersQuery.data.data[0]);
+  }
 
   const updateMutation = useMutation({
     mutationFn: ({ orderId, payload }) => updateAdminOrderStatus(orderId, payload),
@@ -145,7 +148,7 @@ export default function Orders() {
                 return (
                 <tr key={order.id} className="border-t border-slate-100">
                   <td className="px-4 py-3 font-medium text-slate-900">
-                    {order.invoiceNo || `#${order.id}`}
+                    {order.invoiceNo || order.invoice || `#${order.id ?? "-"}`}
                   </td>
                   <td className="px-4 py-3 text-slate-600">
                     {order.customerName || order.customer?.name || "Guest"}
@@ -174,7 +177,11 @@ export default function Orders() {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-slate-500">
-                    {order.createdAt ? new Date(order.createdAt).toLocaleString("id-ID") : "-"}
+                    {order.createdAt
+                      ? new Date(order.createdAt).toLocaleString("id-ID")
+                      : order.created_at
+                      ? new Date(order.created_at).toLocaleString("id-ID")
+                      : "-"}
                   </td>
                   <td className="px-4 py-3">
                     <Link

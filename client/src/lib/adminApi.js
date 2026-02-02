@@ -191,10 +191,12 @@ const normalizeOrdersList = (payload, params = {}) => {
       : [];
   const data = items.map((order) => ({
     ...order,
+    id: order.id || order.orderId,
     status: toUIStatus(order.status),
-    invoice: order.invoiceNo || order.invoice || null,
-    invoiceNo: order.invoiceNo || order.invoice || null,
-    totalAmount: Number(order.totalAmount || 0),
+    invoice: order.invoiceNo || order.invoice_no || order.invoice || order.ref || null,
+    invoiceNo: order.invoiceNo || order.invoice_no || order.invoice || order.ref || null,
+    createdAt: order.createdAt || order.created_at || null,
+    totalAmount: Number(order.totalAmount || order.total || order.total_amount || 0),
   }));
 
   return {

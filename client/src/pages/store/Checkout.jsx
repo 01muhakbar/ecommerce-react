@@ -81,6 +81,15 @@ export default function CheckoutPage() {
 
     setIsSubmitting(true);
     try {
+      if (import.meta.env.DEV) {
+        console.log("[checkout] submit payload", {
+          items,
+          mapped: items.map((item) => ({
+            productId: item.productId,
+            qty: item.qty,
+          })),
+        });
+      }
       const response = await createStoreOrder({
         customer: {
           name: fullName.trim(),
@@ -94,9 +103,9 @@ export default function CheckoutPage() {
         })),
       });
       clearCart();
-      const invoiceNo =
-        response?.data?.invoiceNo || response?.data?.data?.invoiceNo || "";
-      const total = response?.data?.total ?? response?.data?.data?.total ?? "";
+      const result = response?.data?.data ?? response?.data ?? {};
+      const invoiceNo = result.invoiceNo || "";
+      const total = result.total ?? result.totalAmount ?? result.total_amount ?? "";
       navigate(
         `/checkout/success?invoiceNo=${encodeURIComponent(
           invoiceNo
@@ -110,13 +119,14 @@ export default function CheckoutPage() {
         });
       }
       const data = err?.response?.data;
-      if (Array.isArray(data?.missing) && data.missing.length > 0) {
+      if (err?.response?.status === 400 && Array.isArray(data?.missing)) {
+        if (import.meta.env.DEV) {
+          console.warn("[checkout] missing items", data.missing);
+        }
+        clearCart();
         setIsMissingError(true);
-        setError(
-          `Some products in your cart are no longer available (missing: ${data.missing.join(
-            ", "
-          )}). Please clear your cart and add products again.`
-        );
+        setError("Cart cleared, please add products again");
+        setTimeout(() => navigate("/search"), 800);
       } else {
         setError(data?.message || "Checkout failed. Please try again.");
       }
@@ -163,15 +173,6 @@ export default function CheckoutPage() {
           />
         </div>
         {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-        {isMissingError ? (
-          <button
-            type="button"
-            onClick={clearCart}
-            className="text-sm text-slate-600 underline"
-          >
-            Clear cart
-          </button>
-        ) : null}
         <button
           type="submit"
           disabled={isSubmitting}

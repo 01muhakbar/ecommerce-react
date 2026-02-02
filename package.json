@@ -13,9 +13,10 @@
   "scripts": {
     "build": "pnpm -F server build && pnpm -F client build",
     "start": "pnpm --filter server start",
-    "dev": "echo \"Run pnpm dev:server and pnpm dev:client in separate terminals\"",
+    "dev": "pnpm -r --parallel dev",
     "dev:server": "pnpm --filter server dev",
     "dev:client": "pnpm --filter client dev",
+    "dev:all": "pnpm -r --parallel dev",
     "db:sync": "pnpm --filter server db:sync",
     "seed:super": "pnpm --filter server seed:super",
     "seed:analytics": "pnpm --filter server seed:analytics",

@@ -113,8 +113,19 @@ export default function StoreCheckoutPage() {
         )}`
       );
     } catch (err) {
-      const message = err?.response?.data?.message;
-      setError(message || "Checkout failed. Please try again.");
+      const data = err?.response?.data;
+      if (err?.response?.status === 400 && Array.isArray(data?.missing)) {
+        clearCart();
+        if (import.meta.env.DEV) {
+          console.warn("[checkout] missing items", data.missing);
+        }
+        setError(
+          "Some products in your cart are no longer available. Cart has been cleared — please add products again."
+        );
+      } else {
+        const message = data?.message;
+        setError(message || "Checkout failed. Please try again.");
+      }
     } finally {
       setIsSubmitting(false);
     }

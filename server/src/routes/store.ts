@@ -18,6 +18,14 @@ const getAuthUserId = (req: Request, res: Response) => {
   return userId;
 };
 
+function getProductId(product: any): number {
+  const raw =
+    product?.getDataValue?.("id") ??
+    product?.get?.("id") ??
+    product?.id;
+  return Number(raw);
+}
+
 const toProductListItem = (product: any) => {
   const plain = product?.get ? product.get({ plain: true }) : product;
   const imageUrl = plain?.promoImagePath || plain?.imagePaths?.[0] || null;
@@ -520,16 +528,35 @@ router.post(
           where: {
             id: { [Op.in]: productIds },
             status: "active",
-            [Op.or]: [{ isPublished: true }, { published: { [Op.in]: [1, true] } }],
+            published: { [Op.in]: [1, true] },
           },
+          attributes: [
+            "id",
+            "name",
+            "stock",
+            "price",
+            "salePrice",
+            "status",
+            "published",
+          ],
           transaction: tx,
           lock: tx.LOCK.UPDATE,
         });
         if (process.env.NODE_ENV !== "production") {
-          console.log("[store/orders] foundIds", products.map((p) => p.id));
+          const foundIdsArr = products
+            .map((product: any) => getProductId(product))
+            .filter((n: number) => Number.isFinite(n) && n > 0);
+          console.log("[store/orders] foundIds", foundIdsArr);
+          console.log(
+            "[store/orders] sampleProduct",
+            products?.[0]?.toJSON?.() ?? products?.[0]
+          );
         }
 
-        const foundIds = new Set(products.map((product) => product.id));
+        const foundIdsArr = products
+          .map((product: any) => getProductId(product))
+          .filter((n: number) => Number.isFinite(n) && n > 0);
+        const foundIds = new Set(foundIdsArr);
         if (products.length !== productIds.length) {
           const missing = productIds.filter((id) => !foundIds.has(id));
           await tx.rollback();
@@ -539,7 +566,12 @@ router.post(
           });
         }
 
-        const byId = new Map(products.map((product) => [product.id, product]));
+        const byId = new Map(
+          products.map((product: any) => {
+            const id = getProductId(product);
+            return [id, product];
+          })
+        );
 
         for (const item of itemsNorm) {
           const product = byId.get(item.productId);
@@ -550,14 +582,35 @@ router.post(
               missing: [item.productId],
             });
           }
-          const stock = Number(product.stock || 0);
+          if (process.env.NODE_ENV !== "production") {
+            console.log("[store/orders] stockCheck", {
+              item: { productId: item.productId, qty: item.qty },
+              product: product
+                ? {
+                    id: product.get?.("id") ?? product.getDataValue?.("id") ?? product.id,
+                    name: product.get?.("name") ?? product.name,
+                    stock: product.get?.("stock") ?? product.stock,
+                    status: product.get?.("status") ?? product.status,
+                    isPublished: product.get?.("isPublished") ?? product.isPublished,
+                    published: product.get?.("published") ?? product.published,
+                  }
+                : null,
+            });
+          }
+          const stock = Number(
+            product.getDataValue?.("stock") ?? (product as any).stock ?? 0
+          );
           if (stock < item.qty) {
             await tx.rollback();
             return res.status(409).json({
               message: "Insufficient stock",
               data: {
-                productId: product.id,
-                name: product.name,
+                productId: Number(
+                  product.getDataValue?.("id") ?? (product as any).id
+                ),
+                name: String(
+                  product.getDataValue?.("name") ?? (product as any).name ?? ""
+                ),
                 available: stock,
                 requested: item.qty,
               },
@@ -568,34 +621,48 @@ router.post(
         let subtotal = 0;
         const orderItemsPayload = itemsNorm.map((item) => {
           const product = byId.get(item.productId)!;
-          const unitPrice = Number(product.salePrice ?? product.price ?? 0);
+          const sale = Number(product.salePrice ?? 0);
+          const price = Number(product.price ?? 0);
+          const unitPrice = sale > 0 ? sale : price;
           subtotal += unitPrice * item.qty;
-          return {
-            productId: product.id,
-            quantity: item.qty,
-            price: unitPrice,
-          };
-        });
+          const pid = getProductId(product);
+        if (!Number.isFinite(pid)) {
+          throw new Error("Invalid product id for order item");
+        }
+        return {
+          productId: pid,
+          product_id: pid,
+          quantity: item.qty,
+          price: unitPrice,
+        };
+      });
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[store/orders] orderItemsPayload sample", orderItemsPayload[0]);
+      }
 
         let discountAmount = 0;
         let appliedCouponCode: string | null = null;
         if (couponCode) {
           const result = await validateCoupon(couponCode, subtotal);
-          if (!result.valid) {
-            await tx.rollback();
-            return res.status(400).json({
-              message: result.message || "Coupon invalid/expired/min spend not met",
-            });
-          }
-          discountAmount = result.discountAmount;
-          appliedCouponCode = result.code || couponCode;
+        if (!result.valid) {
+          await tx.rollback();
+          return res.status(400).json({
+            message: result.message || "Coupon invalid/expired/min spend not met",
+          });
         }
+        discountAmount = result.discountAmount;
+        appliedCouponCode = result.code || couponCode;
+      }
 
-        const tax = 0;
-        const shipping = 0;
-        const totalAmount = Math.max(0, subtotal - discountAmount + tax + shipping);
+      function getProductId(p: any): number {
+        return Number(p?.getDataValue?.("id") ?? p?.get?.("id") ?? p?.id);
+      }
 
-        const order = await Order.create(
+      const tax = 0;
+      const shipping = 0;
+      const totalAmount = Math.max(0, subtotal - discountAmount + tax + shipping);
+
+      const order = await Order.create(
           {
             invoiceNo: `STORE-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
             userId,
@@ -619,7 +686,10 @@ router.post(
 
         for (const item of itemsNorm) {
           const product = byId.get(item.productId)!;
-          product.stock = Number(product.stock || 0) - item.qty;
+          const currentStock = Number(
+            product.getDataValue?.("stock") ?? product.get?.("stock") ?? product.stock ?? 0
+          );
+          product.stock = currentStock - item.qty;
           await product.save({ transaction: tx });
         }
 
