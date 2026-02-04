@@ -3,6 +3,10 @@ import { Link, useParams } from "react-router-dom";
 import { fetchStoreOrder } from "../../api/store.service.ts";
 import { formatCurrency } from "../../utils/format.js";
 import StatusBadge from "../../components/UI/StatusBadge.jsx";
+import {
+  COD_INSTRUCTIONS,
+  TRANSFER_INSTRUCTIONS,
+} from "../../config/paymentInstructions.ts";
 
 export default function StoreOrderTrackingPage() {
   const { ref } = useParams();
@@ -123,6 +127,23 @@ export default function StoreOrderTrackingPage() {
           Status: <StatusBadge status={order.status} />
         </div>
         <div>Payment Method: {order.paymentMethod || "COD"}</div>
+        {order.paymentMethod === "TRANSFER" ? (
+          <div style={{ marginTop: "8px", padding: "12px", border: "1px solid #e2e2e2" }}>
+            <strong>How to pay (Bank Transfer)</strong>
+            <div>Bank: {TRANSFER_INSTRUCTIONS.bank}</div>
+            <div>Account No: {TRANSFER_INSTRUCTIONS.accountNo}</div>
+            <div>Account Name: {TRANSFER_INSTRUCTIONS.accountName}</div>
+            <div style={{ marginTop: "6px" }}>
+              After transfer, please upload proof via WhatsApp{" "}
+              {TRANSFER_INSTRUCTIONS.whatsapp}.
+            </div>
+          </div>
+        ) : (
+          <div style={{ marginTop: "8px", padding: "12px", border: "1px solid #e2e2e2" }}>
+            <strong>Pay on delivery</strong>
+            <div>{COD_INSTRUCTIONS.text}</div>
+          </div>
+        )}
         <div>
           Created At:{" "}
           {order.createdAt

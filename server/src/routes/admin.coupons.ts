@@ -8,22 +8,57 @@ const router = Router();
 
 router.use(requireAdmin);
 
-const createSchema = z.object({
-  code: z.string().min(1),
-  discountType: z.enum(["percent", "fixed"]).default("percent"),
-  amount: z.coerce.number().positive(),
-  minSpend: z.coerce.number().min(0).default(0),
-  active: z.coerce.boolean().optional().default(true),
-  expiresAt: z.string().datetime().optional().nullable(),
-});
-
-const updateSchema = createSchema.partial();
-
 const parseExpiresAt = (value?: string | null) => {
   if (!value) return null;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
+
+const parseLocaleNumber = (value: any) => {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (value == null) return 0;
+  const raw = String(value).trim();
+  if (!raw) return 0;
+  const cleaned = raw
+    .replace(/(rp|idr)/gi, "")
+    .replace(/\s+/g, "")
+    .replace(/[^\d,.-]/g, "");
+  if (!cleaned) return 0;
+  const hasComma = cleaned.includes(",");
+  const hasDot = cleaned.includes(".");
+  let normalized = cleaned;
+  if (hasComma && hasDot) {
+    normalized = cleaned.replace(/\./g, "").replace(",", ".");
+  } else if (hasComma) {
+    normalized = cleaned.replace(",", ".");
+  } else if (hasDot) {
+    const isThousands = /^\d{1,3}(\.\d{3})+$/.test(cleaned);
+    if (isThousands) {
+      normalized = cleaned.replace(/\./g, "");
+    }
+  }
+  const n = Number.parseFloat(normalized);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const createSchema = z.object({
+  code: z.string().min(1),
+  discountType: z.enum(["percent", "fixed"]).default("percent"),
+  amount: z
+    .union([z.string(), z.number()])
+    .transform(parseLocaleNumber)
+    .refine((value) => value > 0, { message: "Amount must be greater than 0." }),
+  minSpend: z
+    .union([z.string(), z.number()])
+    .optional()
+    .transform((value) => parseLocaleNumber(value ?? 0))
+    .refine((value) => value >= 0, { message: "Min spend must be >= 0." })
+    .default(0),
+  active: z.coerce.boolean().optional().default(true),
+  expiresAt: z.string().datetime().optional().nullable(),
+});
+
+const updateSchema = createSchema.partial();
 
 // GET /api/admin/coupons?q=&page=&limit=
 router.get("/", async (req, res, next) => {
@@ -72,6 +107,13 @@ router.get("/", async (req, res, next) => {
 router.post("/", async (req, res, next) => {
   try {
     const body = createSchema.parse(req.body);
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[admin.coupons] create raw", req.body);
+      console.log("[admin.coupons] create parsed", {
+        amount: body.amount,
+        minSpend: body.minSpend ?? 0,
+      });
+    }
     const code = body.code.trim().toUpperCase();
     const expiresAt = parseExpiresAt(body.expiresAt ?? null);
     const created = await Coupon.create({
@@ -109,6 +151,14 @@ router.patch("/:id", async (req, res, next) => {
     if (body.minSpend !== undefined) patch.minSpend = body.minSpend;
     if (body.active !== undefined) patch.active = body.active;
     if (body.expiresAt !== undefined) patch.expiresAt = parseExpiresAt(body.expiresAt);
+
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[admin.coupons] update raw", req.body);
+      console.log("[admin.coupons] update parsed", {
+        amount: patch.amount,
+        minSpend: patch.minSpend,
+      });
+    }
 
     await coupon.update(patch);
     res.json({ success: true, data: coupon });

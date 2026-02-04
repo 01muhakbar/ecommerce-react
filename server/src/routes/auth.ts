@@ -3,7 +3,7 @@ import { Router } from "express";
 import bcrypt from "bcrypt";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import * as models from "../models/index.js";
-import { loginSchema } from "@ecommerce/schemas";
+import { loginSchema, registerSchema } from "@ecommerce/schemas";
 import requireAuth from "../middleware/requireAuth.js";
 
 const { User } = models as { User?: any };
@@ -80,6 +80,78 @@ router.post("/login", async (req, res) => {
       path: "/",
     });
     logSetCookieDebug(res, "login");
+
+    return res.json({
+      success: true,
+      data: {
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+        },
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+router.post("/register", async (req, res) => {
+  const parsed = registerSchema.safeParse(req.body);
+  if (!parsed.success) {
+    if (process.env.NODE_ENV === "development") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payload",
+        errors: parsed.error.flatten(),
+      });
+    }
+    return res.status(400).json({ success: false, message: "Invalid payload" });
+  }
+
+  if (!User) {
+    return res.status(500).json({ success: false, message: "User model not loaded" });
+  }
+
+  const { name, email, password } = parsed.data;
+
+  try {
+    const existing = await User.findOne({ where: { email } });
+    if (existing) {
+      return res.status(409).json({ success: false, message: "Email already registered" });
+    }
+
+    const hashed = await bcrypt.hash(password, 10);
+    const user = await User.create({
+      name,
+      email,
+      password: hashed,
+      role: "customer",
+      status: "active",
+    });
+
+    const secret: string = process.env.JWT_SECRET ?? "dev-secret";
+    const expiresIn = (process.env.JWT_EXPIRES_IN ?? "1h") as any;
+    const options: SignOptions = { expiresIn };
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role, name: user.name },
+      secret,
+      options
+    );
+
+    const cookieName = process.env.AUTH_COOKIE_NAME || "token";
+    const secure =
+      process.env.COOKIE_SECURE === "true" ||
+      (process.env.NODE_ENV === "production" && req.secure);
+    res.cookie(cookieName, token, {
+      httpOnly: true,
+      secure,
+      sameSite: "lax",
+      path: "/",
+    });
+    logSetCookieDebug(res, "register");
 
     return res.json({
       success: true,

@@ -1,11 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCartStore } from "../../store/cart.store.ts";
 import { createStoreOrder, validateStoreCoupon } from "../../api/store.service.ts";
 import { formatCurrency } from "../../utils/format.js";
 
 export default function StoreCheckoutPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const items = useCartStore((state) => state.items);
   const subtotal = useCartStore((state) => state.subtotal);
   const clearCart = useCartStore((state) => state.clearCart);
@@ -16,10 +18,17 @@ export default function StoreCheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState("COD");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [showCartLink, setShowCartLink] = useState(false);
   const [couponCode, setCouponCode] = useState("");
   const [couponMessage, setCouponMessage] = useState("");
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [appliedCoupon, setAppliedCoupon] = useState(null);
+
+  useEffect(() => {
+    if (items.length === 0) {
+      navigate("/search", { replace: true });
+    }
+  }, [items.length, navigate]);
 
   if (items.length === 0) {
     return (
@@ -56,8 +65,11 @@ export default function StoreCheckoutPage() {
         code,
         subtotal: Number(subtotal || 0),
       });
-      const result = response.data;
-      if (result?.valid) {
+      const result = response?.data?.data ?? response?.data;
+      if (import.meta.env.DEV) {
+        console.log("[coupon validate payload]", response?.data ?? response);
+      }
+      if (result?.valid === true) {
         setAppliedCoupon(result);
         setCouponMessage(result.message || "Kupon diterapkan.");
         setCouponCode(result.code || code);
@@ -76,11 +88,16 @@ export default function StoreCheckoutPage() {
   const removeCoupon = () => {
     setAppliedCoupon(null);
     setCouponMessage("");
+    setCouponCode("");
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (isSubmitting) {
+      return;
+    }
     setError("");
+    setShowCartLink(false);
 
     if (!name.trim() || !phone.trim() || !address.trim()) {
       setError("Please complete your contact details.");
@@ -104,29 +121,35 @@ export default function StoreCheckoutPage() {
         })),
       });
 
-      clearCart();
+      if (response?.data?.orderId != null) {
+        clearCart();
+        queryClient.invalidateQueries({ queryKey: ["account", "orders"] });
+      }
       const invoiceNo = response?.data?.invoiceNo;
       const ref = invoiceNo || String(response.data.orderId);
+      const invoiceRef = invoiceNo || ref;
       navigate(
         `/checkout/success?ref=${encodeURIComponent(ref)}&invoiceNo=${encodeURIComponent(
-          invoiceNo || ""
+          invoiceRef
         )}&total=${encodeURIComponent(
           String(response?.data?.total ?? total ?? "")
-        )}&method=${encodeURIComponent(response.data.paymentMethod || paymentMethod)}`
+        )}&method=${encodeURIComponent(paymentMethod)}`
       );
     } catch (err) {
       const data = err?.response?.data;
       if (err?.response?.status === 400 && Array.isArray(data?.missing)) {
-        clearCart();
         if (import.meta.env.DEV) {
           console.warn("[checkout] missing items", data.missing);
         }
+        const missingList = data.missing.map((item) => String(item)).join(", ");
         setError(
-          "Some products in your cart are no longer available. Cart has been cleared — please add products again."
+          `Some items in your cart are no longer available (IDs: ${missingList}). Please remove them from your cart and try again.`
         );
+        setShowCartLink(true);
       } else {
         const message = data?.message;
         setError(message || "Checkout failed. Please try again.");
+        setShowCartLink(false);
       }
     } finally {
       setIsSubmitting(false);
@@ -177,8 +200,7 @@ export default function StoreCheckoutPage() {
             style={{ display: "block", width: "100%", padding: "8px" }}
           >
             <option value="COD">COD</option>
-            <option value="TRANSFER">TRANSFER</option>
-            <option value="EWALLET">EWALLET</option>
+            <option value="TRANSFER">Bank Transfer</option>
           </select>
         </div>
         <div style={{ marginBottom: "12px" }}>
@@ -210,7 +232,7 @@ export default function StoreCheckoutPage() {
               {isApplyingCoupon ? "Applying..." : "Apply"}
             </button>
             {appliedCoupon ? (
-              <button type="button" onClick={removeCoupon}>
+              <button type="button" onClick={removeCoupon} disabled={isApplyingCoupon}>
                 Remove
               </button>
             ) : null}
@@ -221,7 +243,15 @@ export default function StoreCheckoutPage() {
             </p>
           ) : null}
           {couponMessage ? (
-            <p style={{ marginTop: "6px", fontSize: "12px" }}>{couponMessage}</p>
+            <p
+              style={{
+                marginTop: "6px",
+                fontSize: "12px",
+                color: appliedCoupon ? "#16a34a" : "crimson",
+              }}
+            >
+              {couponMessage}
+            </p>
           ) : null}
         </div>
         <div style={{ marginBottom: "12px" }}>
@@ -230,9 +260,18 @@ export default function StoreCheckoutPage() {
           </div>
           <div style={{ fontWeight: 600 }}>Total: {formatCurrency(total)}</div>
         </div>
-        {error ? <p style={{ color: "crimson" }}>{error}</p> : null}
-        <button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Submitting..." : "Place Order"}
+        {error ? (
+          <div style={{ color: "crimson" }}>
+            <p>{error}</p>
+            {showCartLink ? (
+              <button type="button" onClick={() => navigate("/cart")}>
+                Go to cart
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        <button type="submit" disabled={isSubmitting || items.length === 0}>
+          {isSubmitting ? "Placing order..." : "Place Order"}
         </button>
       </form>
     </section>

@@ -129,7 +129,7 @@ export const fetchStoreCoupons = async () => {
 };
 
 export const validateStoreCoupon = async (payload: { code: string; subtotal: number }) => {
-  const { data } = await api.post<{
+  const response = await api.post<{
     data: {
       valid: boolean;
       code: string | null;
@@ -137,5 +137,5 @@ export const validateStoreCoupon = async (payload: { code: string; subtotal: num
       message: string;
     };
   }>("/store/coupons/validate", payload);
-  return data;
+  return response;
 };

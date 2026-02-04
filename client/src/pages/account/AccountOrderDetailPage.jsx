@@ -8,9 +8,11 @@ const fetchOrder = async (orderId) => {
 };
 
 const money = (value) =>
-  new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(
-    Number(value || 0)
-  );
+  new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
 
 const statusStyles = (status = "") => {
   const s = String(status).toLowerCase();
@@ -34,7 +36,19 @@ export default function AccountOrderDetailPage() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["account", "orders", id],
     queryFn: () => fetchOrder(id),
+    enabled: Boolean(id),
   });
+
+  if (!id) {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+        Invalid order id.{" "}
+        <Link to="/account/orders" className="font-medium text-slate-700 hover:text-slate-900">
+          Back to orders
+        </Link>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return <div className="text-sm text-slate-500">Loading order...</div>;
@@ -48,14 +62,21 @@ export default function AccountOrderDetailPage() {
     );
   }
 
-  const order = data?.data;
+  const order = data?.data ?? data?.data?.data ?? null;
   if (!order) {
     return (
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-        Order not found.
+        Order not found.{" "}
+        <Link to="/account/orders" className="font-medium text-slate-700 hover:text-slate-900">
+          Back to orders
+        </Link>
       </div>
     );
   }
+
+  const orderRef = order.invoiceNo || order.ref || `#${order.id}`;
+  const discountValue = order.discount ?? order.discountAmount ?? 0;
+  const subtotalValue = order.subtotal ?? 0;
 
   return (
     <div className="space-y-6">
@@ -63,7 +84,7 @@ export default function AccountOrderDetailPage() {
         <div>
           <p className="text-sm text-slate-500">Order</p>
           <h2 className="text-lg font-semibold text-slate-900">
-            {order.ref || `#${order.id}`}
+            {orderRef}
           </h2>
           <p className="text-xs text-slate-500">Placed {formatDate(order.createdAt)}</p>
         </div>
@@ -80,9 +101,9 @@ export default function AccountOrderDetailPage() {
         <h3 className="text-sm font-semibold text-slate-900">Summary</h3>
         <div className="mt-3 grid gap-2 text-sm text-slate-600 md:grid-cols-2">
           <div>Payment: {order.paymentMethod || "-"}</div>
-          <div>Total: {money(order.totalAmount)}</div>
-          <div>Discount: {money(order.discount)}</div>
-          <div>Subtotal: {money(order.subtotal)}</div>
+          <div>Total: {money(order.totalAmount || 0)}</div>
+          <div>Discount: {money(discountValue)}</div>
+          <div>Subtotal: {money(subtotalValue)}</div>
         </div>
       </div>
 

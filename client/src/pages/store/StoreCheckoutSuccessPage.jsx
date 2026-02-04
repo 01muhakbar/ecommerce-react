@@ -1,12 +1,16 @@
 import { useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import {
+  COD_INSTRUCTIONS,
+  TRANSFER_INSTRUCTIONS,
+} from "../../config/paymentInstructions.ts";
 
 export default function StoreCheckoutSuccessPage() {
   const [params] = useSearchParams();
   const ref = params.get("ref") || params.get("orderId");
   const invoiceNo = params.get("invoiceNo") || ref;
   const total = params.get("total");
-  const method = params.get("method");
+  const method = params.get("method") || "COD";
   const [copyStatus, setCopyStatus] = useState("");
   const resetTimerRef = useRef(null);
 
@@ -61,11 +65,32 @@ export default function StoreCheckoutSuccessPage() {
         </div>
       ) : null}
       {total ? <p>Total: {total}</p> : null}
-      <p>Payment Method: {method || "COD"}</p>
-      {ref ? (
-        <Link to={`/order/${encodeURIComponent(ref)}`}>View Order</Link>
-      ) : null}
-      <Link to="/">Back to Store Home</Link>
+      <p>Payment Method: {method}</p>
+      {method === "TRANSFER" ? (
+        <div style={{ marginTop: "12px", padding: "12px", border: "1px solid #e2e2e2" }}>
+          <strong>How to pay (Bank Transfer)</strong>
+          <div>Bank: {TRANSFER_INSTRUCTIONS.bank}</div>
+          <div>Account No: {TRANSFER_INSTRUCTIONS.accountNo}</div>
+          <div>Account Name: {TRANSFER_INSTRUCTIONS.accountName}</div>
+          <div style={{ marginTop: "6px" }}>
+            After transfer, please upload proof via WhatsApp{" "}
+            {TRANSFER_INSTRUCTIONS.whatsapp}.
+          </div>
+        </div>
+      ) : (
+        <div style={{ marginTop: "12px", padding: "12px", border: "1px solid #e2e2e2" }}>
+          <strong>Pay on delivery</strong>
+          <div>{COD_INSTRUCTIONS.text}</div>
+        </div>
+      )}
+      <div style={{ marginTop: "12px", display: "flex", gap: "12px", flexWrap: "wrap" }}>
+        {ref ? (
+          <Link to={`/order/${encodeURIComponent(ref)}`}>Track your order</Link>
+        ) : (
+          <Link to="/account/orders">Track your order</Link>
+        )}
+        <Link to="/">Back to Store Home</Link>
+      </div>
     </section>
   );
 }

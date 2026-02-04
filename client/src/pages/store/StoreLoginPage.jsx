@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/useAuth.js";
 import { api } from "../../api/axios.ts";
 
@@ -97,6 +97,12 @@ export default function StoreLoginPage() {
           {isSubmitting ? "Signing in..." : "Sign in"}
         </button>
       </form>
+      <p className="mt-4 text-sm text-slate-500">
+        New here?{" "}
+        <Link to="/auth/register" className="font-semibold text-slate-900 hover:underline">
+          Create account
+        </Link>
+      </p>
     </section>
   );
 }

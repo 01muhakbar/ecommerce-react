@@ -24,6 +24,14 @@ const getAttr = (row: any, key: string) =>
   row?.dataValues?.[key] ??
   undefined;
 
+function normalizeUploadsUrl(v?: string | null) {
+  if (!v) return null;
+  if (/^https?:\/\//i.test(v)) return v;
+  if (v.startsWith("/uploads/")) return v;
+  if (v.startsWith("/")) return v;
+  return `/uploads/${v}`;
+}
+
 function getProductId(product: any): number {
   const raw =
     product?.getDataValue?.("id") ??
@@ -34,7 +42,8 @@ function getProductId(product: any): number {
 
 const toProductListItem = (product: any) => {
   const plain = product?.get ? product.get({ plain: true }) : product;
-  const imageUrl = plain?.promoImagePath || plain?.imagePaths?.[0] || null;
+  const rawImage = plain?.promoImagePath || plain?.imagePaths?.[0] || null;
+  const imageUrl = normalizeUploadsUrl(rawImage);
   const category = plain?.category
     ? {
         id: plain.category.id,
@@ -500,7 +509,7 @@ router.post(
       const customer = req.body?.customer;
       const items = Array.isArray(req.body?.items) ? req.body.items : [];
       const couponCode = normalizeCouponCode(req.body?.couponCode);
-      const PAYMENT_METHODS = ["COD", "TRANSFER", "EWALLET"] as const;
+      const PAYMENT_METHODS = ["COD", "TRANSFER"] as const;
       const rawPaymentMethod = req.body?.paymentMethod;
       let paymentMethod = "COD";
       if (typeof rawPaymentMethod === "string" && rawPaymentMethod.trim() !== "") {
@@ -709,6 +718,7 @@ router.post(
         });
       }
 
+      const orderStatus = paymentMethod === "TRANSFER" ? "pending_payment" : "processing";
       const order = await Order.create(
           {
             invoiceNo: `STORE-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
@@ -721,7 +731,7 @@ router.post(
             totalAmount,
             couponCode: appliedCouponCode,
             discountAmount,
-            status: "pending",
+            status: orderStatus,
           } as any,
           { transaction: tx }
         );

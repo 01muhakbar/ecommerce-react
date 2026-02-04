@@ -108,7 +108,14 @@ export const useCartStore = create<CartState>()(
           return { items, ...totals };
         });
       },
-      clearCart: () => set({ items: [], totalQty: 0, subtotal: 0 }),
+      clearCart: () => {
+        try {
+          localStorage.removeItem("cart");
+        } catch {
+          // ignore storage errors
+        }
+        set({ items: [], totalQty: 0, subtotal: 0 });
+      },
     }),
     {
       name: "cart",

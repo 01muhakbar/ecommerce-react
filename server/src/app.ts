@@ -75,4 +75,12 @@ app.use("/api/admin/staff", requireSuperAdmin, staffRouter);
 // uploads (tentukan kebijakan; ini aku set staff+)
 app.use("/api/admin", requireStaffOrAdmin, adminUploadsRouter);
 
+// 404 handler (dev-only logging)
+app.use((req, res) => {
+  if (process.env.NODE_ENV === "development") {
+    console.log("[404]", req.method, req.originalUrl);
+  }
+  res.status(404).json({ success: false, message: "Not found" });
+});
+
 export default app;

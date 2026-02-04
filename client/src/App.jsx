@@ -8,7 +8,7 @@ import StoreCartPage from "./pages/store/StoreCartPage.jsx";
 import CheckoutPage from "./pages/store/Checkout.jsx";
 import StoreLoginPage from "./pages/store/StoreLoginPage.jsx";
 import StoreRegisterPage from "./pages/store/StoreRegisterPage.jsx";
-import CheckoutSuccess from "./pages/store/CheckoutSuccess.jsx";
+import StoreCheckoutSuccessPage from "./pages/store/StoreCheckoutSuccessPage.jsx";
 import StoreOrderTrackingPage from "./pages/store/StoreOrderTrackingPage.jsx";
 import StoreSearchPage from "./pages/store/StoreSearchPage.jsx";
 import StoreOffersPage from "./pages/store/StoreOffersPage.jsx";
@@ -56,7 +56,7 @@ export default function App() {
             <Route path="product/:slug" element={<StoreProductDetailPage />} />
             <Route path="cart" element={<StoreCartPage />} />
             <Route path="checkout" element={<CheckoutPage />} />
-            <Route path="checkout/success" element={<CheckoutSuccess />} />
+            <Route path="checkout/success" element={<StoreCheckoutSuccessPage />} />
             <Route path="order/:ref" element={<StoreOrderTrackingPage />} />
             <Route path="offers" element={<StoreOffersPage />} />
             <Route path="auth/login" element={<StoreLoginPage />} />

@@ -1,0 +1,17 @@
+
+> project-ecommerce@1.0.0 dev C:\Users\user\Documents\ecommerce-react
+> pnpm -r --parallel dev
+
+Scope: 3 of 4 workspace projects
+client dev$ vite
+server dev$ tsx watch src/server.ts
+client dev:   [32m[1mVITE[22m v7.1.9[39m  [2mready in [0m[1m984[22m[2m[0m ms[22m
+client dev:   [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5173[22m/[39m
+client dev: [2m  [32m➜[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m
+client dev: [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+server dev: Attempting to connect to the database...
+server dev: Database connected successfully.
+server dev: Skipping database sync (set DB_SYNC=true to enable).
+server dev: 🚀 Server is running on http://localhost:3001 with DB sync
+
+c:\Users\user\Documents\ecommerce-react>

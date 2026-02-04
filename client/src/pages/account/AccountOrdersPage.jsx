@@ -11,9 +11,11 @@ const fetchOrders = async (page, limit) => {
 };
 
 const money = (value) =>
-  new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(
-    Number(value || 0)
-  );
+  new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
 
 const statusStyles = (status = "") => {
   const s = String(status).toLowerCase();

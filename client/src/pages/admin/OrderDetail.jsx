@@ -104,7 +104,7 @@ export default function OrderDetail() {
             <div>
               Created: {order.createdAt ? new Date(order.createdAt).toLocaleString("id-ID") : "-"}
             </div>
-            <div>Payment: {order.method || "COD"}</div>
+            <div>Payment: {order.paymentMethod || order.method || "COD"}</div>
           </div>
         </div>
 
