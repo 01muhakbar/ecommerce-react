@@ -7,7 +7,7 @@ import {
 
 export default function StoreCheckoutSuccessPage() {
   const [params] = useSearchParams();
-  const ref = params.get("ref") || params.get("orderId");
+  const ref = params.get("ref") || params.get("orderId") || params.get("invoiceNo");
   const invoiceNo = params.get("invoiceNo") || ref;
   const total = params.get("total");
   const method = params.get("method") || "COD";
@@ -83,7 +83,7 @@ export default function StoreCheckoutSuccessPage() {
           <div>{COD_INSTRUCTIONS.text}</div>
         </div>
       )}
-      <div style={{ marginTop: "12px", display: "flex", gap: "12px", flexWrap: "wrap" }}>
+      <div className="flex gap-3" style={{ marginTop: "12px", flexWrap: "wrap" }}>
         {ref ? (
           <Link to={`/order/${encodeURIComponent(ref)}`}>Track your order</Link>
         ) : (

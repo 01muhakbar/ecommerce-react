@@ -24,6 +24,9 @@ import adminCategoriesRouter from "./routes/admin.categories.js";
 import adminOrdersRouter from "./routes/admin.orders.js";
 import adminCustomersRouter from "./routes/admin.customers.js";
 import adminCouponsRouter from "./routes/admin.coupons.js";
+import adminAttributesRouter from "./routes/admin.attributes.js";
+import adminAttributeValuesRouter from "./routes/admin.attributeValues.js";
+import adminProductAttributesRouter from "./routes/admin.productAttributes.js";
 import storeRouter from "./routes/store.js";
 import storeCouponsRouter from "./routes/store.coupons.js";
 import publicRouter from "./routes/public.js";
@@ -68,6 +71,9 @@ app.use("/api/admin/customers", requireStaffOrAdmin, adminCustomersRouter);
 
 app.use("/api/admin/categories", requireAdmin, adminCategoriesRouter);
 app.use("/api/admin/coupons", requireAdmin, adminCouponsRouter);
+app.use("/api/admin/attributes", requireAdmin, adminAttributesRouter);
+app.use("/api/admin", requireAdmin, adminAttributeValuesRouter);
+app.use("/api/admin", requireAdmin, adminProductAttributesRouter);
 
 // super admin only
 app.use("/api/admin/staff", requireSuperAdmin, staffRouter);

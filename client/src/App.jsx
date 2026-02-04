@@ -24,6 +24,7 @@ const AdminOrdersPage = lazy(() => import("./pages/admin/Orders.jsx"));
 const Customers = lazy(() => import("./pages/Customers.jsx"));
 const Settings = lazy(() => import("./pages/Settings.jsx"));
 const AdminOrderDetail = lazy(() => import("./pages/admin/OrderDetail.jsx"));
+const AdminAttributesPage = lazy(() => import("./pages/admin/Attributes.jsx"));
 const AdminCategoriesPage = lazy(() => import("./pages/admin/AdminCategoriesPage.jsx"));
 const AdminCustomerDetailPage = lazy(() =>
   import("./pages/admin/AdminCustomerDetailPage.jsx")
@@ -169,7 +170,7 @@ export default function App() {
                 path="attributes"
                 element={
                   <RequirePerm perm="ATTRIBUTES_CRUD">
-                    <ComingSoon title="Attributes" />
+                    <AdminAttributesPage />
                   </RequirePerm>
                 }
               />

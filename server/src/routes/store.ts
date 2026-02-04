@@ -267,6 +267,36 @@ router.get(
   }
 );
 
+// GET /api/store/my/orders (auth)
+router.get(
+  "/my/orders",
+  protect,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = getAuthUserId(req, res);
+      if (!userId) return;
+
+      const [rows] = await sequelize.query(
+        "SELECT id, invoice_no, status, total_amount, created_at, payment_method FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT 20",
+        { replacements: [userId] }
+      );
+
+      res.json({
+        data: (rows as any[]).map((row: any) => ({
+          id: row.id,
+          invoiceNo: row.invoice_no ?? row.invoiceNo ?? null,
+          status: row.status ?? null,
+          totalAmount: Number(row.total_amount ?? row.totalAmount ?? 0),
+          createdAt: row.created_at ?? row.createdAt ?? null,
+          paymentMethod: row.payment_method ?? row.paymentMethod ?? null,
+        })),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 // GET /api/store/orders/my/:id (auth)
 router.get(
   "/orders/my/:id",
@@ -406,13 +436,15 @@ router.get(
   "/orders/:ref",
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const ref = String(req.params.ref || "").trim();
-      if (!ref) {
+      const refParam = String(req.params.ref || "").trim();
+      if (!refParam) {
         return res.status(400).json({ message: "Invalid order reference." });
       }
 
-      const isNumeric = /^\d+$/.test(ref);
-      const where = isNumeric ? { id: Number(ref) } : { invoiceNo: ref };
+      const isNumeric = /^\d+$/.test(refParam);
+      const where = isNumeric
+        ? { id: Number(refParam) }
+        : sequelize.where(sequelize.col("invoice_no"), refParam);
 
       const order = await Order.findOne({
         where,
@@ -449,14 +481,81 @@ router.get(
         return res.status(404).json({ message: "Order not found" });
       }
 
-      const items = ((order as any).items ?? []).map((item: any) => ({
-        id: item.id,
-        productId: item.productId ?? item.get?.("productId") ?? item.product_id,
-        name: item.product?.name ?? `Product #${item.productId || item.product_id || "-"}`,
-        quantity: Number(item.quantity || 0),
-        price: Number(item.price || 0),
-        lineTotal: Number(item.price || 0) * Number(item.quantity || 0),
-      }));
+      const orderId =
+        (order as any).id ??
+        order.get?.("id") ??
+        (order as any).get?.("id") ??
+        null;
+      if (!orderId) {
+        return res.status(500).json({ message: "Order id missing" });
+      }
+
+      const invoiceNo =
+        (order as any).invoiceNo ??
+        order.get?.("invoiceNo") ??
+        (order as any).invoice_no ??
+        order.get?.("invoice_no") ??
+        null;
+      const totalAmount =
+        (order as any).totalAmount ??
+        order.get?.("totalAmount") ??
+        (order as any).total_amount ??
+        order.get?.("total_amount") ??
+        0;
+      const paymentMethod =
+        (order as any).paymentMethod ??
+        order.get?.("paymentMethod") ??
+        (order as any).payment_method ??
+        order.get?.("payment_method") ??
+        "COD";
+      const status =
+        (order as any).status ??
+        order.get?.("status") ??
+        (order as any).status_text ??
+        order.get?.("status_text") ??
+        "pending";
+      const customerName =
+        (order as any).customerName ??
+        order.get?.("customerName") ??
+        (order as any).customer_name ??
+        order.get?.("customer_name") ??
+        null;
+      const customerPhone =
+        (order as any).customerPhone ??
+        order.get?.("customerPhone") ??
+        (order as any).customer_phone ??
+        order.get?.("customer_phone") ??
+        null;
+      const customerAddress =
+        (order as any).customerAddress ??
+        order.get?.("customerAddress") ??
+        (order as any).customer_address ??
+        order.get?.("customer_address") ??
+        null;
+      const createdAt =
+        (order as any).createdAt ??
+        order.get?.("createdAt") ??
+        (order as any).created_at ??
+        order.get?.("created_at") ??
+        null;
+
+      const [rows] = await sequelize.query(
+        "SELECT oi.product_id, oi.quantity, oi.price, p.name FROM orderitems oi LEFT JOIN products p ON p.id=oi.product_id WHERE oi.order_id = ?",
+        { replacements: [orderId] }
+      );
+
+      const items = (rows as any[]).map((r: any) => {
+        const productId = r.product_id ?? r.productId;
+        const quantity = Number(r.quantity || 0);
+        const price = Number(r.price || 0);
+        return {
+          productId,
+          name: r.name ?? `Product #${productId || "-"}`,
+          quantity,
+          price,
+          lineTotal: price * quantity,
+        };
+      });
       const subtotal = items.reduce(
         (sum: number, item: any) => sum + Number(item.lineTotal || 0),
         0
@@ -467,21 +566,20 @@ router.get(
 
       return res.json({
         data: {
-          id: order.id,
-          ref: order.invoiceNo || String(order.id),
-          invoiceNo: order.invoiceNo,
-          status: order.status,
-          totalAmount: Number(order.totalAmount || 0),
+          ref: invoiceNo || String(order.id),
+          invoiceNo,
+          status,
+          totalAmount: Number(totalAmount),
           subtotal,
           discount: discountAmount,
           tax,
           shipping,
           couponCode: (order as any).couponCode ?? null,
-          paymentMethod: order.paymentMethod ?? "COD",
-          createdAt: order.createdAt,
-          customerName: order.customerName ?? null,
-          customerPhone: order.customerPhone ?? null,
-          customerAddress: order.customerAddress ?? null,
+          paymentMethod,
+          createdAt,
+          customerName,
+          customerPhone,
+          customerAddress,
           items,
         },
       });

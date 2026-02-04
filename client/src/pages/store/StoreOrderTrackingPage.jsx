@@ -60,7 +60,13 @@ export default function StoreOrderTrackingPage() {
       try {
         const response = await fetchStoreOrder(ref);
         if (!active) return;
-        setOrder(response.data || null);
+        const payload =
+          response?.data?.data ??
+          response?.data ??
+          response?.order ??
+          response?.data?.order ??
+          response;
+        setOrder(payload || null);
       } catch (err) {
         if (!active) return;
         const status = err?.response?.status;
@@ -104,7 +110,14 @@ export default function StoreOrderTrackingPage() {
     );
   }
 
-  const invoiceRef = order.invoiceNo || order.ref;
+  const invoiceRef = order.invoiceNo || order.ref || ref;
+  const totalAmount = order.totalAmount ?? order.total ?? 0;
+  const customerName = order.customerName ?? order.customer?.name ?? "—";
+  const customerPhone = order.customerPhone ?? order.customer?.phone ?? "—";
+  const customerAddress = order.customerAddress ?? order.customer?.address ?? "—";
+  const paymentMethod = order.paymentMethod ?? order.method ?? "COD";
+  const items = order.items ?? order.orderItems ?? [];
+  const createdAt = order.createdAt ?? order.created_at ?? null;
 
   return (
     <section>
@@ -126,8 +139,8 @@ export default function StoreOrderTrackingPage() {
         <div>
           Status: <StatusBadge status={order.status} />
         </div>
-        <div>Payment Method: {order.paymentMethod || "COD"}</div>
-        {order.paymentMethod === "TRANSFER" ? (
+        <div>Payment Method: {paymentMethod}</div>
+        {paymentMethod === "TRANSFER" ? (
           <div style={{ marginTop: "8px", padding: "12px", border: "1px solid #e2e2e2" }}>
             <strong>How to pay (Bank Transfer)</strong>
             <div>Bank: {TRANSFER_INSTRUCTIONS.bank}</div>
@@ -146,8 +159,8 @@ export default function StoreOrderTrackingPage() {
         )}
         <div>
           Created At:{" "}
-          {order.createdAt
-            ? new Date(order.createdAt).toLocaleString("id-ID", {
+          {createdAt
+            ? new Date(createdAt).toLocaleString("id-ID", {
                 dateStyle: "medium",
                 timeStyle: "short",
               })
@@ -157,14 +170,14 @@ export default function StoreOrderTrackingPage() {
 
       <div style={{ marginBottom: "16px" }}>
         <h3>Customer</h3>
-        <div>Name: {order.customerName || "—"}</div>
-        <div>Phone: {order.customerPhone || "—"}</div>
-        <div>Address: {order.customerAddress || "—"}</div>
+        <div>Name: {customerName}</div>
+        <div>Phone: {customerPhone}</div>
+        <div>Address: {customerAddress}</div>
       </div>
 
       <div style={{ marginBottom: "16px" }}>
         <h3>Items</h3>
-        {order.items && order.items.length > 0 ? (
+        {items && items.length > 0 ? (
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
@@ -175,8 +188,8 @@ export default function StoreOrderTrackingPage() {
               </tr>
             </thead>
             <tbody>
-              {order.items.map((item) => (
-                <tr key={item.id}>
+              {items.map((item, idx) => (
+                <tr key={`${item.id ?? item.productId ?? idx}`}>
                   <td style={{ padding: "8px 0" }}>{item.name}</td>
                   <td style={{ textAlign: "right" }}>{item.quantity}</td>
                   <td style={{ textAlign: "right" }}>
@@ -195,7 +208,7 @@ export default function StoreOrderTrackingPage() {
       </div>
 
       <div style={{ fontWeight: 600 }}>
-        Total: {formatCurrency(Number(order.totalAmount || 0))}
+        Total: {formatCurrency(Number(totalAmount))}
       </div>
 
       <div style={{ marginTop: "16px" }}>

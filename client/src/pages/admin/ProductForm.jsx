@@ -27,6 +27,8 @@ export default function ProductForm() {
   });
   const [notice, setNotice] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [attributeSelections, setAttributeSelections] = useState({});
+  const [attributeNotice, setAttributeNotice] = useState(null);
 
   const productQuery = useQuery({
     queryKey: ["admin-product", id],
@@ -38,6 +40,48 @@ export default function ProductForm() {
     queryFn: () => fetchAdminCategories({ page: 1, limit: 200 }),
   });
   const categories = categoriesQuery.data?.data || [];
+  const attributesQuery = useQuery({
+    queryKey: ["admin", "attributes-with-values"],
+    queryFn: async () => {
+      const { data } = await api.get("/admin/attributes");
+      const attributes = data?.data || [];
+      const valuesEntries = await Promise.all(
+        attributes.map(async (attr) => {
+          const { data: valuesData } = await api.get(
+            `/admin/attributes/${attr.id}/values`,
+          );
+          return [attr.id, valuesData?.data || []];
+        }),
+      );
+      const valuesByAttribute = Object.fromEntries(valuesEntries);
+      return { attributes, valuesByAttribute, warning: data?.warning || "" };
+    },
+  });
+  const attributes = attributesQuery.data?.attributes || [];
+  const valuesByAttribute = attributesQuery.data?.valuesByAttribute || {};
+  const attributesWarning = attributesQuery.data?.warning || "";
+
+  const productAttributesQuery = useQuery({
+    queryKey: ["admin", "product-attributes", id],
+    queryFn: async () => {
+      const { data } = await api.get(`/admin/products/${id}/attributes`);
+      return data;
+    },
+    enabled: isEdit,
+  });
+
+  useEffect(() => {
+    if (!isEdit) return;
+    const rows = productAttributesQuery.data?.data || [];
+    if (!rows.length) return;
+    const next = {};
+    rows.forEach((row) => {
+      if (row?.attributeId) {
+        next[row.attributeId] = row.valueId ? String(row.valueId) : "";
+      }
+    });
+    setAttributeSelections(next);
+  }, [isEdit, productAttributesQuery.data]);
 
   useEffect(() => {
     if (!isEdit) return;
@@ -84,6 +128,25 @@ export default function ProductForm() {
       setNotice({
         type: "error",
         message: error?.response?.data?.message || "Failed to update product.",
+      });
+    },
+  });
+
+  const saveAttributesMutation = useMutation({
+    mutationFn: async ({ productId, items }) => {
+      const { data } = await api.put(`/admin/products/${productId}/attributes`, {
+        items,
+      });
+      return data;
+    },
+    onSuccess: () => {
+      setAttributeNotice({ type: "success", message: "Attributes saved." });
+      qc.invalidateQueries({ queryKey: ["admin", "product-attributes", id] });
+    },
+    onError: (error) => {
+      setAttributeNotice({
+        type: "error",
+        message: error?.response?.data?.message || "Failed to save attributes.",
       });
     },
   });
@@ -275,6 +338,97 @@ export default function ProductForm() {
           </Link>
         </div>
       </form>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">Attributes</h2>
+            <p className="text-sm text-slate-500">
+              Assign attribute values to this product.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={!isEdit || saveAttributesMutation.isPending}
+            onClick={() => {
+              const items = Object.entries(attributeSelections)
+                .map(([attributeId, valueId]) => ({
+                  attributeId: Number(attributeId),
+                  valueId: Number(valueId),
+                }))
+                .filter((item) => item.attributeId > 0 && item.valueId > 0);
+              saveAttributesMutation.mutate({ productId: id, items });
+            }}
+            className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {saveAttributesMutation.isPending ? "Saving..." : "Save Attributes"}
+          </button>
+        </div>
+
+        {attributeNotice ? (
+          <div
+            className={`mt-4 rounded-2xl px-4 py-2 text-sm ${
+              attributeNotice.type === "error"
+                ? "border border-rose-200 bg-rose-50 text-rose-700"
+                : "border border-emerald-200 bg-emerald-50 text-emerald-700"
+            }`}
+          >
+            {attributeNotice.message}
+          </div>
+        ) : null}
+
+        {attributesWarning ? (
+          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700">
+            Warning: {attributesWarning}
+          </div>
+        ) : null}
+
+        {!isEdit ? (
+          <div className="mt-4 text-sm text-slate-500">
+            Save the product first to manage attributes.
+          </div>
+        ) : attributesQuery.isLoading ? (
+          <div className="mt-4 text-sm text-slate-500">Loading attributes...</div>
+        ) : attributesQuery.isError ? (
+          <div className="mt-4 text-sm text-rose-600">
+            {attributesQuery.error?.response?.status === 401
+              ? "Unauthorized. Please login as admin."
+              : "Failed to load attributes."}
+          </div>
+        ) : attributes.length === 0 ? (
+          <div className="mt-4 text-sm text-slate-500">No attributes yet.</div>
+        ) : (
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            {attributes.map((attr) => {
+              const values = valuesByAttribute[attr.id] || [];
+              return (
+                <div key={attr.id}>
+                  <label className="text-sm font-medium text-slate-600">
+                    {attr.name}
+                  </label>
+                  <select
+                    value={attributeSelections[attr.id] || ""}
+                    onChange={(event) =>
+                      setAttributeSelections((prev) => ({
+                        ...prev,
+                        [attr.id]: event.target.value,
+                      }))
+                    }
+                    className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-slate-400 focus:outline-none"
+                  >
+                    <option value="">Select value</option>
+                    {values.map((val) => (
+                      <option key={val.id} value={String(val.id)}>
+                        {val.value}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
