@@ -2,12 +2,21 @@ import { Request, Response } from 'express';
 import { Cart } from '../models/Cart.js';
 import { CartItem } from '../models/CartItem.js';
 import { Product } from '../models/Product.js';
+import { sequelize } from "../models/index.js";
 
 const asSingle = (v: unknown) => (Array.isArray(v) ? v[0] : v);
 const toId = (v: unknown): number | null => {
   const raw = asSingle(v);
   const id = typeof raw === "string" ? Number(raw) : Number(raw as any);
   return Number.isFinite(id) ? id : null;
+};
+
+const toQty = (v: unknown): number | null => {
+  const raw = asSingle(v);
+  if (raw === undefined || raw === null) return null;
+  const qty = typeof raw === "string" ? Number(raw) : Number(raw as any);
+  if (!Number.isFinite(qty) || !Number.isInteger(qty)) return null;
+  return qty;
 };
 
 // --- CONTROLLER FUNCTIONS ---
@@ -210,6 +219,79 @@ export const updateCartItem = async (
         message: "Failed to update cart.",
         error: (error as Error).message,
       });
+  }
+};
+
+export const setCartItemQty = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const userId = (req as any).user?.id;
+    const productId = toId(req.params.productId);
+    const qty = toQty((req.body as any)?.qty ?? (req.body as any)?.quantity);
+
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    if (!productId || productId <= 0 || !Number.isInteger(productId)) {
+      res.status(400).json({ message: "Invalid productId" });
+      return;
+    }
+
+    if (qty === null) {
+      res.status(400).json({ message: "Invalid qty" });
+      return;
+    }
+
+    await sequelize.transaction(async (t) => {
+      let cart = await Cart.findOne({
+        where: { userId },
+        transaction: t,
+        lock: t.LOCK.UPDATE,
+      });
+
+      if (!cart) {
+        if (qty <= 0) return;
+        cart = await Cart.create({ userId }, { transaction: t });
+      }
+
+      const cartItem = await CartItem.findOne({
+        where: { cartId: cart.id, productId },
+        transaction: t,
+        lock: t.LOCK.UPDATE,
+      });
+
+      if (qty <= 0) {
+        if (cartItem) {
+          await cartItem.destroy({ transaction: t });
+        }
+        return;
+      }
+
+      if (cartItem) {
+        if (cartItem.quantity !== qty) {
+          cartItem.quantity = qty;
+          await cartItem.save({ transaction: t });
+        }
+        return;
+      }
+
+      await CartItem.create(
+        { cartId: cart.id, productId, quantity: qty },
+        { transaction: t }
+      );
+    });
+
+    res.status(204).end();
+  } catch (error) {
+    console.error("SET CART ITEM QTY ERROR:", error);
+    res.status(500).json({
+      message: "Failed to set cart item quantity.",
+      error: (error as Error).message,
+    });
   }
 };
 

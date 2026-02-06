@@ -9,6 +9,7 @@ router.use(protect);
 
 router.get("/", cartController.getCart);
 router.post("/add", cartController.addToCart);
+router.put("/items/:productId", cartController.setCartItemQty);
 router.delete("/remove/:itemId", cartController.removeFromCart);
 
 export default router;

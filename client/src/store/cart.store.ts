@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import * as cartApi from "../api/cartApi.ts";
+import { fetchRemoteCartItems } from "../utils/cartSync.ts";
 
 export type CartItem = {
   productId: number;
@@ -20,6 +22,11 @@ type CartState = {
   items: CartItem[];
   totalQty: number;
   subtotal: number;
+  mode: "guest" | "remote";
+  isRemoteSyncing: boolean;
+  setMode: (mode: "guest" | "remote") => void;
+  setItems: (items: CartItem[]) => void;
+  reset: () => void;
   addItem: (product: CartProduct, qty?: number) => void;
   removeItem: (productId: number) => void;
   updateQty: (productId: number, qty: number) => void;
@@ -50,73 +57,355 @@ const normalizeCartItem = (item: any): CartItem | null => {
   };
 };
 
+const isUnauthorized = (error: any) => error?.response?.status === 401;
+
+const warnDev = (...args: any[]) => {
+  if (import.meta.env.DEV) {
+    console.warn(...args);
+  }
+};
+
 export const useCartStore = create<CartState>()(
   persist(
-    (set) => ({
-      items: [],
-      totalQty: 0,
-      subtotal: 0,
-      addItem: (product, qty = 1) => {
-        const safeQty = Math.max(1, qty);
-        const productId = Number(product?.productId ?? product?.id);
-        if (!Number.isFinite(productId) || productId <= 0) {
+    (set, get) => {
+      let pendingQtyByProductId = new Map<number, number>();
+      let remoteBaselineQtyByProductId = new Map<number, number>();
+      let flushTimer: number | null = null;
+      let refreshTimer: number | null = null;
+      let remoteDirty = false;
+
+      const updateRemoteBaseline = (items: CartItem[]) => {
+        remoteBaselineQtyByProductId = new Map(
+          (items || []).map((item) => [item.productId, item.qty])
+        );
+      };
+
+      const applyRemoteItems = (items: CartItem[]) => {
+        get().setItems(items);
+        updateRemoteBaseline(get().items);
+      };
+
+      const cancelFlushTimer = () => {
+        if (flushTimer !== null) {
+          clearTimeout(flushTimer);
+          flushTimer = null;
+        }
+      };
+
+      const cancelRemoteRefresh = () => {
+        if (refreshTimer !== null) {
+          clearTimeout(refreshTimer);
+          refreshTimer = null;
+        }
+        remoteDirty = false;
+      };
+
+      const scheduleRemoteRefreshAfterIdle = () => {
+        remoteDirty = true;
+        if (refreshTimer !== null) {
+          clearTimeout(refreshTimer);
+        }
+        refreshTimer = window.setTimeout(() => {
+          refreshTimer = null;
+          if (!remoteDirty) {
+            return;
+          }
+          if (get().mode !== "remote") {
+            cancelRemoteRefresh();
+            return;
+          }
+          if (get().isRemoteSyncing) {
+            scheduleRemoteRefreshAfterIdle();
+            return;
+          }
+          const started = withRemoteLock(async () => {
+            try {
+              const remoteItems = await fetchRemoteCartItems();
+              applyRemoteItems(remoteItems);
+              remoteDirty = false;
+            } catch (error) {
+              if (isUnauthorized(error)) {
+                get().setMode("guest");
+                pendingQtyByProductId.clear();
+                remoteBaselineQtyByProductId.clear();
+                cancelFlushTimer();
+                cancelRemoteRefresh();
+                return;
+              }
+              warnDev("[cart] refresh failed", error);
+            }
+          });
+          if (!started) {
+            scheduleRemoteRefreshAfterIdle();
+          }
+        }, 900);
+      };
+
+      const withRemoteLock = (fn: () => Promise<void>) => {
+        if (get().isRemoteSyncing) return false;
+        set({ isRemoteSyncing: true });
+        void (async () => {
+          try {
+            await fn();
+          } finally {
+            set({ isRemoteSyncing: false });
+          }
+        })();
+        return true;
+      };
+
+      const scheduleFlushUpdateQty = () => {
+        if (flushTimer !== null) {
+          clearTimeout(flushTimer);
+        }
+        flushTimer = window.setTimeout(() => {
+          flushTimer = null;
+          flushPendingUpdateQty();
+        }, 300);
+      };
+
+      const flushPendingUpdateQty = () => {
+        if (get().mode !== "remote") {
+          pendingQtyByProductId.clear();
+          remoteBaselineQtyByProductId.clear();
+          cancelFlushTimer();
+          cancelRemoteRefresh();
           return;
         }
-        set((state) => {
-          const existing = state.items.find(
-            (item) => item.productId === productId
-          );
-          let items: CartItem[];
-          if (existing) {
-            items = state.items.map((item) =>
-              item.productId === productId
-                ? { ...item, qty: item.qty + safeQty }
-                : item
-            );
-          } else {
-            items = [
-              ...state.items,
-              {
-                productId,
-                name: product?.name || "",
-                price: Number(product?.price || 0),
-                imageUrl: product?.imageUrl ?? null,
-                qty: safeQty,
-              },
-            ];
-          }
-          const totals = computeTotals(items);
-          return { items, ...totals };
-        });
-      },
-      removeItem: (productId) => {
-        set((state) => {
-          const items = state.items.filter(
-            (item) => item.productId !== productId
-          );
-          const totals = computeTotals(items);
-          return { items, ...totals };
-        });
-      },
-      updateQty: (productId, qty) => {
-        const safeQty = Math.max(1, qty);
-        set((state) => {
-          const items = state.items.map((item) =>
-            item.productId === productId ? { ...item, qty: safeQty } : item
-          );
-          const totals = computeTotals(items);
-          return { items, ...totals };
-        });
-      },
-      clearCart: () => {
-        try {
-          localStorage.removeItem("cart");
-        } catch {
-          // ignore storage errors
+        if (get().isRemoteSyncing) {
+          scheduleFlushUpdateQty();
+          return;
         }
-        set({ items: [], totalQty: 0, subtotal: 0 });
-      },
-    }),
+        const started = withRemoteLock(async () => {
+          const entries = Array.from(pendingQtyByProductId.entries());
+          pendingQtyByProductId.clear();
+          if (entries.length === 0) return;
+
+          try {
+            let didMutate = false;
+            for (const [productId, desiredQty] of entries) {
+              const baselineQty =
+                remoteBaselineQtyByProductId.get(productId) ?? 0;
+              if (desiredQty === baselineQty) {
+                continue;
+              }
+              await cartApi.setCartItemQty(productId, desiredQty);
+              didMutate = true;
+            }
+
+            if (!didMutate) return;
+
+            for (const [productId, desiredQty] of entries) {
+              if (desiredQty <= 0) {
+                remoteBaselineQtyByProductId.delete(productId);
+              } else {
+                remoteBaselineQtyByProductId.set(productId, desiredQty);
+              }
+            }
+
+            scheduleRemoteRefreshAfterIdle();
+          } catch (error) {
+            if (isUnauthorized(error)) {
+              get().setMode("guest");
+              pendingQtyByProductId.clear();
+              remoteBaselineQtyByProductId.clear();
+              cancelFlushTimer();
+              cancelRemoteRefresh();
+              return;
+            }
+            warnDev("[cart] updateQty flush failed", error);
+            try {
+              const remoteItems = await fetchRemoteCartItems();
+              applyRemoteItems(remoteItems);
+            } catch (innerError) {
+              warnDev("[cart] updateQty refresh failed", innerError);
+            }
+          } finally {
+            if (pendingQtyByProductId.size > 0) {
+              scheduleFlushUpdateQty();
+            }
+          }
+        });
+        if (!started) {
+          scheduleFlushUpdateQty();
+        }
+      };
+
+      return {
+        items: [],
+        totalQty: 0,
+        subtotal: 0,
+        mode: "guest",
+        isRemoteSyncing: false,
+        setMode: (mode) => {
+          set({ mode });
+          if (mode === "remote") {
+            updateRemoteBaseline(get().items);
+          } else {
+            pendingQtyByProductId.clear();
+            remoteBaselineQtyByProductId.clear();
+            cancelFlushTimer();
+            cancelRemoteRefresh();
+          }
+        },
+        setItems: (items) => {
+          const normalized = (items || [])
+            .map(normalizeCartItem)
+            .filter((item): item is CartItem => Boolean(item));
+          const totals = computeTotals(normalized);
+          set({ items: normalized, ...totals });
+        },
+        reset: () => {
+          try {
+            localStorage.removeItem("cart");
+          } catch {
+            // ignore storage errors
+          }
+          pendingQtyByProductId.clear();
+          remoteBaselineQtyByProductId.clear();
+          cancelFlushTimer();
+          cancelRemoteRefresh();
+          set({ items: [], totalQty: 0, subtotal: 0 });
+        },
+        addItem: (product, qty = 1) => {
+          const safeQty = Math.max(1, qty);
+          const productId = Number(product?.productId ?? product?.id);
+          if (!Number.isFinite(productId) || productId <= 0) {
+            return;
+          }
+          set((state) => {
+            const existing = state.items.find(
+              (item) => item.productId === productId
+            );
+            let items: CartItem[];
+            if (existing) {
+              items = state.items.map((item) =>
+                item.productId === productId
+                  ? { ...item, qty: item.qty + safeQty }
+                  : item
+              );
+            } else {
+              items = [
+                ...state.items,
+                {
+                  productId,
+                  name: product?.name || "",
+                  price: Number(product?.price || 0),
+                  imageUrl: product?.imageUrl ?? null,
+                  qty: safeQty,
+                },
+              ];
+            }
+            const totals = computeTotals(items);
+            return { items, ...totals };
+          });
+          if (get().mode !== "remote") return;
+          withRemoteLock(async () => {
+            try {
+              await cartApi.addToCart(productId, safeQty);
+              const remoteItems = await fetchRemoteCartItems();
+              applyRemoteItems(remoteItems);
+            } catch (error) {
+              if (isUnauthorized(error)) {
+                get().setMode("guest");
+                return;
+              }
+              warnDev("[cart] addItem sync failed", error);
+              try {
+                const remoteItems = await fetchRemoteCartItems();
+                applyRemoteItems(remoteItems);
+              } catch (innerError) {
+                warnDev("[cart] addItem refresh failed", innerError);
+              }
+            }
+          });
+        },
+        removeItem: (productId) => {
+          set((state) => {
+            const items = state.items.filter(
+              (item) => item.productId !== productId
+            );
+            const totals = computeTotals(items);
+            return { items, ...totals };
+          });
+          if (get().mode !== "remote") return;
+          withRemoteLock(async () => {
+            try {
+              await cartApi.removeFromCart(productId);
+              const remoteItems = await fetchRemoteCartItems();
+              applyRemoteItems(remoteItems);
+            } catch (error) {
+              if (isUnauthorized(error)) {
+                get().setMode("guest");
+                return;
+              }
+              warnDev("[cart] removeItem sync failed", error);
+              try {
+                const remoteItems = await fetchRemoteCartItems();
+                applyRemoteItems(remoteItems);
+              } catch (innerError) {
+                warnDev("[cart] removeItem refresh failed", innerError);
+              }
+            }
+          });
+        },
+        updateQty: (productId, qty) => {
+          const isRemote = get().mode === "remote";
+          // Clamp remote qty to avoid negative/NaN causing invalid API calls
+          const desiredQty = isRemote
+            ? Math.max(0, Number(qty) || 0)
+            : Math.max(1, Number(qty) || 1);
+          set((state) => {
+            const items =
+              isRemote && desiredQty <= 0
+                ? state.items.filter((item) => item.productId !== productId)
+                : state.items.map((item) =>
+                    item.productId === productId
+                      ? { ...item, qty: desiredQty }
+                      : item
+                  );
+            const totals = computeTotals(items);
+            return { items, ...totals };
+          });
+          if (get().mode !== "remote") return;
+          // coalescing updateQty to latest per productId
+          pendingQtyByProductId.set(productId, desiredQty);
+          scheduleFlushUpdateQty();
+        },
+        clearCart: () => {
+          const snapshot = get().items;
+          try {
+            localStorage.removeItem("cart");
+          } catch {
+            // ignore storage errors
+          }
+          set({ items: [], totalQty: 0, subtotal: 0 });
+          if (get().mode !== "remote") return;
+          withRemoteLock(async () => {
+            try {
+              for (const item of snapshot) {
+                await cartApi.removeFromCart(item.productId);
+              }
+              const remoteItems = await fetchRemoteCartItems();
+              applyRemoteItems(remoteItems);
+            } catch (error) {
+              if (isUnauthorized(error)) {
+                get().setMode("guest");
+                get().setItems(snapshot);
+                return;
+              }
+              warnDev("[cart] clearCart sync failed", error);
+              try {
+                const remoteItems = await fetchRemoteCartItems();
+                applyRemoteItems(remoteItems);
+              } catch (innerError) {
+                warnDev("[cart] clearCart refresh failed", innerError);
+              }
+            }
+          });
+        },
+      };
+    },
     {
       name: "cart",
       partialize: (state) => ({
@@ -129,13 +418,18 @@ export const useCartStore = create<CartState>()(
         const normalized = (state.items || [])
           .map(normalizeCartItem)
           .filter((item): item is CartItem => Boolean(item));
-        if (import.meta.env.DEV && normalized.length !== (state.items || []).length) {
+        if (
+          import.meta.env.DEV &&
+          normalized.length !== (state.items || []).length
+        ) {
           console.warn("[cart] Dropped invalid items during rehydrate");
         }
         const totals = computeTotals(normalized);
         state.items = normalized;
         state.totalQty = totals.totalQty;
         state.subtotal = totals.subtotal;
+        state.mode = "guest";
+        state.isRemoteSyncing = false;
       },
     }
   )

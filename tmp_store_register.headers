@@ -1,0 +1,13 @@
+HTTP/1.1 200 OK
+X-Powered-By: Express
+Access-Control-Allow-Origin: http://localhost:5173
+Vary: Origin
+Access-Control-Allow-Credentials: true
+Set-Cookie: token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTYsImVtYWlsIjoiYnV5ZXIrMjAyNjAyMDYwODM0MjZAbG9jYWwudGVzdCIsInJvbGUiOiJjdXN0b21lciIsIm5hbWUiOiJCdXllciBBdWRpdCIsImlhdCI6MTc3MDMzODA2NiwiZXhwIjoxNzcwMzQxNjY2fQ.1Y3ZOqzX37wijm63Ac4QDVXFONo-d4dLzIGljmlHbvM; Path=/; HttpOnly; SameSite=Lax
+Content-Type: application/json; charset=utf-8
+Content-Length: 123
+ETag: W/"7b-2psY3n3QprTOGnYUphkTdxFQEHM"
+Date: Fri, 06 Feb 2026 00:34:26 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
