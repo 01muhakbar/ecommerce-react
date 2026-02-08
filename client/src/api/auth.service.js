@@ -11,6 +11,13 @@ export async function logout() {
 }
 
 export async function me() {
-  const { data } = await api.get("/auth/me");
-  return data;
+  try {
+    const { data } = await api.get("/auth/me");
+    return data;
+  } catch (error) {
+    if (error?.response?.status === 401) {
+      return null;
+    }
+    throw error;
+  }
 }

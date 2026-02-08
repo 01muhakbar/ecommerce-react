@@ -8,10 +8,24 @@ const currency = new Intl.NumberFormat("id-ID", {
 
 export default function StoreCartPage() {
   const items = useCartStore((state) => state.items);
+  const hasHydrated = useCartStore((state) => state.hasHydrated);
   const subtotal = useCartStore((state) => state.subtotal);
   const updateQty = useCartStore((state) => state.updateQty);
   const removeItem = useCartStore((state) => state.removeItem);
   const hasItems = items.length > 0;
+
+  if (!hasHydrated) {
+    return (
+      <div className="mx-auto w-full max-w-6xl px-4 py-10">
+        <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center">
+          <h1 className="text-2xl font-semibold text-slate-900">
+            Loading cart...
+          </h1>
+          <p className="mt-2 text-sm text-slate-500">Please wait.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!hasItems) {
     return (

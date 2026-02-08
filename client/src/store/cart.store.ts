@@ -11,6 +11,9 @@ export type CartItem = {
   qty: number;
 };
 
+const CART_STORAGE_KEY = "kb_cart_v1";
+const LEGACY_CART_STORAGE_KEY = "cart";
+
 type CartProduct = {
   id: number;
   name: string;
@@ -24,6 +27,8 @@ type CartState = {
   subtotal: number;
   mode: "guest" | "remote";
   isRemoteSyncing: boolean;
+  hasHydrated: boolean;
+  setHasHydrated: (value: boolean) => void;
   setMode: (mode: "guest" | "remote") => void;
   setItems: (items: CartItem[]) => void;
   reset: () => void;
@@ -43,18 +48,66 @@ const computeTotals = (items: CartItem[]) => {
 };
 
 const normalizeCartItem = (item: any): CartItem | null => {
-  const productId = Number(item?.productId ?? item?.id);
-  const qty = Number(item?.qty ?? 0);
+  const rawId =
+    item?.productId ?? item?.id ?? item?._id ?? item?.product_id ?? item?.productID;
+  let productId: number | null = null;
+  if (typeof rawId === "number") {
+    productId = rawId;
+  } else if (typeof rawId === "string") {
+    const trimmed = rawId.trim();
+    if (trimmed && /^[0-9]+$/.test(trimmed)) {
+      productId = Number(trimmed);
+    }
+  }
+  if (!productId) {
+    const rawSku = item?.sku ?? item?.SKU;
+    if (typeof rawSku === "number") {
+      productId = rawSku;
+    } else if (typeof rawSku === "string") {
+      const trimmedSku = rawSku.trim();
+      if (trimmedSku && /^[0-9]+$/.test(trimmedSku)) {
+        productId = Number(trimmedSku);
+      }
+    }
+  }
+  if (productId === null) {
+    if (import.meta.env.DEV) {
+      console.warn("[cart] dropping persisted item", item);
+    }
+    return null;
+  }
+  const qty = Number(item?.qty ?? item?.quantity ?? item?.count ?? 0);
   if (!Number.isFinite(productId) || productId <= 0 || qty <= 0) {
+    if (import.meta.env.DEV) {
+      console.warn("[cart] dropping persisted item", item);
+    }
     return null;
   }
   return {
     productId,
-    name: item?.name || "",
+    name: item?.name || item?.title || "",
     price: Number(item?.price || 0),
-    imageUrl: item?.imageUrl ?? null,
+    imageUrl: item?.imageUrl ?? item?.image ?? item?.img ?? item?.image_url ?? null,
     qty,
   };
+};
+
+const readPersistedCart = (storageKey: string) => {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const state = parsed?.state ?? parsed;
+    const items = Array.isArray(state?.items) ? state.items : [];
+    const normalized = items
+      .map(normalizeCartItem)
+      .filter((item): item is CartItem => Boolean(item));
+    if (!normalized.length) return null;
+    const totals = computeTotals(normalized);
+    return { items: normalized, ...totals };
+  } catch {
+    return null;
+  }
 };
 
 const isUnauthorized = (error: any) => error?.response?.status === 401;
@@ -237,6 +290,8 @@ export const useCartStore = create<CartState>()(
         subtotal: 0,
         mode: "guest",
         isRemoteSyncing: false,
+        hasHydrated: false,
+        setHasHydrated: (value) => set({ hasHydrated: value }),
         setMode: (mode) => {
           set({ mode });
           if (mode === "remote") {
@@ -257,7 +312,8 @@ export const useCartStore = create<CartState>()(
         },
         reset: () => {
           try {
-            localStorage.removeItem("cart");
+            localStorage.removeItem(CART_STORAGE_KEY);
+            localStorage.removeItem(LEGACY_CART_STORAGE_KEY);
           } catch {
             // ignore storage errors
           }
@@ -375,7 +431,8 @@ export const useCartStore = create<CartState>()(
         clearCart: () => {
           const snapshot = get().items;
           try {
-            localStorage.removeItem("cart");
+            localStorage.removeItem(CART_STORAGE_KEY);
+            localStorage.removeItem(LEGACY_CART_STORAGE_KEY);
           } catch {
             // ignore storage errors
           }
@@ -407,20 +464,47 @@ export const useCartStore = create<CartState>()(
       };
     },
     {
-      name: "cart",
+      name: CART_STORAGE_KEY,
       partialize: (state) => ({
         items: state.items,
         totalQty: state.totalQty,
         subtotal: state.subtotal,
       }),
       onRehydrateStorage: () => (state) => {
-        if (!state) return;
-        const normalized = (state.items || [])
+        if (!state) {
+          useCartStore.setState({ hasHydrated: true });
+          return;
+        }
+        const rawItems = Array.isArray(state.items) ? state.items : [];
+        let normalized = rawItems
           .map(normalizeCartItem)
           .filter((item): item is CartItem => Boolean(item));
+        if (!normalized.length) {
+          const legacy = readPersistedCart(LEGACY_CART_STORAGE_KEY);
+          if (legacy) {
+            normalized = legacy.items;
+            state.totalQty = legacy.totalQty;
+            state.subtotal = legacy.subtotal;
+            try {
+              localStorage.removeItem(LEGACY_CART_STORAGE_KEY);
+            } catch {
+              // ignore storage errors
+            }
+          }
+        }
+        if (rawItems.length > 0 && normalized.length === 0) {
+          if (import.meta.env.DEV) {
+            console.warn("[cart] keeping persisted items after normalization failure");
+          }
+          state.mode = "guest";
+          state.isRemoteSyncing = false;
+          state.hasHydrated = true;
+          useCartStore.setState({ hasHydrated: true });
+          return;
+        }
         if (
           import.meta.env.DEV &&
-          normalized.length !== (state.items || []).length
+          normalized.length !== rawItems.length
         ) {
           console.warn("[cart] Dropped invalid items during rehydrate");
         }
@@ -430,6 +514,8 @@ export const useCartStore = create<CartState>()(
         state.subtotal = totals.subtotal;
         state.mode = "guest";
         state.isRemoteSyncing = false;
+        state.hasHydrated = true;
+        useCartStore.setState({ hasHydrated: true });
       },
     }
   )

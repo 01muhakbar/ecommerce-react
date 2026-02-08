@@ -13,6 +13,8 @@ import { bootstrapRemoteCart, syncCartOnLogin } from "../utils/cartSync.ts";
 export const AuthContext = createContext(null);
 
 const CART_SYNC_KEY = "cartSync:lastSyncedUserId";
+const CART_STORAGE_KEY = "kb_cart_v1";
+const LEGACY_CART_STORAGE_KEY = "cart";
 
 const readSyncedUserId = () => {
   try {
@@ -45,6 +47,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const hasCartHydrated = useCartStore((state) => state.hasHydrated);
   const cartSyncInFlightRef = useRef(false);
   const lastSyncedUserIdRef = useRef(null);
 
@@ -63,6 +66,16 @@ export function AuthProvider({ children }) {
   const refreshSession = async () => {
     setIsLoading(true);
     try {
+      let hasToken = false;
+      try {
+        hasToken = Boolean(localStorage.getItem("authToken"));
+      } catch {
+        hasToken = false;
+      }
+      if (!hasToken && !api.defaults.headers.common.Authorization) {
+        clearSession();
+        return;
+      }
       const response = await meRequest();
       const nextUser =
         response?.data?.user ??
@@ -80,7 +93,14 @@ export function AuthProvider({ children }) {
         console.log("[auth] refreshSession user", nextUser);
       }
     } catch (error) {
-      clearSession();
+      const status = error?.response?.status;
+      if (status === 401 || status === 403) {
+        clearSession();
+        return;
+      }
+      if (import.meta.env.DEV) {
+        console.info("[auth] refreshSession skipped", error);
+      }
       return;
     } finally {
       setIsLoading(false);
@@ -147,10 +167,22 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     if (isLoading) return;
+    if (!hasCartHydrated) return;
     let cancelled = false;
     const roleValue = String(role || "").toLowerCase();
     const isStoreUser = !["admin", "staff", "super_admin"].includes(roleValue);
     const cart = useCartStore.getState();
+
+    const shouldSkipEmptyRemote = (remoteItems) => {
+      const localItems = useCartStore.getState().items;
+      if (localItems.length > 0 && remoteItems.length === 0) {
+        if (import.meta.env.DEV) {
+          console.info("[cart-sync] skip overwrite empty remote");
+        }
+        return true;
+      }
+      return false;
+    };
 
     const run = async () => {
       if (user && isStoreUser) {
@@ -173,6 +205,9 @@ export function AuthProvider({ children }) {
           try {
             const remoteItems = await bootstrapRemoteCart();
             if (cancelled) return;
+            if (shouldSkipEmptyRemote(remoteItems)) {
+              return;
+            }
             cart.setItems(remoteItems);
             cart.setMode("remote");
             lastSyncedUserIdRef.current = userId;
@@ -194,12 +229,16 @@ export function AuthProvider({ children }) {
         try {
           const finalItems = await syncCartOnLogin(guestItems);
           if (cancelled) return;
+          if (shouldSkipEmptyRemote(finalItems)) {
+            return;
+          }
           cart.setItems(finalItems);
           cart.setMode("remote");
           lastSyncedUserIdRef.current = userId;
           writeSyncedUserId(userId);
           try {
-            localStorage.removeItem("cart");
+            localStorage.removeItem(CART_STORAGE_KEY);
+            localStorage.removeItem(LEGACY_CART_STORAGE_KEY);
           } catch {
             // ignore storage errors
           }
@@ -212,7 +251,9 @@ export function AuthProvider({ children }) {
         return;
       }
 
-      cart.reset();
+      if (cart.mode === "remote") {
+        cart.reset();
+      }
       cart.setMode("guest");
       lastSyncedUserIdRef.current = null;
       cartSyncInFlightRef.current = false;
@@ -223,7 +264,7 @@ export function AuthProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, [user?.id, role, isLoading]);
+  }, [user?.id, role, isLoading, hasCartHydrated]);
 
   const value = useMemo(
     () => ({

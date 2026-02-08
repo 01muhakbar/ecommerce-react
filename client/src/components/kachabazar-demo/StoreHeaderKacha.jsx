@@ -45,11 +45,22 @@ export default function StoreHeaderKacha() {
 
   const categoryList = useMemo(() => {
     if (categories.length > 0) {
-      return categories.map((category) => ({
-        id: category.id ?? category.code ?? category.slug,
-        name: category.name ?? "Category",
-        slug: category.slug || category.code || String(category.id || ""),
-      }));
+      return categories.map((category, index) => {
+        const slug =
+          category.slug ??
+          category.code ??
+          String(category._id ?? category.id ?? index);
+        const name =
+          category.name ??
+          category.title ??
+          category.label ??
+          category.categoryName ??
+          category.code ??
+          category.slug ??
+          "Category";
+        const id = category.id ?? category._id ?? category.code ?? slug ?? index;
+        return { ...category, id, name, slug, code: category.code ?? category.slug ?? "" };
+      });
     }
     return fallbackCategories;
   }, [categories]);

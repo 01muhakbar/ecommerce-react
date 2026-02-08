@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   CategoryDropdown,
@@ -14,6 +14,7 @@ export default function StoreSearchPage() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
   const [sort, setSort] = useState("default");
+  const searchInputRef = useRef(null);
   const page = Math.max(1, Number(searchParams.get("page") || 1));
   const limit = Math.max(1, Number(searchParams.get("limit") || 12));
 
@@ -109,6 +110,9 @@ export default function StoreSearchPage() {
     setCategory("");
     setSort("default");
     updateParams({ search: "", category: "", sort: "default", page: 1 });
+    if (searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
   };
 
   const isLoading = productsLoading || categoriesLoading;
@@ -136,16 +140,12 @@ export default function StoreSearchPage() {
     return items;
   }, [normalizedProducts, sort]);
   const isEmpty = !isLoading && !isError && sortedProducts.length === 0;
+  const shouldShowError = isError && !isLoading;
 
-  const resultLabel = useMemo(() => {
-    if (meta?.total != null) {
-      return `${meta.total} results`;
-    }
-    if (sortedProducts.length > 0) {
-      return `${sortedProducts.length} results`;
-    }
-    return "";
-  }, [meta?.total, sortedProducts.length]);
+  const resultLabel = useMemo(
+    () => (isLoading ? "Results (loading...)" : `Results: ${sortedProducts.length}`),
+    [isLoading, sortedProducts.length]
+  );
 
   return (
     <div className="space-y-6">
@@ -156,10 +156,11 @@ export default function StoreSearchPage() {
             type="search"
             value={query}
             onChange={handleQueryChange}
+            ref={searchInputRef}
             placeholder="Search by name"
             className="w-full rounded-full border border-slate-200 px-4 py-2 text-sm focus:border-slate-400 focus:outline-none"
           />
-          <div className="w-full md:w-64">
+          <div className="w-full min-w-[160px] shrink-0 md:w-64">
             <CategoryDropdown
               categories={categories}
               value={category}
@@ -190,63 +191,76 @@ export default function StoreSearchPage() {
       </div>
 
       <QueryState
-        isLoading={isLoading}
-        isError={isError}
+        isLoading={false}
+        isError={shouldShowError}
         error={error}
-        isEmpty={isEmpty}
-        emptyTitle="Produk tidak ditemukan"
-        emptyHint="Coba gunakan kata kunci lain atau ubah kategori."
+        isEmpty={false}
         onRetry={() => {
           refetchProducts();
           refetchCategories();
         }}
       >
         <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {sortedProducts.map((product, index) => {
-              const title = product?.title ?? product?.name ?? "";
-              const category =
-                product?.category ??
-                (product?.categoryName ? { name: product.categoryName } : { name: "Uncategorized" });
-              const imageUrl =
-                product?.promoImagePath ?? product?.imageUrl ?? product?.image ?? null;
-              return (
-                <ProductCard
-                  key={
-                    product?.id ??
-                    product?.slug ??
-                    `${product?.name || product?.title || "product"}-${index}`
-                  }
-                  product={{
-                    ...product,
-                    id: product?.id,
-                    name: product?.name ?? title,
-                    title,
-                    price: Number(product?.price ?? product?.salePrice ?? 0),
-                    category,
-                    imageUrl,
-                  }}
-                />
-              );
-            })}
-          </div>
-          <Pagination
-            page={meta?.page ?? page}
-            total={meta?.total ?? sortedProducts.length}
-            limit={meta?.limit ?? limit}
-            onPageChange={(nextPage) => updateParams({ page: nextPage })}
-          />
-          {isEmpty ? (
-            <div className="flex justify-center">
+          {isLoading ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
+              Loading products...
+            </div>
+          ) : isEmpty ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
+              <div className="text-sm font-semibold text-slate-900">
+                No products found
+              </div>
+              <div className="mt-2 text-xs text-slate-500">
+                Try adjusting your search or filters.
+              </div>
               <button
                 type="button"
                 onClick={clearFilters}
-                className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:border-slate-300"
+                className="mt-4 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:border-slate-300"
               >
-                Reset search
+                Reset filters
               </button>
             </div>
-          ) : null}
+          ) : (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {sortedProducts.map((product, index) => {
+                  const title = product?.title ?? product?.name ?? "";
+                  const category =
+                    product?.category ??
+                    (product?.categoryName
+                      ? { name: product.categoryName }
+                      : { name: "Uncategorized" });
+                  const imageUrl =
+                    product?.promoImagePath ?? product?.imageUrl ?? product?.image ?? null;
+                  return (
+                    <ProductCard
+                      key={
+                        product?.id ??
+                        product?.slug ??
+                        `${product?.name || product?.title || "product"}-${index}`
+                      }
+                      product={{
+                        ...product,
+                        id: product?.id,
+                        name: product?.name ?? title,
+                        title,
+                        price: Number(product?.price ?? product?.salePrice ?? 0),
+                        category,
+                        imageUrl,
+                      }}
+                    />
+                  );
+                })}
+              </div>
+              <Pagination
+                page={meta?.page ?? page}
+                total={meta?.total ?? sortedProducts.length}
+                limit={meta?.limit ?? limit}
+                onPageChange={(nextPage) => updateParams({ page: nextPage })}
+              />
+            </>
+          )}
         </div>
       </QueryState>
     </div>

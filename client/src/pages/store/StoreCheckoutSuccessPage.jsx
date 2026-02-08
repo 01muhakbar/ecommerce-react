@@ -1,11 +1,12 @@
-import { useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   COD_INSTRUCTIONS,
   TRANSFER_INSTRUCTIONS,
 } from "../../config/paymentInstructions.ts";
 
 export default function StoreCheckoutSuccessPage() {
+  const navigate = useNavigate();
   const [params] = useSearchParams();
   const ref = params.get("ref") || params.get("orderId") || params.get("invoiceNo");
   const invoiceNo = params.get("invoiceNo") || ref;
@@ -44,6 +45,12 @@ export default function StoreCheckoutSuccessPage() {
       resetCopyStatus();
     }
   };
+
+  useEffect(() => {
+    if (!ref && !invoiceNo) {
+      navigate("/checkout", { replace: true });
+    }
+  }, [ref, invoiceNo, navigate]);
 
   return (
     <section>

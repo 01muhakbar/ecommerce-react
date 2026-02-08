@@ -47,8 +47,8 @@ export default function BestSellingCard({
                   outerRadius={80}
                   paddingAngle={3}
                 >
-                  {data.map((entry) => (
-                    <Cell key={entry.name} fill={entry.color} />
+                  {data.map((entry, index) => (
+                    <Cell key={`${entry.name}-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
               </PieChart>
@@ -57,8 +57,11 @@ export default function BestSellingCard({
         </div>
         <div className="best-selling-card__legend">
           {hasData
-            ? data.map((item) => (
-                <div key={item.name} className="best-selling-card__legend-item">
+            ? data.map((item, index) => (
+                <div
+                  key={`${item.name}-${index}`}
+                  className="best-selling-card__legend-item"
+                >
                   <span
                     className="best-selling-card__dot"
                     style={{ background: item.color }}

@@ -17,11 +17,22 @@ const fetchCategories = async () => {
   const items = Array.isArray(data?.data)
     ? data.data
     : data?.data?.items || [];
+  const normalizedItems = (items || []).map((category) => {
+    const slug =
+      category?.slug ??
+      category?.code ??
+      String(category?._id ?? category?.id ?? "");
+    return {
+      ...category,
+      slug,
+      code: category?.code ?? category?.slug ?? "",
+    };
+  });
   const normalized = {
     ...data,
     data: {
       ...(data?.data && !Array.isArray(data.data) ? data.data : {}),
-      items,
+      items: normalizedItems,
     },
   };
   if (process.env.NODE_ENV !== "production" && Array.isArray(data?.data)) {
@@ -116,15 +127,25 @@ export function CategoryDropdown({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-full border border-slate-200 bg-white px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
+        className="w-full rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
         disabled={isLoading}
       >
-        <option value="">All categories</option>
-        {categories.map((category) => (
-          <option key={category.id} value={category.slug}>
-            {category.name}
-          </option>
-        ))}
+        <option key="all-categories" value="">
+          All categories
+        </option>
+        {categories.map((category, index) => {
+          const baseKey = String(
+            category.id ?? category._id ?? category.slug ?? category.name ?? ""
+          );
+          const key = `${baseKey || "category"}-${category.parentId ?? ""}-${
+            category.type ?? ""
+          }-${index}`;
+          return (
+            <option key={key} value={category.slug}>
+              {category.name}
+            </option>
+          );
+        })}
       </select>
     );
   }
@@ -139,20 +160,28 @@ export function CategoryDropdown({
         <button
           type="button"
           onClick={() => onChange("")}
-          className="w-full rounded-lg px-3 py-2 text-left hover:bg-slate-100"
+          className="w-full rounded-lg px-3 py-2 text-left text-slate-900 hover:bg-slate-100"
         >
           All categories
         </button>
-        {categories.map((category) => (
-          <button
-            key={category.id}
-            type="button"
-            onClick={() => onChange(category.slug)}
-            className="w-full rounded-lg px-3 py-2 text-left hover:bg-slate-100"
-          >
-            {category.name}
-          </button>
-        ))}
+        {categories.map((category, index) => {
+          const baseKey = String(
+            category.id ?? category._id ?? category.slug ?? category.name ?? ""
+          );
+          const key = `${baseKey || "category"}-${category.parentId ?? ""}-${
+            category.type ?? ""
+          }-${index}`;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onChange(category.slug)}
+              className="w-full rounded-lg px-3 py-2 text-left text-slate-900 hover:bg-slate-100"
+            >
+              {category.name}
+            </button>
+          );
+        })}
       </div>
     </details>
   );

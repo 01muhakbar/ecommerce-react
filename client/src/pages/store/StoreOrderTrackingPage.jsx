@@ -95,7 +95,7 @@ export default function StoreOrderTrackingPage() {
       <section>
         <h1>Order Tracking</h1>
         <p style={{ color: "crimson" }}>{error}</p>
-        <Link to="/">Back to Store Home</Link>
+        <Link to="/search">Back to search</Link>
       </section>
     );
   }
@@ -105,7 +105,7 @@ export default function StoreOrderTrackingPage() {
       <section>
         <h1>Order Tracking</h1>
         <p>Order not found.</p>
-        <Link to="/">Back to Store Home</Link>
+        <Link to="/search">Back to search</Link>
       </section>
     );
   }
