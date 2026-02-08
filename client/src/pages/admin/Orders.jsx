@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchAdminOrders, updateAdminOrderStatus } from "../../lib/adminApi.js";
 import { ORDER_STATUS_OPTIONS, toUIStatus } from "../../constants/orderStatus.js";
 import { moneyIDR } from "../../utils/money.js";
+import QueryState from "../../components/UI/QueryState.jsx";
+import OrderStatusBadge from "../../components/admin/OrderStatusBadge.jsx";
 
 export default function Orders() {
   const [page, setPage] = useState(1);
@@ -61,6 +63,31 @@ export default function Orders() {
   const items = ordersQuery.data?.data || [];
   const meta = ordersQuery.data?.meta || { page: 1, limit, total: 0, totalPages: 1 };
   const totalPages = Math.max(1, Number(meta.totalPages || 1));
+  const filteredItems = useMemo(() => {
+    const needle = debouncedSearch.trim().toLowerCase();
+    const statusFilter = status.trim().toLowerCase();
+    return items.filter((order) => {
+      const orderStatus = (order.status || "").toString().toLowerCase();
+      if (statusFilter && orderStatus !== statusFilter) return false;
+      if (!needle) return true;
+      const haystack = [
+        order.id,
+        order.invoiceNo,
+        order.invoice,
+        order.ref,
+        order.customerName,
+        order.customer?.name,
+        order.customer?.email,
+        order.customerEmail,
+      ]
+        .filter(Boolean)
+        .map((value) => value.toString().toLowerCase())
+        .join(" ");
+      return haystack.includes(needle);
+    });
+  }, [items, debouncedSearch, status]);
+  const isEmpty =
+    !ordersQuery.isLoading && !ordersQuery.isError && filteredItems.length === 0;
 
   const onSearchSubmit = (event) => {
     event.preventDefault();
@@ -90,7 +117,7 @@ export default function Orders() {
           type="search"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search orders"
+          placeholder="Cari Order ID / Ref / Email"
           className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none md:w-64"
         />
         <select
@@ -116,19 +143,15 @@ export default function Orders() {
         </button>
       </form>
 
-      {ordersQuery.isLoading ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
-          Loading orders...
-        </div>
-      ) : ordersQuery.isError ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-600">
-          {ordersQuery.error?.response?.data?.message || "Failed to load orders."}
-        </div>
-      ) : items.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
-          No orders found.
-        </div>
-      ) : (
+      <QueryState
+        isLoading={ordersQuery.isLoading}
+        isError={ordersQuery.isError}
+        error={ordersQuery.error}
+        isEmpty={isEmpty}
+        emptyTitle="Belum ada pesanan"
+        emptyHint="Pesanan akan muncul di sini setelah ada checkout."
+        onRetry={() => ordersQuery.refetch()}
+      >
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase text-slate-400">
@@ -142,7 +165,7 @@ export default function Orders() {
               </tr>
             </thead>
             <tbody>
-              {items.map((order) => {
+              {filteredItems.map((order) => {
                 const uiStatus = toUIStatus(order.status || "pending");
                 const isUpdating = pendingUpdateId === order.id;
                 return (
@@ -158,9 +181,7 @@ export default function Orders() {
                   </td>
                   <td className="px-4 py-3">{moneyIDR(order.totalAmount || 0)}</td>
                   <td className="px-4 py-3">
-                    <span className="rounded-full border border-slate-200 px-2 py-0.5 text-xs capitalize">
-                      {uiStatus || "-"}
-                    </span>
+                    <OrderStatusBadge status={uiStatus || "-"} />
                     <div className="mt-2">
                       <select
                         value={uiStatus}
@@ -197,7 +218,7 @@ export default function Orders() {
             </tbody>
           </table>
         </div>
-      )}
+      </QueryState>
 
       {rowError ? (
         <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-600">

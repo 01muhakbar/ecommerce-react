@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useCartStore } from "../../store/cart.store.ts";
 import { ProductCard, useProduct, useProducts } from "../../storefront.jsx";
+import QueryState from "../../components/UI/QueryState.jsx";
 
 const currency = new Intl.NumberFormat("id-ID", {
   style: "currency",
@@ -21,22 +22,65 @@ export default function StoreProductDetailPage() {
   } = useProduct(slug);
   const product = productData?.data ?? null;
 
-  const relatedCategory = product?.category?.slug || product?.category?.id || "";
-  const { data: relatedData } = useProducts({
-    category: relatedCategory || undefined,
+  const relatedCategoryId = product?.category?.id ?? product?.categoryId ?? null;
+  const numericCategoryId = Number(relatedCategoryId);
+  const hasCategoryId = Number.isFinite(numericCategoryId) && numericCategoryId > 0;
+  const relatedQuery = useProducts({
     page: 1,
-    limit: 8,
+    limit: 40,
   });
 
   const relatedProducts = useMemo(() => {
-    const items = relatedData?.data?.items ?? [];
-    if (!product?.slug) return items.slice(0, 8);
-    return items.filter((item) => item.slug !== product.slug).slice(0, 8);
-  }, [relatedData, product?.slug]);
+    const raw =
+      relatedQuery.data?.data?.items ??
+      relatedQuery.data?.data ??
+      relatedQuery.data?.items ??
+      relatedQuery.data ??
+      [];
+    const items = Array.isArray(raw) ? raw : [];
+    const currentId = product?.id;
+    const currentSlug = product?.slug;
+    const norm = (value) => String(value || "").trim().toLowerCase();
+    const targetSlug = norm(product?.category?.slug);
+    const cleaned = items.filter(Boolean);
+    const withoutCurrent = cleaned.filter((item) => {
+      if (currentId && item.id === currentId) return false;
+      if (currentSlug && item.slug === currentSlug) return false;
+      return true;
+    });
+    const primary = hasCategoryId
+      ? withoutCurrent.filter((item) => {
+          const itemCategoryId =
+            Number(item?.category?.id ?? item?.categoryId ?? item?.category_id) || null;
+          return itemCategoryId === numericCategoryId;
+        })
+      : targetSlug
+        ? withoutCurrent.filter((item) => {
+            const itemSlug = norm(
+              item?.category?.slug ?? item?.category?.code ?? item?.categorySlug
+            );
+            return itemSlug && itemSlug === targetSlug;
+          })
+        : [];
+    const baseList = primary.length > 0 ? primary : withoutCurrent;
+    return baseList.slice(0, 8);
+  }, [
+    relatedQuery.data,
+    product?.id,
+    product?.slug,
+    product?.category?.slug,
+    numericCategoryId,
+    hasCategoryId,
+  ]);
 
   const hasStock = typeof product?.stock === "number" ? product.stock > 0 : true;
   const imageSrc =
     product?.imageUrl || product?.image || product?.thumbnail || null;
+  const keyword = (product?.name || "").trim().split(/\s+/)[0] || "";
+  const safeKeyword = keyword.length >= 3 ? keyword : "";
+  const browseUrl = safeKeyword
+    ? `/search?q=${encodeURIComponent(safeKeyword)}`
+    : "/search";
 
   if (isLoading) {
     return <p className="text-sm text-slate-500">Loading product...</p>;
@@ -143,20 +187,37 @@ export default function StoreProductDetailPage() {
 
       <section className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Related products</h2>
-          <Link to="/search" className="text-sm text-slate-500 hover:text-slate-900">
+          <div>
+            <h2 className="text-lg font-semibold">Related products</h2>
+            <p className="text-sm text-slate-500">You may also like</p>
+          </div>
+          <Link to={browseUrl} className="text-sm text-slate-500 hover:text-slate-900">
             Browse more
           </Link>
         </div>
-        {relatedProducts.length === 0 ? (
-          <p className="text-sm text-slate-500">No related products.</p>
-        ) : (
+        <QueryState
+          isLoading={relatedQuery.isLoading}
+          isError={false}
+          error={relatedQuery.error}
+          isEmpty={!relatedQuery.isLoading && (relatedQuery.isError || relatedProducts.length === 0)}
+          emptyTitle="No related products"
+          emptyHint="Coba jelajahi produk lainnya."
+          onRetry={() => relatedQuery.refetch()}
+        >
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
             {relatedProducts.map((item) => (
               <ProductCard key={item.id} product={item} />
             ))}
           </div>
-        )}
+          <div className="mt-6 flex justify-center">
+            <Link
+              to={browseUrl}
+              className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:border-slate-300"
+            >
+              Browse more
+            </Link>
+          </div>
+        </QueryState>
       </section>
     </div>
   );

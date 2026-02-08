@@ -1,0 +1,59 @@
+(sequelize) Warning: Model "Product" is declaring public class fields for attribute(s): "id", "name", "slug", "sku", "barcode", "gtin", "price", "stock", "weight", "notes", "parentSku", "condition", "length", "width", "height", "dangerousProduct", "preOrder", "preorderDays", "youtubeLink", "variations", "wholesale", "promoImagePath", "imagePaths", "videoPath", "tags", "userId", "categoryId", "description", "salePrice", "status", "isPublished", "createdAt", "updatedAt".
+These class fields are shadowing Sequelize's attribute getters & setters.
+See https://sequelize.org/main/manual/model-basics.html#caveat-with-public-class-fields
+(sequelize) Warning: Model "Category" is declaring public class fields for attribute(s): "id", "code", "name", "description", "icon", "published", "parentId", "createdAt", "updatedAt".
+These class fields are shadowing Sequelize's attribute getters & setters.
+See https://sequelize.org/main/manual/model-basics.html#caveat-with-public-class-fields
+SyntaxError: Expected ':' after property name in JSON at position 114 (line 1 column 115)
+    at JSON.parse (<anonymous>)
+    at parse (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\body-parser@1.20.3\node_modules\body-parser\lib\types\json.js:92:19)
+    at C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\body-parser@1.20.3\node_modules\body-parser\lib\read.js:128:18
+    at AsyncResource.runInAsyncScope (node:async_hooks:214:14)
+    at invokeCallback (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\raw-body@2.5.2\node_modules\raw-body\index.js:238:16)
+    at done (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\raw-body@2.5.2\node_modules\raw-body\index.js:227:7)
+    at IncomingMessage.onEnd (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\raw-body@2.5.2\node_modules\raw-body\index.js:287:7)
+    at IncomingMessage.emit (node:events:519:28)
+    at endReadableNT (node:internal/streams/readable:1698:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+SyntaxError: Expected ':' after property name in JSON at position 114 (line 1 column 115)
+    at JSON.parse (<anonymous>)
+    at parse (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\body-parser@1.20.3\node_modules\body-parser\lib\types\json.js:92:19)
+    at C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\body-parser@1.20.3\node_modules\body-parser\lib\read.js:128:18
+    at AsyncResource.runInAsyncScope (node:async_hooks:214:14)
+    at invokeCallback (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\raw-body@2.5.2\node_modules\raw-body\index.js:238:16)
+    at done (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\raw-body@2.5.2\node_modules\raw-body\index.js:227:7)
+    at IncomingMessage.onEnd (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\raw-body@2.5.2\node_modules\raw-body\index.js:287:7)
+    at IncomingMessage.emit (node:events:519:28)
+    at endReadableNT (node:internal/streams/readable:1698:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+(sequelize) Warning: Model "Order" is declaring public class fields for attribute(s): "id", "invoiceNo", "userId", "customerName", "customerPhone", "customerAddress", "customerNotes", "paymentMethod", "couponCode", "discountAmount", "totalAmount", "status", "createdAt", "updatedAt".
+These class fields are shadowing Sequelize's attribute getters & setters.
+See https://sequelize.org/main/manual/model-basics.html#caveat-with-public-class-fields
+(sequelize) Warning: Model "OrderItem" is declaring public class fields for attribute(s): "id", "orderId", "productId", "quantity", "price", "createdAt", "updatedAt".
+These class fields are shadowing Sequelize's attribute getters & setters.
+See https://sequelize.org/main/manual/model-basics.html#caveat-with-public-class-fields
+(sequelize) Warning: Model "Coupon" is declaring public class fields for attribute(s): "id", "code", "discountType", "amount", "minSpend", "active", "expiresAt", "createdAt", "updatedAt".
+These class fields are shadowing Sequelize's attribute getters & setters.
+See https://sequelize.org/main/manual/model-basics.html#caveat-with-public-class-fields
+Error: WHERE parameter "category_id" has invalid "undefined" value
+    at MySQLQueryGenerator.whereItemQuery (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\sequelize@6.37.7_mysql2@3.15.2\node_modules\sequelize\src\dialects\abstract\query-generator.js:2451:13)
+    at <anonymous> (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\sequelize@6.37.7_mysql2@3.15.2\node_modules\sequelize\src\dialects\abstract\query-generator.js:2440:25)
+    at Array.forEach (<anonymous>)
+    at MySQLQueryGenerator.whereItemsQuery (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\sequelize@6.37.7_mysql2@3.15.2\node_modules\sequelize\src\dialects\abstract\query-generator.js:2438:35)
+    at MySQLQueryGenerator.getWhereConditions (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\sequelize@6.37.7_mysql2@3.15.2\node_modules\sequelize\src\dialects\abstract\query-generator.js:2866:19)
+    at MySQLQueryGenerator.selectQuery (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\sequelize@6.37.7_mysql2@3.15.2\node_modules\sequelize\src\dialects\abstract\query-generator.js:1466:28)
+    at MySQLQueryInterface.rawSelect (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\sequelize@6.37.7_mysql2@3.15.2\node_modules\sequelize\src\dialects\abstract\query-interface.js:1037:37)
+    at Function.aggregate (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\sequelize@6.37.7_mysql2@3.15.2\node_modules\sequelize\src\model.js:2067:45)
+    at Function.count (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\sequelize@6.37.7_mysql2@3.15.2\node_modules\sequelize\src\model.js:2124:31)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+Error: WHERE parameter "category_id" has invalid "undefined" value
+    at MySQLQueryGenerator.whereItemQuery (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\sequelize@6.37.7_mysql2@3.15.2\node_modules\sequelize\src\dialects\abstract\query-generator.js:2451:13)
+    at <anonymous> (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\sequelize@6.37.7_mysql2@3.15.2\node_modules\sequelize\src\dialects\abstract\query-generator.js:2440:25)
+    at Array.forEach (<anonymous>)
+    at MySQLQueryGenerator.whereItemsQuery (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\sequelize@6.37.7_mysql2@3.15.2\node_modules\sequelize\src\dialects\abstract\query-generator.js:2438:35)
+    at MySQLQueryGenerator.getWhereConditions (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\sequelize@6.37.7_mysql2@3.15.2\node_modules\sequelize\src\dialects\abstract\query-generator.js:2866:19)
+    at MySQLQueryGenerator.selectQuery (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\sequelize@6.37.7_mysql2@3.15.2\node_modules\sequelize\src\dialects\abstract\query-generator.js:1466:28)
+    at MySQLQueryInterface.rawSelect (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\sequelize@6.37.7_mysql2@3.15.2\node_modules\sequelize\src\dialects\abstract\query-interface.js:1037:37)
+    at Function.aggregate (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\sequelize@6.37.7_mysql2@3.15.2\node_modules\sequelize\src\model.js:2067:45)
+    at Function.count (C:\Users\user\Documents\ecommerce-react\node_modules\.pnpm\sequelize@6.37.7_mysql2@3.15.2\node_modules\sequelize\src\model.js:2124:31)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)

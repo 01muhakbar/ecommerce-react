@@ -6,3 +6,521 @@ Attempting to connect to the database...
 Database connected successfully.
 Skipping database sync (set DB_SYNC=true to enable).
 🚀 Server is running on http://localhost:3001 with DB sync
+[store/products] sample {
+  id: 3,
+  name: 'Running Shoes',
+  slug: 'running-shoes',
+  price: '480000.00',
+  stock: 15,
+  categoryId: 1,
+  promoImagePath: '/uploads/products/demo.svg',
+  imagePaths: null,
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:28:03.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[store/products/:id] lookup by slug running-shoes
+[404] POST /api/cart/add
+[store] POST /orders hit 2026-02-06T00:35:35.850Z
+[store/orders] payload {
+  customer: {
+    name: 'Buyer Audit',
+    phone: '08123456789',
+    address: 'Audit Street'
+  },
+  paymentMethod: 'COD',
+  itemsCount: 1,
+  firstItem: { productId: 3, qty: 1 }
+}
+[store/orders] requestedIds [ 3 ]
+[store/orders] foundIds [ 3 ]
+[store/orders] sampleProduct {
+  id: 3,
+  name: 'Running Shoes',
+  stock: 15,
+  price: '480000.00',
+  salePrice: null,
+  status: 'active',
+  published: 1
+}
+[store/orders] stockCheck {
+  item: { productId: 3, qty: 1 },
+  product: {
+    id: 3,
+    name: 'Running Shoes',
+    stock: 15,
+    status: 'active',
+    isPublished: undefined,
+    published: 1
+  }
+}
+[store/orders] orderItemsPayload sample { productId: 3, product_id: 3, quantity: 1, price: 480000 }
+create order totals { subtotal: 480000, total: 480000, totalAmount: 480000 }
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[404] GET /uploads/[
+[store/products/:id] lookup by slug audit-product-20260206083205
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[404] GET /uploads/[
+[404] GET /uploads/[
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[404] GET /uploads/[
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[404] GET /uploads/[
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[404] GET /uploads/[
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[404] GET /uploads/[
+[404] GET /uploads/[
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[404] GET /uploads/[
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[404] GET /uploads/[
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[404] GET /uploads/[
+[404] GET /uploads/[
+[404] GET /uploads/[
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[404] GET /uploads/[
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[404] GET /uploads/[
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[404] GET /uploads/[
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[404] GET /uploads/[
+[404] GET /uploads/[
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[404] GET /uploads/[
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[404] GET /uploads/[
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[404] GET /uploads/[
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[404] GET /uploads/[
+[404] GET /uploads/[
+[404] GET /uploads/[
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[404] GET /uploads/[
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[404] GET /uploads/[
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[404] GET /uploads/[
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[404] GET /uploads/[
+[404] GET /uploads/[
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[404] GET /uploads/[
+[404] GET /uploads/[
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}
+[404] GET /uploads/[
+[store/products] sample {
+  id: 13,
+  name: 'Audit Product 20260206083205',
+  slug: 'audit-product-20260206083205',
+  price: '12345.00',
+  stock: 5,
+  categoryId: 1,
+  promoImagePath: null,
+  imagePaths: '[]',
+  status: 'active',
+  published: 1,
+  updatedAt: 2026-02-06T00:32:05.000Z,
+  category: { id: 1, name: 'Apparel', code: 'apparel' }
+}

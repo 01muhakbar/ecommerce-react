@@ -1,119 +1,117 @@
-import { Link } from "react-router-dom";
-import { useCategories, useProducts, CategoryCard, ProductCard } from "../../storefront.jsx";
+import { Link, useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { useCategories, useProducts, ProductCard } from "../../storefront.jsx";
+import QueryState from "../../components/UI/QueryState.jsx";
+import HeroSlider from "../../components/kachabazar-demo/HeroSlider.jsx";
+import PopularProductsGrid from "../../components/kachabazar-demo/PopularProductsGrid.jsx";
+import FeaturedCategoriesMega from "../../components/kachabazar-demo/FeaturedCategoriesMega.jsx";
 
 export default function StoreHomePage() {
+  const navigate = useNavigate();
+  const [activeSlide, setActiveSlide] = useState(0);
+  const slides = useMemo(
+    () => [
+      {
+        title: "Fresh groceries delivered in minutes.",
+        subtitle: "KachaBazaar • Daily essentials for your family",
+      },
+      {
+        title: "Healthy picks, curated every day.",
+        subtitle: "Discover seasonal fruits, veggies, and pantry staples",
+      },
+      {
+        title: "Your neighborhood market, online.",
+        subtitle: "Shop local favorites with fast checkout",
+      },
+    ],
+    []
+  );
+  const heroSlide = slides[Math.max(0, Math.min(activeSlide, slides.length - 1))];
+
   const {
     data: categoriesData,
     isLoading: categoriesLoading,
     isError: categoriesError,
+    error: categoriesErrorObj,
+    refetch: refetchCategories,
   } = useCategories();
   const {
     data: popularData,
     isLoading: popularLoading,
     isError: popularError,
-  } = useProducts({ page: 1, limit: 8 });
-  const {
-    data: latestData,
-    isLoading: latestLoading,
-    isError: latestError,
-  } = useProducts({ page: 1, limit: 8 });
+    error: popularErrorObj,
+    refetch: refetchPopular,
+  } = useProducts({ page: 1, limit: 10 });
 
   const categories = categoriesData?.data?.items ?? [];
-  const popularProducts = popularData?.data?.items ?? [];
-  const latestProducts = latestData?.data?.items ?? [];
-
-  const loading = categoriesLoading || popularLoading || latestLoading;
-  const error = categoriesError || popularError || latestError;
-
-  if (loading) {
-    return <p className="text-sm text-slate-500">Loading storefront...</p>;
-  }
-
-  if (error) {
-    return (
-      <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-        Failed to load storefront data.
-      </div>
-    );
-  }
+  const rawPopular =
+    popularData?.data?.items ?? popularData?.data ?? popularData?.items ?? popularData ?? [];
+  const popularProducts = Array.isArray(rawPopular) ? rawPopular : [];
+  const featuredCategories = categories.map((category) => ({
+    id: category.id ?? category.code ?? category.slug,
+    name: category.name ?? "Category",
+    slug: category.slug || category.code || String(category.id || ""),
+    icon: category.icon ?? category.image ?? null,
+    items: [],
+  }));
 
   return (
-    <div className="space-y-12">
-      <section className="rounded-3xl bg-gradient-to-br from-amber-50 via-white to-slate-50 p-8">
-        <div className="max-w-xl space-y-4">
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">KachaBazaar</p>
-          <h1 className="text-3xl font-semibold text-slate-900 md:text-4xl">
-            Groceries, lifestyle, and everything fresh in one place.
-          </h1>
-          <p className="text-sm text-slate-600">
-            Browse the latest arrivals and curated categories to kick-start your
-            daily essentials.
-          </p>
-          <Link
-            to="/search"
-            className="inline-flex items-center rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
+    <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div className="space-y-12 py-8">
+        <section>
+          <HeroSlider
+            heroSlide={heroSlide}
+            slides={slides}
+            activeSlide={activeSlide}
+            setActiveSlide={setActiveSlide}
+            onCta={() => navigate("/search")}
+          />
+        </section>
+
+        <section>
+          <QueryState
+            isLoading={categoriesLoading}
+            isError={categoriesError}
+            error={categoriesErrorObj}
+            isEmpty={categories.length === 0}
+            emptyTitle="Belum ada kategori"
+            emptyHint="Kategori akan muncul setelah admin menambahkan produk."
+            onRetry={() => refetchCategories()}
           >
-            Browse catalog
-          </Link>
-        </div>
-      </section>
+            <FeaturedCategoriesMega featuredCategories={featuredCategories} />
+          </QueryState>
+        </section>
 
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Featured Categories</h2>
-          <Link to="/search" className="text-sm text-slate-500 hover:text-slate-900">
-            View all
-          </Link>
-        </div>
-        {categories.length === 0 ? (
-          <p className="text-sm text-slate-500">No categories available.</p>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {categories.map((category) => (
-              <CategoryCard key={category.id} category={category} />
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Popular Products</h2>
-          <Link
-            to="/search"
-            className="text-sm text-slate-500 hover:text-slate-900"
+        <section>
+          <QueryState
+            isLoading={popularLoading}
+            isError={popularError}
+            error={popularErrorObj}
+            isEmpty={popularProducts.length === 0}
+            emptyTitle="Produk belum tersedia"
+            emptyHint="Produk populer akan muncul setelah katalog diisi."
+            onRetry={() => refetchPopular()}
           >
-            Shop all
-          </Link>
-        </div>
-        {popularProducts.length === 0 ? (
-          <p className="text-sm text-slate-500">No products available.</p>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {popularProducts.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Latest Products</h2>
-          <Link to="/search" className="text-sm text-slate-500 hover:text-slate-900">
-            Discover more
-          </Link>
-        </div>
-        {latestProducts.length === 0 ? (
-          <p className="text-sm text-slate-500">No products available.</p>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {latestProducts.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
-        )}
-      </section>
+            <div className="flex items-center justify-end">
+              <Link
+                to="/search"
+                className="hidden sm:inline-flex shrink-0 items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-slate-300"
+              >
+                Shop all
+              </Link>
+            </div>
+            <PopularProductsGrid safeProducts={popularProducts} ProductCard={ProductCard} />
+            <div className="mt-8 flex justify-center">
+              <Link
+                to="/search"
+                className="inline-flex items-center rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 hover:border-slate-300"
+              >
+                Shop all products
+              </Link>
+            </div>
+          </QueryState>
+        </section>
+      </div>
     </div>
   );
 }

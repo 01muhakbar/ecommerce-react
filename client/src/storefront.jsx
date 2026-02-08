@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
 import { useCartStore } from "./store/cart.store.ts";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "./api/axios.ts";
@@ -173,55 +174,87 @@ export function CategoryCard({ category }) {
 export function ProductCard({ product }) {
   const addItem = useCartStore((state) => state.addItem);
   const imageSrc = getImageSrc(product);
+  const [isAdding, setIsAdding] = useState(false);
+  const timerRef = useRef(null);
+  const productName = product?.name || product?.title || "Product";
+  const productSlug = product?.slug || product?.id;
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
+
+  const handleAdd = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (isAdding) return;
+    setIsAdding(true);
+    addItem(
+      {
+        id: product.id,
+        name: productName,
+        price: Number(product.price || 0),
+        imageUrl: product.imageUrl ?? null,
+      },
+      1
+    );
+    timerRef.current = setTimeout(() => {
+      setIsAdding(false);
+    }, 600);
+  };
+
   return (
-    <Link
-      to={`/product/${product.slug || product.id}`}
-      className="group flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-4 transition hover:-translate-y-1 hover:border-slate-300 hover:shadow-md"
-    >
-      <div className="flex h-36 items-center justify-center rounded-xl bg-slate-100 text-xs text-slate-400">
-        {imageSrc ? (
-          <img
-            src={imageSrc}
-            alt={product.name}
-            className="h-full w-full rounded-xl object-cover"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center rounded-xl bg-slate-100 text-[11px] uppercase tracking-widest text-slate-400">
-            Img
-          </div>
-        )}
-      </div>
-      <div className="mt-4 flex-1">
-        <div className="text-sm font-semibold text-slate-900">{product.name}</div>
-        <div className="mt-1 text-xs text-slate-500">
-          {product.category?.name || "Uncategorized"}
+    <div className="group flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-4 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md focus-within:ring-2 focus-within:ring-slate-300">
+      <Link to={`/product/${productSlug}`} className="block focus:outline-none">
+        <div className="flex h-36 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-xs text-slate-400">
+          {imageSrc ? (
+            <img
+              src={imageSrc}
+              alt={productName}
+              className="h-full w-full rounded-xl object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center rounded-xl bg-gradient-to-br from-slate-100 via-white to-slate-200 text-slate-400">
+              <svg
+                viewBox="0 0 24 24"
+                className="h-6 w-6"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+              >
+                <rect x="3" y="5" width="18" height="14" rx="2" />
+                <path d="M7 14l3-3 4 4 3-3 2 2" />
+              </svg>
+            </div>
+          )}
         </div>
-      </div>
+        <div className="mt-4 flex-1">
+          <div className="text-sm font-semibold text-slate-900 line-clamp-2">
+            {productName}
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            {product.category?.name || "Uncategorized"}
+          </div>
+        </div>
+      </Link>
       <div className="mt-4 flex items-center justify-between">
         <div className="text-sm font-semibold text-slate-900">
           {currency.format(Number(product.price || 0))}
         </div>
         <button
           type="button"
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            addItem(
-              {
-                id: product.id,
-                name: product.name,
-                price: Number(product.price || 0),
-                imageUrl: product.imageUrl ?? null,
-              },
-              1
-            );
-          }}
-          className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:border-slate-300"
+          onClick={handleAdd}
+          aria-label={`Add ${productName} to cart`}
+          disabled={isAdding}
+          className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Add to cart
+          {isAdding ? "Added" : "Add to cart"}
         </button>
       </div>
-    </Link>
+    </div>
   );
 }
 
