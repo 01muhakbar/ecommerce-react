@@ -1,3 +1,5 @@
+import { formatCurrency } from "../../utils/format.js";
+
 const ICONS = {
   total: (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -26,14 +28,6 @@ const ICONS = {
   ),
 };
 
-const formatUSD = (value) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-
 export default function OrderStatusCards({ items, labelMap, pendingAmount }) {
   return (
     <div className="dashboard-status-row">
@@ -48,7 +42,7 @@ export default function OrderStatusCards({ items, labelMap, pendingAmount }) {
             </div>
             {item.id === "pending" ? (
               <div className="status-mini-card__note">
-                ({formatUSD(pendingAmount)})
+                ({formatCurrency(pendingAmount)})
               </div>
             ) : null}
             <div className="status-mini-card__value">{item.count}</div>

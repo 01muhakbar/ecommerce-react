@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { validateCoupon } from "../services/coupon.service.js";
+import { normalizeCouponRecord, validateCoupon } from "../services/coupon.service.js";
 import { Coupon } from "../models/index.js";
 import { Op } from "sequelize";
 
@@ -45,14 +45,17 @@ router.get("/", async (_req, res, next) => {
     });
 
     res.json({
-      data: coupons.map((coupon) => ({
-        id: coupon.id,
-        code: coupon.code,
-        discountType: coupon.discountType,
-        amount: parseLocaleNumber(coupon.amount || 0),
-        minSpend: parseLocaleNumber(coupon.minSpend || 0),
-        expiresAt: coupon.expiresAt ?? null,
-      })),
+      data: coupons.map((coupon) => {
+        const normalized = normalizeCouponRecord(coupon);
+        return {
+          id: coupon.id,
+          code: normalized.code || coupon.code,
+          discountType: normalized.discountType || coupon.discountType,
+          amount: normalized.amount,
+          minSpend: normalized.minSpend,
+          expiresAt: coupon.expiresAt ?? null,
+        };
+      }),
     });
   } catch (error) {
     next(error);

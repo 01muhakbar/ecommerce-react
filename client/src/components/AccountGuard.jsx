@@ -9,11 +9,26 @@ const fetchMe = async () => {
 
 export default function AccountGuard() {
   const location = useLocation();
+  const shouldProbe = (() => {
+    try {
+      return (
+        Boolean(localStorage.getItem("authToken")) ||
+        localStorage.getItem("authSessionHint") === "true"
+      );
+    } catch {
+      return false;
+    }
+  })();
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["account", "me"],
     queryFn: fetchMe,
     retry: false,
+    enabled: shouldProbe,
   });
+
+  if (!shouldProbe) {
+    return <Navigate to="/auth/login" replace state={{ from: location }} />;
+  }
 
   const status = error?.response?.status;
   if (isLoading) {

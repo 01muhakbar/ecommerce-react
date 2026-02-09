@@ -1,11 +1,19 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/useAuth.js";
 import { api } from "../../api/axios.ts";
+import { useCart } from "../../hooks/useCart.ts";
+import * as cartApi from "../../api/cartApi.ts";
+import { clearGuestCart, getGuestCart } from "../../utils/guestCart.ts";
+
+const PENDING_ADD_KEY = "pending_cart_add";
+const PENDING_ADD_CONSUMED_KEY = "pending_cart_add_consumed";
 
 export default function StoreRegisterPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { refreshSession } = useAuth();
+  const { refreshCart } = useCart();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -17,9 +25,74 @@ export default function StoreRegisterPage() {
     setError("");
     setIsSubmitting(true);
     try {
-      await api.post("/auth/register", { name, email, password });
+      await api.post(
+        "/auth/register",
+        { name, email, password },
+        { withCredentials: true }
+      );
+      const mergeGuestCart = async () => {
+        try {
+          const guest = getGuestCart();
+          const items = Array.isArray(guest?.items) ? guest.items : [];
+          if (items.length === 0) return;
+          for (const item of items) {
+            const id = Number(item?.productId);
+            const qty = Math.max(1, Number(item?.qty) || 1);
+            if (!Number.isFinite(id) || id <= 0) continue;
+            await cartApi.addToCart(id, qty);
+          }
+          clearGuestCart();
+        } catch (mergeError) {
+          if (import.meta.env.DEV) {
+            console.warn("[store-register] guest cart merge failed", mergeError);
+          }
+        }
+      };
+      const mergePendingAdd = async () => {
+        try {
+          const raw = localStorage.getItem(PENDING_ADD_KEY);
+          if (!raw) return null;
+          localStorage.removeItem(PENDING_ADD_KEY);
+          const parsed = JSON.parse(raw);
+          const nonce = parsed?.nonce;
+          if (nonce) {
+            const consumed = sessionStorage.getItem(PENDING_ADD_CONSUMED_KEY);
+            if (consumed === String(nonce)) {
+              return null;
+            }
+            sessionStorage.setItem(PENDING_ADD_CONSUMED_KEY, String(nonce));
+          }
+          const id = Number(parsed?.productId);
+          const qty = Math.max(1, Number(parsed?.qty) || 1);
+          if (Number.isFinite(id) && id > 0) {
+            await cartApi.addToCart(id, qty);
+          }
+          return typeof parsed?.from === "string" ? parsed.from : null;
+        } catch (mergeError) {
+          if (import.meta.env.DEV) {
+            console.warn("[store-register] pending add merge failed", mergeError);
+          }
+          return null;
+        }
+      };
+      await mergeGuestCart();
+      const pendingFrom = await mergePendingAdd();
       await refreshSession();
-      navigate("/account", { replace: true });
+      await refreshCart(false);
+      const fromState = location.state?.from;
+      const resolvedFrom =
+        typeof fromState === "string"
+          ? fromState
+          : fromState && fromState.pathname
+            ? `${fromState.pathname || ""}${fromState.search || ""}${fromState.hash || ""}`
+            : null;
+      const target =
+        pendingFrom && pendingFrom !== "/auth/register"
+          ? pendingFrom
+          : resolvedFrom && resolvedFrom !== "/auth/register"
+            ? resolvedFrom
+            : "/account";
+      navigate(target, { replace: true });
     } catch (err) {
       const fieldErrors = err?.response?.data?.errors?.fieldErrors;
       if (

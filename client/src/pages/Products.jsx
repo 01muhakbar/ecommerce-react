@@ -9,11 +9,7 @@ import {
   updateAdminProduct,
   uploadAdminImage,
 } from "../lib/adminApi.js";
-
-const currency = new Intl.NumberFormat("id-ID", {
-  style: "currency",
-  currency: "IDR",
-});
+import { formatCurrency } from "../utils/format.js";
 
 const getImageUrl = (product) => {
   if (product?.promoImagePath) return product.promoImagePath;
@@ -307,7 +303,7 @@ export default function Products() {
                     </div>
                   </td>
                   <td className="px-4 py-3 font-medium text-slate-900">{product.name}</td>
-                  <td className="px-4 py-3">{currency.format(Number(product.price || 0))}</td>
+                  <td className="px-4 py-3">{formatCurrency(Number(product.price || 0))}</td>
                   <td className="px-4 py-3">{product.stock ?? 0}</td>
                   <td className="px-4 py-3">
                     {categoryMap.get(product.categoryId) || "-"}

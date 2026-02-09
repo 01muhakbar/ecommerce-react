@@ -1,13 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { fetchStoreProducts } from "../../api/store.service.ts";
-import { useCartStore } from "../../store/cart.store.ts";
+import { useCart } from "../../hooks/useCart.ts";
 import QueryState from "../../components/UI/QueryState.jsx";
-
-const currency = new Intl.NumberFormat("id-ID", {
-  style: "currency",
-  currency: "IDR",
-});
+import { formatCurrency } from "../../utils/format.js";
 
 export default function StoreCategoryPage() {
   const { slug } = useParams();
@@ -25,7 +21,7 @@ export default function StoreCategoryPage() {
   const [retryKey, setRetryKey] = useState(0);
   const invalidSlug =
     !safeSlug || safeSlug.includes("<") || safeSlug.includes(">");
-  const addItem = useCartStore((state) => state.addItem);
+  const { add } = useCart();
 
   useEffect(() => {
     if (!safeSlug || invalidSlug) {
@@ -97,18 +93,22 @@ export default function StoreCategoryPage() {
             >
               <div className="text-sm font-semibold">{product.name}</div>
               <div className="text-xs text-slate-500">
-                {currency.format(Number(product.price || 0))}
+                {formatCurrency(Number(product.price || 0))}
               </div>
               <button
                 type="button"
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
-                  addItem({
-                    id: product.id,
-                    name: product.name,
-                    price: Number(product.price || 0),
-                    imageUrl: product.imageUrl ?? null,
+                  add(product.id, 1, {
+                    name: product?.name || product?.title,
+                    price: product?.salePrice ?? product?.sellingPrice ?? product?.price,
+                    imageUrl:
+                      product?.imageUrl ??
+                      product?.image ??
+                      product?.thumbnail ??
+                      product?.promoImagePath ??
+                      null,
                   });
                 }}
                 className="mt-auto self-start rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:border-slate-300"

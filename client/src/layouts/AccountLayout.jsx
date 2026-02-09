@@ -1,4 +1,7 @@
-import { NavLink, Outlet, useOutletContext } from "react-router-dom";
+import { NavLink, Outlet, useNavigate, useOutletContext } from "react-router-dom";
+import { useState } from "react";
+import { useAuth } from "../auth/useAuth.js";
+import { useCartStore } from "../store/cart.store.ts";
 
 const navItems = [
   { to: "/account", label: "Dashboard" },
@@ -6,7 +9,7 @@ const navItems = [
   { to: "/account/profile", label: "Update Profile" },
 ];
 
-function AccountSidebar() {
+function AccountSidebar({ onLogout, isLoggingOut }) {
   return (
     <aside className="w-full shrink-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:w-60">
       <div className="mb-4 text-xs font-semibold uppercase tracking-widest text-slate-400">
@@ -31,15 +34,48 @@ function AccountSidebar() {
           </NavLink>
         ))}
       </nav>
+      <button
+        type="button"
+        onClick={onLogout}
+        disabled={isLoggingOut}
+        className="mt-4 w-full rounded-full border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {isLoggingOut ? "Logging out..." : "Logout"}
+      </button>
     </aside>
   );
 }
 
 export default function AccountLayout() {
+  const navigate = useNavigate();
   const { user } = useOutletContext() || {};
+  const { logout } = useAuth() || {};
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    try {
+      if (typeof logout === "function") {
+        await logout();
+      }
+    } finally {
+      const cart = useCartStore.getState();
+      cart.reset();
+      cart.setMode("guest");
+      try {
+        sessionStorage.removeItem("cart_remote_ok");
+        sessionStorage.removeItem("pending_cart_add_consumed");
+      } catch {
+        // ignore storage errors
+      }
+      navigate("/", { replace: true });
+      setIsLoggingOut(false);
+    }
+  };
   return (
     <section className="grid gap-6 md:grid-cols-[240px_1fr]">
-      <AccountSidebar />
+      <AccountSidebar onLogout={handleLogout} isLoggingOut={isLoggingOut} />
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>

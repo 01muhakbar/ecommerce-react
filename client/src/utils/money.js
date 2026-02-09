@@ -1,4 +1,3 @@
-export const moneyIDR = (value) =>
-  new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR" }).format(
-    Number(value || 0)
-  );
+import { formatCurrency } from "./format.js";
+
+export const moneyIDR = (value) => formatCurrency(Number(value || 0));

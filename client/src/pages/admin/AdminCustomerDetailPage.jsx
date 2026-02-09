@@ -7,11 +7,7 @@ import {
   fetchAdminOrders,
 } from "../../lib/adminApi.js";
 import { ORDER_STATUS_OPTIONS } from "../../constants/orderStatus.js";
-
-const currency = new Intl.NumberFormat("id-ID", {
-  style: "currency",
-  currency: "IDR",
-});
+import { formatCurrency } from "../../utils/format.js";
 
 const STATUS_OPTIONS = ORDER_STATUS_OPTIONS;
 
@@ -155,7 +151,7 @@ export default function AdminCustomerDetailPage() {
           <h3 className="text-sm font-semibold">Summary</h3>
           <div className="mt-3 space-y-1 text-sm text-slate-600">
             <div>Total orders: {totalOrders ?? "-"}</div>
-            <div>Total spent: {totalOrders ? currency.format(totalSpent) : "-"}</div>
+            <div>Total spent: {totalOrders ? formatCurrency(totalSpent) : "-"}</div>
           </div>
         </div>
       </div>
@@ -187,7 +183,7 @@ export default function AdminCustomerDetailPage() {
                     {orderInvoice(order)}
                   </td>
                   <td className="py-2">
-                    {currency.format(order.totalAmount || order.total || 0)}
+                    {formatCurrency(order.totalAmount || order.total || 0)}
                   </td>
                   <td className="py-2 capitalize">{order.status || "-"}</td>
                   <td className="py-2 text-slate-500">
@@ -273,7 +269,7 @@ export default function AdminCustomerDetailPage() {
                       {orderInvoice(order)}
                     </td>
                     <td className="py-2">
-                      {currency.format(order.totalAmount || order.total || 0)}
+                      {formatCurrency(order.totalAmount || order.total || 0)}
                     </td>
                     <td className="py-2">
                       <span

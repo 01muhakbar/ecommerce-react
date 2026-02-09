@@ -1,18 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../api/axios.ts";
+import { formatCurrency } from "../../utils/format.js";
 
 const fetchOrder = async (orderId) => {
   const { data } = await api.get(`/store/orders/my/${orderId}`);
   return data;
 };
 
-const money = (value) =>
-  new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(Number(value || 0));
+const money = (value) => formatCurrency(Number(value || 0));
 
 const statusStyles = (status = "") => {
   const s = String(status).toLowerCase();

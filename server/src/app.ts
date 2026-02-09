@@ -14,6 +14,7 @@ import {
 } from "./middleware/requireRole.js";
 
 import authRouter from "./routes/auth.js";
+import cartRouter from "./routes/cartRoutes.js";
 import catalogRouter from "./routes/admin.catalog.js";
 import statsRouter from "./routes/admin.stats.js";
 import analyticsRouter from "./routes/admin.analytics.js";
@@ -39,9 +40,14 @@ app.set("trust proxy", 1);
 app.use(cookieParser());
 app.use(express.json());
 
-const ORIGIN =
-  process.env.CLIENT_URL || process.env.CORS_ORIGIN || "http://localhost:5173";
-app.use(cors({ origin: ORIGIN, credentials: true }));
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  process.env.CORS_ORIGIN,
+  "http://localhost:5173",
+].filter(Boolean);
+const corsOrigin =
+  allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins;
+app.use(cors({ origin: corsOrigin, credentials: true }));
 
 // optional: boleh tetap dipakai, tapi pastikan tidak konflik dengan requireAuth
 app.use(authFromCookie);
@@ -51,6 +57,7 @@ app.use("/api", healthRouter);
 // public
 app.use("/api", publicRouter);
 app.use("/api/auth", authRouter);
+app.use("/api/cart", cartRouter);
 app.use("/api/store", storeRouter);
 app.use("/api/store/coupons", storeCouponsRouter);
 

@@ -1,18 +1,16 @@
 import { Link } from "react-router-dom";
-import { useCartStore } from "../../store/cart.store.ts";
-
-const currency = new Intl.NumberFormat("id-ID", {
-  style: "currency",
-  currency: "IDR",
-});
+import { useEffect } from "react";
+import { useCart } from "../../hooks/useCart.ts";
+import { formatCurrency } from "../../utils/format.js";
 
 export default function StoreCartPage() {
-  const items = useCartStore((state) => state.items);
-  const hasHydrated = useCartStore((state) => state.hasHydrated);
-  const subtotal = useCartStore((state) => state.subtotal);
-  const updateQty = useCartStore((state) => state.updateQty);
-  const removeItem = useCartStore((state) => state.removeItem);
+  const { items, subtotal, hasHydrated, isLoading, error, update, remove, refreshCart } =
+    useCart();
   const hasItems = items.length > 0;
+
+  useEffect(() => {
+    refreshCart();
+  }, [refreshCart]);
 
   if (!hasHydrated) {
     return (
@@ -55,6 +53,14 @@ export default function StoreCartPage() {
         <p className="mt-1 text-sm text-slate-500">
           Review items and proceed to checkout.
         </p>
+        {isLoading ? (
+          <p className="mt-2 text-xs text-slate-400">Syncing cart...</p>
+        ) : null}
+        {error ? (
+          <p className="mt-2 text-xs text-rose-600">
+            Failed to sync cart. Please try again.
+          </p>
+        ) : null}
       </div>
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
@@ -65,9 +71,9 @@ export default function StoreCartPage() {
             >
               <div className="flex flex-col gap-4 md:flex-row md:items-center">
                 <div className="h-16 w-16 overflow-hidden rounded-xl bg-slate-100">
-                  {item.imageUrl ? (
+                  {item.image ? (
                     <img
-                      src={item.imageUrl}
+                      src={item.image}
                       alt={item.name}
                       className="h-full w-full object-cover"
                     />
@@ -82,32 +88,32 @@ export default function StoreCartPage() {
                     {item.name}
                   </div>
                   <div className="mt-1 text-xs text-slate-500">
-                    {currency.format(Number(item.price || 0))}
+                    {formatCurrency(Number(item.price || 0))}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => updateQty(item.productId, item.qty - 1)}
+                    onClick={() => update(item.productId, item.quantity - 1)}
                     className="rounded-full border border-slate-200 px-3 py-1 text-sm hover:border-slate-300"
                   >
                     -
                   </button>
-                  <span className="text-sm font-semibold">{item.qty}</span>
+                  <span className="text-sm font-semibold">{item.quantity}</span>
                   <button
                     type="button"
-                    onClick={() => updateQty(item.productId, item.qty + 1)}
+                    onClick={() => update(item.productId, item.quantity + 1)}
                     className="rounded-full border border-slate-200 px-3 py-1 text-sm hover:border-slate-300"
                   >
                     +
                   </button>
                 </div>
                 <div className="text-sm font-semibold text-slate-900 md:min-w-[96px] md:text-right">
-                  {currency.format(Number(item.price || 0) * item.qty)}
+                  {formatCurrency(Number(item.price || 0) * item.quantity)}
                 </div>
                 <button
                   type="button"
-                  onClick={() => removeItem(item.productId)}
+                  onClick={() => remove(item.productId)}
                   className="text-sm font-semibold text-rose-600 hover:text-rose-700"
                 >
                   Remove
@@ -125,7 +131,7 @@ export default function StoreCartPage() {
                 <div className="flex items-center justify-between">
                   <span>Subtotal</span>
                   <span className="font-semibold text-slate-900">
-                    {currency.format(Number(subtotal || 0))}
+                    {formatCurrency(Number(subtotal || 0))}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -135,7 +141,7 @@ export default function StoreCartPage() {
                 <div className="flex items-center justify-between border-t border-slate-200 pt-3">
                   <span className="font-semibold text-slate-900">Total</span>
                   <span className="font-semibold text-slate-900">
-                    {currency.format(Number(subtotal || 0))}
+                    {formatCurrency(Number(subtotal || 0))}
                   </span>
                 </div>
               </div>

@@ -304,11 +304,11 @@ export const useCartStore = create<CartState>()(
           }
         },
         setItems: (items) => {
-          const normalized = (items || [])
+          const normalized = (Array.isArray(items) ? items : [])
             .map(normalizeCartItem)
             .filter((item): item is CartItem => Boolean(item));
-          const totals = computeTotals(normalized);
-          set({ items: normalized, ...totals });
+          const { totalQty, subtotal } = computeTotals(normalized);
+          set({ items: normalized, totalQty, subtotal });
         },
         reset: () => {
           try {
@@ -407,21 +407,18 @@ export const useCartStore = create<CartState>()(
         },
         updateQty: (productId, qty) => {
           const isRemote = get().mode === "remote";
-          // Clamp remote qty to avoid negative/NaN causing invalid API calls
-          const desiredQty = isRemote
-            ? Math.max(0, Number(qty) || 0)
-            : Math.max(1, Number(qty) || 1);
+          const desiredQty = Math.max(0, Number(qty) || 0);
           set((state) => {
             const items =
-              isRemote && desiredQty <= 0
+              desiredQty <= 0
                 ? state.items.filter((item) => item.productId !== productId)
                 : state.items.map((item) =>
                     item.productId === productId
                       ? { ...item, qty: desiredQty }
                       : item
                   );
-            const totals = computeTotals(items);
-            return { items, ...totals };
+            const { totalQty, subtotal } = computeTotals(items);
+            return { items, totalQty, subtotal };
           });
           if (get().mode !== "remote") return;
           // coalescing updateQty to latest per productId

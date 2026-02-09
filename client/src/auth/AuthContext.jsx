@@ -15,6 +15,27 @@ export const AuthContext = createContext(null);
 const CART_SYNC_KEY = "cartSync:lastSyncedUserId";
 const CART_STORAGE_KEY = "kb_cart_v1";
 const LEGACY_CART_STORAGE_KEY = "cart";
+const AUTH_SESSION_KEY = "authSessionHint";
+
+const readAuthHint = () => {
+  try {
+    return localStorage.getItem(AUTH_SESSION_KEY) === "true";
+  } catch {
+    return false;
+  }
+};
+
+const writeAuthHint = (value) => {
+  try {
+    if (value) {
+      localStorage.setItem(AUTH_SESSION_KEY, "true");
+    } else {
+      localStorage.removeItem(AUTH_SESSION_KEY);
+    }
+  } catch {
+    // ignore storage errors
+  }
+};
 
 const readSyncedUserId = () => {
   try {
@@ -57,6 +78,7 @@ export function AuthProvider({ children }) {
     setIsLoading(false);
     try {
       localStorage.removeItem("authToken");
+      writeAuthHint(false);
     } catch (_) {
       // ignore storage errors
     }
@@ -66,16 +88,6 @@ export function AuthProvider({ children }) {
   const refreshSession = async () => {
     setIsLoading(true);
     try {
-      let hasToken = false;
-      try {
-        hasToken = Boolean(localStorage.getItem("authToken"));
-      } catch {
-        hasToken = false;
-      }
-      if (!hasToken && !api.defaults.headers.common.Authorization) {
-        clearSession();
-        return;
-      }
       const response = await meRequest();
       const nextUser =
         response?.data?.user ??
@@ -89,6 +101,7 @@ export function AuthProvider({ children }) {
       const nextRole = String(nextUser?.role ?? "").toLowerCase() || null;
       setUser(nextUser);
       setRole(nextRole);
+      writeAuthHint(true);
       if (import.meta.env.DEV) {
         console.log("[auth] refreshSession user", nextUser);
       }
@@ -128,6 +141,7 @@ export function AuthProvider({ children }) {
       if (nextUser) {
         setUser(nextUser);
         setRole(nextRole);
+        writeAuthHint(true);
         setIsLoading(false);
       } else {
         await refreshSession();
@@ -152,7 +166,19 @@ export function AuthProvider({ children }) {
   };
 
   useEffect(() => {
-    refreshSession();
+    const hasToken = (() => {
+      try {
+        return Boolean(localStorage.getItem("authToken"));
+      } catch {
+        return false;
+      }
+    })();
+    const shouldProbe = hasToken || readAuthHint();
+    if (shouldProbe) {
+      refreshSession();
+    } else {
+      setIsLoading(false);
+    }
     const unsubscribe = onUnauthorized(() => {
       clearSession();
       clearSyncedUserId();

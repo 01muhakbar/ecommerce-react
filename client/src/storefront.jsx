@@ -1,13 +1,9 @@
 import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
-import { useCartStore } from "./store/cart.store.ts";
+import { useCart } from "./hooks/useCart.ts";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "./api/axios.ts";
-
-const currency = new Intl.NumberFormat("id-ID", {
-  style: "currency",
-  currency: "IDR",
-});
+import { formatCurrency } from "./utils/format.js";
 
 const getImageSrc = (product) =>
   product?.imageUrl || product?.image || product?.thumbnail || null;
@@ -201,7 +197,7 @@ export function CategoryCard({ category }) {
 }
 
 export function ProductCard({ product }) {
-  const addItem = useCartStore((state) => state.addItem);
+  const { add, isLoading } = useCart();
   const imageSrc = getImageSrc(product);
   const [isAdding, setIsAdding] = useState(false);
   const timerRef = useRef(null);
@@ -221,15 +217,11 @@ export function ProductCard({ product }) {
     event.stopPropagation();
     if (isAdding) return;
     setIsAdding(true);
-    addItem(
-      {
-        id: product.id,
-        name: productName,
-        price: Number(product.price || 0),
-        imageUrl: product.imageUrl ?? null,
-      },
-      1
-    );
+    add(product?.id, 1, {
+      name: product?.name || product?.title,
+      price: product?.price,
+      imageUrl: imageSrc,
+    });
     timerRef.current = setTimeout(() => {
       setIsAdding(false);
     }, 600);
@@ -271,13 +263,13 @@ export function ProductCard({ product }) {
       </Link>
       <div className="mt-4 flex items-center justify-between">
         <div className="text-sm font-semibold text-slate-900">
-          {currency.format(Number(product.price || 0))}
+          {formatCurrency(Number(product.price || 0))}
         </div>
         <button
           type="button"
           onClick={handleAdd}
           aria-label={`Add ${productName} to cart`}
-          disabled={isAdding}
+          disabled={isAdding || isLoading}
           className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isAdding ? "Added" : "Add to cart"}

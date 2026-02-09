@@ -34,6 +34,21 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     let mounted = true;
+    const hasAuthHint = (() => {
+      try {
+        return (
+          Boolean(localStorage.getItem("authToken")) ||
+          localStorage.getItem("authSessionHint") === "true"
+        );
+      } catch {
+        return false;
+      }
+    })();
+    if (!hasAuthHint) {
+      return () => {
+        mounted = false;
+      };
+    }
     const checkAuth = async () => {
       try {
         const res = await fetch("/api/auth/me", { credentials: "include" });
@@ -166,6 +181,20 @@ export default function CheckoutPage() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    const hasAuthHint = (() => {
+      try {
+        return (
+          Boolean(localStorage.getItem("authToken")) ||
+          localStorage.getItem("authSessionHint") === "true"
+        );
+      } catch {
+        return false;
+      }
+    })();
+    if (!hasAuthHint) {
+      navigate("/auth/login", { replace: true, state: { from: "/checkout" } });
+      return;
+    }
     setError("");
     setIsMissingError(false);
     setFieldErrors({ fullName: "", phone: "", address: "" });

@@ -5,11 +5,7 @@ import { fetchAdminOrder, updateAdminOrderStatus } from "../../lib/adminApi.js";
 import { ORDER_STATUS_OPTIONS } from "../../constants/orderStatus.js";
 import QueryState from "../../components/UI/QueryState.jsx";
 import OrderStatusBadge from "../../components/admin/OrderStatusBadge.jsx";
-
-const currency = new Intl.NumberFormat("id-ID", {
-  style: "currency",
-  currency: "IDR",
-});
+import { formatCurrency } from "../../utils/format.js";
 
 const labelize = (value) =>
   value ? value.charAt(0).toUpperCase() + value.slice(1) : "";
@@ -129,7 +125,7 @@ export default function OrderDetail() {
 
           <div className="mt-4 flex flex-wrap gap-2 text-xs">
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-600">
-              Total {currency.format(order?.totalAmount || 0)}
+              Total {formatCurrency(order?.totalAmount || 0)}
             </span>
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-600">
               {itemCount} items
@@ -190,7 +186,7 @@ export default function OrderDetail() {
             <h3 className="text-sm font-semibold">Summary</h3>
             <div className="mt-3 space-y-1 text-sm text-slate-600">
               <div>Status: {order?.status}</div>
-              <div>Total: {currency.format(order?.totalAmount || 0)}</div>
+              <div>Total: {formatCurrency(order?.totalAmount || 0)}</div>
               <div>Payment: {order?.paymentMethod || order?.method || "COD"}</div>
             </div>
           </div>
@@ -220,8 +216,8 @@ export default function OrderDetail() {
                       {item.product?.name || `Product #${item.productId}`}
                     </td>
                     <td className="py-2 text-right">{item.quantity}</td>
-                    <td className="py-2 text-right">{currency.format(item.price || 0)}</td>
-                    <td className="py-2 text-right">{currency.format(item.lineTotal || 0)}</td>
+                    <td className="py-2 text-right">{formatCurrency(item.price || 0)}</td>
+                    <td className="py-2 text-right">{formatCurrency(item.lineTotal || 0)}</td>
                   </tr>
                 ))}
               </tbody>

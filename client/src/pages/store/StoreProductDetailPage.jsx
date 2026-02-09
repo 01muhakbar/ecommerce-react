@@ -1,17 +1,13 @@
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { useCartStore } from "../../store/cart.store.ts";
+import { useCart } from "../../hooks/useCart.ts";
 import { ProductCard, useProduct, useProducts } from "../../storefront.jsx";
 import QueryState from "../../components/UI/QueryState.jsx";
-
-const currency = new Intl.NumberFormat("id-ID", {
-  style: "currency",
-  currency: "IDR",
-});
+import { formatCurrency } from "../../utils/format.js";
 
 export default function StoreProductDetailPage() {
   const { slug } = useParams();
-  const addItem = useCartStore((state) => state.addItem);
+  const { add, isLoading: cartLoading } = useCart();
   const [qty, setQty] = useState(1);
 
   const {
@@ -125,7 +121,7 @@ export default function StoreProductDetailPage() {
           </div>
           <h1 className="text-2xl font-semibold text-slate-900">{product.name}</h1>
           <div className="text-xl font-semibold text-slate-900">
-            {currency.format(Number(product.salePrice || product.price || 0))}
+            {formatCurrency(Number(product.salePrice || product.price || 0))}
           </div>
           {product.description ? (
             <p className="text-sm text-slate-600">{product.description}</p>
@@ -156,17 +152,13 @@ export default function StoreProductDetailPage() {
             </div>
             <button
               type="button"
-              disabled={!hasStock}
+              disabled={!hasStock || cartLoading || isLoading}
               onClick={() =>
-                addItem(
-                  {
-                    id: product.id,
-                    name: product.name,
-                    price: Number(product.price || 0),
-                    imageUrl: product.imageUrl ?? null,
-                  },
-                  qty
-                )
+                add(product.id, qty, {
+                  name: product?.name || product?.title,
+                  price: product?.salePrice ?? product?.sellingPrice ?? product?.price,
+                  imageUrl: imageSrc,
+                })
               }
               className="rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
             >

@@ -15,9 +15,9 @@ export default function CouponPanel({
             No active coupons right now.
           </div>
         ) : (
-          (couponList || []).slice(0, 3).map((coupon) => (
+          (couponList || []).slice(0, 3).map((coupon, index) => (
             <div
-              key={coupon.id}
+              key={coupon.code || coupon.id || index}
               className="flex items-center justify-between rounded-2xl bg-white p-3 shadow-sm"
             >
               <div>

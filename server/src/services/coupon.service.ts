@@ -3,6 +3,55 @@ import { Coupon } from "../models/index.js";
 
 const normalizeCode = (value: any) => String(value || "").trim().toUpperCase();
 
+const getCouponField = (coupon: any, keys: string[]) => {
+  if (!coupon) return undefined;
+  const raw =
+    typeof coupon.get === "function" ? coupon.get({ plain: true }) : coupon;
+  for (const key of keys) {
+    const value = raw?.[key];
+    if (value !== undefined && value !== null && value !== "") {
+      return value;
+    }
+  }
+  return undefined;
+};
+
+const resolveDiscountType = (value: any) => {
+  const raw = String(value || "").trim().toLowerCase();
+  return raw === "fixed" ? "fixed" : "percent";
+};
+
+export const normalizeCouponRecord = (coupon: any) => {
+  const code = normalizeCode(getCouponField(coupon, ["code", "couponCode", "coupon_code"]));
+  const discountType = resolveDiscountType(
+    getCouponField(coupon, ["discountType", "discount_type", "type"])
+  );
+  const amount = parseLocaleNumber(
+    getCouponField(coupon, [
+      "amount",
+      "discountAmount",
+      "discount_amount",
+      "discount",
+      "value",
+      "discountValue",
+      "discount_value",
+    ]) ?? 0
+  );
+  const minSpend = parseLocaleNumber(
+    getCouponField(coupon, [
+      "minSpend",
+      "min_spend",
+      "minimumSpend",
+      "minimum_spend",
+      "minAmount",
+      "min_amount",
+      "minimumAmount",
+      "minimum_amount",
+    ]) ?? 0
+  );
+  return { code, discountType, amount, minSpend };
+};
+
 const parseLocaleNumber = (value: any) => {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   if (value == null) return 0;
@@ -70,19 +119,19 @@ export const validateCoupon = async (codeRaw: any, subtotalRaw: any) => {
     };
   }
 
-  const minSpend = parseLocaleNumber(coupon.minSpend || 0);
+  const { code: resolvedCode, discountType, amount, minSpend } =
+    normalizeCouponRecord(coupon);
+  const effectiveCode = resolvedCode || code;
   if (subtotal < minSpend) {
     return {
       valid: false,
-      code,
+      code: effectiveCode,
       discountAmount: 0,
       message: `Minimal belanja ${minSpend} untuk memakai kupon ini.`,
     };
   }
-
-  const amount = parseLocaleNumber(coupon.amount || 0);
   let discountAmount = 0;
-  if (coupon.discountType === "percent") {
+  if (discountType === "percent") {
     discountAmount = Math.floor(subtotal * (amount / 100));
   } else {
     discountAmount = Math.min(subtotal, amount);
@@ -94,6 +143,7 @@ export const validateCoupon = async (codeRaw: any, subtotalRaw: any) => {
     console.log("[coupon.validate] raw", {
       amount: coupon.amount,
       minSpend: coupon.minSpend,
+      discountType: coupon.discountType,
       amountType: typeof coupon.amount,
       minSpendType: typeof coupon.minSpend,
     });
@@ -107,8 +157,8 @@ export const validateCoupon = async (codeRaw: any, subtotalRaw: any) => {
 
   return {
     valid: true,
-    code,
-    discountType: coupon.discountType,
+    code: effectiveCode,
+    discountType,
     amount,
     minSpend,
     discountAmount,

@@ -19,6 +19,44 @@ const toQty = (v: unknown): number | null => {
   return qty;
 };
 
+const getAttr = (row: any, key: string) =>
+  row?.getDataValue?.(key) ?? row?.get?.(key) ?? row?.dataValues?.[key];
+
+const resolveCartId = async (cart: any, userId: number | string) => {
+  let cartId = getAttr(cart, "id");
+  if (!cartId && cart?.reload) {
+    try {
+      await cart.reload();
+      cartId = getAttr(cart, "id");
+    } catch {
+      // ignore reload failure and fall back to query
+    }
+  }
+  if (!cartId) {
+    const [rows] = await sequelize.query(
+      "SELECT id FROM carts WHERE user_id = ? ORDER BY id DESC LIMIT 1",
+      { replacements: [userId] }
+    );
+    const row = Array.isArray(rows) ? rows[0] : rows;
+    cartId = (row as any)?.id ?? null;
+  }
+  const normalized = Number(cartId);
+  return Number.isFinite(normalized) ? normalized : null;
+};
+
+const toCartItemPayload = (row: any) => {
+  const id = Number(getAttr(row, "id"));
+  const cartId = Number(getAttr(row, "cartId"));
+  const productId = Number(getAttr(row, "productId"));
+  const quantity = Number(getAttr(row, "quantity"));
+  return {
+    id: Number.isFinite(id) ? id : null,
+    cartId: Number.isFinite(cartId) ? cartId : null,
+    productId: Number.isFinite(productId) ? productId : null,
+    quantity: Number.isFinite(quantity) ? quantity : null,
+  };
+};
+
 // --- CONTROLLER FUNCTIONS ---
 
 export const addToCart = async (
@@ -40,24 +78,60 @@ export const addToCart = async (
       return;
     }
 
-    const [cart] = await Cart.findOrCreate({
-      where: { userId },
-      defaults: { userId },
-    });
-
-    const [cartItem, itemCreated] = await CartItem.findOrCreate({
-      where: { cartId: cart.id, productId: productId },
-      defaults: { quantity: quantity, productId: productId, cartId: cart.id },
-    });
-
-    if (!itemCreated) {
-      cartItem.quantity += quantity;
-      await cartItem.save();
+    let cart = await Cart.findOne({ where: { userId } });
+    if (!cart) {
+      cart = await Cart.create({ userId });
+    }
+    const cartId = await resolveCartId(cart, userId);
+    if (!cartId) {
+      res.status(500).json({ message: "Failed to resolve cart id." });
+      return;
     }
 
-    res
-      .status(200)
-      .json({ message: "Product added to cart successfully.", cartItem });
+    const existingItem = await CartItem.findOne({
+      where: { cartId, productId: productId },
+    });
+
+    if (existingItem) {
+      const currentQty = Number(getAttr(existingItem, "quantity") ?? 0);
+      existingItem.set("quantity", currentQty + quantity);
+      await existingItem.save();
+
+      const fresh = await CartItem.findOne({
+        where: { cartId, productId: productId },
+        order: [["id", "DESC"]],
+      });
+      if (!fresh) {
+        res.status(500).json({ message: "Failed to resolve cart item." });
+        return;
+      }
+
+      res.status(200).json({
+        message: "Product added to cart successfully.",
+        cartItem: toCartItemPayload(fresh),
+      });
+      return;
+    }
+
+    await CartItem.create({
+      quantity: quantity,
+      productId: productId,
+      cartId,
+    });
+
+    const fresh = await CartItem.findOne({
+      where: { cartId, productId: productId },
+      order: [["id", "DESC"]],
+    });
+    if (!fresh) {
+      res.status(500).json({ message: "Failed to resolve cart item." });
+      return;
+    }
+
+    res.status(200).json({
+      message: "Product added to cart successfully.",
+      cartItem: toCartItemPayload(fresh),
+    });
   } catch (error) {
     console.error("ADD TO CART ERROR:", error);
     res
@@ -85,6 +159,7 @@ export const getCart = async (
       include: [
         {
           model: Product,
+          as: "Products",
           through: { attributes: ["quantity"] },
         },
       ],
@@ -113,7 +188,7 @@ export const removeFromCart = async (
 ): Promise<void> => {
   try {
     const userId = (req as any).user?.id;
-    const id = toId(req.params.productId);
+    const id = toId((req.params as any).productId ?? (req.params as any).itemId);
     if (id === null) {
       res.status(400).json({ message: "Invalid id" });
       return;
@@ -129,10 +204,15 @@ export const removeFromCart = async (
       res.status(404).json({ message: "Cart not found." });
       return;
     }
+    const cartId = await resolveCartId(cart, userId);
+    if (!cartId) {
+      res.status(500).json({ message: "Failed to resolve cart id." });
+      return;
+    }
 
     const deletedRows = await CartItem.destroy({
       where: {
-        cartId: cart.id,
+        cartId,
         productId: id,
       },
     });
@@ -182,10 +262,15 @@ export const updateCartItem = async (
       res.status(404).json({ message: "Cart not found." });
       return;
     }
+    const cartId = await resolveCartId(cart, userId);
+    if (!cartId) {
+      res.status(500).json({ message: "Failed to resolve cart id." });
+      return;
+    }
 
     if (quantity === 0) {
       await CartItem.destroy({
-        where: { cartId: cart.id, productId: id },
+        where: { cartId, productId: id },
       });
       res.status(200).json({ message: "Item removed from cart." });
       return;
@@ -207,7 +292,7 @@ export const updateCartItem = async (
 
     await CartItem.update(
       { quantity },
-      { where: { cartId: cart.id, productId: id } }
+      { where: { cartId, productId: id } }
     );
 
     res.status(200).json({ message: "Cart updated successfully." });
@@ -257,9 +342,13 @@ export const setCartItemQty = async (
         if (qty <= 0) return;
         cart = await Cart.create({ userId }, { transaction: t });
       }
+      const cartId = await resolveCartId(cart, userId);
+      if (!cartId) {
+        throw new Error("Failed to resolve cart id.");
+      }
 
       const cartItem = await CartItem.findOne({
-        where: { cartId: cart.id, productId },
+        where: { cartId, productId },
         transaction: t,
         lock: t.LOCK.UPDATE,
       });
@@ -272,20 +361,21 @@ export const setCartItemQty = async (
       }
 
       if (cartItem) {
-        if (cartItem.quantity !== qty) {
-          cartItem.quantity = qty;
+        const currentQty = Number(getAttr(cartItem, "quantity") ?? 0);
+        if (currentQty !== qty) {
+          cartItem.set("quantity", qty);
           await cartItem.save({ transaction: t });
         }
         return;
       }
 
       await CartItem.create(
-        { cartId: cart.id, productId, quantity: qty },
+        { cartId, productId, quantity: qty },
         { transaction: t }
       );
     });
 
-    res.status(204).end();
+    res.status(200).json({ message: "Cart updated successfully." });
   } catch (error) {
     console.error("SET CART ITEM QTY ERROR:", error);
     res.status(500).json({

@@ -33,8 +33,10 @@ api.interceptors.response.use(
   (res) => res,
   (err) => {
     const status = err?.response?.status;
+    const url = err?.config?.url || "";
+    const isAuthMe = typeof url === "string" && url.includes("/auth/me");
     const msg = err?.response?.data || err.message;
-    if (status === 401) {
+    if (status === 401 && !isAuthMe) {
       triggerUnauthorized();
     }
     // eslint-disable-next-line no-console
