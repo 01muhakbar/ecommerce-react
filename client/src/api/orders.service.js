@@ -1,6 +1,6 @@
 import { api } from "./axios";
 import { orders as dummyOrders } from "../data/orders.js";
-import { toBackendStatus, toUIStatus } from "../constants/orderStatus.js";
+import { toUIStatus } from "../constants/orderStatus.js";
 
 const mapOrderForUi = (order) => ({
   ...order,
@@ -17,7 +17,7 @@ export async function listOrders(params = {}) {
     page: params.page ?? 1,
     limit: params.pageSize ?? 10,
     q: params.q ?? "",
-    status: params.status ? toBackendStatus(params.status) : "",
+    status: params.status ?? "",
     sort: params.sort ?? "",
     order: params.order ?? "",
     method: params.method ?? "",
@@ -74,11 +74,10 @@ export async function getOrder(id) {
 
 export async function updateOrderStatus(id, payload) {
   const nextStatus = typeof payload === "string" ? payload : payload?.status;
-  const apiStatus = toBackendStatus(nextStatus);
   const body =
     typeof payload === "string"
-      ? { status: apiStatus }
-      : { ...payload, status: apiStatus ?? payload?.status };
+      ? { status: nextStatus }
+      : { ...payload, status: nextStatus ?? payload?.status };
   try {
     const response = await api.patch(`/admin/orders/${id}/status`, body);
     return response?.data ?? response ?? true;

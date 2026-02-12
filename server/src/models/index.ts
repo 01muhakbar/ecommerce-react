@@ -9,6 +9,7 @@ import { CartItem } from "./CartItem.js";
 import { Order } from "./Order.js";
 import { OrderItem } from "./OrderItem.js";
 import { Coupon } from "./Coupon.js";
+import { ProductReview } from "./ProductReview.js";
 
 // Registrasi semua model di sini
 function initModels() {
@@ -20,6 +21,7 @@ function initModels() {
   Order.initModel(sequelize);
   OrderItem.initModel(sequelize);
   Coupon.initModel(sequelize);
+  ProductReview.initModel(sequelize);
 
   const models: any = {
     User,
@@ -30,6 +32,7 @@ function initModels() {
     Order,
     OrderItem,
     Coupon,
+    ProductReview,
   };
 
   Object.values(models).forEach((model: any) => {
@@ -63,4 +66,15 @@ export async function resetDbDev() {
   }
 }
 
-export { sequelize, User, Product, Category, Cart, CartItem, Order, OrderItem, Coupon };
+export {
+  sequelize,
+  User,
+  Product,
+  Category,
+  Cart,
+  CartItem,
+  Order,
+  OrderItem,
+  Coupon,
+  ProductReview,
+};

@@ -76,6 +76,19 @@ npm start
 Frontend akan berjalan di:
 
 http://localhost:5173
+
+QA UI (Opt-in)
+Jalankan QA UI untuk memverifikasi /account/orders dan /order/:ref (termasuk print mode).
+
+pnpm qa:ui
+
+Jika Playwright belum terpasang:
+
+pnpm qa:ui:install
+
+Catatan:
+- Script akan menyalakan `pnpm -w dev`, menjalankan QA, lalu mematikan server.
+- Script opt-in dan tidak berjalan otomatis.
 🔄 Alur Kerja Aplikasi
 Frontend (React) mengirim request ke Backend (Express)
 Backend memproses logic & database

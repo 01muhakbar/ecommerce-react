@@ -1,12 +1,12 @@
 import { Link } from "react-router-dom";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useCart } from "./hooks/useCart.ts";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "./api/axios.ts";
 import { formatCurrency } from "./utils/format.js";
+import { resolveProductImageUrl } from "./utils/productImage.js";
 
-const getImageSrc = (product) =>
-  product?.imageUrl || product?.image || product?.thumbnail || null;
+const getImageSrc = (product) => resolveProductImageUrl(product);
 
 const fetchCategories = async () => {
   const { data } = await api.get("/store/categories");
@@ -198,19 +198,21 @@ export function CategoryCard({ category }) {
 
 export function ProductCard({ product }) {
   const { add, isLoading } = useCart();
-  const imageSrc = getImageSrc(product);
+  const resolvedSrc = useMemo(() => getImageSrc(product), [product]);
+  const [imageSrc, setImageSrc] = useState(resolvedSrc);
   const [isAdding, setIsAdding] = useState(false);
   const timerRef = useRef(null);
   const productName = product?.name || product?.title || "Product";
   const productSlug = product?.slug || product?.id;
 
   useEffect(() => {
+    setImageSrc(resolvedSrc);
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
       }
     };
-  }, []);
+  }, [resolvedSrc]);
 
   const handleAdd = (event) => {
     event.preventDefault();
@@ -235,6 +237,7 @@ export function ProductCard({ product }) {
             <img
               src={imageSrc}
               alt={productName}
+              onError={() => setImageSrc("")}
               className="h-full w-full rounded-xl object-cover transition-transform duration-200 group-hover:scale-[1.02]"
             />
           ) : (

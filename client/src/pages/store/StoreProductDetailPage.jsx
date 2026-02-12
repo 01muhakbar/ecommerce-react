@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useCart } from "../../hooks/useCart.ts";
 import { ProductCard, useProduct, useProducts } from "../../storefront.jsx";
 import QueryState from "../../components/UI/QueryState.jsx";
 import { formatCurrency } from "../../utils/format.js";
+import { resolveProductImageUrl } from "../../utils/productImage.js";
 
 export default function StoreProductDetailPage() {
   const { slug } = useParams();
@@ -70,13 +71,20 @@ export default function StoreProductDetailPage() {
   ]);
 
   const hasStock = typeof product?.stock === "number" ? product.stock > 0 : true;
-  const imageSrc =
-    product?.imageUrl || product?.image || product?.thumbnail || null;
+  const resolvedImageSrc = useMemo(
+    () => resolveProductImageUrl(product),
+    [product]
+  );
+  const [imageSrc, setImageSrc] = useState(resolvedImageSrc);
   const keyword = (product?.name || "").trim().split(/\s+/)[0] || "";
   const safeKeyword = keyword.length >= 3 ? keyword : "";
   const browseUrl = safeKeyword
     ? `/search?q=${encodeURIComponent(safeKeyword)}`
     : "/search";
+
+  useEffect(() => {
+    setImageSrc(resolvedImageSrc);
+  }, [resolvedImageSrc]);
 
   if (isLoading) {
     return <p className="text-sm text-slate-500">Loading product...</p>;
@@ -107,6 +115,7 @@ export default function StoreProductDetailPage() {
             <img
               src={imageSrc}
               alt={product.name}
+              onError={() => setImageSrc("")}
               className="h-full w-full rounded-3xl object-cover"
             />
           ) : (

@@ -68,3 +68,48 @@ select {
   border-color: #fecaca;
   color: #b91c1c;
 }
+
+@media print {
+  header,
+  nav,
+  footer,
+  .no-print {
+    display: none !important;
+  }
+
+  .print-area {
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  .admin-no-print {
+    display: none !important;
+  }
+
+  .admin-print-area {
+    border: none !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+
+  .admin-shell {
+    background: #ffffff !important;
+  }
+
+  .admin-shell main {
+    padding: 0 !important;
+  }
+
+  .admin-print-area table {
+    page-break-inside: auto;
+  }
+
+  .admin-print-area tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+
+  body {
+    background: #ffffff !important;
+  }
+}

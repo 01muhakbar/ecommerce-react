@@ -4,6 +4,7 @@ import { fetchStoreProducts } from "../../api/store.service.ts";
 import { useCart } from "../../hooks/useCart.ts";
 import QueryState from "../../components/UI/QueryState.jsx";
 import { formatCurrency } from "../../utils/format.js";
+import { resolveProductImageUrl } from "../../utils/productImage.js";
 
 export default function StoreCategoryPage() {
   const { slug } = useParams();
@@ -100,17 +101,12 @@ export default function StoreCategoryPage() {
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
-                  add(product.id, 1, {
-                    name: product?.name || product?.title,
-                    price: product?.salePrice ?? product?.sellingPrice ?? product?.price,
-                    imageUrl:
-                      product?.imageUrl ??
-                      product?.image ??
-                      product?.thumbnail ??
-                      product?.promoImagePath ??
-                      null,
-                  });
-                }}
+                    add(product.id, 1, {
+                      name: product?.name || product?.title,
+                      price: product?.salePrice ?? product?.sellingPrice ?? product?.price,
+                      imageUrl: resolveProductImageUrl(product),
+                    });
+                  }}
                 className="mt-auto self-start rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:border-slate-300"
               >
                 Add to cart

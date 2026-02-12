@@ -21,9 +21,9 @@ export default function AdminLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
+    <div className="admin-shell min-h-screen bg-slate-100 text-slate-900">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl">
-        <aside className="w-64 border-r border-slate-200 bg-white px-6 py-8">
+        <aside className="admin-no-print w-64 border-r border-slate-200 bg-white px-6 py-8">
           <div className="text-lg font-semibold">Dashtar Lite</div>
           <nav className="mt-8 space-y-2 text-sm">
             <Link className="block rounded-lg px-3 py-2 hover:bg-slate-100" to="/admin/dashboard">
@@ -54,7 +54,7 @@ export default function AdminLayout() {
         </aside>
 
         <div className="flex flex-1 flex-col">
-          <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
+          <header className="admin-no-print flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
             <div className="text-sm text-slate-500">Admin Console</div>
             <div className="flex items-center gap-4 text-sm">
               <div className="rounded-full bg-slate-100 px-3 py-1">

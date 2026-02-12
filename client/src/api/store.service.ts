@@ -98,9 +98,14 @@ export const fetchStoreOrder = async (ref: string) => {
   return data;
 };
 
+export const fetchStoreMyOrders = async (params?: { page?: number; limit?: number }) => {
+  const { data } = await api.get("/store/my/orders", { params });
+  return data;
+};
+
 export const createStoreOrder = async (payload: {
   customer: { name: string; phone: string; address: string; notes?: string };
-  paymentMethod?: string;
+  paymentMethod: "COD";
   items: { productId: number; qty: number }[];
   couponCode?: string;
 }) => {
@@ -110,14 +115,25 @@ export const createStoreOrder = async (payload: {
   }
   const { data } = await api.post<{
     data: {
-      orderId: number;
+      id: number;
+      ref: string;
       invoiceNo?: string | null;
+      status: string;
+      totalAmount: number;
+      createdAt: string;
+      items: Array<{
+        productId: number;
+        name: string;
+        quantity: number;
+        price: number;
+        lineTotal: number;
+      }>;
       subtotal?: number;
       discount?: number;
       tax?: number;
       shipping?: number;
       total: number;
-      paymentMethod?: string;
+      paymentMethod: "COD";
     };
   }>(url, payload, { withCredentials: true });
   return data;

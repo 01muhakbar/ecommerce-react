@@ -1,102 +1,62 @@
-import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import {
-  COD_INSTRUCTIONS,
-  TRANSFER_INSTRUCTIONS,
-} from "../../config/paymentInstructions.ts";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 
 export default function StoreCheckoutSuccessPage() {
-  const navigate = useNavigate();
+  const location = useLocation();
   const [params] = useSearchParams();
-  const ref = params.get("ref") || params.get("orderId") || params.get("invoiceNo");
-  const invoiceNo = params.get("invoiceNo") || ref;
-  const total = params.get("total");
-  const method = params.get("method") || "COD";
-  const [copyStatus, setCopyStatus] = useState("");
-  const resetTimerRef = useRef(null);
-
-  const resetCopyStatus = () => {
-    if (resetTimerRef.current) {
-      clearTimeout(resetTimerRef.current);
-    }
-    resetTimerRef.current = setTimeout(() => setCopyStatus(""), 1500);
-  };
-
-  const copyToClipboard = async (value) => {
-    if (!value) return;
-    try {
-      if (navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(value);
-      } else {
-        const textarea = document.createElement("textarea");
-        textarea.value = value;
-        textarea.setAttribute("readonly", "");
-        textarea.style.position = "absolute";
-        textarea.style.left = "-9999px";
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand("copy");
-        document.body.removeChild(textarea);
-      }
-      setCopyStatus("success");
-      resetCopyStatus();
-    } catch (err) {
-      setCopyStatus("error");
-      resetCopyStatus();
-    }
-  };
-
-  useEffect(() => {
-    if (!ref && !invoiceNo) {
-      navigate("/checkout", { replace: true });
-    }
-  }, [ref, invoiceNo, navigate]);
+  const refFromParams = params.get("ref") || params.get("invoiceNo");
+  const refFromState = location.state?.ref;
+  const orderRef = refFromParams || refFromState || "";
 
   return (
-    <section>
-      <h1>Checkout Success</h1>
-      <p>Your order has been placed successfully.</p>
-      {invoiceNo ? (
-        <div style={{ marginBottom: "8px" }}>
-          <div>Invoice: {invoiceNo}</div>
-          <div style={{ marginTop: "6px" }}>
-            <button type="button" onClick={() => copyToClipboard(invoiceNo)}>
-              {copyStatus === "success" ? "Copied!" : "Copy Invoice"}
-            </button>
-            {copyStatus === "error" ? (
-              <span style={{ marginLeft: "8px", color: "crimson" }}>
-                Failed to copy
-              </span>
-            ) : null}
-          </div>
+    <section className="mx-auto max-w-5xl px-4 py-10 lg:px-6">
+      <div className="rounded-lg bg-emerald-100 px-6 py-4 text-emerald-900">
+        <span className="font-semibold text-emerald-700">Thank You!</span> Your
+        order has been received!
+      </div>
+
+      <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6">
+        <h1 className="text-2xl font-bold text-slate-900">Order Success</h1>
+        <p className="mt-2 text-sm text-slate-500">
+          We are preparing your order. You can track it anytime from your
+          account.
+        </p>
+
+        <div className="mt-6 rounded-lg border border-emerald-100 bg-emerald-50 p-4">
+          <p className="text-xs font-semibold uppercase text-slate-500">
+            Order Reference
+          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">
+            {orderRef || "Reference unavailable"}
+          </p>
+          {!orderRef ? (
+            <p className="mt-2 text-sm text-slate-600">
+              If you cannot find the reference, please check your order history.
+            </p>
+          ) : null}
         </div>
-      ) : null}
-      {total ? <p>Total: {total}</p> : null}
-      <p>Payment Method: {method}</p>
-      {method === "TRANSFER" ? (
-        <div style={{ marginTop: "12px", padding: "12px", border: "1px solid #e2e2e2" }}>
-          <strong>How to pay (Bank Transfer)</strong>
-          <div>Bank: {TRANSFER_INSTRUCTIONS.bank}</div>
-          <div>Account No: {TRANSFER_INSTRUCTIONS.accountNo}</div>
-          <div>Account Name: {TRANSFER_INSTRUCTIONS.accountName}</div>
-          <div style={{ marginTop: "6px" }}>
-            After transfer, please upload proof via WhatsApp{" "}
-            {TRANSFER_INSTRUCTIONS.whatsapp}.
-          </div>
+
+        <div className="mt-6 flex flex-wrap gap-3">
+          {orderRef ? (
+            <Link
+              to={`/order/${encodeURIComponent(orderRef)}`}
+              className="rounded-lg bg-emerald-600 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-700"
+            >
+              View Invoice
+            </Link>
+          ) : null}
+          <Link
+            to="/account/orders"
+            className="rounded-lg border border-emerald-200 px-5 py-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-50"
+          >
+            My Orders
+          </Link>
+          <Link
+            to="/"
+            className="rounded-lg border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Continue Shopping
+          </Link>
         </div>
-      ) : (
-        <div style={{ marginTop: "12px", padding: "12px", border: "1px solid #e2e2e2" }}>
-          <strong>Pay on delivery</strong>
-          <div>{COD_INSTRUCTIONS.text}</div>
-        </div>
-      )}
-      <div className="flex gap-3" style={{ marginTop: "12px", flexWrap: "wrap" }}>
-        {ref ? (
-          <Link to={`/order/${encodeURIComponent(ref)}`}>Track your order</Link>
-        ) : (
-          <Link to="/account/orders">Track your order</Link>
-        )}
-        <Link to="/">Back to Store Home</Link>
       </div>
     </section>
   );

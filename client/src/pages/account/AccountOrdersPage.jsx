@@ -1,35 +1,20 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Eye } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../../api/axios.ts";
 import { formatCurrency } from "../../utils/format.js";
+import {
+  normalizeOrderStatus,
+} from "../../utils/orderStatus.js";
 
-const fetchOrders = async () => {
-  const { data } = await api.get("/store/my/orders");
+const fetchOrders = async (page) => {
+  const { data } = await api.get("/store/my/orders", {
+    params: { page },
+  });
   return data;
 };
 
 const money = (value) => formatCurrency(Number(value || 0));
-
-const statusStyles = (status = "") => {
-  const s = String(status).toLowerCase();
-  if (s.includes("deliver")) return "bg-emerald-100 text-emerald-700";
-  if (s.includes("ship")) return "bg-blue-100 text-blue-700";
-  if (s.includes("process") || s.includes("pending"))
-    return "bg-amber-100 text-amber-700";
-  if (s.includes("cancel") || s.includes("fail")) return "bg-rose-100 text-rose-700";
-  return "bg-slate-100 text-slate-600";
-};
-
-const ORDER_STATUSES = [
-  "pending",
-  "paid",
-  "processing",
-  "shipped",
-  "delivered",
-  "completed",
-  "cancelled",
-];
 
 const formatDate = (value) => {
   if (!value) return "-";
@@ -38,132 +23,211 @@ const formatDate = (value) => {
   return date.toLocaleString();
 };
 
+const getOrderDateValue = (order) =>
+  order?.createdAt || order?.created_at || order?.orderTime || null;
+
+const getOrderRef = (order) => order?.invoiceNo || order?.orderId || order?.id || null;
+
 export default function AccountOrdersPage() {
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [query, setQuery] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const page = Math.max(1, Number(searchParams.get("page") || 1));
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["account", "orders", "my"],
-    queryFn: () => fetchOrders(),
+    queryKey: ["account", "orders", "my", page],
+    queryFn: () => fetchOrders(page),
   });
 
-  if (isLoading) {
-    return <div className="text-sm text-slate-500">Loading orders...</div>;
-  }
+  const response = data ?? {};
+  const orders = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
+  const meta = response?.meta || response?.pagination || response?.pageInfo || null;
+  const totalPages =
+    meta?.totalPages ??
+    meta?.total_pages ??
+    meta?.lastPage ??
+    meta?.totalPage ??
+    null;
+  const hasNext =
+    typeof meta?.hasNext === "boolean"
+      ? meta.hasNext
+      : typeof totalPages === "number"
+        ? page < totalPages
+        : true;
+  const hasPrev = page > 1;
 
-  if (isError) {
-    const status = error?.response?.status;
-    if (status === 401) {
-      return (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
-          Please login.{" "}
-          <Link to="/login" className="font-medium text-amber-800 underline">
-            Go to login
-          </Link>
-        </div>
-      );
+  const getStatusUI = (status) => {
+    const normalized = normalizeOrderStatus(status);
+    switch (normalized) {
+      case "pending":
+        return { label: "Pending", dot: "bg-amber-500", text: "text-amber-700" };
+      case "processing":
+        return { label: "Processing", dot: "bg-indigo-500", text: "text-indigo-700" };
+      case "shipping":
+        return { label: "Shipping", dot: "bg-sky-500", text: "text-sky-700" };
+      case "complete":
+        return { label: "Delivered", dot: "bg-emerald-500", text: "text-emerald-700" };
+      case "cancelled":
+        return { label: "Cancel", dot: "bg-rose-500", text: "text-rose-700" };
+      default:
+        return { label: "Unknown", dot: "bg-slate-400", text: "text-slate-600" };
     }
-    return (
-      <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-600">
-        Failed to load orders.
-      </div>
-    );
-  }
+  };
 
-  const orders = data?.data || [];
-  const normalizedQuery = query.trim().toLowerCase();
-  const filteredOrders = orders.filter((order) => {
-    const orderStatus = String(order.status || "").trim().toLowerCase();
-    const statusOk = statusFilter === "all" || orderStatus === statusFilter;
-    const invoiceValue = String(
-      order.invoiceNo || order.invoice || order.ref || order.id || ""
-    ).toLowerCase();
-    const searchOk = !normalizedQuery || invoiceValue.includes(normalizedQuery);
-    return statusOk && searchOk;
-  });
-  if (!orders.length) {
-    return (
-      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-        You do not have any orders yet.
-      </div>
-    );
-  }
+  const setPage = (nextPage) => {
+    const params = new URLSearchParams(searchParams);
+    params.set("page", String(nextPage));
+    setSearchParams(params);
+  };
+
+  const isEmpty = !isLoading && !isError && orders.length === 0;
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
-        <div className="mb-3 flex flex-wrap items-center gap-3">
-          <select
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-          >
-            <option value="all">All</option>
-            {ORDER_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {status.charAt(0).toUpperCase() + status.slice(1)}
-              </option>
-            ))}
-          </select>
-          <input
-            type="text"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search invoice..."
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm sm:max-w-xs"
-          />
-        </div>
+    <div className="rounded-xl border border-slate-200 bg-white p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold text-slate-900">My Orders</h1>
+        <div className="text-sm text-slate-500">Page {page}</div>
+      </div>
+      <div className="mt-4 border-t border-slate-100" />
 
-        {filteredOrders.length === 0 ? (
-          <div className="text-sm text-slate-500">No orders found.</div>
-        ) : (
-          <table className="w-full text-left text-sm">
-            <thead className="text-xs uppercase text-slate-400">
+      {isLoading ? (
+        <div className="mt-6 overflow-hidden rounded-xl border border-slate-200">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="py-2">Invoice</th>
-                <th className="py-2">Status</th>
-                <th className="py-2">Total</th>
-                <th className="py-2">Created</th>
-                <th className="py-2">Payment</th>
-                <th className="py-2 text-right">Action</th>
+                {[
+                  "ORDER ID",
+                  "ORDERTIME",
+                  "METHOD",
+                  "STATUS",
+                  "SHIPPING",
+                  "SHIPPING COST",
+                  "TOTAL",
+                  "ACTION",
+                ].map((label) => (
+                  <th key={label} className="px-5 py-4 font-semibold">
+                    {label}
+                  </th>
+                ))}
               </tr>
             </thead>
-            <tbody>
-              {filteredOrders.map((order) => {
-                const invoiceNo = order.invoiceNo || order.invoice || order.ref || null;
-                const trackRef = invoiceNo || order.id;
-                return (
-                  <tr key={order.id} className="border-t border-slate-100">
-                    <td className="py-2">{invoiceNo || `#${order.id}`}</td>
-                    <td className="py-2">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusStyles(
-                          order.status
-                        )}`}
-                      >
-                        {order.status}
-                      </span>
+            <tbody className="animate-pulse">
+              {Array.from({ length: 5 }).map((_, idx) => (
+                <tr key={`skeleton-${idx}`} className="border-t border-slate-100">
+                  {Array.from({ length: 8 }).map((__, cellIdx) => (
+                    <td key={cellIdx} className="px-5 py-4">
+                      <div className="h-3 w-full rounded bg-slate-100" />
                     </td>
-                    <td className="py-2">{money(order.totalAmount)}</td>
-                    <td className="py-2">{formatDate(order.createdAt)}</td>
-                    <td className="py-2">{order.paymentMethod || "-"}</td>
-                    <td className="py-2 text-right">
-                      {trackRef ? (
-                        <Link
-                          to={`/order/${encodeURIComponent(trackRef)}`}
-                          className="text-sm font-medium text-slate-700 hover:text-slate-900"
-                        >
-                          Track
-                        </Link>
-                      ) : (
-                        <span className="text-xs text-slate-400">-</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+                  ))}
+                </tr>
+              ))}
             </tbody>
           </table>
-        )}
+        </div>
+      ) : isError ? (
+        <div className="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-600">
+          {error?.response?.status === 401 ? (
+            <>
+              Please login.{" "}
+              <Link to="/login" className="font-medium text-rose-700 underline">
+                Go to login
+              </Link>
+            </>
+          ) : (
+            "Failed to load orders."
+          )}
+        </div>
+      ) : isEmpty ? (
+        <div className="mt-6 rounded-xl border border-slate-200 p-6 text-sm text-slate-600">
+          No orders found.
+        </div>
+      ) : (
+        <div className="mt-6 overflow-hidden rounded-xl border border-slate-200">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-5 py-4 font-semibold">ORDER ID</th>
+                  <th className="px-5 py-4 font-semibold">ORDERTIME</th>
+                  <th className="px-5 py-4 font-semibold">METHOD</th>
+                  <th className="px-5 py-4 font-semibold">STATUS</th>
+                  <th className="px-5 py-4 font-semibold">SHIPPING</th>
+                  <th className="px-5 py-4 font-semibold">SHIPPING COST</th>
+                  <th className="px-5 py-4 font-semibold">TOTAL</th>
+                  <th className="px-5 py-4 text-right font-semibold">ACTION</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orders.map((order) => {
+                  const orderRef = getOrderRef(order);
+                  const statusUI = getStatusUI(order.status);
+                  const shippingProvider =
+                    order.shippingProvider || order.shipping?.provider || "-";
+                  const shippingCostRaw =
+                    order.shippingCost ?? order.shipping?.cost ?? order.deliveryFee ?? null;
+                  const totalAmount = order.totalAmount ?? order.total ?? 0;
+                  const paymentMethod = order.paymentMethod || order.method || "COD";
+                  return (
+                    <tr key={order.id} className="border-t border-slate-100 hover:bg-slate-50">
+                      <td className="px-5 py-4 font-semibold text-slate-900">
+                        {orderRef || `#${order.id}`}
+                      </td>
+                      <td className="px-5 py-4 text-slate-700">
+                        {formatDate(getOrderDateValue(order))}
+                      </td>
+                      <td className="px-5 py-4 text-slate-700">{paymentMethod || "-"}</td>
+                      <td className="px-5 py-4">
+                        <span className="flex items-center text-sm font-medium">
+                          <span className={`h-2 w-2 rounded-full ${statusUI.dot}`} />
+                          <span className={`ml-2 ${statusUI.text}`}>{statusUI.label}</span>
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-slate-700">{shippingProvider}</td>
+                      <td className="px-5 py-4 text-slate-700">
+                        {shippingCostRaw != null && shippingCostRaw !== ""
+                          ? money(shippingCostRaw)
+                          : "-"}
+                      </td>
+                      <td className="px-5 py-4 font-semibold text-slate-900">
+                        {money(totalAmount)}
+                      </td>
+                      <td className="px-5 py-4 text-right">
+                        {orderRef ? (
+                          <Link
+                            to={`/order/${encodeURIComponent(orderRef)}`}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-emerald-200 text-emerald-600 transition hover:bg-emerald-50 hover:text-emerald-800"
+                          >
+                            <Eye className="h-4 w-4" />
+                            <span className="sr-only">View order</span>
+                          </Link>
+                        ) : (
+                          <span className="text-xs text-slate-400">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-6 flex items-center justify-end gap-3">
+        <button
+          type="button"
+          onClick={() => setPage(Math.max(1, page - 1))}
+          disabled={!hasPrev}
+          className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Prev
+        </button>
+        <div className="text-sm text-slate-500">Page {page}</div>
+        <button
+          type="button"
+          onClick={() => setPage(page + 1)}
+          disabled={!hasNext}
+          className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Next
+        </button>
       </div>
     </div>
   );

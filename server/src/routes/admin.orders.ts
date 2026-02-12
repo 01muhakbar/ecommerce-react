@@ -1,6 +1,5 @@
 import { Router } from "express";
 import { Op } from "sequelize";
-import { updateOrderStatus } from "../controllers/orderController.js";
 import { requireAdmin, requireStaffOrAdmin } from "../middleware/requireRole.js";
 import { Order } from "../models/Order.js";
 import { User } from "../models/User.js";
@@ -15,13 +14,50 @@ const getAttr = (row: any, key: string) =>
   row?.dataValues?.[key] ??
   undefined;
 
+const normalizeStatusInput = (raw: unknown) => {
+  const value = String(raw || "").toLowerCase().trim();
+  if (!value) return "";
+  if (value === "shipping") return "shipped";
+  if (value === "complete") return "delivered";
+  if (value === "completed") return "delivered";
+  return value;
+};
+
+const toUiStatus = (raw: unknown) => {
+  const value = String(raw || "").toLowerCase().trim();
+  if (!value) return "pending";
+  if (["pending_payment", "awaiting_payment", "unpaid"].includes(value)) {
+    return "pending";
+  }
+  if (["processing", "process", "packed", "confirmed", "paid"].includes(value)) {
+    return "processing";
+  }
+  if (["shipped", "shipping", "in_transit"].includes(value)) return "shipping";
+  if (["delivered", "completed", "complete"].includes(value)) return "complete";
+  if (["cancelled", "canceled", "cancel", "refunded", "failed"].includes(value)) {
+    return "cancelled";
+  }
+  return "pending";
+};
+
+const allowedStatuses = ["pending", "processing", "shipping", "complete", "cancelled"];
+
+const resolveOrderWhere = (idOrRef: string) => {
+  const trimmed = String(idOrRef || "").trim();
+  const isNumeric = /^\d+$/.test(trimmed);
+  if (isNumeric) {
+    return { id: Number(trimmed) };
+  }
+  return { invoiceNo: trimmed };
+};
+
 // GET list with pagination, search, and filtering
 router.get("/", requireStaffOrAdmin, async (req, res) => {
   const page = Math.max(1, Number(asSingle(req.query.page) ?? 1));
   const rawLimit = Number(asSingle(req.query.limit) ?? asSingle(req.query.pageSize) ?? 10);
   const limit = Math.min(50, Math.max(1, rawLimit || 10));
   const rawStatus = String(asSingle(req.query.status) ?? "").trim().toLowerCase();
-  const status = rawStatus === "completed" ? "delivered" : rawStatus;
+  const normalizedStatus = normalizeStatusInput(rawStatus);
   const q = String(asSingle(req.query.q) ?? "").trim();
 
   const where: any = {};
@@ -34,8 +70,8 @@ router.get("/", requireStaffOrAdmin, async (req, res) => {
     ];
   }
 
-  if (status) {
-    where.status = status as string;
+  if (normalizedStatus) {
+    where.status = normalizedStatus as string;
   }
 
   const { rows, count } = await Order.findAndCountAll({
@@ -48,6 +84,7 @@ router.get("/", requireStaffOrAdmin, async (req, res) => {
       "totalAmount",
       "customerName",
       "customerPhone",
+      "paymentMethod",
     ],
     order: [["createdAt", "DESC"]],
     limit,
@@ -68,9 +105,10 @@ router.get("/", requireStaffOrAdmin, async (req, res) => {
     const customerPhone = getAttr(orderRow, "customerPhone");
     return {
       id,
+      ref: invoiceNo ?? String(id ?? ""),
       orderId: id,
       invoiceNo,
-      status,
+      status: toUiStatus(status),
       createdAt,
       totalAmount: Number(
         getAttr(orderRow, "totalAmount") ??
@@ -78,6 +116,7 @@ router.get("/", requireStaffOrAdmin, async (req, res) => {
           getAttr(orderRow, "grandTotal") ??
           0
       ),
+      paymentMethod: getAttr(orderRow, "paymentMethod") ?? "COD",
       customerName:
         customerName ??
         getAttr(orderRow, "shippingName") ??
@@ -92,11 +131,12 @@ router.get("/", requireStaffOrAdmin, async (req, res) => {
   });
 
   res.json({
-    data,
-    meta: {
+    success: true,
+    data: {
+      items: data,
       page,
       limit,
-      total: count,
+      totalItems: count,
       totalPages: Math.max(1, Math.ceil(count / limit)),
     },
   });
@@ -104,12 +144,12 @@ router.get("/", requireStaffOrAdmin, async (req, res) => {
 
 router.get("/:id", requireStaffOrAdmin, async (req, res) => {
   const idStr = String(asSingle(req.params.id) ?? "");
-  const idNum = Number(idStr);
-  if (!Number.isInteger(idNum) || idNum <= 0) {
+  if (!idStr) {
     return res.status(400).json({ message: "Invalid id" });
   }
 
-  const orderItem = await Order.findByPk(idNum, {
+  const orderItem = await Order.findOne({
+    where: resolveOrderWhere(idStr),
     include: [
       { model: User, as: "customer", attributes: ["name", "email"] },
       {
@@ -150,13 +190,26 @@ router.get("/:id", requireStaffOrAdmin, async (req, res) => {
 
   const customer = (orderItem as any).customer ?? null;
 
+  const subtotal = items.reduce((sum: number, item: any) => {
+    return sum + Number(item.lineTotal || 0);
+  }, 0);
+  const discount = Number(getAttr(orderItem, "discountAmount") || 0);
+  const shipping = Number(getAttr(orderItem, "shippingCost") || 0);
+  const totalAmount = Number(getAttr(orderItem, "totalAmount") || 0);
   return res.json({
+    success: true,
     data: {
       id: getAttr(orderItem, "id"),
+      ref: getAttr(orderItem, "invoiceNo") ?? String(getAttr(orderItem, "id") ?? ""),
       invoiceNo: getAttr(orderItem, "invoiceNo"),
-      status: getAttr(orderItem, "status"),
-      totalAmount: Number(getAttr(orderItem, "totalAmount") || 0),
+      status: toUiStatus(getAttr(orderItem, "status")),
+      totalAmount,
+      subtotal,
+      discount,
+      shipping,
+      total: totalAmount,
       createdAt: getAttr(orderItem, "createdAt"),
+      updatedAt: getAttr(orderItem, "updatedAt"),
       customerName: getAttr(orderItem, "customerName") ?? customer?.name ?? null,
       customerPhone: getAttr(orderItem, "customerPhone") ?? null,
       customerAddress: getAttr(orderItem, "customerAddress") ?? null,
@@ -168,7 +221,49 @@ router.get("/:id", requireStaffOrAdmin, async (req, res) => {
   });
 });
 
-router.patch("/:id/status", requireStaffOrAdmin, updateOrderStatus);
+router.patch("/:id/status", requireStaffOrAdmin, async (req, res) => {
+  const idStr = String(asSingle(req.params.id) ?? "");
+  if (!idStr) {
+    return res.status(400).json({ message: "Invalid id" });
+  }
+
+  const rawStatus = String(req.body?.status ?? "").toLowerCase().trim();
+  if (!rawStatus || !allowedStatuses.includes(rawStatus)) {
+    return res.status(400).json({
+      message: `Status tidak valid. Gunakan salah satu dari: ${allowedStatuses.join(
+        ", "
+      )}`,
+    });
+  }
+
+  const normalizedStatus = normalizeStatusInput(rawStatus);
+  const [updatedRows] = await Order.update(
+    { status: normalizedStatus, updatedAt: new Date() },
+    { where: resolveOrderWhere(idStr) }
+  );
+
+  if (updatedRows === 0) {
+    return res.status(404).json({ message: "Pesanan tidak ditemukan." });
+  }
+
+  const updatedOrder = await Order.findOne({
+    where: resolveOrderWhere(idStr),
+    attributes: ["id", "invoiceNo", "status", "totalAmount", "createdAt", "updatedAt"],
+  });
+
+  return res.json({
+    success: true,
+    message: `Status pesanan berhasil diperbarui menjadi ${rawStatus}.`,
+    data: {
+      id: getAttr(updatedOrder, "id"),
+      invoiceNo: getAttr(updatedOrder, "invoiceNo"),
+      status: toUiStatus(getAttr(updatedOrder, "status")),
+      totalAmount: Number(getAttr(updatedOrder, "totalAmount") || 0),
+      createdAt: getAttr(updatedOrder, "createdAt"),
+      updatedAt: getAttr(updatedOrder, "updatedAt"),
+    },
+  });
+});
 
 // Other CRUD endpoints for Orders can be added here following the same pattern as Customers
 

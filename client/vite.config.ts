@@ -10,6 +10,8 @@ export default defineConfig({
     },
   },
   server: {
+    port: 5173,
+    strictPort: true,
     proxy: {
       // Proxy semua request /api ke server dev
       "/api": {

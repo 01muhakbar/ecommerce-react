@@ -32,13 +32,26 @@ async function ensureMigrationsTable() {
   );
 }
 
+const allowedCjs = process.env.CJS_MIGRATIONS
+  ? new Set(
+      process.env.CJS_MIGRATIONS.split(",")
+        .map((name) => name.trim())
+        .filter(Boolean)
+    )
+  : null;
+
 async function getMigrationFiles() {
   if (!fs.existsSync(migrationsDir)) {
     return [];
   }
   return fs
     .readdirSync(migrationsDir)
-    .filter((name) => name.endsWith(".sql"))
+    .filter((name) => {
+      if (name.endsWith(".sql")) return true;
+      if (!name.endsWith(".cjs")) return false;
+      if (!allowedCjs) return false;
+      return allowedCjs.has(name);
+    })
     .sort();
 }
 
@@ -67,15 +80,30 @@ async function run() {
       const applied = await hasMigration(filename);
       if (applied) continue;
       const fullPath = path.join(migrationsDir, filename);
-      const sql = fs.readFileSync(fullPath, "utf8");
-      if (!sql.trim()) {
+      if (filename.endsWith(".sql")) {
+        const sql = fs.readFileSync(fullPath, "utf8");
+        if (!sql.trim()) {
+          await markMigration(filename);
+          console.log(`Applied: ${filename}`);
+          continue;
+        }
+        await sequelize.query(sql);
         await markMigration(filename);
         console.log(`Applied: ${filename}`);
         continue;
       }
-      await sequelize.query(sql);
-      await markMigration(filename);
-      console.log(`Applied: ${filename}`);
+
+      if (filename.endsWith(".cjs")) {
+        const migration = require(fullPath);
+        if (typeof migration.up !== "function") {
+          throw new Error(`Migration missing up(): ${filename}`);
+        }
+        const queryInterface = sequelize.getQueryInterface();
+        await migration.up(queryInterface, Sequelize);
+        await markMigration(filename);
+        console.log(`Applied: ${filename}`);
+        continue;
+      }
     }
   } catch (err) {
     console.error(err);

@@ -5,10 +5,29 @@ import { fetchAdminOrder, updateAdminOrderStatus } from "../../lib/adminApi.js";
 import { ORDER_STATUS_OPTIONS } from "../../constants/orderStatus.js";
 import QueryState from "../../components/UI/QueryState.jsx";
 import OrderStatusBadge from "../../components/admin/OrderStatusBadge.jsx";
+import OrderStatusTimeline from "../../components/admin/OrderStatusTimeline.jsx";
 import { formatCurrency } from "../../utils/format.js";
 
 const labelize = (value) =>
   value ? value.charAt(0).toUpperCase() + value.slice(1) : "";
+
+const formatDate = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const formatDateTime = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("id-ID");
+};
 
 export default function OrderDetail() {
   const { id } = useParams();
@@ -73,24 +92,41 @@ export default function OrderDetail() {
   }, []);
 
   const invoiceRef = order?.invoiceNo || order?.invoice || order?.ref || id || "—";
-  const createdAt = order?.createdAt
-    ? new Date(order.createdAt).toLocaleString("id-ID")
-    : "-";
-  const itemCount = items.length;
-  const customerEmail =
-    order?.customerEmail || order?.customer?.email || "—";
-  const isEmpty = !orderQuery.isLoading && !orderQuery.isError && !order;
-  const mutationState = updateMutation.isPending
-    ? "pending"
-    : updateMutation.isError
-      ? "error"
-      : updateMutation.isSuccess
-        ? "success"
-        : "idle";
+  const createdAtLabel = formatDate(order?.createdAt);
+  const createdAtFull = formatDateTime(order?.createdAt);
+  const updatedAtValue = order?.updatedAt || order?.updated_at || order?.updatedAt;
+  const customerEmail = order?.customerEmail || order?.customer?.email || null;
+  const paymentMethod = order?.method || order?.paymentMethod || "COD";
+  const subtotal = Number(order?.subtotal || 0);
+  const discount = Number(order?.discount || 0);
+  const shipping = Number(order?.shipping || 0);
+  const totalAmount = Number(order?.totalAmount || order?.total || 0);
 
+  const handleCopy = async (value, label) => {
+    if (!value || value === "—") return;
+    try {
+      await navigator.clipboard.writeText(String(value));
+      setSuccessMessage(`${label} copied.`);
+      if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+      noticeTimerRef.current = setTimeout(() => {
+        setSuccessMessage("");
+        noticeTimerRef.current = null;
+      }, 2000);
+    } catch {
+      setErrorMessage("Failed to copy to clipboard.");
+    }
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+  const isEmpty = !orderQuery.isLoading && !orderQuery.isError && !order;
   return (
-    <div className="space-y-6">
-      <Link to="/admin/orders" className="text-sm text-slate-500 hover:text-slate-900">
+    <div className="mx-auto w-full max-w-6xl px-4 py-8 lg:px-6">
+      <Link
+        to="/admin/orders"
+        className="admin-no-print text-sm text-slate-500 hover:text-slate-900"
+      >
         ← Back to Orders
       </Link>
 
@@ -114,115 +150,208 @@ export default function OrderDetail() {
           </div>
         ) : null}
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="space-y-1">
-              <h1 className="text-2xl font-semibold">Order #{invoiceRef}</h1>
-              <p className="text-sm text-slate-500">Created {createdAt}</p>
+        <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-12">
+          <div className="lg:col-span-8">
+            <div className="admin-print-area rounded-2xl border border-slate-200 bg-white overflow-hidden">
+              <div className="bg-slate-100/60 px-6 py-5">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                      Invoice / Order
+                    </div>
+                    <h1 className="mt-1 text-2xl font-extrabold tracking-wide text-slate-900">
+                      {invoiceRef}
+                    </h1>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Created {createdAtLabel}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <OrderStatusBadge status={order?.status || "-"} />
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(invoiceRef, "Order ref")}
+                      className="admin-no-print rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:border-slate-300"
+                    >
+                      Copy Ref
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handlePrint}
+                      className="admin-no-print rounded-full border border-slate-200 bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+                    >
+                      Print
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-6 grid grid-cols-1 gap-4 text-sm text-slate-600 md:grid-cols-3">
+                  <div>
+                    <div className="text-xs font-semibold uppercase text-slate-500">Date</div>
+                    <div className="mt-1 font-medium text-slate-900">{createdAtLabel}</div>
+                    <div className="text-xs text-slate-400">{createdAtFull}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold uppercase text-slate-500">
+                      Invoice No.
+                    </div>
+                    <div className="mt-1 font-medium text-slate-900">{invoiceRef}</div>
+                  </div>
+                  <div className="md:text-right">
+                    <div className="text-xs font-semibold uppercase text-slate-500">
+                      Invoice To
+                    </div>
+                    <div className="mt-1 font-medium text-slate-900">
+                      {order?.customerName || "Guest"}
+                    </div>
+                    {customerEmail ? <div>{customerEmail}</div> : null}
+                    {order?.customerPhone ? <div>{order.customerPhone}</div> : null}
+                    {order?.customerAddress ? <div>{order.customerAddress}</div> : null}
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-6 py-6">
+                {items.length === 0 ? (
+                  <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
+                    No items found.
+                  </div>
+                ) : (
+                  <div className="overflow-hidden rounded-xl border border-slate-200">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                        <tr>
+                          <th className="px-4 py-3">SR.</th>
+                          <th className="px-4 py-3">Product Name</th>
+                          <th className="px-4 py-3 text-right">Quantity</th>
+                          <th className="px-4 py-3 text-right">Item Price</th>
+                          <th className="px-4 py-3 text-right">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.map((item, index) => {
+                          const name =
+                            item.product?.name || item.name || `Product #${item.productId}`;
+                          const qty = item.quantity || item.qty || 0;
+                          const price = item.price || item.unitPrice || 0;
+                          const amount = item.lineTotal || price * qty;
+                          return (
+                            <tr
+                              key={item.id || `${item.productId}-${index}`}
+                              className="border-t border-slate-100 hover:bg-slate-50"
+                            >
+                              <td className="px-4 py-3">{index + 1}</td>
+                              <td className="px-4 py-3 font-medium text-slate-900">
+                                {name}
+                              </td>
+                              <td className="px-4 py-3 text-right">{qty}</td>
+                              <td className="px-4 py-3 text-right">
+                                {formatCurrency(price)}
+                              </td>
+                              <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                                {formatCurrency(amount)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div className="px-6 pb-6">
+                <div className="rounded-xl bg-emerald-50 px-6 py-5">
+                  <div className="grid grid-cols-1 gap-4 text-sm text-slate-700 md:grid-cols-4">
+                    <div>
+                      <div className="text-xs font-semibold uppercase text-slate-500">
+                        Payment Method
+                      </div>
+                      <div className="mt-2 font-medium text-slate-900">{paymentMethod}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold uppercase text-slate-500">
+                        Shipping Cost
+                      </div>
+                      <div className="mt-2 font-medium text-slate-900">
+                        {formatCurrency(shipping)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold uppercase text-slate-500">
+                        Discount
+                      </div>
+                      <div className="mt-2 font-medium text-slate-900">
+                        {formatCurrency(discount)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold uppercase text-slate-500">
+                        Total Amount
+                      </div>
+                      <div className="mt-2 text-3xl font-extrabold text-red-500">
+                        {formatCurrency(totalAmount)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <OrderStatusBadge status={order?.status || "-"} />
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2 text-xs">
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-600">
-              Total {formatCurrency(order?.totalAmount || 0)}
-            </span>
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-600">
-              {itemCount} items
-            </span>
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-600">
-              {customerEmail}
-            </span>
-          </div>
-        </div>
+          <div className="lg:col-span-4">
+            <div className="admin-no-print space-y-4">
+              <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                <div className="text-sm font-semibold text-slate-900">Update Status</div>
+                <div className="mt-3 space-y-3">
+                  <select
+                    value={selectedStatus}
+                    onChange={(event) => setStatus(event.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  >
+                    <option value="">Select status</option>
+                    {ORDER_STATUS_OPTIONS.map((value) => (
+                      <option key={value} value={value}>
+                        {labelize(value)}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateMutation.mutate({
+                        orderId: order.id,
+                        payload: { status: selectedStatus },
+                      })
+                    }
+                    disabled={updateMutation.isPending || !selectedStatus || isSameStatus}
+                    className="w-full rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {updateMutation.isPending ? "Updating..." : "Update Status"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(invoiceRef, "Invoice")}
+                    className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:border-slate-300"
+                  >
+                    Copy Invoice No.
+                  </button>
+                  <Link
+                    to={`/order/${encodeURIComponent(invoiceRef)}`}
+                    className="w-full rounded-xl border border-slate-200 px-4 py-2 text-center text-sm font-semibold text-slate-700 hover:border-slate-300"
+                  >
+                    Open Customer Invoice
+                  </Link>
+                </div>
+              </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm font-semibold">Action Bar</div>
-            <div className="flex flex-wrap items-center gap-3">
-              <select
-                value={selectedStatus}
-                onChange={(event) => setStatus(event.target.value)}
-                className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
-              >
-                <option value="">Select status</option>
-                {ORDER_STATUS_OPTIONS.map((value) => (
-                  <option key={value} value={value}>
-                    {labelize(value)}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() =>
-                  updateMutation.mutate({ orderId: order.id, payload: { status: selectedStatus } })
-                }
-                disabled={updateMutation.isPending || !selectedStatus || isSameStatus}
-                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {updateMutation.isPending ? "Updating..." : "Update status"}
-              </button>
+              <OrderStatusTimeline
+                status={order?.status}
+                createdAt={order?.createdAt}
+                updatedAt={updatedAtValue}
+              />
             </div>
           </div>
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <h3 className="text-sm font-semibold">Customer & Shipping</h3>
-            <div className="mt-3 space-y-1 text-sm text-slate-600">
-              <div>{order?.customerName || "Guest"}</div>
-              {customerEmail ? <div>{customerEmail}</div> : null}
-              {order?.customerPhone ? <div>{order.customerPhone}</div> : null}
-              {order?.customerAddress ? (
-                <div>{order.customerAddress}</div>
-              ) : (
-                <div className="text-xs text-slate-400">No shipping address.</div>
-              )}
-              {order?.customerNotes ? <div>Notes: {order.customerNotes}</div> : null}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <h3 className="text-sm font-semibold">Summary</h3>
-            <div className="mt-3 space-y-1 text-sm text-slate-600">
-              <div>Status: {order?.status}</div>
-              <div>Total: {formatCurrency(order?.totalAmount || 0)}</div>
-              <div>Payment: {order?.paymentMethod || order?.method || "COD"}</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold">Items</h3>
-            <div className="text-xs text-slate-400">{items.length} items</div>
-          </div>
-          {items.length === 0 ? (
-            <div className="mt-3 text-sm text-slate-500">No items found.</div>
-          ) : (
-            <table className="mt-3 w-full text-left text-sm">
-              <thead className="text-xs uppercase text-slate-400">
-                <tr>
-                  <th className="py-2">Product</th>
-                  <th className="py-2 text-right">Qty</th>
-                  <th className="py-2 text-right">Price</th>
-                  <th className="py-2 text-right">Subtotal</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => (
-                  <tr key={item.id} className="border-t border-slate-100">
-                    <td className="py-2">
-                      {item.product?.name || `Product #${item.productId}`}
-                    </td>
-                    <td className="py-2 text-right">{item.quantity}</td>
-                    <td className="py-2 text-right">{formatCurrency(item.price || 0)}</td>
-                    <td className="py-2 text-right">{formatCurrency(item.lineTotal || 0)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
         </div>
       </QueryState>
     </div>

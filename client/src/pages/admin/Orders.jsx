@@ -6,6 +6,7 @@ import { ORDER_STATUS_OPTIONS, toUIStatus } from "../../constants/orderStatus.js
 import { moneyIDR } from "../../utils/money.js";
 import QueryState from "../../components/UI/QueryState.jsx";
 import OrderStatusBadge from "../../components/admin/OrderStatusBadge.jsx";
+import { Eye } from "lucide-react";
 
 export default function Orders() {
   const [page, setPage] = useState(1);
@@ -158,6 +159,7 @@ export default function Orders() {
               <tr>
                 <th className="px-4 py-3">Order</th>
                 <th className="px-4 py-3">Customer</th>
+                <th className="px-4 py-3">Payment</th>
                 <th className="px-4 py-3">Total</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Created</th>
@@ -178,6 +180,9 @@ export default function Orders() {
                     {order.customer?.email ? (
                       <div className="text-xs text-slate-400">{order.customer.email}</div>
                     ) : null}
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {order.paymentMethod || order.method || "COD"}
                   </td>
                   <td className="px-4 py-3">{moneyIDR(order.totalAmount || 0)}</td>
                   <td className="px-4 py-3">
@@ -207,8 +212,9 @@ export default function Orders() {
                   <td className="px-4 py-3">
                     <Link
                       to={`/admin/orders/${order.id}`}
-                      className="rounded-full border border-slate-200 px-3 py-1 text-xs"
+                      className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-xs"
                     >
+                      <Eye className="h-3.5 w-3.5" />
                       View
                     </Link>
                   </td>

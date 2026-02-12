@@ -1,51 +1,30 @@
-import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
+import { Download, Printer } from "lucide-react";
 import { fetchStoreOrder } from "../../api/store.service.ts";
 import { formatCurrency } from "../../utils/format.js";
-import StatusBadge from "../../components/UI/StatusBadge.jsx";
-import {
-  COD_INSTRUCTIONS,
-  TRANSFER_INSTRUCTIONS,
-} from "../../config/paymentInstructions.ts";
+import { getOrderStatusLabel } from "../../utils/orderStatus.js";
+
+const formatDate = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString();
+};
+
+const getItemName = (item) =>
+  item?.product?.name || item?.name || item?.title || "Item";
+
+const getItemQuantity = (item) => Number(item?.quantity ?? item?.qty ?? item?.amount ?? 0);
+
+const getItemPrice = (item) =>
+  Number(item?.price ?? item?.unitPrice ?? item?.product?.price ?? 0);
 
 export default function StoreOrderTrackingPage() {
   const { ref } = useParams();
   const [order, setOrder] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const [copyStatus, setCopyStatus] = useState("");
-  const resetTimerRef = useRef(null);
-
-  const resetCopyStatus = () => {
-    if (resetTimerRef.current) {
-      clearTimeout(resetTimerRef.current);
-    }
-    resetTimerRef.current = setTimeout(() => setCopyStatus(""), 1500);
-  };
-
-  const copyToClipboard = async (value) => {
-    if (!value) return;
-    try {
-      if (navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(value);
-      } else {
-        const textarea = document.createElement("textarea");
-        textarea.value = value;
-        textarea.setAttribute("readonly", "");
-        textarea.style.position = "absolute";
-        textarea.style.left = "-9999px";
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand("copy");
-        document.body.removeChild(textarea);
-      }
-      setCopyStatus("success");
-      resetCopyStatus();
-    } catch (err) {
-      setCopyStatus("error");
-      resetCopyStatus();
-    }
-  };
 
   useEffect(() => {
     let active = true;
@@ -81,138 +60,211 @@ export default function StoreOrderTrackingPage() {
     };
   }, [ref]);
 
+  const handlePrint = () => {
+    window.print();
+  };
+
   if (isLoading) {
     return (
-      <section>
-        <h1>Order Tracking</h1>
-        <p>Loading order...</p>
+      <section className="mx-auto max-w-6xl px-4 py-10 lg:px-6">
+        <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
+          Loading order...
+        </div>
       </section>
     );
   }
 
   if (error) {
     return (
-      <section>
-        <h1>Order Tracking</h1>
-        <p style={{ color: "crimson" }}>{error}</p>
-        <Link to="/search">Back to search</Link>
+      <section className="mx-auto max-w-6xl px-4 py-10 lg:px-6">
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-600">
+          {error}
+        </div>
       </section>
     );
   }
 
   if (!order) {
     return (
-      <section>
-        <h1>Order Tracking</h1>
-        <p>Order not found.</p>
-        <Link to="/search">Back to search</Link>
+      <section className="mx-auto max-w-6xl px-4 py-10 lg:px-6">
+        <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
+          Order not found.
+        </div>
       </section>
     );
   }
 
-  const invoiceRef = order.invoiceNo || order.ref || ref;
-  const totalAmount = order.totalAmount ?? order.total ?? 0;
-  const customerName = order.customerName ?? order.customer?.name ?? "—";
-  const customerPhone = order.customerPhone ?? order.customer?.phone ?? "—";
-  const customerAddress = order.customerAddress ?? order.customer?.address ?? "—";
-  const paymentMethod = order.paymentMethod ?? order.method ?? "COD";
-  const items = order.items ?? order.orderItems ?? [];
-  const createdAt = order.createdAt ?? order.created_at ?? null;
+  const invoiceRef = order.invoiceNo || order.orderId || order.ref || ref;
+  const createdAt = order.createdAt || order.created_at || order.orderTime || null;
+  const customer = order.customer || order.user || {};
+  const customerName =
+    order.customerName || customer.name || order.userName || customer.email || "Customer";
+  const customerEmail = order.customerEmail || customer.email || order.email || "-";
+  const customerPhone = order.customerPhone || customer.phone || order.phone || "-";
+  const customerAddress =
+    order.customerAddress || customer.address || order.shippingAddress || "-";
+  const paymentMethod = order.paymentMethod || order.method || "-";
+  const items = order.items || order.orderItems || order.products || [];
+  const shippingCost =
+    order.shippingCost ?? order.shipping?.cost ?? order.deliveryFee ?? 0;
+  const discount =
+    order.discount ?? order.discountAmount ?? order.discountTotal ?? 0;
+  const totalAmount =
+    order.totalAmount ?? order.total ?? order.grandTotal ?? 0;
+  const statusLabel = getOrderStatusLabel(order.status);
 
   return (
-    <section>
-      <h1>Order Tracking</h1>
-      <div style={{ marginBottom: "16px" }}>
-        <div style={{ marginBottom: "6px" }}>Invoice: {invoiceRef}</div>
-        {invoiceRef ? (
-          <div style={{ marginBottom: "6px" }}>
-            <button type="button" onClick={() => copyToClipboard(invoiceRef)}>
-              {copyStatus === "success" ? "Copied!" : "Copy Invoice"}
-            </button>
-            {copyStatus === "error" ? (
-              <span style={{ marginLeft: "8px", color: "crimson" }}>
-                Failed to copy
-              </span>
-            ) : null}
-          </div>
-        ) : null}
-        <div>
-          Status: <StatusBadge status={order.status} />
-        </div>
-        <div>Payment Method: {paymentMethod}</div>
-        {paymentMethod === "TRANSFER" ? (
-          <div style={{ marginTop: "8px", padding: "12px", border: "1px solid #e2e2e2" }}>
-            <strong>How to pay (Bank Transfer)</strong>
-            <div>Bank: {TRANSFER_INSTRUCTIONS.bank}</div>
-            <div>Account No: {TRANSFER_INSTRUCTIONS.accountNo}</div>
-            <div>Account Name: {TRANSFER_INSTRUCTIONS.accountName}</div>
-            <div style={{ marginTop: "6px" }}>
-              After transfer, please upload proof via WhatsApp{" "}
-              {TRANSFER_INSTRUCTIONS.whatsapp}.
+    <section className="mx-auto max-w-6xl px-4 py-10 lg:px-6">
+      <div className="no-print mb-8 rounded-lg bg-emerald-100 px-6 py-4 text-emerald-900">
+        Thank You{" "}
+        <span className="font-semibold text-emerald-700">{customerName}</span>,
+        Your order have been received !
+      </div>
+
+      <div className="print-area overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <div className="bg-slate-100/60 px-8 py-8">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h1 className="text-3xl font-extrabold tracking-wide text-slate-900">
+                INVOICE
+              </h1>
+              <p className="mt-2 text-sm text-slate-600">
+                Status : <span className="font-medium text-slate-900">{statusLabel}</span>
+              </p>
+            </div>
+            <div className="text-right text-sm text-slate-600">
+              <div className="text-lg font-bold text-emerald-600">KACHA BAZAR</div>
+              <div>59 Station Rd, Purls Bridge,</div>
+              <div>United Kingdom</div>
             </div>
           </div>
-        ) : (
-          <div style={{ marginTop: "8px", padding: "12px", border: "1px solid #e2e2e2" }}>
-            <strong>Pay on delivery</strong>
-            <div>{COD_INSTRUCTIONS.text}</div>
+          <div className="mt-6 grid grid-cols-1 gap-6 border-t border-slate-200 pt-6 md:grid-cols-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Date
+              </p>
+              <p className="mt-2 text-sm text-slate-900">{formatDate(createdAt)}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Invoice No.
+              </p>
+              <p className="mt-2 text-sm text-slate-900">#{invoiceRef}</p>
+            </div>
+            <div className="md:text-right">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Invoice To
+              </p>
+              <p className="mt-2 text-sm font-medium text-slate-900">
+                {customerName}
+              </p>
+              <p className="text-sm text-slate-600">{customerEmail}</p>
+              <p className="text-sm text-slate-600">{customerPhone}</p>
+              <p className="text-sm text-slate-600">{customerAddress}</p>
+            </div>
           </div>
-        )}
-        <div>
-          Created At:{" "}
-          {createdAt
-            ? new Date(createdAt).toLocaleString("id-ID", {
-                dateStyle: "medium",
-                timeStyle: "short",
-              })
-            : "—"}
         </div>
-      </div>
 
-      <div style={{ marginBottom: "16px" }}>
-        <h3>Customer</h3>
-        <div>Name: {customerName}</div>
-        <div>Phone: {customerPhone}</div>
-        <div>Address: {customerAddress}</div>
-      </div>
-
-      <div style={{ marginBottom: "16px" }}>
-        <h3>Items</h3>
-        {items && items.length > 0 ? (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <th style={{ textAlign: "left", padding: "8px 0" }}>Product</th>
-                <th style={{ textAlign: "right", padding: "8px 0" }}>Qty</th>
-                <th style={{ textAlign: "right", padding: "8px 0" }}>Price</th>
-                <th style={{ textAlign: "right", padding: "8px 0" }}>Line Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item, idx) => (
-                <tr key={`${item.id ?? item.productId ?? idx}`}>
-                  <td style={{ padding: "8px 0" }}>{item.name}</td>
-                  <td style={{ textAlign: "right" }}>{item.quantity}</td>
-                  <td style={{ textAlign: "right" }}>
-                    {formatCurrency(Number(item.price || 0))}
-                  </td>
-                  <td style={{ textAlign: "right" }}>
-                    {formatCurrency(Number(item.lineTotal || 0))}
-                  </td>
+        <div className="px-8 py-6">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 text-left font-semibold">SR.</th>
+                  <th className="px-4 py-3 text-left font-semibold">PRODUCT NAME</th>
+                  <th className="px-4 py-3 text-right font-semibold">QUANTITY</th>
+                  <th className="px-4 py-3 text-right font-semibold">ITEM PRICE</th>
+                  <th className="px-4 py-3 text-right font-semibold">AMOUNT</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p>No items found.</p>
-        )}
-      </div>
+              </thead>
+              <tbody>
+                {items.length > 0 ? (
+                  items.map((item, index) => {
+                    const quantity = getItemQuantity(item);
+                    const price = getItemPrice(item);
+                    const lineTotal = Number(item?.lineTotal ?? item?.total ?? price * quantity);
+                    return (
+                      <tr
+                        key={`${item?.id ?? item?.productId ?? index}`}
+                        className="border-t border-slate-100"
+                      >
+                        <td className="px-4 py-3 text-slate-700">{index + 1}</td>
+                        <td className="px-4 py-3 text-slate-700">{getItemName(item)}</td>
+                        <td className="px-4 py-3 text-right text-slate-700">{quantity}</td>
+                        <td className="px-4 py-3 text-right text-slate-700">
+                          {formatCurrency(price)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-slate-700">
+                          {formatCurrency(lineTotal)}
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr className="border-t border-slate-100">
+                    <td className="px-4 py-6 text-center text-slate-500" colSpan={5}>
+                      No items found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-      <div style={{ fontWeight: 600 }}>
-        Total: {formatCurrency(Number(totalAmount))}
-      </div>
+        <div className="bg-emerald-50 px-8 py-10">
+          <div className="grid gap-6 md:grid-cols-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                Payment Method
+              </p>
+              <p className="mt-2 text-sm text-slate-900">{paymentMethod}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                Shipping Cost
+              </p>
+              <p className="mt-2 text-sm text-slate-900">
+                {formatCurrency(Number(shippingCost || 0))}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                Discount
+              </p>
+              <p className="mt-2 text-sm text-slate-900">
+                {formatCurrency(Number(discount || 0))}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                Total Amount
+              </p>
+              <p className="mt-3 text-4xl font-extrabold text-red-500">
+                {formatCurrency(Number(totalAmount || 0))}
+              </p>
+            </div>
+          </div>
+        </div>
 
-      <div style={{ marginTop: "16px" }}>
-        <Link to="/">Back to Store Home</Link>
+        <div className="no-print flex flex-wrap items-center justify-between gap-4 px-8 py-6">
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
+          >
+            <Download className="h-4 w-4" />
+            Download PDF
+          </button>
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
+          >
+            <Printer className="h-4 w-4" />
+            Print Invoice
+          </button>
+        </div>
       </div>
     </section>
   );

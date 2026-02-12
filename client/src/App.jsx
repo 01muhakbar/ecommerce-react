@@ -39,6 +39,7 @@ import AccountDashboardPage from "./pages/account/AccountDashboardPage.jsx";
 import AccountOrdersPage from "./pages/account/AccountOrdersPage.jsx";
 import AccountOrderDetailPage from "./pages/account/AccountOrderDetailPage.jsx";
 import AccountProfilePage from "./pages/account/AccountProfilePage.jsx";
+import AccountMyReviewPage from "./pages/account/AccountMyReviewPage.jsx";
 
 export default function App() {
   return (
@@ -69,6 +70,7 @@ export default function App() {
                 <Route path="dashboard" element={<AccountDashboardPage />} />
                 <Route path="orders" element={<AccountOrdersPage />} />
                 <Route path="orders/:id" element={<AccountOrderDetailPage />} />
+                <Route path="my-review" element={<AccountMyReviewPage />} />
                 <Route path="profile" element={<AccountProfilePage />} />
               </Route>
             </Route>

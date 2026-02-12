@@ -5,45 +5,14 @@
 Scope: 3 of 4 workspace projects
 client dev$ vite
 server dev$ tsx watch src/server.ts
-client dev:   [32m[1mVITE[22m v7.1.9[39m  [2mready in [0m[1m1106[22m[2m[0m ms[22m
-client dev:   [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5173[22m/[39m
-client dev: [2m  [32m➜[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m
-client dev: [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
-server dev: Attempting to connect to the database...
-server dev: Database connected successfully.
-server dev: Skipping database sync (set DB_SYNC=true to enable).
-server dev: 🚀 Server is running on http://localhost:3001 with DB sync
-server dev: (sequelize) Warning: Model "Category" is declaring public class fields for attribute(s): "id", "code", "name", "description", "icon", "published", "parentId", "createdAt", "updatedAt".
-server dev: These class fields are shadowing Sequelize's attribute getters & setters.
-server dev: See https://sequelize.org/main/manual/model-basics.html#caveat-with-public-class-fields
-server dev: [store/products] sample {
-server dev:   id: 1,
-server dev:   name: 'Organic Banana',
-server dev:   slug: 'organic-banana',
-server dev:   price: '12000.00',
-server dev:   stock: 40,
-server dev:   categoryId: 1,
-server dev:   promoImagePath: '/uploads/products/demo.svg',
-server dev:   imagePaths: null,
-server dev:   status: 'active',
-server dev:   published: 1,
-server dev:   updatedAt: 2026-02-08T10:58:25.000Z,
-server dev:   category: { id: 1, name: 'Fruits', code: 'fruits' }
-server dev: }
-server dev: (sequelize) Warning: Model "Product" is declaring public class fields for attribute(s): "id", "name", "slug", "sku", "barcode", "gtin", "price", "stock", "weight", "notes", "parentSku", "condition", "length", "width", "height", "dangerousProduct", "preOrder", "preorderDays", "youtubeLink", "variations", "wholesale", "promoImagePath", "imagePaths", "videoPath", "tags", "userId", "categoryId", "description", "salePrice", "status", "isPublished", "createdAt", "updatedAt".
-server dev: These class fields are shadowing Sequelize's attribute getters & setters.
-server dev: See https://sequelize.org/main/manual/model-basics.html#caveat-with-public-class-fields
-server dev: [store/products] sample {
-server dev:   id: 8,
-server dev:   name: 'Green Apple',
-server dev:   slug: 'green-apple',
-server dev:   price: '16000.00',
-server dev:   stock: 40,
-server dev:   categoryId: 1,
-server dev:   promoImagePath: '/uploads/products/demo.svg',
-server dev:   imagePaths: null,
-server dev:   status: 'active',
-server dev:   published: 1,
-server dev:   updatedAt: 2026-02-08T10:58:25.000Z,
-server dev:   category: { id: 1, name: 'Fruits', code: 'fruits' }
-server dev: }
+client dev: [31merror when starting dev server:
+client dev: Error: Port 5173 is already in use
+client dev:     at Server.onError$1 (file:///C:/Users/user/Documents/ecommerce-react/node_modules/.pnpm/vite@7.1.9_@types+node@20.1_3b7e1ca31a0cdabb189337b246156b95/node_modules/vite/dist/node/chunks/dep-Chhhsdoe.js:18429:28)
+client dev:     at Server.emit (node:events:519:28)
+client dev:     at emitErrorNT (node:net:1976:8)
+client dev:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21)[39m
+client dev: Failed
+C:\Users\user\Documents\ecommerce-react\client:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  client@0.0.0 dev: `vite`
+Exit status 1
+ ELIFECYCLE  Command failed with exit code 1.

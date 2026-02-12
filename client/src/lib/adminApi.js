@@ -1,5 +1,5 @@
 import axios from "axios";
-import { toBackendStatus, toUIStatus } from "../constants/orderStatus.js";
+import { toUIStatus } from "../constants/orderStatus.js";
 
 const adminApi = axios.create({
   baseURL: "/api",
@@ -171,7 +171,7 @@ export const uploadAdminImage = async (file) => {
 };
 
 const normalizeOrdersMeta = (payload, params = {}) => {
-  const meta = payload?.meta || payload?.pagination || {};
+  const meta = payload?.meta || payload?.pagination || payload?.data || {};
   const page = Number(meta.page ?? meta.currentPage ?? params.page ?? 1);
   const limit = Number(
     meta.limit ?? meta.itemsPerPage ?? params.limit ?? params.pageSize ?? 10
@@ -184,11 +184,13 @@ const normalizeOrdersMeta = (payload, params = {}) => {
 };
 
 const normalizeOrdersList = (payload, params = {}) => {
-  const items = Array.isArray(payload?.data)
-    ? payload.data
-    : Array.isArray(payload)
-      ? payload
-      : [];
+  const items = Array.isArray(payload?.data?.items)
+    ? payload.data.items
+    : Array.isArray(payload?.data)
+      ? payload.data
+      : Array.isArray(payload)
+        ? payload
+        : [];
   const data = items.map((order) => ({
     ...order,
     id: order.id || order.orderId,
@@ -197,6 +199,7 @@ const normalizeOrdersList = (payload, params = {}) => {
     invoiceNo: order.invoiceNo || order.invoice_no || order.invoice || order.ref || null,
     createdAt: order.createdAt || order.created_at || null,
     totalAmount: Number(order.totalAmount || order.total || order.total_amount || 0),
+    paymentMethod: order.paymentMethod || order.method || null,
   }));
 
   return {
@@ -212,8 +215,13 @@ const normalizeAdminOrderDetail = (raw) => {
     invoice: raw.invoiceNo || raw.invoice || `#${raw.id}`,
     invoiceNo: raw.invoiceNo || raw.invoice || null,
     status: toUIStatus(raw.status),
-    totalAmount: Number(raw.totalAmount || 0),
+    totalAmount: Number(raw.totalAmount || raw.total || 0),
+    subtotal: Number(raw.subtotal || 0),
+    discount: Number(raw.discount || 0),
+    shipping: Number(raw.shipping || 0),
+    total: Number(raw.total || raw.totalAmount || 0),
     createdAt: raw.createdAt || null,
+    updatedAt: raw.updatedAt || raw.updated_at || null,
     customerName: raw.customerName || raw.customer?.name || "Guest",
     customerPhone: raw.customerPhone || null,
     customerAddress: raw.customerAddress || null,
@@ -234,7 +242,7 @@ const normalizeAdminOrderDetail = (raw) => {
 export const fetchAdminOrders = async (params) => {
   const normalizedParams = {
     ...params,
-    status: params?.status ? toBackendStatus(params.status) : undefined,
+    status: params?.status || undefined,
   };
   const { data } = await adminApi.get("/admin/orders", { params: normalizedParams });
   return normalizeOrdersList(data, normalizedParams);
@@ -247,14 +255,9 @@ export const fetchAdminOrder = async (id) => {
 };
 
 export const updateAdminOrderStatus = async (id, payload) => {
-  const nextStatus = payload?.status;
-  const mappedPayload = {
-    ...payload,
-    status: nextStatus ? toBackendStatus(nextStatus) : nextStatus,
-  };
   const { data } = await adminApi.patch(
     `/admin/orders/${id}/status`,
-    mappedPayload
+    payload
   );
   if (data?.data) {
     return {
@@ -283,7 +286,7 @@ export const fetchAdminCustomerOrders = async (customerId, params) => {
   const mergedParams = {
     ...params,
     userId: customerId,
-    status: params?.status ? toBackendStatus(params.status) : undefined,
+    status: params?.status || undefined,
   };
   const { data } = await adminApi.get("/admin/orders", { params: mergedParams });
   return normalizeOrdersList(data, mergedParams);

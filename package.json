@@ -20,7 +20,9 @@
     "db:sync": "pnpm --filter server db:sync",
     "seed:super": "pnpm --filter server seed:super",
     "seed:analytics": "pnpm --filter server seed:analytics",
-    "seed:customers": "pnpm --filter server seed:customers"
+    "seed:customers": "pnpm --filter server seed:customers",
+    "qa:ui": "node qa-ui.mjs",
+    "qa:ui:install": "pnpm add -D playwright -w && npx playwright install --with-deps"
   },
   "repository": {
     "type": "git",
