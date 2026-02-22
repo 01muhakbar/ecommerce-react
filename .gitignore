@@ -1,3 +1,13 @@
 .env
 node_modules/
 packages/schemas/dist/
+tmp_*.json
+tmp_*.out
+tmp_*.err
+tmp_*.pid
+**/tmp_*.json
+**/tmp_*.out
+**/tmp_*.err
+**/tmp_*.pid
+client/dist/
+**/*.log
