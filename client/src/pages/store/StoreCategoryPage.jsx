@@ -1,13 +1,18 @@
-import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { fetchStoreProducts } from "../../api/store.service.ts";
 import { useCart } from "../../hooks/useCart.ts";
 import QueryState from "../../components/UI/QueryState.jsx";
 import { formatCurrency } from "../../utils/format.js";
 import { resolveProductImageUrl } from "../../utils/productImage.js";
+import { useStoreCategories } from "../../hooks/useStoreCategories.ts";
+import CategoryAccordion from "../../components/store/CategoryAccordion.jsx";
+import { buildCategoryTree } from "../../utils/categoryTree.ts";
 
 export default function StoreCategoryPage() {
+  const navigate = useNavigate();
   const { slug } = useParams();
+  const isCategoryListMode = !slug;
   let safeSlug = "";
   if (slug) {
     try {
@@ -23,8 +28,19 @@ export default function StoreCategoryPage() {
   const invalidSlug =
     !safeSlug || safeSlug.includes("<") || safeSlug.includes(">");
   const { add } = useCart();
+  const {
+    data: categories,
+    isLoading: categoriesLoading,
+    isError: categoriesError,
+    error: categoriesErrorObj,
+    refetch: refetchCategories,
+  } = useStoreCategories();
+  const categoryTree = useMemo(() => buildCategoryTree(categories || []), [categories]);
 
   useEffect(() => {
+    if (isCategoryListMode) {
+      return;
+    }
     if (!safeSlug || invalidSlug) {
       setProducts([]);
       setIsLoading(false);
@@ -52,7 +68,70 @@ export default function StoreCategoryPage() {
     return () => {
       isActive = false;
     };
-  }, [safeSlug, invalidSlug, retryKey]);
+  }, [isCategoryListMode, safeSlug, invalidSlug, retryKey]);
+
+  const handleCategoryClick = (category) => {
+    const categoryKey = String(category?.code || category?.slug || category?.id || "").trim();
+    if (!categoryKey) return;
+    navigate(`/search?category=${encodeURIComponent(categoryKey)}`);
+  };
+
+  if (isCategoryListMode) {
+    return (
+      <section className="mx-auto w-full max-w-7xl space-y-5 px-3 py-6 sm:px-4 sm:py-8 lg:px-6">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold text-slate-900">Categories</h1>
+          <p className="text-sm text-slate-500">
+            Browse categories and jump to filtered products.
+          </p>
+        </div>
+
+        {categoriesLoading ? (
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="h-[70vh] space-y-2 overflow-y-auto pr-1">
+              {Array.from({ length: 8 }).map((_, idx) => (
+                <div
+                  key={`category-skeleton-${idx}`}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 px-3 py-3"
+                >
+                  <div className="h-8 w-8 animate-pulse rounded-full bg-slate-200" />
+                  <div className="h-4 flex-1 animate-pulse rounded bg-slate-100" />
+                  <div className="h-4 w-4 animate-pulse rounded bg-slate-100" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : categoriesError ? (
+          <QueryState
+            isLoading={false}
+            isError={true}
+            error={categoriesErrorObj}
+            isEmpty={false}
+            onRetry={refetchCategories}
+          />
+        ) : categoryTree.length === 0 ? (
+          <QueryState
+            isLoading={false}
+            isError={false}
+            error={null}
+            isEmpty={true}
+            emptyTitle="No categories found"
+            emptyHint="Please add categories from admin dashboard."
+          />
+        ) : (
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+            <div className="h-[70vh] overflow-y-auto">
+              <CategoryAccordion
+                nodes={categoryTree}
+                onSelect={handleCategoryClick}
+                defaultExpandedIds={categoryTree.slice(0, 1).map((item) => item.id)}
+              />
+            </div>
+          </div>
+        )}
+      </section>
+    );
+  }
 
   if (invalidSlug) {
     return (
@@ -101,12 +180,12 @@ export default function StoreCategoryPage() {
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
-                    add(product.id, 1, {
-                      name: product?.name || product?.title,
-                      price: product?.salePrice ?? product?.sellingPrice ?? product?.price,
-                      imageUrl: resolveProductImageUrl(product),
-                    });
-                  }}
+                  add(product.id, 1, {
+                    name: product?.name || product?.title,
+                    price: product?.salePrice ?? product?.sellingPrice ?? product?.price,
+                    imageUrl: resolveProductImageUrl(product),
+                  });
+                }}
                 className="mt-auto self-start rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:border-slate-300"
               >
                 Add to cart

@@ -4,7 +4,11 @@ export type StoreCategory = {
   id: number;
   name: string;
   slug: string;
+  code?: string;
   image?: string | null;
+  parentId?: number | null;
+  parent_id?: number | null;
+  published?: boolean;
 };
 
 export type StoreProductCategory = {

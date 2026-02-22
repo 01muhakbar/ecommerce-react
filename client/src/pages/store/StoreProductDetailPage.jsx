@@ -70,7 +70,10 @@ export default function StoreProductDetailPage() {
     hasCategoryId,
   ]);
 
-  const hasStock = typeof product?.stock === "number" ? product.stock > 0 : true;
+  const stockValue = Number(product?.stock);
+  const hasFiniteStock = Number.isFinite(stockValue);
+  const hasStock = hasFiniteStock ? stockValue > 0 : true;
+  const isAtStockLimit = hasFiniteStock ? qty >= stockValue : false;
   const resolvedImageSrc = useMemo(
     () => resolveProductImageUrl(product),
     [product]
@@ -85,6 +88,15 @@ export default function StoreProductDetailPage() {
   useEffect(() => {
     setImageSrc(resolvedImageSrc);
   }, [resolvedImageSrc]);
+
+  useEffect(() => {
+    if (!hasFiniteStock) return;
+    if (stockValue <= 0) {
+      setQty(1);
+      return;
+    }
+    setQty((prev) => Math.min(Math.max(1, prev), stockValue));
+  }, [hasFiniteStock, stockValue]);
 
   if (isLoading) {
     return <p className="text-sm text-slate-500">Loading product...</p>;
@@ -145,16 +157,23 @@ export default function StoreProductDetailPage() {
             <div className="flex items-center rounded-full border border-slate-200">
               <button
                 type="button"
+                disabled={qty <= 1}
                 onClick={() => setQty((prev) => Math.max(1, prev - 1))}
-                className="px-3 py-1 text-sm"
+                className="px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-40"
               >
                 -
               </button>
               <span className="px-3 text-sm">{qty}</span>
               <button
                 type="button"
-                onClick={() => setQty((prev) => prev + 1)}
-                className="px-3 py-1 text-sm"
+                disabled={!hasStock || isAtStockLimit}
+                onClick={() =>
+                  setQty((prev) => {
+                    if (!hasFiniteStock) return prev + 1;
+                    return Math.min(stockValue, prev + 1);
+                  })
+                }
+                className="px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-40"
               >
                 +
               </button>

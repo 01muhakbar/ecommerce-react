@@ -1,14 +1,58 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
+import { Banknote, CreditCard, Trash2, WalletCards } from "lucide-react";
 import { createOrderSchema } from "@ecommerce/schemas";
 import { useCartStore } from "../../store/cart.store.ts";
 import { createStoreOrder } from "../../api/store.service.ts";
 import { formatCurrency } from "../../utils/format.js";
 
-const LABEL_CLASS = "text-xs font-semibold uppercase text-slate-600";
 const INPUT_CLASS =
-  "mt-2 w-full rounded-lg border border-slate-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200";
+  "mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100";
+
+const SHIPPING_OPTIONS = [
+  { id: "ups_today", title: "UPS Delivery", eta: "Today", cost: 60 },
+  { id: "ups_7_days", title: "UPS Delivery", eta: "7 Days", cost: 20 },
+];
+
+const PAYMENT_OPTIONS = [
+  {
+    id: "cash",
+    title: "Cash",
+    hint: "Pay after delivery",
+    Icon: Banknote,
+  },
+  {
+    id: "card",
+    title: "Card",
+    hint: "Visa / Mastercard",
+    Icon: CreditCard,
+  },
+  {
+    id: "razorpay",
+    title: "RazorPay",
+    hint: "Fast online payment",
+    Icon: WalletCards,
+  },
+];
+
+function SectionTitle({ number, title, hint }) {
+  return (
+    <div>
+      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-600">
+        {number}
+      </div>
+      <h2 className="mt-1 text-lg font-semibold text-slate-900">{title}</h2>
+      {hint ? <p className="mt-1 text-sm text-slate-500">{hint}</p> : null}
+    </div>
+  );
+}
+
+function fieldClass(hasError) {
+  return `${INPUT_CLASS} ${
+    hasError ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100" : ""
+  }`;
+}
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
@@ -18,19 +62,38 @@ export default function CheckoutPage() {
   const subtotal = useCartStore((state) => state.subtotal);
   const totalQty = useCartStore((state) => state.totalQty);
   const clearCart = useCartStore((state) => state.clearCart);
-  const [fullName, setFullName] = useState("");
+  const updateQty = useCartStore((state) => state.updateQty);
+  const removeItem = useCartStore((state) => state.removeItem);
+  const isRemoteSyncing = useCartStore((state) => state.isRemoteSyncing);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [address, setAddress] = useState("");
+  const [streetAddress, setStreetAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [country, setCountry] = useState("");
+  const [zipCode, setZipCode] = useState("");
+  const [useDefaultShipping, setUseDefaultShipping] = useState(false);
+  const [shippingOptionId, setShippingOptionId] = useState(SHIPPING_OPTIONS[0].id);
+  const [paymentOptionId, setPaymentOptionId] = useState(PAYMENT_OPTIONS[0].id);
+  const [couponCode, setCouponCode] = useState("");
+  const [couponMessage, setCouponMessage] = useState("");
+  const [discount, setDiscount] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({
-    fullName: "",
+    firstName: "",
+    lastName: "",
     phone: "",
-    address: "",
+    streetAddress: "",
+    city: "",
+    country: "",
+    zipCode: "",
   });
-  const fullNameRef = useRef(null);
+  const submitLockRef = useRef(false);
+  const firstNameRef = useRef(null);
   const phoneRef = useRef(null);
-  const addressRef = useRef(null);
+  const streetRef = useRef(null);
 
   useEffect(() => {
     let mounted = true;
@@ -56,7 +119,7 @@ export default function CheckoutPage() {
         if (res.status === 401) {
           navigate("/auth/login");
         }
-      } catch (_) {
+      } catch {
         if (mounted) {
           navigate("/auth/login");
         }
@@ -68,40 +131,47 @@ export default function CheckoutPage() {
     };
   }, [navigate]);
 
-  const paymentMethod = "COD";
   const hasItems = items.length > 0;
-  const trimmedFullName = fullName.trim();
-  const trimmedPhone = phone.trim();
-  const trimmedAddress = address.trim();
-  const phoneDigits = trimmedPhone.replace(/[^\d]/g, "");
-  const isPhoneCharsValid = trimmedPhone
-    ? /^[\d+\s-]+$/.test(trimmedPhone)
-    : true;
-  const isPhoneTooShort = trimmedPhone ? phoneDigits.length < 8 : false;
-  const isFormInvalid =
-    !trimmedFullName ||
-    !trimmedPhone ||
-    !trimmedAddress ||
-    !isPhoneCharsValid ||
-    isPhoneTooShort;
+  const shippingOption =
+    SHIPPING_OPTIONS.find((option) => option.id === shippingOptionId) ||
+    SHIPPING_OPTIONS[0];
+  const shippingCost = Number(shippingOption?.cost || 0);
 
   const summaryItems = useMemo(
     () =>
       items.map((item) => ({
         productId: Number(item.productId ?? item.id),
         name: item.name || "Product",
-        qty: Number(item.qty ?? 0),
+        qty: Math.max(1, Number(item.qty ?? 1)),
         price: Number(item.price ?? 0),
+        imageUrl: item.imageUrl ?? item.image ?? null,
+        stock: item.stock ?? null,
       })),
     [items]
   );
 
+  const subtotalValue = Number(subtotal || 0);
+  const discountValue = Number(discount || 0);
+  const total = Math.max(0, subtotalValue + shippingCost - discountValue);
+
+  const fullName = `${firstName} ${lastName}`.trim();
+  const shippingAddress = [
+    streetAddress.trim(),
+    city.trim(),
+    country.trim(),
+    zipCode.trim(),
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const phoneValue = phone.trim();
+  const paymentMethod = "COD";
+
   const payloadDraft = useMemo(
     () => ({
       customer: {
-        name: trimmedFullName,
-        phone: trimmedPhone,
-        address: trimmedAddress,
+        name: fullName,
+        phone: phoneValue,
+        address: shippingAddress,
       },
       paymentMethod,
       items: summaryItems.map((item) => ({
@@ -109,38 +179,8 @@ export default function CheckoutPage() {
         qty: item.qty,
       })),
     }),
-    [trimmedFullName, trimmedPhone, trimmedAddress, paymentMethod, summaryItems]
+    [fullName, phoneValue, shippingAddress, paymentMethod, summaryItems]
   );
-
-  if (!hasHydrated) {
-    return (
-      <div className="mx-auto w-full max-w-6xl px-4 py-10">
-        <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center">
-          <h1 className="text-2xl font-semibold text-slate-900">
-            Loading checkout...
-          </h1>
-          <p className="mt-2 text-sm text-slate-500">Please wait.</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!hasItems) {
-    return (
-      <div className="mx-auto w-full max-w-6xl px-4 py-10">
-        <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center">
-          <h1 className="text-2xl font-semibold text-slate-900">Cart is empty</h1>
-          <p className="mt-2 text-sm text-slate-500">Your cart is empty.</p>
-          <Link
-            to="/search"
-            className="mt-6 inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold !text-white visited:!text-white active:!text-white hover:bg-slate-800 no-underline hover:no-underline"
-          >
-            Browse products
-          </Link>
-        </div>
-      </div>
-    );
-  }
 
   const focusField = (ref) => {
     if (!ref?.current) return;
@@ -148,8 +188,38 @@ export default function CheckoutPage() {
     ref.current.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
+  const handleApplyCoupon = () => {
+    const code = couponCode.trim();
+    if (!code) {
+      setCouponMessage("Please enter coupon code.");
+      setDiscount(0);
+      return;
+    }
+    setCouponMessage("Coupon service is not active yet.");
+    setDiscount(0);
+  };
+
+  const handleQtyDecrement = (item) => {
+    const currentQty = Math.max(1, Number(item.qty ?? 1));
+    if (currentQty <= 1) return;
+    updateQty(item.productId, currentQty - 1);
+  };
+
+  const handleQtyIncrement = (item) => {
+    const currentQty = Math.max(1, Number(item.qty ?? 1));
+    const stockValue = Number(item.stock);
+    const stock = Number.isFinite(stockValue) && stockValue >= 0 ? stockValue : null;
+    const nextQty = stock !== null ? Math.min(stock, currentQty + 1) : currentQty + 1;
+    if (nextQty <= currentQty) return;
+    updateQty(item.productId, nextQty);
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (submitLockRef.current || isSubmitting) {
+      return;
+    }
+
     const hasAuthHint = (() => {
       try {
         return (
@@ -164,31 +234,71 @@ export default function CheckoutPage() {
       navigate("/auth/login", { replace: true, state: { from: "/checkout" } });
       return;
     }
+
     setError("");
-    setFieldErrors({ fullName: "", phone: "", address: "" });
+    setFieldErrors({
+      firstName: "",
+      lastName: "",
+      phone: "",
+      streetAddress: "",
+      city: "",
+      country: "",
+      zipCode: "",
+    });
+
+    if (!firstName.trim() || !lastName.trim() || !phoneValue || !streetAddress.trim()) {
+      setError("Please complete required checkout fields.");
+      const nextErrors = {
+        firstName: firstName.trim() ? "" : "First name is required.",
+        lastName: lastName.trim() ? "" : "Last name is required.",
+        phone: phoneValue ? "" : "Phone is required.",
+        streetAddress: streetAddress.trim() ? "" : "Street address is required.",
+        city: city.trim() ? "" : "City is required.",
+        country: country.trim() ? "" : "Country is required.",
+        zipCode: zipCode.trim() ? "" : "ZIP code is required.",
+      };
+      setFieldErrors(nextErrors);
+      if (nextErrors.firstName) {
+        focusField(firstNameRef);
+      } else if (nextErrors.phone) {
+        focusField(phoneRef);
+      } else if (nextErrors.streetAddress) {
+        focusField(streetRef);
+      }
+      return;
+    }
+
     const parsed = createOrderSchema.safeParse(payloadDraft);
     if (!parsed.success) {
-      const nextErrors = { fullName: "", phone: "", address: "" };
+      const nextErrors = {
+        firstName: "",
+        lastName: "",
+        phone: "",
+        streetAddress: "",
+        city: "",
+        country: "",
+        zipCode: "",
+      };
       for (const issue of parsed.error.issues) {
         const path = issue.path.join(".");
         if (path === "customer.name") {
-          nextErrors.fullName = issue.message;
+          nextErrors.firstName = issue.message;
         }
         if (path === "customer.phone") {
           nextErrors.phone = issue.message;
         }
         if (path === "customer.address") {
-          nextErrors.address = issue.message;
+          nextErrors.streetAddress = issue.message;
         }
       }
       setFieldErrors(nextErrors);
-      setError("Please check the highlighted fields.");
-      if (nextErrors.fullName) {
-        focusField(fullNameRef);
+      setError("Please check highlighted fields.");
+      if (nextErrors.firstName) {
+        focusField(firstNameRef);
       } else if (nextErrors.phone) {
         focusField(phoneRef);
-      } else if (nextErrors.address) {
-        focusField(addressRef);
+      } else if (nextErrors.streetAddress) {
+        focusField(streetRef);
       }
       return;
     }
@@ -198,26 +308,34 @@ export default function CheckoutPage() {
       return;
     }
 
+    submitLockRef.current = true;
     setIsSubmitting(true);
     try {
       const response = await createStoreOrder(parsed.data);
       const result = response?.data?.data ?? response?.data ?? {};
-      const invoiceNo =
-        result.invoiceNo ||
-        result.invoice ||
-        result.ref ||
-        (result.id ? `ORDER-${result.id}` : "");
+      const resolvedOrderRef = [
+        result?.invoiceNo,
+        result?.ref,
+        result?.invoice,
+        result?.orderRef,
+        result?.id,
+      ]
+        .map((value) => (value == null ? "" : String(value).trim()))
+        .find((value) => value.length > 0);
       clearCart();
       await queryClient.invalidateQueries({
         queryKey: ["account", "orders", "my"],
       });
       const successParams = new URLSearchParams();
-      if (invoiceNo) {
-        successParams.set("ref", invoiceNo);
+      if (resolvedOrderRef) {
+        successParams.set("ref", resolvedOrderRef);
       }
-      navigate(`/checkout/success?${successParams.toString()}`, {
-        state: { ref: invoiceNo },
-      });
+      navigate(
+        `/checkout/success${successParams.size > 0 ? `?${successParams.toString()}` : ""}`,
+        {
+          state: { ref: resolvedOrderRef || "" },
+        }
+      );
     } catch (err) {
       const data = err?.response?.data;
       if (err?.response?.status === 401) {
@@ -234,178 +352,522 @@ export default function CheckoutPage() {
         setError(data?.message || "Checkout failed. Please try again.");
       }
     } finally {
+      submitLockRef.current = false;
       setIsSubmitting(false);
     }
   };
 
-  const subtotalValue = Number(subtotal || 0);
-  const shippingCost = 0;
-  const discountAmount = 0;
-  const total = Math.max(0, subtotalValue + shippingCost - discountAmount);
+  if (!hasHydrated) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-10 lg:px-6">
+        <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6">
+          <div className="h-6 w-56 animate-pulse rounded bg-slate-200" />
+          <div className="h-20 animate-pulse rounded-xl bg-slate-100" />
+          <div className="h-20 animate-pulse rounded-xl bg-slate-100" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasItems) {
+    return (
+      <div className="mx-auto max-w-5xl px-4 py-10 lg:px-6">
+        <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center">
+          <h1 className="text-2xl font-semibold text-slate-900">Checkout is blocked</h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Your cart is empty. Please add products before checkout.
+          </p>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <Link
+              to="/cart"
+              className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Back to Cart
+            </Link>
+            <Link
+              to="/search"
+              className="rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+            >
+              Browse Products
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <section className="mx-auto w-full max-w-6xl px-4 py-10 lg:px-6">
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-        <div className="lg:col-span-7">
-          <div className="rounded-xl border border-slate-200 bg-white p-6">
-            <h1 className="text-2xl font-bold text-slate-900">Checkout</h1>
-            <p className="mt-2 text-sm text-slate-500">
-              Fill in your details to place the order.
-            </p>
-
-            <div className="mt-6 space-y-5">
+    <section className="mx-auto max-w-7xl px-3 py-6 sm:px-4 sm:py-8 lg:px-6">
+      <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[1.35fr_0.95fr]">
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 lg:p-7">
+            <div className="mb-5 flex flex-col gap-4 border-b border-slate-100 pb-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <label className={LABEL_CLASS}>Full Name *</label>
-                <input
-                  type="text"
-                  value={fullName}
-                  ref={fullNameRef}
-                  onChange={(event) => {
-                    setFullName(event.target.value);
-                    if (fieldErrors.fullName) {
-                      setFieldErrors((prev) => ({ ...prev, fullName: "" }));
-                    }
-                  }}
-                  disabled={isSubmitting}
-                  className={INPUT_CLASS}
-                />
-                {fieldErrors.fullName ? (
-                  <p className="mt-1 text-sm text-red-600">{fieldErrors.fullName}</p>
-                ) : null}
+                <h1 className="text-lg font-semibold text-slate-900">Checkout</h1>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Complete your delivery details and confirm order.
+                </p>
               </div>
-              <div>
-                <label className={LABEL_CLASS}>Phone *</label>
-                <input
-                  type="tel"
-                  value={phone}
-                  ref={phoneRef}
-                  onChange={(event) => {
-                    const nextValue = event.target.value;
-                    setPhone(nextValue);
-                    if (fieldErrors.phone) {
-                      const nextTrimmed = nextValue.trim();
-                      const nextDigits = nextTrimmed.replace(/[^\d]/g, "");
-                      const nextCharsValid = nextTrimmed
-                        ? /^[\d+\s-]+$/.test(nextTrimmed)
-                        : true;
-                      if (nextTrimmed && nextCharsValid && nextDigits.length >= 8) {
-                        setFieldErrors((prev) => ({ ...prev, phone: "" }));
-                      }
-                    }
-                  }}
-                  disabled={isSubmitting}
-                  className={INPUT_CLASS}
-                />
-                {fieldErrors.phone ? (
-                  <p className="mt-1 text-sm text-red-600">{fieldErrors.phone}</p>
-                ) : null}
-              </div>
-              <div>
-                <label className={LABEL_CLASS}>Address *</label>
-                <textarea
-                  rows={4}
-                  value={address}
-                  ref={addressRef}
-                  onChange={(event) => {
-                    setAddress(event.target.value);
-                    if (fieldErrors.address) {
-                      setFieldErrors((prev) => ({ ...prev, address: "" }));
-                    }
-                  }}
-                  disabled={isSubmitting}
-                  className={`${INPUT_CLASS} min-h-[120px] resize-none`}
-                />
-                {fieldErrors.address ? (
-                  <p className="mt-1 text-sm text-red-600">{fieldErrors.address}</p>
-                ) : null}
+              <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:w-auto sm:flex-nowrap sm:justify-end sm:gap-3">
+                <span className="text-sm font-medium text-slate-700">
+                  Use Default Shipping Address
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={useDefaultShipping}
+                  aria-label="Use Default Shipping Address"
+                  onClick={() => setUseDefaultShipping((prev) => !prev)}
+                  className={`relative inline-flex h-6 w-12 items-center rounded-full transition ${
+                    useDefaultShipping ? "bg-emerald-500" : "bg-rose-500"
+                  }`}
+                >
+                  <span
+                    className={`absolute h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                      useDefaultShipping ? "translate-x-1" : "translate-x-6"
+                    }`}
+                  />
+                </button>
+                <span
+                  className={`text-xs font-semibold ${
+                    useDefaultShipping ? "text-emerald-600" : "text-rose-600"
+                  }`}
+                >
+                  {useDefaultShipping ? "Yes" : "No"}
+                </span>
               </div>
             </div>
 
-            <div className="mt-6">
-              <p className={LABEL_CLASS}>Payment Method</p>
-              <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-slate-700">
-                <input
-                  type="radio"
-                  name="paymentMethod"
-                  value={paymentMethod}
-                  checked
-                  readOnly
-                  className="mt-1 h-4 w-4 text-emerald-600"
+            {useDefaultShipping ? (
+              <p className="mt-3 text-xs text-slate-500">
+                Use Default Shipping Address is enabled. Fill fields below if your profile
+                address is not available.
+              </p>
+            ) : null}
+
+            <div className="mt-8 space-y-8">
+              <section className="space-y-4">
+                <SectionTitle
+                  number="01."
+                  title="Personal Details"
+                  hint="Enter your contact details."
                 />
-                <span>
-                  <span className="block font-semibold text-slate-900">Cash on Delivery</span>
-                  <span className="mt-1 block text-sm text-slate-500">
-                    Pay when your order arrives.
-                  </span>
-                </span>
-              </label>
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">
+                      First Name *
+                    </label>
+                    <input
+                      ref={firstNameRef}
+                      type="text"
+                      value={firstName}
+                      onChange={(event) => {
+                        setFirstName(event.target.value);
+                        if (fieldErrors.firstName) {
+                          setFieldErrors((prev) => ({ ...prev, firstName: "" }));
+                        }
+                      }}
+                      disabled={isSubmitting}
+                      className={fieldClass(Boolean(fieldErrors.firstName))}
+                    />
+                    {fieldErrors.firstName ? (
+                      <p className="mt-1 text-xs text-rose-600">{fieldErrors.firstName}</p>
+                    ) : null}
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">
+                      Last Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={lastName}
+                      onChange={(event) => {
+                        setLastName(event.target.value);
+                        if (fieldErrors.lastName) {
+                          setFieldErrors((prev) => ({ ...prev, lastName: "" }));
+                        }
+                      }}
+                      disabled={isSubmitting}
+                      className={fieldClass(Boolean(fieldErrors.lastName))}
+                    />
+                    {fieldErrors.lastName ? (
+                      <p className="mt-1 text-xs text-rose-600">{fieldErrors.lastName}</p>
+                    ) : null}
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">
+                      Email Address
+                    </label>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      disabled={isSubmitting}
+                      className={INPUT_CLASS}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">
+                      Phone Number *
+                    </label>
+                    <input
+                      ref={phoneRef}
+                      type="tel"
+                      value={phone}
+                      onChange={(event) => {
+                        setPhone(event.target.value);
+                        if (fieldErrors.phone) {
+                          setFieldErrors((prev) => ({ ...prev, phone: "" }));
+                        }
+                      }}
+                      disabled={isSubmitting}
+                      className={fieldClass(Boolean(fieldErrors.phone))}
+                    />
+                    {fieldErrors.phone ? (
+                      <p className="mt-1 text-xs text-rose-600">{fieldErrors.phone}</p>
+                    ) : null}
+                  </div>
+                </div>
+              </section>
+
+              <section className="space-y-4">
+                <SectionTitle
+                  number="02."
+                  title="Shipping Details"
+                  hint="Choose destination and shipping option."
+                />
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">
+                      Street Address *
+                    </label>
+                    <input
+                      ref={streetRef}
+                      type="text"
+                      value={streetAddress}
+                      onChange={(event) => {
+                        setStreetAddress(event.target.value);
+                        if (fieldErrors.streetAddress) {
+                          setFieldErrors((prev) => ({ ...prev, streetAddress: "" }));
+                        }
+                      }}
+                      disabled={isSubmitting}
+                      className={fieldClass(Boolean(fieldErrors.streetAddress))}
+                    />
+                    {fieldErrors.streetAddress ? (
+                      <p className="mt-1 text-xs text-rose-600">{fieldErrors.streetAddress}</p>
+                    ) : null}
+                  </div>
+                  <div className="grid gap-4 lg:grid-cols-3">
+                    <div>
+                      <label className="text-sm font-medium text-slate-700">
+                        City *
+                      </label>
+                      <input
+                        type="text"
+                        value={city}
+                        onChange={(event) => {
+                          setCity(event.target.value);
+                          if (fieldErrors.city) {
+                            setFieldErrors((prev) => ({ ...prev, city: "" }));
+                          }
+                        }}
+                        disabled={isSubmitting}
+                        className={fieldClass(Boolean(fieldErrors.city))}
+                      />
+                      {fieldErrors.city ? (
+                        <p className="mt-1 text-xs text-rose-600">{fieldErrors.city}</p>
+                      ) : null}
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700">
+                        Country *
+                      </label>
+                      <input
+                        type="text"
+                        value={country}
+                        onChange={(event) => {
+                          setCountry(event.target.value);
+                          if (fieldErrors.country) {
+                            setFieldErrors((prev) => ({ ...prev, country: "" }));
+                          }
+                        }}
+                        disabled={isSubmitting}
+                        className={fieldClass(Boolean(fieldErrors.country))}
+                      />
+                      {fieldErrors.country ? (
+                        <p className="mt-1 text-xs text-rose-600">{fieldErrors.country}</p>
+                      ) : null}
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700">
+                        Zip Code *
+                      </label>
+                      <input
+                        type="text"
+                        value={zipCode}
+                        onChange={(event) => {
+                          setZipCode(event.target.value);
+                          if (fieldErrors.zipCode) {
+                            setFieldErrors((prev) => ({ ...prev, zipCode: "" }));
+                          }
+                        }}
+                        disabled={isSubmitting}
+                        className={fieldClass(Boolean(fieldErrors.zipCode))}
+                      />
+                      {fieldErrors.zipCode ? (
+                        <p className="mt-1 text-xs text-rose-600">{fieldErrors.zipCode}</p>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-1">
+                  <p className="text-xs font-semibold uppercase text-slate-600">
+                    Shipping Cost
+                  </p>
+                  <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                    {SHIPPING_OPTIONS.map((option) => {
+                      const selected = shippingOptionId === option.id;
+                      return (
+                        <label
+                          key={option.id}
+                          className={`cursor-pointer rounded-2xl border p-4 transition ${
+                            selected
+                              ? "border-emerald-400 bg-emerald-50"
+                              : "border-slate-200 bg-white hover:border-slate-300"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="shippingOption"
+                            className="sr-only"
+                            checked={selected}
+                            onChange={() => setShippingOptionId(option.id)}
+                          />
+                          <div className="text-sm font-semibold text-slate-900">
+                            {option.title}
+                          </div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            {option.eta} Cost: {formatCurrency(option.cost)}
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </section>
+
+              <section className="space-y-4">
+                <SectionTitle
+                  number="03."
+                  title="Payment Method"
+                  hint="Select a preferred payment option."
+                />
+                <div className="grid gap-3 lg:grid-cols-3">
+                  {PAYMENT_OPTIONS.map((option) => {
+                    const selected = paymentOptionId === option.id;
+                    const Icon = option.Icon;
+                    return (
+                      <label
+                        key={option.id}
+                        className={`cursor-pointer rounded-2xl border p-4 transition ${
+                          selected
+                            ? "border-emerald-400 bg-emerald-50"
+                            : "border-slate-200 bg-white hover:border-slate-300"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="paymentOption"
+                          className="sr-only"
+                          checked={selected}
+                          onChange={() => setPaymentOptionId(option.id)}
+                        />
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white text-slate-700">
+                            <Icon className="h-4 w-4" />
+                          </span>
+                          <div>
+                            <div className="text-sm font-semibold text-slate-900">
+                              {option.title}
+                            </div>
+                            <div className="text-xs text-slate-500">{option.hint}</div>
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+                {paymentOptionId !== "cash" ? (
+                  <p className="text-xs text-amber-600">
+                    For now, checkout is processed as COD in this environment.
+                  </p>
+                ) : null}
+              </section>
             </div>
 
             {error ? (
-              <div className="mt-6 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
+              <div className="mt-6 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                 {error}
               </div>
             ) : null}
 
-            <div className="mt-6 flex flex-col gap-3">
-              <button
-                type="submit"
-                disabled={isSubmitting || isFormInvalid}
-                className="w-full rounded-lg bg-emerald-600 px-6 py-3 text-center text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isSubmitting ? "Placing order..." : "Place Order"}
-              </button>
+            <div className="mt-8 flex flex-col gap-3 lg:flex-row lg:justify-between">
               <Link
                 to="/cart"
-                className="w-full rounded-lg border border-slate-200 px-6 py-3 text-center text-sm font-semibold text-slate-700 hover:border-slate-300"
+                className="inline-flex h-11 w-full items-center justify-center rounded-full border border-slate-200 px-6 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 lg:w-auto"
               >
-                Back to cart
+                Continue Shipping
               </Link>
+              <button
+                type="submit"
+                disabled={isSubmitting || isRemoteSyncing}
+                className="inline-flex h-11 w-full items-center justify-center rounded-full bg-emerald-600 px-7 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
+              >
+                {isSubmitting ? "Confirming..." : "Confirm Order"}
+              </button>
             </div>
           </div>
         </div>
 
-        <div className="lg:col-span-5">
-          <div className="rounded-xl border border-slate-200 bg-white p-6 lg:sticky lg:top-24">
+        <aside className="space-y-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 lg:sticky lg:top-24">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-slate-900">Your Order</h2>
-              <span className="text-sm text-slate-500">{totalQty} items</span>
+              <h3 className="text-lg font-semibold text-slate-900">Order Summary</h3>
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                {totalQty} Items
+              </span>
             </div>
-            <div className="mt-4 space-y-3 text-sm text-slate-600">
-              {summaryItems.map((item) => (
-                <div key={item.productId} className="flex items-start justify-between gap-3">
-                  <div className="flex-1">
-                    <p className="text-slate-700">{item.name}</p>
-                    <p className="text-xs text-slate-500">Qty {item.qty}</p>
+
+            <div className="mt-4 space-y-4">
+              {summaryItems.map((item) => {
+                const stockValue = Number(item.stock);
+                const stock =
+                  Number.isFinite(stockValue) && stockValue >= 0 ? stockValue : null;
+                const canIncrement = stock === null || item.qty < stock;
+                return (
+                  <div
+                    key={item.productId}
+                    className="rounded-xl border border-slate-100 bg-slate-50/60 p-3"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-white">
+                        {item.imageUrl ? (
+                          <img
+                            src={item.imageUrl}
+                            alt={item.name}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-[10px] text-slate-400">
+                            IMG
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="break-words text-sm font-semibold leading-5 text-slate-900">
+                          {item.name}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Item Price {formatCurrency(item.price)}
+                        </p>
+                        <p className="mt-1 text-sm font-bold text-slate-900">
+                          {formatCurrency(item.price * item.qty)}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeItem(item.productId)}
+                        disabled={isSubmitting || isRemoteSyncing}
+                        className="rounded-lg p-1.5 text-rose-500 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
+                        aria-label={`Remove ${item.name}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="mt-3 flex items-center justify-end">
+                      <div className="inline-flex items-center rounded-full border border-slate-200 bg-white px-0.5 shadow-sm">
+                        <button
+                          type="button"
+                          disabled={item.qty <= 1 || isSubmitting || isRemoteSyncing}
+                          onClick={() => handleQtyDecrement(item)}
+                          className="h-6 w-6 rounded-full border border-transparent text-xs font-semibold text-slate-700 hover:border-slate-200 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          -
+                        </button>
+                        <span className="min-w-7 text-center text-xs font-semibold text-slate-900">
+                          {item.qty}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={!canIncrement || isSubmitting || isRemoteSyncing}
+                          onClick={() => handleQtyIncrement(item)}
+                          className="h-6 w-6 rounded-full border border-transparent text-xs font-semibold text-slate-700 hover:border-slate-200 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <span className="text-slate-900">
-                    {formatCurrency(item.price * item.qty)}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
-            <div className="mt-5 space-y-2 border-t border-slate-200 pt-4 text-sm">
+
+            <div className="mt-6 border-t border-slate-200 pt-5">
+              <p className="text-xs font-semibold uppercase text-slate-600">Coupon Code</p>
+              <div className="mt-2 flex items-center gap-2.5">
+                <input
+                  type="text"
+                  value={couponCode}
+                  onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
+                  disabled={isSubmitting}
+                  placeholder="Coupon Code"
+                  className="h-11 min-w-0 flex-1 rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-400 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleApplyCoupon}
+                  disabled={isSubmitting}
+                  className="h-11 w-24 shrink-0 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-28"
+                >
+                  Apply
+                </button>
+              </div>
+              {couponMessage ? (
+                <p className="mt-2 text-xs text-slate-500">{couponMessage}</p>
+              ) : null}
+            </div>
+
+            <div className="mt-6 space-y-2 border-t border-slate-200 pt-5 text-sm">
               <div className="flex items-center justify-between text-slate-600">
                 <span>Subtotal</span>
-                <span className="font-medium text-slate-900">
+                <span className="font-medium tabular-nums text-slate-900">
                   {formatCurrency(subtotalValue)}
                 </span>
               </div>
               <div className="flex items-center justify-between text-slate-600">
-                <span>Shipping</span>
-                <span>{formatCurrency(shippingCost)}</span>
+                <span>Shipping Cost</span>
+                <span className="font-medium tabular-nums text-slate-900">
+                  {formatCurrency(shippingCost)}
+                </span>
               </div>
               <div className="flex items-center justify-between text-slate-600">
                 <span>Discount</span>
-                <span>{formatCurrency(discountAmount)}</span>
+                <span className="font-semibold tabular-nums text-orange-500">
+                  {formatCurrency(discountValue)}
+                </span>
               </div>
-              <div className="flex items-center justify-between pt-2 text-base font-semibold text-slate-900">
-                <span>Total</span>
-                <span>{formatCurrency(total)}</span>
+              <div className="border-t border-dashed border-slate-200 pt-3" />
+              <div className="flex items-center justify-between">
+                <span className="text-base font-semibold text-slate-900">TOTAL COST</span>
+                <span className="text-2xl font-extrabold tabular-nums text-slate-900">
+                  {formatCurrency(total)}
+                </span>
               </div>
             </div>
           </div>
-        </div>
+        </aside>
       </form>
     </section>
   );

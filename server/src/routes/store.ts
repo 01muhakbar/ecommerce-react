@@ -149,14 +149,48 @@ router.get(
         order: [["createdAt", "DESC"]],
       });
 
+      const normalized = categories
+        .map((category: any, index: number) => {
+          const id = getAttr(category, "id");
+          const code = String(
+            getAttr(category, "code") ?? getAttr(category, "slug") ?? ""
+          ).trim();
+          const name = String(
+            getAttr(category, "name") ??
+              getAttr(category, "title") ??
+              getAttr(category, "label") ??
+              code
+          ).trim();
+          const parentId =
+            getAttr(category, "parentId") ?? getAttr(category, "parent_id") ?? null;
+          const publishedRaw =
+            getAttr(category, "published") ?? getAttr(category, "isPublished") ?? true;
+          const imageRaw =
+            getAttr(category, "icon") ??
+            getAttr(category, "image") ??
+            getAttr(category, "imageUrl") ??
+            null;
+
+          if (!name) return null;
+
+          const safeCode = code || String(id ?? "").trim();
+          const slug = safeCode || name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
+          return {
+            id: id ?? index + 1,
+            name,
+            slug,
+            code: safeCode || slug,
+            image: imageRaw ? String(imageRaw).trim() : null,
+            parentId,
+            parent_id: parentId,
+            published: Boolean(publishedRaw),
+          };
+        })
+        .filter(Boolean);
+
       res.json({
-        data: categories.map((category) => ({
-          id: category.id,
-          name: category.name,
-          slug: category.code,
-          code: category.code,
-          image: category.icon ?? null,
-        })),
+        data: normalized,
       });
     } catch (error) {
       next(error);

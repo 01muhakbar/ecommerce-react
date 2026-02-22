@@ -1,26 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useCartStore } from "../../store/cart.store.ts";
-import { useCategories } from "../../storefront.jsx";
+import { useStoreCategories } from "../../hooks/useStoreCategories.ts";
 import TopInfoBar from "./TopInfoBar.jsx";
 import GreenHeaderBar from "./GreenHeaderBar.jsx";
 import NavBar from "./NavBar.jsx";
-
-const fallbackCategories = [
-  { id: 1, name: "Fresh Fruits", slug: "fresh-fruits" },
-  { id: 2, name: "Fresh Vegetables", slug: "fresh-vegetables" },
-  { id: 3, name: "Fish & Meat", slug: "fish-meat" },
-  { id: 4, name: "Milk & Dairy", slug: "milk-dairy" },
-  { id: 5, name: "Beverages", slug: "beverages" },
-  { id: 6, name: "Bread & Bakery", slug: "bread-bakery" },
-];
 
 export default function StoreHeaderKacha() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const totalQty = useCartStore((state) => state.totalQty);
-  const { data } = useCategories();
-  const categories = data?.data?.items ?? [];
+  const { data: categories, isLoading: categoriesLoading } = useStoreCategories();
 
   const [search, setSearch] = useState("");
   const [showCategories, setShowCategories] = useState(false);
@@ -43,28 +33,6 @@ export default function StoreHeaderKacha() {
     return () => document.removeEventListener("click", handleClick);
   }, []);
 
-  const categoryList = useMemo(() => {
-    if (categories.length > 0) {
-      return categories.map((category, index) => {
-        const slug =
-          category.slug ??
-          category.code ??
-          String(category._id ?? category.id ?? index);
-        const name =
-          category.name ??
-          category.title ??
-          category.label ??
-          category.categoryName ??
-          category.code ??
-          category.slug ??
-          "Category";
-        const id = category.id ?? category._id ?? category.code ?? slug ?? index;
-        return { ...category, id, name, slug, code: category.code ?? category.slug ?? "" };
-      });
-    }
-    return fallbackCategories;
-  }, [categories]);
-
   const handleSearchSubmit = (event) => {
     event.preventDefault();
     const q = search.trim();
@@ -77,20 +45,25 @@ export default function StoreHeaderKacha() {
 
   return (
     <div>
-      <TopInfoBar />
+      <div className="hidden sm:block">
+        <TopInfoBar />
+      </div>
       <GreenHeaderBar
         search={search}
         setSearch={setSearch}
         onSubmit={handleSearchSubmit}
         totalQty={totalQty}
       />
-      <NavBar
-        showCategories={showCategories}
-        setShowCategories={setShowCategories}
-        showPages={showPages}
-        setShowPages={setShowPages}
-        dummyCategories={categoryList}
-      />
+      <div className="hidden sm:block">
+        <NavBar
+          showCategories={showCategories}
+          setShowCategories={setShowCategories}
+          showPages={showPages}
+          setShowPages={setShowPages}
+          categories={categories}
+          categoriesLoading={categoriesLoading}
+        />
+      </div>
     </div>
   );
 }

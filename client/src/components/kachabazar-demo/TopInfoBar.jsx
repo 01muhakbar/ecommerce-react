@@ -9,10 +9,10 @@ export default function TopInfoBar() {
           <span className="font-semibold text-emerald-600">+62 812 3456 7890</span>
         </div>
         <div className="flex flex-wrap items-center gap-4">
-          <Link to="/about" className="hover:text-slate-900">
+          <Link to="/about-us" className="hover:text-slate-900">
             About Us
           </Link>
-          <Link to="/contact" className="hover:text-slate-900">
+          <Link to="/contact-us" className="hover:text-slate-900">
             Contact Us
           </Link>
           <Link to="/account" className="hover:text-slate-900">

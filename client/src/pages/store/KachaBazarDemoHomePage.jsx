@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useCartStore } from "../../store/cart.store.ts";
 import { useCategories, useProducts, ProductCard } from "../../storefront.jsx";
 import { fetchStoreCoupons } from "../../api/store.service.ts";
 import { formatCurrency } from "../../utils/format.js";
-import HeroSlider from "../../components/kachabazar-demo/HeroSlider.jsx";
 import CouponPanel from "../../components/kachabazar-demo/CouponPanel.jsx";
 import FloatingCartWidget from "../../components/kachabazar-demo/FloatingCartWidget.jsx";
 import FeaturedCategoriesMega from "../../components/kachabazar-demo/FeaturedCategoriesMega.jsx";
 import PopularProductsGrid from "../../components/kachabazar-demo/PopularProductsGrid.jsx";
+import HomeHeroBanners from "../../components/store/HomeHeroBanners.jsx";
 
 const slides = [
   {
@@ -105,7 +105,6 @@ const dummyCoupons = [
 ];
 
 export default function KachaBazarDemoHomePage() {
-  const navigate = useNavigate();
   const totalQty = useCartStore((state) => state.totalQty);
   const subtotal = useCartStore((state) => state.subtotal);
   const { data: categoriesData } = useCategories();
@@ -156,8 +155,6 @@ export default function KachaBazarDemoHomePage() {
       mounted = false;
     };
   }, []);
-
-  const heroSlide = slides[activeSlide] || slides[0];
 
   const featuredCategories =
     categories.length > 0
@@ -248,37 +245,49 @@ export default function KachaBazarDemoHomePage() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <main className="mx-auto max-w-7xl space-y-16 px-4 py-10">
-        <section className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-          <HeroSlider
-            heroSlide={heroSlide}
-            slides={slides}
-            activeSlide={activeSlide}
-            setActiveSlide={setActiveSlide}
-            onCta={() => navigate("/search")}
-          />
-          <CouponPanel
-            couponList={couponList}
-            couponError={couponError}
-            copiedCode={copiedCode}
-            onCopy={handleCopyCoupon}
-          />
+        <section className="space-y-4">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start">
+            <div className="lg:col-span-8">
+              <HomeHeroBanners
+                slides={slides}
+                activeSlide={activeSlide}
+                setActiveSlide={setActiveSlide}
+                promoClassName="lg:hidden"
+              />
+            </div>
+            <div className="hidden lg:col-span-4 lg:block">
+              <CouponPanel
+                couponList={couponList}
+                couponError={couponError}
+                copiedCode={copiedCode}
+                onCopy={handleCopyCoupon}
+              />
+            </div>
+          </div>
+          <article className="relative hidden overflow-hidden rounded-2xl border border-[#f1d2b3] bg-[#FDEEDC] p-6 shadow-sm lg:block">
+            <div className="max-w-[70%]">
+              <h2 className="text-2xl font-semibold leading-8 text-slate-900">
+                100% Natural Quality Organic Product
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                See our latest collection of organic products and healthy groceries for your
+                family.
+              </p>
+            </div>
+            <Link
+              to="/search?query=organic"
+              className="absolute right-8 top-1/2 inline-flex h-20 w-20 -translate-y-1/2 items-center justify-center rounded-full bg-emerald-600 text-sm font-semibold text-white shadow-md transition hover:bg-emerald-700"
+            >
+              <span className="text-center leading-[1.1rem]">
+                Buy
+                <br />
+                Now
+              </span>
+            </Link>
+          </article>
         </section>
 
         <FloatingCartWidget totalQty={totalQty} subtotalDisplay={subtotalDisplay} />
-
-        <section className="rounded-3xl bg-emerald-600 px-6 py-6 text-white">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="text-sm">
-              100% Natural Quality Organic Product. We are the best in the world.
-            </div>
-            <Link
-              to="/search"
-              className="rounded-full bg-white px-5 py-2 text-xs font-semibold text-emerald-700"
-            >
-              Buy Now
-            </Link>
-          </div>
-        </section>
 
         <FeaturedCategoriesMega featuredCategories={featuredCategories} />
         {isLoading ? (

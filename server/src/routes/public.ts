@@ -56,6 +56,9 @@ router.get("/categories", async (_req: Request, res: Response) => {
           name: category.name,
           slug: category.code,
           image: category.icon ?? null,
+          parentId: category.parentId ?? null,
+          parent_id: category.parentId ?? null,
+          published: Boolean(category.published),
         })),
       },
     });

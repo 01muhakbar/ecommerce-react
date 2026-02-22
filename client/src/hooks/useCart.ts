@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import * as cartApi from "../api/cartApi.ts";
 import { useCartStore } from "../store/cart.store.ts";
-import { getGuestCart, removeGuestItem, updateGuestItem } from "../utils/guestCart.ts";
+import {
+  addGuestItemSnapshot,
+  getGuestCart,
+  removeGuestItem,
+  updateGuestItem,
+} from "../utils/guestCart.ts";
 
 const isUnauthorized = (error: any) => error?.response?.status === 401;
 const REMOTE_HINT_KEY = "cart_remote_ok";
@@ -46,6 +51,7 @@ type NormalizedCartProduct = {
   price: number;
   image: string | null;
   quantity: number;
+  stock?: number;
 };
 
 export const normalizeCartProducts = (cart: any): NormalizedCartProduct[] => {
@@ -70,12 +76,15 @@ export const normalizeCartProducts = (cart: any): NormalizedCartProduct[] => {
         (Array.isArray(product?.imagePaths) ? product.imagePaths[0] : null) ??
         null;
       const rawName = String(product?.name || product?.title || "").trim();
+      const stockValue = Number(product?.stock ?? product?.availableStock);
+      const stock = Number.isFinite(stockValue) && stockValue >= 0 ? stockValue : undefined;
       return {
         productId,
         name: rawName || `Product #${productId}`,
         price: Number(product?.price ?? product?.salePrice ?? 0),
         image,
         quantity,
+        stock,
       } as NormalizedCartProduct;
     })
     .filter((item): item is NormalizedCartProduct => Boolean(item));
@@ -217,13 +226,8 @@ export function useCart() {
       setIsLoading(true);
       setError(null);
       if (mode !== "remote") {
-        stashPendingAdd({
-          productId: id,
-          qty: safeQty,
-          snapshot,
-          from: fromPath,
-        });
-        navigate("/auth/login", { state: { from: fromPath } });
+        addGuestItemSnapshot(id, safeQty, snapshot);
+        refreshGuest();
         setIsLoading(false);
         return;
       }

@@ -14,6 +14,7 @@
     "seed:all": "pnpm seed:super && pnpm seed:dev",
     "seed:kacha": "tsx src/scripts/seedKachaDemo.ts",
     "seed:demo": "pnpm seed:super && pnpm seed:kacha",
+    "seed:categories-demo": "tsx src/scripts/seedCategoriesDemo.ts",
     "seed:analytics": "tsx src/scripts/seedAnalyticsDemo.ts",
     "seed:customers": "tsx src/scripts/seedCustomers.ts",
     "db:sync": "tsx -e \"import('./src/models/index.ts').then(m=>m.syncDb())\"",

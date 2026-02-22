@@ -1,41 +1,40 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
-  CategoryDropdown,
   Pagination,
-  ProductCard,
   useCategories,
   useProducts,
 } from "../../storefront.jsx";
 import QueryState from "../../components/UI/QueryState.jsx";
+import SearchProductCard from "../../components/store/SearchProductCard.jsx";
 
 export default function StoreSearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
   const [sort, setSort] = useState("default");
-  const searchInputRef = useRef(null);
   const page = Math.max(1, Number(searchParams.get("page") || 1));
   const limit = Math.max(1, Number(searchParams.get("limit") || 12));
 
   useEffect(() => {
-    setQuery(searchParams.get("q") ?? searchParams.get("search") ?? "");
+    setQuery(
+      searchParams.get("q") ?? searchParams.get("query") ?? searchParams.get("search") ?? ""
+    );
     setCategory(searchParams.get("category") ?? "");
     setSort(searchParams.get("sort") ?? "default");
   }, [searchParams]);
 
   const {
-    data: categoriesData,
     isLoading: categoriesLoading,
+    isFetching: categoriesFetching,
     isError: categoriesError,
     error: categoriesErrorObj,
     refetch: refetchCategories,
   } = useCategories();
-  const categories = categoriesData?.data?.items ?? [];
-
   const {
     data: productsData,
     isLoading: productsLoading,
+    isFetching: productsFetching,
     isError: productsError,
     error: productsErrorObj,
     refetch: refetchProducts,
@@ -49,9 +48,6 @@ export default function StoreSearchPage() {
     productsData ??
     [];
   const normalizedProducts = Array.isArray(rawCandidate) ? rawCandidate : [];
-  if (import.meta.env.DEV) {
-    console.log("[search] products len", normalizedProducts.length, productsData);
-  }
   const meta = productsData?.meta ?? productsData?.data?.meta;
 
   const updateParams = (next) => {
@@ -59,9 +55,11 @@ export default function StoreSearchPage() {
     if (next.search !== undefined) {
       if (next.search) {
         params.set("q", next.search);
+        params.set("query", next.search);
         params.delete("search");
       } else {
         params.delete("q");
+        params.delete("query");
         params.delete("search");
       }
     }
@@ -88,19 +86,9 @@ export default function StoreSearchPage() {
     setSearchParams(params, { replace: true });
   };
 
-  const handleQueryChange = (event) => {
-    const value = event.target.value;
-    setQuery(value);
-    updateParams({ search: value.trim(), page: 1 });
-  };
-
-  const handleCategoryChange = (value) => {
-    setCategory(value);
-    updateParams({ category: value || "", page: 1 });
-  };
-
   const handleSortChange = (event) => {
-    const value = event.target.value;
+    const selectedValue = event.target.value;
+    const value = selectedValue === "__placeholder" ? "default" : selectedValue;
     setSort(value);
     updateParams({ sort: value, page: 1 });
   };
@@ -110,12 +98,9 @@ export default function StoreSearchPage() {
     setCategory("");
     setSort("default");
     updateParams({ search: "", category: "", sort: "default", page: 1 });
-    if (searchInputRef.current) {
-      searchInputRef.current.focus();
-    }
   };
 
-  const isLoading = productsLoading || categoriesLoading;
+  const isLoading = productsLoading || categoriesLoading || productsFetching || categoriesFetching;
   const isError = productsError || categoriesError;
   const error = productsErrorObj || categoriesErrorObj;
   const sortedProducts = useMemo(() => {
@@ -140,127 +125,86 @@ export default function StoreSearchPage() {
     return items;
   }, [normalizedProducts, sort]);
   const isEmpty = !isLoading && !isError && sortedProducts.length === 0;
-  const shouldShowError = isError && !isLoading;
 
-  const resultLabel = useMemo(
-    () => (isLoading ? "Results (loading...)" : `Results: ${sortedProducts.length}`),
-    [isLoading, sortedProducts.length]
+  const totalCount = Number(
+    meta?.total ?? meta?.totalCount ?? meta?.count ?? productsData?.data?.total ?? sortedProducts.length
   );
+  const safeTotalCount = Number.isFinite(totalCount) ? totalCount : sortedProducts.length;
 
   return (
-    <div className="space-y-6">
-      <div className="sticky top-0 z-10 space-y-3 border-b border-slate-200 bg-slate-50/80 pb-4 backdrop-blur">
-        <h1 className="text-2xl font-semibold">Search products</h1>
-        <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 md:flex-row md:items-center">
-          <input
-            type="search"
-            value={query}
-            onChange={handleQueryChange}
-            ref={searchInputRef}
-            placeholder="Search by name"
-            className="w-full rounded-full border border-slate-200 px-4 py-2 text-sm focus:border-slate-400 focus:outline-none"
-          />
-          <div className="w-full min-w-[160px] shrink-0 md:w-64">
-            <CategoryDropdown
-              categories={categories}
-              value={category}
-              onChange={handleCategoryChange}
-              isLoading={isLoading}
-              inline
-            />
+    <div className="space-y-4 px-3 pb-28 sm:px-4 sm:pb-10 lg:px-6">
+      <div className="rounded-sm border border-[#F3D4B6] bg-[#FDEEDC] px-3 py-1.5">
+        <div className="flex items-center justify-between gap-2 whitespace-nowrap">
+          <p className="truncate whitespace-nowrap text-xs font-medium text-slate-700 sm:text-sm">
+            Total <span className="font-semibold text-slate-900">{safeTotalCount}</span> Items Found
+          </p>
+          <div className="shrink-0">
+            <select
+              id="search-sort"
+              value={sort === "default" ? "__placeholder" : sort}
+              onChange={handleSortChange}
+              className="h-8 w-36 rounded-sm border border-[#E9CDAA] bg-white px-2 text-xs font-medium text-slate-700 focus:border-slate-400 focus:outline-none"
+            >
+              <option value="__placeholder">Sort By Price</option>
+              <option value="default">Default</option>
+              <option value="price_asc">Low to High</option>
+              <option value="price_desc">High to Low</option>
+            </select>
           </div>
-          <select
-            value={sort}
-            onChange={handleSortChange}
-            className="w-full rounded-full border border-slate-200 px-4 py-2 text-sm focus:border-slate-400 focus:outline-none md:w-48"
-          >
-            <option value="default">Sort: Default</option>
-            <option value="price_asc">Price: Low to High</option>
-            <option value="price_desc">Price: High to Low</option>
-            <option value="name_asc">Name: A-Z</option>
-          </select>
-          <button
-            type="button"
-            onClick={clearFilters}
-            className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:border-slate-300"
-          >
-            Clear
-          </button>
-          <div className="text-xs text-slate-500 md:ml-auto">{resultLabel}</div>
         </div>
       </div>
 
       <QueryState
-        isLoading={false}
-        isError={shouldShowError}
+        isLoading={isLoading}
+        isError={isError}
         error={error}
-        isEmpty={false}
+        isEmpty={isEmpty}
+        emptyTitle="No products found"
+        emptyHint="Try adjusting your search or filters."
+        emptyActionLabel="Clear search"
+        onEmptyAction={clearFilters}
         onRetry={() => {
           refetchProducts();
           refetchCategories();
         }}
       >
         <div className="space-y-6">
-          {isLoading ? (
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
-              Loading products...
-            </div>
-          ) : isEmpty ? (
-            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
-              <div className="text-sm font-semibold text-slate-900">
-                No products found
-              </div>
-              <div className="mt-2 text-xs text-slate-500">
-                Try adjusting your search or filters.
-              </div>
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="mt-4 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:border-slate-300"
-              >
-                Reset filters
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {sortedProducts.map((product, index) => {
-                  const title = product?.title ?? product?.name ?? "";
-                  const category =
-                    product?.category ??
-                    (product?.categoryName
-                      ? { name: product.categoryName }
-                      : { name: "Uncategorized" });
-                  const imageUrl =
-                    product?.promoImagePath ?? product?.imageUrl ?? product?.image ?? null;
-                  return (
-                    <ProductCard
-                      key={
-                        product?.id ??
-                        product?.slug ??
-                        `${product?.name || product?.title || "product"}-${index}`
-                      }
-                      product={{
-                        ...product,
-                        id: product?.id,
-                        name: product?.name ?? title,
-                        title,
-                        price: Number(product?.price ?? product?.salePrice ?? 0),
-                        category,
-                        imageUrl,
-                      }}
-                    />
-                  );
-                })}
-              </div>
-              <Pagination
-                page={meta?.page ?? page}
-                total={meta?.total ?? sortedProducts.length}
-                limit={meta?.limit ?? limit}
-                onPageChange={(nextPage) => updateParams({ page: nextPage })}
-              />
-            </>
-          )}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-4">
+            {sortedProducts.map((product, index) => {
+              const title = product?.title ?? product?.name ?? "";
+              const category =
+                product?.category ??
+                (product?.categoryName
+                  ? { name: product.categoryName }
+                  : { name: "Uncategorized" });
+              const imageUrl =
+                product?.promoImagePath ?? product?.imageUrl ?? product?.image ?? null;
+              return (
+                <SearchProductCard
+                  key={
+                    product?.id ??
+                    product?.slug ??
+                    `${product?.name || product?.title || "product"}-${index}`
+                  }
+                  product={{
+                    ...product,
+                    id: product?.id,
+                    name: product?.name ?? title,
+                    title,
+                    price: Number(product?.price ?? product?.salePrice ?? 0),
+                    category,
+                    imageUrl,
+                  }}
+                />
+              );
+            })}
+          </div>
+          <Pagination
+            page={meta?.page ?? page}
+            total={meta?.total ?? sortedProducts.length}
+            limit={meta?.limit ?? limit}
+            onPageChange={(nextPage) => updateParams({ page: nextPage })}
+          />
         </div>
       </QueryState>
     </div>

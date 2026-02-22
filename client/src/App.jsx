@@ -12,6 +12,8 @@ import StoreCheckoutSuccessPage from "./pages/store/StoreCheckoutSuccessPage.jsx
 import StoreOrderTrackingPage from "./pages/store/StoreOrderTrackingPage.jsx";
 import StoreSearchPage from "./pages/store/StoreSearchPage.jsx";
 import StoreOffersPage from "./pages/store/StoreOffersPage.jsx";
+import StoreAboutUsPage from "./pages/store/StoreAboutUsPage.jsx";
+import StoreContactUsPage from "./pages/store/StoreContactUsPage.jsx";
 import KachaBazarDemoHomePage from "./pages/store/KachaBazarDemoHomePage.jsx";
 import AdminGuard from "./components/AdminGuard.jsx";
 import AdminLayout from "./components/layouts/AdminLayout.jsx";
@@ -26,6 +28,9 @@ const Settings = lazy(() => import("./pages/Settings.jsx"));
 const AdminOrderDetail = lazy(() => import("./pages/admin/OrderDetail.jsx"));
 const AdminAttributesPage = lazy(() => import("./pages/admin/Attributes.jsx"));
 const AdminCategoriesPage = lazy(() => import("./pages/admin/AdminCategoriesPage.jsx"));
+const AdminSubCategoriesPage = lazy(() =>
+  import("./pages/admin/AdminSubCategoriesPage.jsx")
+);
 const AdminCustomerDetailPage = lazy(() =>
   import("./pages/admin/AdminCustomerDetailPage.jsx")
 );
@@ -54,13 +59,18 @@ export default function App() {
           <Route path="/" element={<StoreLayout />}>
             <Route index element={<KachaBazarDemoHomePage />} />
             <Route path="search" element={<StoreSearchPage />} />
+            <Route path="category" element={<StoreCategoryPage />} />
             <Route path="category/:slug" element={<StoreCategoryPage />} />
             <Route path="product/:slug" element={<StoreProductDetailPage />} />
             <Route path="cart" element={<StoreCartPage />} />
             <Route path="checkout" element={<CheckoutPage />} />
             <Route path="checkout/success" element={<StoreCheckoutSuccessPage />} />
             <Route path="order/:ref" element={<StoreOrderTrackingPage />} />
+            <Route path="about-us" element={<StoreAboutUsPage />} />
+            <Route path="contact-us" element={<StoreContactUsPage />} />
             <Route path="offers" element={<StoreOffersPage />} />
+            <Route path="about" element={<Navigate to="/about-us" replace />} />
+            <Route path="contact" element={<Navigate to="/contact-us" replace />} />
             <Route path="auth/login" element={<StoreLoginPage />} />
             <Route path="auth/register" element={<StoreRegisterPage />} />
             <Route path="my-orders" element={<Navigate to="/account/orders" replace />} />
@@ -149,6 +159,22 @@ export default function App() {
                 element={
                   <RequirePerm perm="CUSTOMERS_VIEW">
                     <AdminCustomerDetailPage />
+                  </RequirePerm>
+                }
+              />
+              <Route
+                path="categories/id/:id"
+                element={
+                  <RequirePerm perm="CATEGORIES_CRUD">
+                    <AdminSubCategoriesPage resolveMode="id" />
+                  </RequirePerm>
+                }
+              />
+              <Route
+                path="categories/:code"
+                element={
+                  <RequirePerm perm="CATEGORIES_CRUD">
+                    <AdminSubCategoriesPage resolveMode="code" />
                   </RequirePerm>
                 }
               />

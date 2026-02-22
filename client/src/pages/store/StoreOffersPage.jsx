@@ -1,130 +1,115 @@
 import { useEffect, useState } from "react";
-import { fetchStoreCoupons } from "../../api/store.service.ts";
-import { formatCurrency } from "../../utils/format.js";
+import PageHeroBanner from "../../components/store/PageHeroBanner.jsx";
+import heroImage from "../../assets/admin-login-hero.jpg";
 
-const formatDiscount = (coupon) => {
-  if (!coupon) return "-";
-  if (coupon.discountType === "percent") {
-    return `${Number(coupon.amount || 0)}% OFF`;
-  }
-  return `${formatCurrency(Number(coupon.amount || 0))} OFF`;
+const DEMO_OFFERS = [
+  {
+    code: "AUGUST24",
+    title: "Summer Grocery Coupon",
+    discountText: "10% Off For All Items",
+    minPurchase: "$200.00",
+    isActive: false,
+  },
+  {
+    code: "SUMMER24",
+    title: "Fresh Weekend Offer",
+    discountText: "15% Off For Selected Items",
+    minPurchase: "$150.00",
+    isActive: false,
+  },
+  {
+    code: "WINTER25",
+    title: "Monthly Essentials",
+    discountText: "20% Off For Groceries",
+    minPurchase: "$250.00",
+    isActive: true,
+    expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 26).toISOString(),
+  },
+  {
+    code: "SUMMER26",
+    title: "Mega Household Promo",
+    discountText: "25% Off Household Tools",
+    minPurchase: "$300.00",
+    isActive: false,
+  },
+];
+
+const pad2 = (value) => String(value).padStart(2, "0");
+
+const renderCountdown = (offer, now) => {
+  if (!offer.isActive || !offer.expiresAt) return "00:00:00:00";
+  const diff = new Date(offer.expiresAt).getTime() - now;
+  if (!Number.isFinite(diff) || diff <= 0) return "00:00:00:00";
+  const sec = Math.floor(diff / 1000);
+  const day = Math.floor(sec / 86400);
+  const hour = Math.floor((sec % 86400) / 3600);
+  const min = Math.floor((sec % 3600) / 60);
+  const second = sec % 60;
+  return `${pad2(day)}:${pad2(hour)}:${pad2(min)}:${pad2(second)}`;
 };
 
 export default function StoreOffersPage() {
-  const [coupons, setCoupons] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [copied, setCopied] = useState("");
+  const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    let active = true;
-    const load = async () => {
-      setIsLoading(true);
-      setError("");
-      try {
-        const response = await fetchStoreCoupons();
-        if (!active) return;
-        setCoupons(response.data || []);
-      } catch (err) {
-        if (!active) return;
-        setError("Failed to load offers.");
-      } finally {
-        if (active) setIsLoading(false);
-      }
-    };
-    load();
-    return () => {
-      active = false;
-    };
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
   }, []);
 
-  const copyCode = async (code) => {
-    if (!code) return;
-    try {
-      if (navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(code);
-      } else {
-        const textarea = document.createElement("textarea");
-        textarea.value = code;
-        textarea.setAttribute("readonly", "");
-        textarea.style.position = "absolute";
-        textarea.style.left = "-9999px";
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand("copy");
-        document.body.removeChild(textarea);
-      }
-      setCopied(code);
-      setTimeout(() => setCopied(""), 1500);
-    } catch (_) {
-      setCopied("");
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <section>
-        <h1>Offers</h1>
-        <p>Loading offers...</p>
-      </section>
-    );
-  }
-
-  if (error) {
-    return (
-      <section>
-        <h1>Offers</h1>
-        <p style={{ color: "crimson" }}>{error}</p>
-      </section>
-    );
-  }
-
   return (
-    <section className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Offers & Coupons</h1>
-        <p className="text-sm text-slate-500">Use these codes at checkout.</p>
-      </div>
+    <div className="mx-auto max-w-7xl space-y-10 px-3 py-6 sm:px-4 sm:py-8 lg:px-6">
+      <PageHeroBanner
+        title="Mega Offer"
+        subtitle="Exclusive coupon deals for your next grocery and household shopping."
+      />
 
-      {coupons.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-8 text-sm text-slate-500">
-          No active offers right now.
-        </div>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2">
-          {coupons.map((coupon) => (
-            <div
-              key={coupon.id}
-              className="rounded-2xl border border-slate-200 bg-white p-5"
-            >
-              <div className="flex items-center justify-between">
-                <div className="text-xs uppercase tracking-widest text-slate-400">Coupon</div>
-                <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">
-                  {formatDiscount(coupon)}
+      <section className="grid gap-4 lg:grid-cols-2">
+        {DEMO_OFFERS.map((offer) => (
+          <article
+            key={offer.code}
+            className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+          >
+            <div className="flex flex-col md:flex-row">
+              <div className="relative min-h-44 flex-1 bg-slate-900 text-white">
+                <img
+                  src={heroImage}
+                  alt={offer.title}
+                  className="absolute inset-0 h-full w-full object-cover opacity-35"
+                />
+                <div className="relative p-4">
+                  <div className="rounded-full bg-white/20 px-3 py-1 text-xs font-semibold uppercase tracking-wide">
+                    {renderCountdown(offer, now)}
+                  </div>
+                  <h3 className="mt-4 text-lg font-semibold leading-snug">{offer.title}</h3>
+                  <p className="mt-2 text-sm text-white/85">{offer.discountText}</p>
+                </div>
+              </div>
+
+              <div className="flex w-full items-center justify-center border-y border-dashed border-slate-300 px-4 py-3 md:w-40 md:border-y-0 md:border-x">
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                    offer.isActive
+                      ? "bg-emerald-100 text-emerald-700"
+                      : "bg-rose-100 text-rose-700"
+                  }`}
+                >
+                  Coupon {offer.isActive ? "Active" : "Inactive"}
                 </span>
               </div>
-              <div className="mt-3 text-2xl font-semibold text-slate-900">
-                {coupon.code}
-              </div>
-              <div className="mt-2 text-xs text-slate-500">
-                Min spend: {formatCurrency(Number(coupon.minSpend || 0))}
-              </div>
-              {coupon.expiresAt ? (
-                <div className="mt-1 text-xs text-slate-500">
-                  Expires: {new Date(coupon.expiresAt).toLocaleDateString("id-ID")}
+
+              <div className="flex flex-1 flex-col items-start justify-center p-4">
+                <div className="rounded-full border border-dashed border-emerald-400 px-4 py-2 text-sm font-extrabold tracking-[0.16em] text-emerald-700">
+                  {offer.code}
                 </div>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => copyCode(coupon.code)}
-                className="mt-4 rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:border-slate-300"
-              >
-                {copied === coupon.code ? "Copied!" : "Copy Code"}
-              </button>
+                <p className="mt-3 text-xs leading-6 text-slate-500">
+                  Minimum purchase required:{" "}
+                  <span className="font-semibold text-slate-700">{offer.minPurchase}</span>
+                </p>
+              </div>
             </div>
-          ))}
-        </div>
-      )}
-    </section>
+          </article>
+        ))}
+      </section>
+    </div>
   );
 }
