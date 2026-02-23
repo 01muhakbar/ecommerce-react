@@ -26,6 +26,7 @@ const PRODUCTS = [
     { name: "Aloe Face Wash", slug: "aloe-face-wash", price: 98000, stock: 28, categoryCode: "beauty" },
 ];
 const DEFAULT_PRODUCT_IMAGE = "/uploads/products/demo.svg";
+const getModelId = (record) => record?.getDataValue?.("id") ?? record?.get?.("id") ?? record?.id ?? null;
 async function seedDev() {
     await sequelize.authenticate();
     await syncDb();
@@ -58,15 +59,31 @@ async function seedDev() {
     let categoriesUpdated = 0;
     const categoryMap = new Map();
     for (const category of CATEGORIES) {
-        const [record, created] = await Category.findOrCreate({
-            where: { code: category.code },
-            defaults: {
-                code: category.code,
-                name: category.name,
-                icon: category.icon,
-                published: true,
-            },
-        });
+        let record;
+        let created = false;
+        try {
+            [record, created] = await Category.findOrCreate({
+                where: { code: category.code },
+                defaults: {
+                    code: category.code,
+                    name: category.name,
+                    icon: category.icon,
+                    published: true,
+                },
+            });
+        }
+        catch (err) {
+            if (err?.name === "SequelizeUniqueConstraintError") {
+                record = await Category.findOne({ where: { code: category.code } });
+                if (!record) {
+                    throw err;
+                }
+                created = false;
+            }
+            else {
+                throw err;
+            }
+        }
         if (created) {
             categoriesCreated += 1;
         }
@@ -78,12 +95,29 @@ async function seedDev() {
             });
             categoriesUpdated += 1;
         }
-        categoryMap.set(category.code, record.id);
+        const recordId = getModelId(record);
+        if (Number.isFinite(Number(recordId))) {
+            categoryMap.set(category.code, Number(recordId));
+        }
     }
     let productsCreated = 0;
     let productsUpdated = 0;
     for (const product of PRODUCTS) {
-        const categoryId = categoryMap.get(product.categoryCode);
+        let categoryId = categoryMap.get(product.categoryCode);
+        if (!categoryId) {
+            const fallbackCategory = await Category.findOne({
+                where: { code: product.categoryCode },
+            });
+            if (fallbackCategory) {
+                categoryId = Number(getModelId(fallbackCategory));
+            }
+            else if (categoryMap.size > 0) {
+                categoryId = Array.from(categoryMap.values())[0];
+            }
+        }
+        if (!Number.isFinite(Number(categoryId))) {
+            categoryId = null;
+        }
         const existing = await Product.findOne({ where: { slug: product.slug } });
         if (existing) {
             await existing.update({

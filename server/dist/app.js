@@ -8,6 +8,7 @@ import authFromCookie from "./middleware/authFromCookie.js";
 import requireAuth from "./middleware/requireAuth.js";
 import { requireAdmin, requireStaffOrAdmin, requireSuperAdmin, } from "./middleware/requireRole.js";
 import authRouter from "./routes/auth.js";
+import cartRouter from "./routes/cartRoutes.js";
 import catalogRouter from "./routes/admin.catalog.js";
 import statsRouter from "./routes/admin.stats.js";
 import analyticsRouter from "./routes/admin.analytics.js";
@@ -18,6 +19,9 @@ import adminCategoriesRouter from "./routes/admin.categories.js";
 import adminOrdersRouter from "./routes/admin.orders.js";
 import adminCustomersRouter from "./routes/admin.customers.js";
 import adminCouponsRouter from "./routes/admin.coupons.js";
+import adminAttributesRouter from "./routes/admin.attributes.js";
+import adminAttributeValuesRouter from "./routes/admin.attributeValues.js";
+import adminProductAttributesRouter from "./routes/admin.productAttributes.js";
 import storeRouter from "./routes/store.js";
 import storeCouponsRouter from "./routes/store.coupons.js";
 import publicRouter from "./routes/public.js";
@@ -27,14 +31,20 @@ const app = express();
 app.set("trust proxy", 1);
 app.use(cookieParser());
 app.use(express.json());
-const ORIGIN = process.env.CLIENT_URL || process.env.CORS_ORIGIN || "http://localhost:5173";
-app.use(cors({ origin: ORIGIN, credentials: true }));
+const allowedOrigins = [
+    process.env.CLIENT_URL,
+    process.env.CORS_ORIGIN,
+    "http://localhost:5173",
+].filter(Boolean);
+const corsOrigin = allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins;
+app.use(cors({ origin: corsOrigin, credentials: true }));
 // optional: boleh tetap dipakai, tapi pastikan tidak konflik dengan requireAuth
 app.use(authFromCookie);
 app.use("/api", healthRouter);
 // public
 app.use("/api", publicRouter);
 app.use("/api/auth", authRouter);
+app.use("/api/cart", cartRouter);
 app.use("/api/store", storeRouter);
 app.use("/api/store/coupons", storeCouponsRouter);
 // serve uploaded files
@@ -50,8 +60,18 @@ app.use("/api/admin/orders", requireStaffOrAdmin, adminOrdersRouter);
 app.use("/api/admin/customers", requireStaffOrAdmin, adminCustomersRouter);
 app.use("/api/admin/categories", requireAdmin, adminCategoriesRouter);
 app.use("/api/admin/coupons", requireAdmin, adminCouponsRouter);
+app.use("/api/admin/attributes", requireAdmin, adminAttributesRouter);
+app.use("/api/admin", requireAdmin, adminAttributeValuesRouter);
+app.use("/api/admin", requireAdmin, adminProductAttributesRouter);
 // super admin only
 app.use("/api/admin/staff", requireSuperAdmin, staffRouter);
 // uploads (tentukan kebijakan; ini aku set staff+)
 app.use("/api/admin", requireStaffOrAdmin, adminUploadsRouter);
+// 404 handler (dev-only logging)
+app.use((req, res) => {
+    if (process.env.NODE_ENV === "development") {
+        console.log("[404]", req.method, req.originalUrl);
+    }
+    res.status(404).json({ success: false, message: "Not found" });
+});
 export default app;

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useCartStore } from "../../store/cart.store.ts";
 import { useStoreCategories } from "../../hooks/useStoreCategories.ts";
+import { useAuth } from "../../auth/useAuth.js";
 import TopInfoBar from "./TopInfoBar.jsx";
 import GreenHeaderBar from "./GreenHeaderBar.jsx";
 import NavBar from "./NavBar.jsx";
@@ -11,6 +12,7 @@ export default function StoreHeaderKacha() {
   const [searchParams] = useSearchParams();
   const totalQty = useCartStore((state) => state.totalQty);
   const { data: categories, isLoading: categoriesLoading } = useStoreCategories();
+  const { isAuthenticated } = useAuth() || {};
 
   const [search, setSearch] = useState("");
   const [showCategories, setShowCategories] = useState(false);
@@ -53,6 +55,7 @@ export default function StoreHeaderKacha() {
         setSearch={setSearch}
         onSubmit={handleSearchSubmit}
         totalQty={totalQty}
+        isAuthenticated={Boolean(isAuthenticated)}
       />
       <div className="hidden sm:block">
         <NavBar

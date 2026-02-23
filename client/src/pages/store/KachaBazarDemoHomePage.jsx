@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { useCartStore } from "../../store/cart.store.ts";
-import { useCategories, useProducts, ProductCard } from "../../storefront.jsx";
+import { useCategories, useProducts } from "../../storefront.jsx";
 import { fetchStoreCoupons } from "../../api/store.service.ts";
 import { formatCurrency } from "../../utils/format.js";
 import CouponPanel from "../../components/kachabazar-demo/CouponPanel.jsx";
 import FloatingCartWidget from "../../components/kachabazar-demo/FloatingCartWidget.jsx";
-import FeaturedCategoriesMega from "../../components/kachabazar-demo/FeaturedCategoriesMega.jsx";
-import PopularProductsGrid from "../../components/kachabazar-demo/PopularProductsGrid.jsx";
+import FeatureStrip from "../../components/kachabazar-demo/FeatureStrip.jsx";
+import FeaturedCategoriesSection from "../../components/kachabazar-demo/FeaturedCategoriesSection.jsx";
+import ProductSection from "../../components/kachabazar-demo/ProductSection.jsx";
+import PromoDeliveryBanner from "../../components/kachabazar-demo/PromoDeliveryBanner.jsx";
+import DiscountedProductsSection from "../../components/kachabazar-demo/DiscountedProductsSection.jsx";
 import HomeHeroBanners from "../../components/store/HomeHeroBanners.jsx";
 
 const slides = [
   {
-    title: "Quality Freshness Guaranteed",
+    title: "Quality Freshness Guaranteed!",
     subtitle: "Get fresh groceries delivered to your door every day.",
     cta: "Buy Now",
   },
@@ -28,80 +30,31 @@ const slides = [
   },
 ];
 
-const dummyCategories = [
+const dummyCoupons = [
   {
     id: 1,
-    name: "Fresh Fruits",
-    slug: "fresh-fruits",
-    icon: "🥬",
-    items: ["Apple", "Orange", "Banana"],
+    code: "SUMMER24",
+    discountLabel: "10% Off",
+    title: "Special discount for all grocery products",
+    countdown: "00 : 00 : 00 : 00",
+    status: "Active",
   },
   {
     id: 2,
-    name: "Fresh Vegetables",
-    slug: "fresh-vegetables",
-    icon: "🍳",
-    items: ["Carrot", "Tomato", "Potato"],
+    code: "WELCOME",
+    discountLabel: "$100 Off",
+    title: "Get instant savings for your first checkout",
+    countdown: "00 : 00 : 00 : 00",
+    status: "Active",
   },
   {
     id: 3,
-    name: "Fish & Meat",
-    slug: "fish-meat",
-    icon: "🐶",
-    items: ["Salmon", "Beef", "Chicken"],
+    code: "SAVE10",
+    discountLabel: "10% Off",
+    title: "Weekend limited voucher for selected products",
+    countdown: "00 : 00 : 00 : 00",
+    status: "Inactive",
   },
-  {
-    id: 4,
-    name: "Milk & Dairy",
-    slug: "milk-dairy",
-    icon: "🥛",
-    items: ["Milk", "Cheese", "Yogurt"],
-  },
-  {
-    id: 5,
-    name: "Beverages",
-    slug: "beverages",
-    icon: "☕",
-    items: ["Tea", "Coffee", "Juice"],
-  },
-  {
-    id: 6,
-    name: "Bread & Bakery",
-    slug: "bread-bakery",
-    icon: "🍩",
-    items: ["Bread", "Cake", "Cookies"],
-  },
-  {
-    id: 7,
-    name: "Snacks",
-    slug: "snacks",
-    icon: "💄",
-    items: ["Chips", "Nuts", "Chocolate"],
-  },
-  {
-    id: 8,
-    name: "Household",
-    slug: "household",
-    icon: "🧼",
-    items: ["Cleaner", "Tissue", "Soap"],
-  },
-];
-
-const dummyProducts = [
-  { id: 101, name: "Organic Banana", slug: "organic-banana", price: 12000, category: { name: "Fruits" } },
-  { id: 102, name: "Fresh Tomato", slug: "fresh-tomato", price: 8000, category: { name: "Vegetables" } },
-  { id: 103, name: "Brown Bread", slug: "brown-bread", price: 15000, category: { name: "Bakery" } },
-  { id: 104, name: "Milk 1L", slug: "milk-1l", price: 18000, category: { name: "Dairy" } },
-  { id: 105, name: "Chicken Breast", slug: "chicken-breast", price: 42000, category: { name: "Meat" } },
-  { id: 106, name: "Orange Juice", slug: "orange-juice", price: 22000, category: { name: "Beverages" } },
-  { id: 107, name: "Potato Chips", slug: "potato-chips", price: 14000, category: { name: "Snacks" } },
-  { id: 108, name: "Green Apple", slug: "green-apple", price: 16000, category: { name: "Fruits" } },
-];
-
-const dummyCoupons = [
-  { id: 1, code: "SAVE10", label: "Save 10% on min 100K" },
-  { id: 2, code: "MIN50K", label: "Save 15K for min 50K" },
-  { id: 3, code: "WELCOME", label: "New user 5% off" },
 ];
 
 export default function KachaBazarDemoHomePage() {
@@ -112,7 +65,8 @@ export default function KachaBazarDemoHomePage() {
     data: productsData,
     isLoading,
     isError,
-  } = useProducts({ page: 1, limit: 10 });
+    refetch: refetchProducts,
+  } = useProducts({ page: 1, limit: 30 });
   const categories = categoriesData?.data?.items ?? [];
   const categoriesById = useMemo(() => {
     const map = new Map();
@@ -156,29 +110,27 @@ export default function KachaBazarDemoHomePage() {
     };
   }, []);
 
-  const featuredCategories =
-    categories.length > 0
-      ? categories.map((category, index) => ({
-          ...category,
-          icon: dummyCategories[index % dummyCategories.length]?.icon || "🥬",
-          items: dummyCategories[index % dummyCategories.length]?.items || [
-            "Item one",
-            "Item two",
-            "Item three",
-          ],
-        }))
-      : dummyCategories;
-  const popularProducts = rawProducts.length > 0 ? rawProducts : dummyProducts;
+  const popularProducts = rawProducts;
   const couponList =
     coupons.length > 0
       ? coupons.map((coupon) => ({
           id: coupon.id,
           code: coupon.code,
-          label: `${coupon.code} - ${
+          discountLabel:
             coupon.discountType === "percent"
-              ? `${coupon.amount}% off`
-              : `${formatCurrency(Number(coupon.amount || 0))} off`
-          }`,
+              ? `${coupon.amount}% Off`
+              : `${formatCurrency(Number(coupon.amount || 0))} Off`,
+          title:
+            coupon.discountType === "percent"
+              ? `Save up to ${coupon.amount}% on selected items`
+              : `Flat savings of ${formatCurrency(Number(coupon.amount || 0))}`,
+          countdown: "00 : 00 : 00 : 00",
+          status:
+            coupon.expiresAt && Number.isFinite(Date.parse(coupon.expiresAt))
+              ? Date.parse(coupon.expiresAt) > Date.now()
+                ? "Active"
+                : "Inactive"
+              : "Active",
         }))
       : dummyCoupons;
 
@@ -195,6 +147,12 @@ export default function KachaBazarDemoHomePage() {
       popularProducts.map((raw) => {
         const title = raw?.title ?? raw?.name ?? "";
         const price = Number(raw?.price ?? raw?.sellingPrice ?? raw?.salePrice ?? 0);
+        const originalPrice = Number(raw?.originalPrice ?? raw?.price ?? 0);
+        const salePrice =
+          raw?.salePrice != null ? Number(raw.salePrice) : null;
+        const discountPercent = Number(raw?.discountPercent ?? 0);
+        const ratingAvg = Number(raw?.ratingAvg ?? raw?.averageRating ?? 0);
+        const reviewCount = Number(raw?.reviewCount ?? 0);
         const categoryObj =
           raw?.category ??
           raw?.Category ??
@@ -209,7 +167,12 @@ export default function KachaBazarDemoHomePage() {
           title,
           name: raw?.name ?? title,
           price,
-          salePrice: raw?.salePrice ?? null,
+          originalPrice,
+          salePrice,
+          discountPercent,
+          ratingAvg,
+          reviewCount,
+          unit: raw?.unit ?? raw?.tags?.unit ?? "1 pc",
           category: categoryObj,
           imageUrl,
           image: imageUrl,
@@ -244,18 +207,13 @@ export default function KachaBazarDemoHomePage() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <main className="mx-auto max-w-7xl space-y-16 px-4 py-10">
-        <section className="space-y-4">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start">
-            <div className="lg:col-span-8">
-              <HomeHeroBanners
-                slides={slides}
-                activeSlide={activeSlide}
-                setActiveSlide={setActiveSlide}
-                promoClassName="lg:hidden"
-              />
+      <main className="mx-auto max-w-7xl space-y-14 px-4 py-8 md:px-6 lg:py-10">
+        <section>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start lg:gap-5 xl:gap-6">
+            <div className="lg:col-span-8 xl:col-span-9">
+              <HomeHeroBanners slides={slides} activeSlide={activeSlide} setActiveSlide={setActiveSlide} />
             </div>
-            <div className="hidden lg:col-span-4 lg:block">
+            <div className="lg:col-span-4 xl:col-span-3">
               <CouponPanel
                 couponList={couponList}
                 couponError={couponError}
@@ -264,43 +222,27 @@ export default function KachaBazarDemoHomePage() {
               />
             </div>
           </div>
-          <article className="relative hidden overflow-hidden rounded-2xl border border-[#f1d2b3] bg-[#FDEEDC] p-6 shadow-sm lg:block">
-            <div className="max-w-[70%]">
-              <h2 className="text-2xl font-semibold leading-8 text-slate-900">
-                100% Natural Quality Organic Product
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                See our latest collection of organic products and healthy groceries for your
-                family.
-              </p>
-            </div>
-            <Link
-              to="/search?query=organic"
-              className="absolute right-8 top-1/2 inline-flex h-20 w-20 -translate-y-1/2 items-center justify-center rounded-full bg-emerald-600 text-sm font-semibold text-white shadow-md transition hover:bg-emerald-700"
-            >
-              <span className="text-center leading-[1.1rem]">
-                Buy
-                <br />
-                Now
-              </span>
-            </Link>
-          </article>
         </section>
 
         <FloatingCartWidget totalQty={totalQty} subtotalDisplay={subtotalDisplay} />
-
-        <FeaturedCategoriesMega featuredCategories={featuredCategories} />
-        {isLoading ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
-            Loading products...
-          </div>
-        ) : isError ? (
-          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-600">
-            Failed to load products.
-          </div>
-        ) : (
-          <PopularProductsGrid safeProducts={safeProducts} ProductCard={ProductCard} />
-        )}
+        <FeatureStrip />
+        <FeaturedCategoriesSection categories={categories} products={safeProducts} />
+        <ProductSection
+          title="Popular Products for Daily Shopping"
+          subtitle="Fresh picks and essentials you can add in one click."
+          products={safeProducts}
+          categories={categories}
+          isLoading={isLoading}
+          isError={isError}
+          onRetry={() => refetchProducts()}
+        />
+        <PromoDeliveryBanner />
+        <DiscountedProductsSection
+          products={safeProducts}
+          isLoading={isLoading}
+          isError={isError}
+          onRetry={() => refetchProducts()}
+        />
       </main>
     </div>
   );

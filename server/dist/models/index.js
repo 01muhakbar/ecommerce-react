@@ -9,6 +9,7 @@ import { CartItem } from "./CartItem.js";
 import { Order } from "./Order.js";
 import { OrderItem } from "./OrderItem.js";
 import { Coupon } from "./Coupon.js";
+import { ProductReview } from "./ProductReview.js";
 // Registrasi semua model di sini
 function initModels() {
     initUser(sequelize);
@@ -19,6 +20,7 @@ function initModels() {
     Order.initModel(sequelize);
     OrderItem.initModel(sequelize);
     Coupon.initModel(sequelize);
+    ProductReview.initModel(sequelize);
     const models = {
         User,
         Product,
@@ -28,6 +30,7 @@ function initModels() {
         Order,
         OrderItem,
         Coupon,
+        ProductReview,
     };
     Object.values(models).forEach((model) => {
         if (typeof model.associate === "function") {
@@ -57,4 +60,4 @@ export async function resetDbDev() {
         await sequelize.query("SET FOREIGN_KEY_CHECKS = 1;");
     }
 }
-export { sequelize, User, Product, Category, Cart, CartItem, Order, OrderItem, Coupon };
+export { sequelize, User, Product, Category, Cart, CartItem, Order, OrderItem, Coupon, ProductReview, };

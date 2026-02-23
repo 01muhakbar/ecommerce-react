@@ -1,86 +1,61 @@
 import { Link } from "react-router-dom";
 import heroBannerImage from "../../assets/admin-login-hero.jpg";
 
-export default function HomeHeroBanners({
-  slides,
-  activeSlide,
-  setActiveSlide,
-  promoClassName = "",
-}) {
+export default function HomeHeroBanners({ slides, activeSlide, setActiveSlide }) {
   const safeSlides = Array.isArray(slides) && slides.length > 0 ? slides : [];
   const slideIndex = Math.max(0, Math.min(activeSlide || 0, safeSlides.length - 1));
   const displaySlide = safeSlides[slideIndex] || {
-    title: "The Best Quality Products Guaranteed!",
+    title: "Quality Freshness Guaranteed!",
     subtitle: "Fresh groceries and essentials delivered to your doorstep.",
+    cta: "Buy Now",
   };
-  const heroSubtitle =
-    displaySlide.subtitle || "Fresh groceries and essentials delivered to your doorstep.";
+  const heroSubtitle = displaySlide.subtitle || "Fresh groceries delivered every day.";
+  const ctaLabel = displaySlide.cta || "Buy Now";
 
   return (
-    <section className="space-y-4 px-3 pb-2 pt-4 sm:px-4 lg:px-0">
-      <article className="relative h-[160px] overflow-hidden rounded-2xl border border-[#d7dee8] bg-[#edf3f8] shadow-sm sm:h-[176px] lg:h-[360px]">
+    <section className="w-full">
+      <article className="relative h-[230px] overflow-hidden rounded-[28px] border border-slate-200/80 bg-[#edf3f8] shadow-[0_22px_40px_-30px_rgba(15,23,42,0.42)] sm:h-[290px] lg:h-[380px] xl:h-[400px]">
         <img
           src={heroBannerImage}
           alt="Fresh groceries"
-          className="absolute right-0 top-0 h-full w-[55%] object-cover lg:w-[52%]"
+          className="absolute right-0 top-0 h-full w-[58%] object-cover sm:w-[54%] lg:w-[52%]"
         />
         <div className="absolute inset-0 bg-gradient-to-r from-[#edf3f8] via-[#edf3f8]/95 to-transparent" />
+        <div className="pointer-events-none absolute -left-10 top-10 h-40 w-40 rounded-full bg-white/60 blur-3xl sm:h-52 sm:w-52" />
 
-        <div className="relative z-10 max-w-[58%] p-4 sm:p-5 lg:max-w-[45%] lg:p-8">
-          <h1 className="text-lg font-bold leading-6 text-slate-900 sm:text-2xl sm:leading-8 lg:text-4xl lg:leading-[1.15]">
-            Quality Freshness Guaranteed!
+        <div className="relative z-10 flex h-full max-w-[66%] flex-col justify-center px-5 pb-12 pt-5 sm:max-w-[56%] sm:px-8 sm:pb-14 sm:pt-8 lg:max-w-[50%] lg:px-10 lg:pb-16">
+          <h1 className="text-[24px] font-bold leading-[1.1] text-slate-900 sm:text-[30px] lg:text-[42px]">
+            {displaySlide.title}
           </h1>
-          <p className="mt-1.5 text-xs leading-5 text-slate-600 sm:text-sm">
+          <p className="mt-2.5 text-[12px] leading-5 text-slate-600 sm:text-[13px] lg:mt-4 lg:text-sm">
             {heroSubtitle}
           </p>
 
           <Link
-            to="/search?query=organic"
-            className="mt-4 inline-flex rounded-full bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 lg:mt-6 lg:px-6 lg:py-2.5"
+            to="/search?q=apple&page=1"
+            className="mt-5 inline-flex w-fit items-center rounded-full bg-emerald-600 px-6 py-2.5 text-[13px] font-semibold text-white shadow-sm transition hover:bg-emerald-700 lg:mt-7"
           >
-            Buy Now
+            {ctaLabel}
           </Link>
         </div>
 
-        <div className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5">
-          {Array.from({ length: 5 }).map((_, index) => {
-            const isActive = index === (slideIndex % 5);
+        <div className="absolute bottom-5 left-6 z-10 flex items-center gap-1.5 sm:left-8 lg:bottom-6 lg:left-10">
+          {Array.from({ length: Math.max(3, safeSlides.length || 0) || 3 }).map((_, index) => {
+            const currentIndex = index % Math.max(1, safeSlides.length);
+            const isActive = currentIndex === slideIndex;
             return (
               <button
                 key={`hero-dot-${index}`}
                 type="button"
-                onClick={() => setActiveSlide?.(index % Math.max(1, safeSlides.length))}
+                onClick={() => setActiveSlide?.(currentIndex)}
                 aria-label={`Slide ${index + 1}`}
-                className={`h-1.5 w-1.5 rounded-full transition-colors ${
-                  isActive ? "bg-slate-800" : "bg-slate-300"
+                className={`rounded-full transition-all ${
+                  isActive ? "h-2 w-5 bg-emerald-600" : "h-2 w-2 bg-slate-300 hover:bg-slate-400"
                 }`}
               />
             );
           })}
         </div>
-      </article>
-
-      <article
-        className={`relative overflow-hidden rounded-2xl border border-[#f1d2b3] bg-[#FDEEDC] p-5 shadow-sm sm:p-6 ${promoClassName}`}
-      >
-        <div className="pr-24">
-          <h2 className="text-lg font-semibold leading-7 text-slate-900 sm:text-xl">
-            100% Natural Quality Organic Product
-          </h2>
-          <p className="mt-2 text-sm leading-5 text-slate-600">
-            See our latest collection of organic products and healthy groceries for your family.
-          </p>
-        </div>
-        <Link
-          to="/search?query=organic"
-          className="absolute right-5 top-1/2 inline-flex h-16 w-16 -translate-y-1/2 items-center justify-center rounded-full bg-emerald-600 text-xs font-semibold text-white shadow-md hover:bg-emerald-700"
-        >
-          <span className="text-center leading-[1.05rem]">
-            Buy
-            <br />
-            Now
-          </span>
-        </Link>
       </article>
     </section>
   );

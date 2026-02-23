@@ -112,10 +112,31 @@ const toReviewResponse = (review: any, product: any) => {
   };
 };
 
+const toSafeNumber = (value: any, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
 const toProductListItem = (product: any) => {
   const plain = product?.get ? product.get({ plain: true }) : product;
   const rawImage = plain?.promoImagePath || plain?.imagePaths?.[0] || null;
   const imageUrl = normalizeUploadsUrl(rawImage);
+  const basePrice = toSafeNumber(plain?.price, 0);
+  const salePriceRaw = toNumber(plain?.salePrice);
+  const salePrice = Number.isFinite(Number(salePriceRaw)) ? Number(salePriceRaw) : null;
+  const hasDiscount =
+    Number.isFinite(Number(salePrice)) &&
+    Number(salePrice) > 0 &&
+    Number(salePrice) < basePrice;
+  const price = hasDiscount ? Number(salePrice) : basePrice;
+  const originalPrice = hasDiscount ? basePrice : null;
+  const discountPercent =
+    hasDiscount && basePrice > 0
+      ? Math.round(((basePrice - Number(salePrice)) / basePrice) * 100)
+      : 0;
+  const ratingAvg = Number(toSafeNumber(plain?.ratingAvg ?? plain?.rating_avg, 0).toFixed(1));
+  const reviewCount = Math.max(0, Math.round(toSafeNumber(plain?.reviewCount ?? plain?.review_count, 0)));
+  const unit = String(plain?.tags?.unit || "").trim() || null;
   const category = plain?.category
     ? {
         id: plain.category.id,
@@ -128,7 +149,13 @@ const toProductListItem = (product: any) => {
     id: plain?.id,
     name: plain?.name,
     slug: plain?.slug,
-    price: Number(plain?.price ?? 0),
+    price,
+    originalPrice,
+    salePrice: hasDiscount ? Number(salePrice) : null,
+    discountPercent,
+    ratingAvg,
+    reviewCount,
+    unit,
     imageUrl,
     categoryId: plain?.categoryId ?? null,
     category,
@@ -249,13 +276,27 @@ router.get(
           "name",
           "slug",
           "price",
+          "salePrice",
           "stock",
           "categoryId",
           "promoImagePath",
           "imagePaths",
+          "tags",
           "status",
           "published",
           "updatedAt",
+          [
+            sequelize.literal(
+              "(SELECT ROUND(AVG(pr.rating), 1) FROM product_reviews pr WHERE pr.product_id = Product.id)"
+            ),
+            "ratingAvg",
+          ],
+          [
+            sequelize.literal(
+              "(SELECT COUNT(*) FROM product_reviews pr WHERE pr.product_id = Product.id)"
+            ),
+            "reviewCount",
+          ],
         ],
         include: [{ model: Category, as: "category", attributes: ["id", "name", "code"] }],
         order: [["createdAt", "DESC"]],
@@ -309,13 +350,25 @@ router.get(
       if (!product) {
         return res.status(404).json({ message: "Not found" });
       }
+      const statsRows = (await ProductReview.findAll({
+        where: { productId: product.id },
+        attributes: [
+          [sequelize.fn("AVG", sequelize.col("rating")), "ratingAvg"],
+          [sequelize.fn("COUNT", sequelize.col("id")), "reviewCount"],
+        ],
+        raw: true,
+      })) as Array<{ ratingAvg?: number | string | null; reviewCount?: number | string | null }>;
+      const stats = statsRows[0] || {};
+      const productWithStats = {
+        ...(product.get ? product.get({ plain: true }) : product),
+        ratingAvg: stats.ratingAvg ?? 0,
+        reviewCount: stats.reviewCount ?? 0,
+      };
 
       res.json({
         data: {
-          ...toProductListItem(product),
-          slug: product.slug,
+          ...toProductListItem(productWithStats),
           description: product.description ?? null,
-          salePrice: toNumber(product.salePrice),
         },
       });
     } catch (error) {

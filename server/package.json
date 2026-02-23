@@ -13,6 +13,7 @@
     "seed:dev": "tsx src/scripts/seedDev.ts",
     "seed:all": "pnpm seed:super && pnpm seed:dev",
     "seed:kacha": "tsx src/scripts/seedKachaDemo.ts",
+    "seed:kachabazar": "tsx src/scripts/seedKachaDemo.ts",
     "seed:demo": "pnpm seed:super && pnpm seed:kacha",
     "seed:categories-demo": "tsx src/scripts/seedCategoriesDemo.ts",
     "seed:analytics": "tsx src/scripts/seedAnalyticsDemo.ts",

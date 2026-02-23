@@ -3,6 +3,7 @@ import "dotenv/config";
 import express from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
+import fs from "fs";
 import path from "path";
 
 import authFromCookie from "./middleware/authFromCookie.js";
@@ -62,7 +63,14 @@ app.use("/api/store", storeRouter);
 app.use("/api/store/coupons", storeCouponsRouter);
 
 // serve uploaded files
-app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
+const uploadsCandidates = [
+  path.resolve(process.cwd(), "server/public/uploads"),
+  path.resolve(process.cwd(), "public/uploads"),
+  path.resolve(process.cwd(), "uploads"),
+];
+const uploadsDir =
+  uploadsCandidates.find((dir) => fs.existsSync(dir)) || uploadsCandidates[0];
+app.use("/uploads", express.static(uploadsDir));
 
 // protected baseline
 app.use("/api/admin", requireAuth);

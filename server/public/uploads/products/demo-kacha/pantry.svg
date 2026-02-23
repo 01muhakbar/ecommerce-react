@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#e0e7ff"/>
+      <stop offset="100%" stop-color="#c7d2fe"/>
+    </linearGradient>
+  </defs>
+  <rect width="240" height="240" rx="28" fill="url(#g)"/>
+  <ellipse cx="120" cy="132" rx="54" ry="34" fill="#6366f1"/>
+  <path d="M88 106h64l-8 26H96z" fill="#a5b4fc"/>
+  <rect x="102" y="78" width="36" height="24" rx="10" fill="#4f46e5"/>
+  <text x="62" y="218" font-family="Arial, sans-serif" font-size="23" font-weight="700" fill="#312e81">PANTRY</text>
+</svg>

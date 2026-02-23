@@ -115,6 +115,8 @@ export const fetchAdminProduct = async (id) => {
   return { data: product };
 };
 
+export const getAdminProduct = fetchAdminProduct;
+
 export const fetchAdminCategories = async (params) => {
   const { data } = await adminApi.get("/admin/categories", { params });
   return normalizeCategoriesList(data, params);
@@ -151,13 +153,30 @@ export const updateAdminProduct = async (id, payload) => {
   return data;
 };
 
+export const updateAdminProductPublished = async (id, published) => {
+  const { data } = await adminApi.patch(`/admin/products/${id}/published`, {
+    published: Boolean(published),
+  });
+  return data;
+};
+
 export const toggleAdminProductPublish = async (id, isPublished) => {
-  const { data } = await adminApi.patch(`/admin/products/${id}`, { isPublished });
+  const { data } = await adminApi.patch(`/admin/products/${id}/published`, {
+    published: Boolean(isPublished),
+  });
   return data;
 };
 
 export const deleteAdminProduct = async (id) => {
   const { data } = await adminApi.delete(`/admin/products/${id}`);
+  return data;
+};
+
+export const bulkAdminProducts = async (action, ids) => {
+  const { data } = await adminApi.post("/admin/products/bulk", {
+    action,
+    ids,
+  });
   return data;
 };
 
