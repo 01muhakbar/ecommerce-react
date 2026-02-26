@@ -125,7 +125,7 @@ async function seedDev() {
       }
     }
     if (!Number.isFinite(Number(categoryId))) {
-      categoryId = null;
+      categoryId = undefined;
     }
     const existing = await Product.findOne({ where: { slug: product.slug } });
     if (existing) {

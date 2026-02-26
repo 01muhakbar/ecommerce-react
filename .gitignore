@@ -10,4 +10,6 @@ tmp_*.pid
 **/tmp_*.err
 **/tmp_*.pid
 client/dist/
+server/dist/
 **/*.log
+.codex-artifacts/

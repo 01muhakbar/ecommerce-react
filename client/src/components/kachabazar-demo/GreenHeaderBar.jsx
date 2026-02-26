@@ -9,6 +9,7 @@ export default function GreenHeaderBar({
   onSubmit,
   totalQty,
   isAuthenticated,
+  onCartClick,
 }) {
   return (
     <div className="bg-emerald-600 text-white shadow-[0_2px_12px_rgba(5,150,105,0.28)]">
@@ -32,7 +33,11 @@ export default function GreenHeaderBar({
             placeholder="Search for products (e.g. fish, apple, baby care)"
           />
         </div>
-        <HeaderActions totalQty={totalQty} isAuthenticated={isAuthenticated} />
+        <HeaderActions
+          totalQty={totalQty}
+          isAuthenticated={isAuthenticated}
+          onCartClick={onCartClick}
+        />
       </div>
     </div>
   );

@@ -45,8 +45,8 @@ const allowedOrigins = [
   process.env.CLIENT_URL,
   process.env.CORS_ORIGIN,
   "http://localhost:5173",
-].filter(Boolean);
-const corsOrigin =
+].filter((origin): origin is string => Boolean(origin));
+const corsOrigin: string | string[] =
   allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins;
 app.use(cors({ origin: corsOrigin, credentials: true }));
 
@@ -62,15 +62,16 @@ app.use("/api/cart", cartRouter);
 app.use("/api/store", storeRouter);
 app.use("/api/store/coupons", storeCouponsRouter);
 
-// serve uploaded files
+// serve uploaded files from all known locations (priority: runtime uploads first)
 const uploadsCandidates = [
-  path.resolve(process.cwd(), "server/public/uploads"),
-  path.resolve(process.cwd(), "public/uploads"),
   path.resolve(process.cwd(), "uploads"),
+  path.resolve(process.cwd(), "public/uploads"),
+  path.resolve(process.cwd(), "server/public/uploads"),
 ];
-const uploadsDir =
-  uploadsCandidates.find((dir) => fs.existsSync(dir)) || uploadsCandidates[0];
-app.use("/uploads", express.static(uploadsDir));
+uploadsCandidates.forEach((uploadsDir) => {
+  if (!fs.existsSync(uploadsDir)) return;
+  app.use("/uploads", express.static(uploadsDir));
+});
 
 // protected baseline
 app.use("/api/admin", requireAuth);

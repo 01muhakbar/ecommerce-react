@@ -36,6 +36,21 @@ const PAYMENT_OPTIONS = [
   },
 ];
 
+const LAST_ORDER_REF_STORAGE_KEY = "store_last_order_ref";
+
+const resolveOrderPayload = (response) => {
+  const candidates = [
+    response?.data?.data,
+    response?.data?.order,
+    response?.data,
+    response?.order,
+    response,
+  ];
+  return (
+    candidates.find((candidate) => candidate && typeof candidate === "object") || {}
+  );
+};
+
 function SectionTitle({ number, title, hint }) {
   return (
     <div>
@@ -312,16 +327,24 @@ export default function CheckoutPage() {
     setIsSubmitting(true);
     try {
       const response = await createStoreOrder(parsed.data);
-      const result = response?.data?.data ?? response?.data ?? {};
+      const result = resolveOrderPayload(response);
       const resolvedOrderRef = [
         result?.invoiceNo,
         result?.ref,
         result?.invoice,
         result?.orderRef,
         result?.id,
+        result?.orderId,
       ]
         .map((value) => (value == null ? "" : String(value).trim()))
         .find((value) => value.length > 0);
+      if (resolvedOrderRef) {
+        try {
+          localStorage.setItem(LAST_ORDER_REF_STORAGE_KEY, resolvedOrderRef);
+        } catch {
+          // ignore storage errors
+        }
+      }
       clearCart();
       await queryClient.invalidateQueries({
         queryKey: ["account", "orders", "my"],

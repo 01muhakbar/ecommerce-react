@@ -80,4 +80,4 @@ export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
-export * from "./reviews";
+export * from "./reviews.js";

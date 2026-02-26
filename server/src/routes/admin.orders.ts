@@ -7,6 +7,9 @@ import { OrderItem } from "../models/OrderItem.js";
 import { Product } from "../models/Product.js";
 
 const router = Router();
+type UiOrderStatus = "pending" | "processing" | "shipping" | "complete" | "cancelled";
+type DbOrderStatus = "pending" | "processing" | "shipped" | "delivered" | "cancelled";
+
 const asSingle = (v: unknown) => (Array.isArray(v) ? v[0] : v);
 const getAttr = (row: any, key: string) =>
   row?.getDataValue?.(key) ??
@@ -14,13 +17,18 @@ const getAttr = (row: any, key: string) =>
   row?.dataValues?.[key] ??
   undefined;
 
-const normalizeStatusInput = (raw: unknown) => {
+const normalizeStatusInput = (raw: unknown): DbOrderStatus | "" => {
   const value = String(raw || "").toLowerCase().trim();
   if (!value) return "";
   if (value === "shipping") return "shipped";
   if (value === "complete") return "delivered";
   if (value === "completed") return "delivered";
-  return value;
+  if (value === "pending") return "pending";
+  if (value === "processing") return "processing";
+  if (value === "shipped") return "shipped";
+  if (value === "delivered") return "delivered";
+  if (value === "cancelled") return "cancelled";
+  return "";
 };
 
 const toUiStatus = (raw: unknown) => {
@@ -40,7 +48,15 @@ const toUiStatus = (raw: unknown) => {
   return "pending";
 };
 
-const allowedStatuses = ["pending", "processing", "shipping", "complete", "cancelled"];
+const allowedStatuses: UiOrderStatus[] = [
+  "pending",
+  "processing",
+  "shipping",
+  "complete",
+  "cancelled",
+];
+const isUiOrderStatus = (value: string): value is UiOrderStatus =>
+  allowedStatuses.includes(value as UiOrderStatus);
 
 const resolveOrderWhere = (idOrRef: string) => {
   const trimmed = String(idOrRef || "").trim();
@@ -228,7 +244,7 @@ router.patch("/:id/status", requireStaffOrAdmin, async (req, res) => {
   }
 
   const rawStatus = String(req.body?.status ?? "").toLowerCase().trim();
-  if (!rawStatus || !allowedStatuses.includes(rawStatus)) {
+  if (!rawStatus || !isUiOrderStatus(rawStatus)) {
     return res.status(400).json({
       message: `Status tidak valid. Gunakan salah satu dari: ${allowedStatuses.join(
         ", "
@@ -237,6 +253,13 @@ router.patch("/:id/status", requireStaffOrAdmin, async (req, res) => {
   }
 
   const normalizedStatus = normalizeStatusInput(rawStatus);
+  if (!normalizedStatus) {
+    return res.status(400).json({
+      message: `Status tidak valid. Gunakan salah satu dari: ${allowedStatuses.join(
+        ", "
+      )}`,
+    });
+  }
   const [updatedRows] = await Order.update(
     { status: normalizedStatus, updatedAt: new Date() },
     { where: resolveOrderWhere(idStr) }

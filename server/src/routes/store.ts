@@ -54,6 +54,11 @@ const toCanonicalOrderStatus = (raw: any) => {
   return "pending";
 };
 
+const REVIEWABLE_ORDER_STATUSES = ["delivered", "completed", "complete"] as const;
+const REVIEWABLE_STATUS_SQL = REVIEWABLE_ORDER_STATUSES.map((status) => `'${status}'`).join(", ");
+const REVIEW_IMAGE_DATA_URL_PATTERN = /^data:image\/(?:jpeg|png);base64,/i;
+const REVIEW_IMAGE_FILE_PATTERN = /\.(?:jpe?g|png)(?:$|[?#])/i;
+
 function normalizeUploadsUrl(v?: string | null) {
   if (!v) return null;
   if (/^https?:\/\//i.test(v)) return v;
@@ -93,8 +98,99 @@ const normalizeReviewComment = (comment: any) => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
+const normalizeReviewImageOutput = (value: any) => {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  if (/^data:image\//i.test(text)) return text;
+  if (/^https?:\/\//i.test(text)) return text;
+  return normalizeUploadsUrl(text) || text;
+};
+
+const parseImagePaths = (value: any): string[] => {
+  if (Array.isArray(value)) {
+    return value.map((entry) => String(entry || "").trim()).filter(Boolean);
+  }
+  if (typeof value !== "string") return [];
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((entry) => String(entry || "").trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+};
+
+const isValidReviewImageReference = (value: string) => {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  if (REVIEW_IMAGE_DATA_URL_PATTERN.test(text)) return true;
+  if (/^https?:\/\//i.test(text) || text.startsWith("/uploads/")) {
+    return REVIEW_IMAGE_FILE_PATTERN.test(text);
+  }
+  return false;
+};
+
+const validateReviewSubmission = (comment: any, images: any) => {
+  const normalizedComment = normalizeReviewComment(comment);
+  if (!normalizedComment || normalizedComment.length < 3) {
+    return {
+      ok: false as const,
+      message: "Comment must be at least 3 characters.",
+    };
+  }
+  const normalizedImages = normalizeReviewImages(images);
+  if (
+    normalizedImages &&
+    normalizedImages.some((image) => !isValidReviewImageReference(image))
+  ) {
+    return {
+      ok: false as const,
+      message: "Images must be jpg/png URLs.",
+    };
+  }
+  return {
+    ok: true as const,
+    comment: normalizedComment,
+    images: normalizedImages,
+  };
+};
+
+const hasEligibleDeliveredOrderItem = async (userId: number, productId: number) => {
+  const [rows] = await sequelize.query(
+    `SELECT 1
+     FROM orders o
+     INNER JOIN orderitems oi ON oi.order_id = o.id
+     WHERE o.user_id = ?
+       AND oi.product_id = ?
+       AND LOWER(COALESCE(o.status, '')) IN (${REVIEWABLE_STATUS_SQL})
+     LIMIT 1`,
+    { replacements: [userId, productId] }
+  );
+  return Array.isArray(rows) && rows.length > 0;
+};
+
 const toReviewResponse = (review: any, product: any) => {
-  const images = review?.images ?? review?.get?.("images") ?? null;
+  const rawImages = review?.images ?? review?.get?.("images") ?? null;
+  const parsedImagePaths = parseImagePaths(rawImages);
+  const parsedImages =
+    parsedImagePaths.length > 0
+      ? parsedImagePaths
+      : Array.isArray(rawImages)
+        ? rawImages.map((image) => String(image || "").trim()).filter(Boolean)
+        : typeof rawImages === "string"
+          ? [rawImages].map((image) => String(image || "").trim()).filter(Boolean)
+          : [];
+  const normalizedImages = parsedImages
+    .map((image) => normalizeReviewImageOutput(image))
+    .filter(Boolean);
+  const user =
+    review?.user ?? review?.get?.("user") ?? review?.dataValues?.user ?? null;
+  const userName =
+    user?.name ?? user?.get?.("name") ?? user?.dataValues?.name ?? null;
+  const userId =
+    user?.id ?? user?.get?.("id") ?? user?.dataValues?.id ?? null;
   const createdAt =
     review?.createdAt ?? review?.get?.("createdAt") ?? review?.created_at ?? null;
   const updatedAt =
@@ -105,9 +201,15 @@ const toReviewResponse = (review: any, product: any) => {
     productId: review?.productId ?? review?.get?.("productId"),
     rating: review?.rating ?? review?.get?.("rating"),
     comment: review?.comment ?? review?.get?.("comment") ?? null,
-    images: Array.isArray(images) ? images : images ? [images] : null,
+    images: normalizedImages.length > 0 ? normalizedImages : null,
     createdAt,
     updatedAt,
+    user: userName
+      ? {
+          id: Number.isFinite(Number(userId)) ? Number(userId) : null,
+          name: String(userName),
+        }
+      : null,
     product: product ? toProductPreview(product) : null,
   };
 };
@@ -339,8 +441,24 @@ router.get(
         where: {
           ...where,
           status: "active",
-          published: { [Op.in]: [1, true] },
+          isPublished: { [Op.in]: [1, true] },
         },
+        attributes: [
+          "id",
+          "name",
+          "slug",
+          "price",
+          "salePrice",
+          "stock",
+          "description",
+          "categoryId",
+          "status",
+          "isPublished",
+          "promoImagePath",
+          "imagePaths",
+          "tags",
+          "updatedAt",
+        ],
         include: [{ model: Category, as: "category", attributes: ["id", "name", "code"] }],
       });
       if (process.env.NODE_ENV !== "production" && !isNumeric) {
@@ -350,17 +468,63 @@ router.get(
       if (!product) {
         return res.status(404).json({ message: "Not found" });
       }
-      const statsRows = (await ProductReview.findAll({
-        where: { productId: product.id },
-        attributes: [
-          [sequelize.fn("AVG", sequelize.col("rating")), "ratingAvg"],
-          [sequelize.fn("COUNT", sequelize.col("id")), "reviewCount"],
-        ],
-        raw: true,
-      })) as Array<{ ratingAvg?: number | string | null; reviewCount?: number | string | null }>;
-      const stats = statsRows[0] || {};
+      const productPlain = product.get ? product.get({ plain: true }) : (product as any);
+      const productIdRaw =
+        (product as any)?.id ??
+        (product as any)?.get?.("id") ??
+        (product as any)?.dataValues?.id ??
+        productPlain?.id;
+      const productId = Number(productIdRaw);
+
+      let stats: { ratingAvg?: number | string | null; reviewCount?: number | string | null } = {
+        ratingAvg: 0,
+        reviewCount: 0,
+      };
+      let detailedReviews: any[] = [];
+      if (Number.isFinite(productId) && productId > 0) {
+        try {
+          const statsRows = (await ProductReview.findAll({
+            where: { productId },
+            attributes: [
+              [sequelize.fn("AVG", sequelize.col("rating")), "ratingAvg"],
+              [sequelize.fn("COUNT", sequelize.col("id")), "reviewCount"],
+            ],
+            raw: true,
+          })) as Array<{ ratingAvg?: number | string | null; reviewCount?: number | string | null }>;
+          stats = statsRows[0] || stats;
+        } catch (statsError) {
+          if (process.env.NODE_ENV !== "production") {
+            console.warn("[store/products/:id] stats fallback", {
+              rawParam,
+              productId,
+              error: (statsError as any)?.message || statsError,
+            });
+          }
+        }
+        try {
+          const reviewRows = await ProductReview.findAll({
+            where: { productId },
+            attributes: ["id", "userId", "productId", "rating", "comment", "images", "createdAt", "updatedAt"],
+            include: [{ model: User, as: "user", attributes: ["id", "name"] }],
+            order: [["updatedAt", "DESC"]],
+            limit: 30,
+          });
+          detailedReviews = reviewRows.map((review: any) => toReviewResponse(review, null));
+        } catch (reviewsError) {
+          if (process.env.NODE_ENV !== "production") {
+            console.warn("[store/products/:id] reviews fallback", {
+              rawParam,
+              productId,
+              error: (reviewsError as any)?.message || reviewsError,
+            });
+          }
+        }
+      }
       const productWithStats = {
-        ...(product.get ? product.get({ plain: true }) : product),
+        ...productPlain,
+        id: Number.isFinite(productId) && productId > 0 ? productId : productPlain?.id,
+        published: productPlain?.published ?? productPlain?.isPublished ?? false,
+        isPublished: productPlain?.isPublished ?? Boolean(productPlain?.published),
         ratingAvg: stats.ratingAvg ?? 0,
         reviewCount: stats.reviewCount ?? 0,
       };
@@ -368,7 +532,8 @@ router.get(
       res.json({
         data: {
           ...toProductListItem(productWithStats),
-          description: product.description ?? null,
+          description: productPlain?.description ?? null,
+          reviews: detailedReviews,
         },
       });
     } catch (error) {
@@ -750,6 +915,76 @@ router.get(
 
 // GET /api/store/my/reviews (auth)
 router.get(
+  "/my/reviews/need",
+  protect,
+  async (req: Request, res: Response) => {
+    try {
+      const userId = getAuthUserId(req, res);
+      if (!userId) return;
+
+      const [rows] = await sequelize.query(
+        `SELECT
+           oi.product_id AS productId,
+           MAX(o.id) AS orderId,
+           MAX(o.invoice_no) AS orderRef,
+           MAX(o.created_at) AS orderedAt,
+           p.id AS id,
+           p.name AS name,
+           p.slug AS slug,
+           p.promo_image_path AS promoImagePath,
+           p.image_paths AS imagePaths
+         FROM orderitems oi
+         INNER JOIN orders o ON o.id = oi.order_id
+         INNER JOIN products p ON p.id = oi.product_id
+         LEFT JOIN product_reviews pr
+           ON pr.product_id = oi.product_id
+          AND pr.user_id = ?
+         WHERE o.user_id = ?
+           AND LOWER(COALESCE(o.status, '')) IN (${REVIEWABLE_STATUS_SQL})
+           AND pr.id IS NULL
+         GROUP BY
+           oi.product_id, p.id, p.name, p.slug, p.promo_image_path, p.image_paths
+         ORDER BY MAX(o.created_at) DESC`,
+        { replacements: [userId, userId] }
+      );
+
+      const items = (rows as any[]).map((row: any) => {
+        const imagePaths = parseImagePaths(row.imagePaths ?? row.image_paths);
+        const rawImage =
+          row.promoImagePath ??
+          row.promo_image_path ??
+          imagePaths[0] ??
+          null;
+        const productId = Number(row.productId ?? row.product_id ?? row.id);
+        const orderId = Number(row.orderId ?? row.order_id);
+        return {
+          productId,
+          orderId: Number.isFinite(orderId) ? orderId : null,
+          orderRef: row.orderRef ?? row.order_ref ?? null,
+          orderedAt: row.orderedAt ?? row.ordered_at ?? null,
+          name: String(row.name || `Product #${productId || "-"}`),
+          slug: row.slug ? String(row.slug) : null,
+          image: normalizeUploadsUrl(rawImage),
+          imageUrl: normalizeUploadsUrl(rawImage),
+        };
+      });
+
+      return res.json({
+        success: true,
+        items,
+        meta: { totalItems: items.length },
+      });
+    } catch (error) {
+      console.error("[store/my/reviews/need] error", error);
+      return res
+        .status(500)
+        .json({ success: false, message: "Failed to load need-to-review list" });
+    }
+  }
+);
+
+// GET /api/store/my/reviews (auth)
+router.get(
   "/my/reviews",
   protect,
   async (req: Request, res: Response, next: NextFunction) => {
@@ -769,11 +1004,15 @@ router.get(
         ],
       });
 
-      const data = reviews.map((review: any) =>
+      const items = reviews.map((review: any) =>
         toReviewResponse(review, review?.product ?? review?.get?.("product"))
       );
 
-      return res.json({ success: true, data });
+      return res.json({
+        success: true,
+        items,
+        meta: { totalItems: items.length },
+      });
     } catch (error) {
       console.error("[store/my/reviews] error", error);
       return res
@@ -801,6 +1040,18 @@ router.post(
       if (!userId) return;
 
       const { productId, rating, comment, images } = parsed.data;
+      const validated = validateReviewSubmission(comment, images);
+      if (!validated.ok) {
+        return res.status(400).json({ message: validated.message });
+      }
+
+      const eligible = await hasEligibleDeliveredOrderItem(userId, productId);
+      if (!eligible) {
+        return res.status(403).json({
+          message: "Product is not eligible for review yet.",
+        });
+      }
+
       const product = await Product.findByPk(productId, {
         attributes: ["id", "name", "slug", "promoImagePath", "imagePaths"],
       });
@@ -812,15 +1063,18 @@ router.post(
         where: { userId, productId },
       });
       if (existing) {
-        return res.status(409).json({ message: "Review already exists" });
+        return res.status(409).json({
+          success: false,
+          message: "You already reviewed this product.",
+        });
       }
 
       const review = await ProductReview.create({
         userId,
         productId,
         rating,
-        comment: normalizeReviewComment(comment),
-        images: normalizeReviewImages(images),
+        comment: validated.comment,
+        images: validated.images,
       } as any);
 
       return res.status(201).json({
@@ -877,17 +1131,36 @@ router.patch(
         updates.rating = parsed.data.rating;
       }
       if (typeof parsed.data.comment !== "undefined") {
-        updates.comment = normalizeReviewComment(parsed.data.comment);
+        const nextComment = normalizeReviewComment(parsed.data.comment);
+        if (!nextComment || nextComment.length < 3) {
+          return res.status(400).json({
+            message: "Comment must be at least 3 characters.",
+          });
+        }
+        updates.comment = nextComment;
       }
       if (typeof parsed.data.images !== "undefined") {
-        updates.images = normalizeReviewImages(parsed.data.images);
+        const nextImages = normalizeReviewImages(parsed.data.images);
+        if (
+          nextImages &&
+          nextImages.some((image) => !isValidReviewImageReference(image))
+        ) {
+          return res.status(400).json({
+            message: "Images must be jpg/png URLs.",
+          });
+        }
+        updates.images = nextImages;
       }
 
       await review.update(updates);
+      const reviewWithRelations = review as any;
 
       return res.json({
         success: true,
-        data: toReviewResponse(review, review?.product ?? review?.get?.("product")),
+        data: toReviewResponse(
+          reviewWithRelations,
+          reviewWithRelations?.product ?? reviewWithRelations?.get?.("product")
+        ),
       });
     } catch (error) {
       console.error("[store/reviews/:id] error", error);
@@ -931,19 +1204,26 @@ router.put(
       }
 
       const { rating, comment, images } = parsed.data;
+      const validated = validateReviewSubmission(comment, images);
+      if (!validated.ok) {
+        return res.status(400).json({ message: validated.message });
+      }
+
+      const eligible = await hasEligibleDeliveredOrderItem(userId, productId);
+      if (!eligible) {
+        return res.status(403).json({
+          message: "Product is not eligible for review yet.",
+        });
+      }
+
       const existing = await ProductReview.findOne({
         where: { userId, productId },
       });
 
       if (existing) {
-        await existing.update({
-          rating,
-          comment: normalizeReviewComment(comment),
-          images: normalizeReviewImages(images),
-        });
-        return res.json({
-          success: true,
-          data: toReviewResponse(existing, product),
+        return res.status(409).json({
+          success: false,
+          message: "You already reviewed this product.",
         });
       }
 
@@ -951,8 +1231,8 @@ router.put(
         userId,
         productId,
         rating,
-        comment: normalizeReviewComment(comment),
-        images: normalizeReviewImages(images),
+        comment: validated.comment,
+        images: validated.images,
       } as any);
 
       return res.status(201).json({
@@ -1021,7 +1301,7 @@ router.post(
           where: {
             id: { [Op.in]: productIds },
             status: "active",
-            published: { [Op.in]: [1, true] },
+            isPublished: { [Op.in]: [1, true] },
           },
           attributes: [
             "id",
@@ -1262,15 +1542,17 @@ router.post(
       } catch (error) {
         await tx.rollback();
         console.error("[store/orders] error", error);
+        const errorMessage = (error as any)?.message;
         return res
           .status(500)
-          .json({ message: error?.message || "Failed to create order" });
+          .json({ message: errorMessage || "Failed to create order" });
       }
     } catch (error) {
       console.error("[store/orders] error", error);
+      const errorMessage = (error as any)?.message;
       return res
         .status(500)
-        .json({ message: error?.message || "Failed to create order" });
+        .json({ message: errorMessage || "Failed to create order" });
     }
   }
 );

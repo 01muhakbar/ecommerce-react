@@ -18,6 +18,8 @@
     "seed:categories-demo": "tsx src/scripts/seedCategoriesDemo.ts",
     "seed:analytics": "tsx src/scripts/seedAnalyticsDemo.ts",
     "seed:customers": "tsx src/scripts/seedCustomers.ts",
+    "reviews:clean-images": "tsx src/scripts/cleanBrokenReviewImages.ts",
+    "reviews:clean-images:dry": "tsx src/scripts/cleanBrokenReviewImages.ts --dry-run",
     "db:sync": "tsx -e \"import('./src/models/index.ts').then(m=>m.syncDb())\"",
     "db:reset": "tsx src/scripts/reset-db.ts",
     "migrate": "node scripts/run-migrations.js",

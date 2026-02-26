@@ -23,9 +23,53 @@ export type ReviewResponse = {
   } | null;
 };
 
+export type NeedReviewItem = {
+  productId: number;
+  orderId?: number | null;
+  orderRef?: string | null;
+  orderedAt?: string | null;
+  slug?: string | null;
+  name: string;
+  image?: string | null;
+  imageUrl?: string | null;
+};
+
+type ReviewsListResponse = {
+  items?: ReviewResponse[];
+  meta?: {
+    totalItems?: number;
+  };
+};
+
+type NeedReviewListResponse = {
+  items?: NeedReviewItem[];
+  meta?: {
+    totalItems?: number;
+  };
+};
+
 export const fetchMyReviews = async () => {
-  const { data } = await api.get<{ data: ReviewResponse[] }>("/store/my/reviews");
-  return data;
+  const { data } = await api.get<ReviewsListResponse>("/store/my/reviews");
+  const items = Array.isArray(data?.items) ? data.items : [];
+  const totalItems = Number(data?.meta?.totalItems ?? items.length);
+  return {
+    items,
+    meta: {
+      totalItems: Number.isFinite(totalItems) ? totalItems : items.length,
+    },
+  };
+};
+
+export const fetchMyReviewNeeds = async () => {
+  const { data } = await api.get<NeedReviewListResponse>("/store/my/reviews/need");
+  const items = Array.isArray(data?.items) ? data.items : [];
+  const totalItems = Number(data?.meta?.totalItems ?? items.length);
+  return {
+    items,
+    meta: {
+      totalItems: Number.isFinite(totalItems) ? totalItems : items.length,
+    },
+  };
 };
 
 export const createReview = async (payload: {
@@ -61,4 +105,17 @@ export const upsertReviewByProduct = async (
     payload
   );
   return data;
+};
+
+export const uploadReviewImage = async (file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await api.post<{ data?: { url?: string } }>("/upload", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  const url = data?.data?.url;
+  if (!url) {
+    throw new Error("Upload succeeded without URL.");
+  }
+  return url;
 };

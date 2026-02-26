@@ -8,6 +8,14 @@ export type GuestCartItem = {
 
 const STORAGE_KEY = "guest_cart_v1";
 
+const hasStorageValue = () => {
+  try {
+    return localStorage.getItem(STORAGE_KEY) !== null;
+  } catch {
+    return false;
+  }
+};
+
 const readItems = (): GuestCartItem[] => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -52,6 +60,31 @@ const writeItems = (items: GuestCartItem[]) => {
 };
 
 export const getGuestCart = () => ({ items: readItems() });
+
+export const hasGuestCartStorage = () => hasStorageValue();
+
+export const setGuestCartItems = (items: GuestCartItem[]) => {
+  const normalized = (Array.isArray(items) ? items : [])
+    .map((item: any) => ({
+      productId: Number(item?.productId ?? item?.id),
+      qty: Number(item?.qty ?? item?.quantity ?? 0),
+      name: typeof item?.name === "string" ? item.name : undefined,
+      price: Number.isFinite(Number(item?.price)) ? Number(item.price) : undefined,
+      imageUrl:
+        typeof item?.imageUrl === "string" || item?.imageUrl === null
+          ? item.imageUrl
+          : undefined,
+    }))
+    .filter(
+      (item) =>
+        Number.isFinite(item.productId) &&
+        item.productId > 0 &&
+        Number.isFinite(item.qty) &&
+        item.qty > 0
+    );
+  writeItems(normalized);
+  return normalized;
+};
 
 export const addGuestItemSnapshot = (
   productId: number,

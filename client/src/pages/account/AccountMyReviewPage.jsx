@@ -2,12 +2,36 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Image as ImageIcon, Star } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
-import { fetchStoreMyOrders, fetchStoreOrder } from "../../api/store.service.ts";
-import { fetchMyReviews, upsertReviewByProduct } from "../../api/reviews.service.ts";
+import {
+  createReview,
+  fetchMyReviewNeeds,
+  fetchMyReviews,
+  uploadReviewImage,
+  updateReview,
+} from "../../api/reviews.service.ts";
 import ReviewModal from "../../components/account/ReviewModal.jsx";
 import { resolveProductImageUrl } from "../../utils/productImage.js";
 
 const PAGE_SIZE = 16;
+
+const toDateLabel = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const normalizeReviewImages = (review) => {
+  if (!Array.isArray(review?.images)) return [];
+  return review.images
+    .map((image) => String(image || "").trim())
+    .filter(Boolean)
+    .slice(0, 4);
+};
 
 const ResolvedImage = ({ product, alt, className, fallback }) => {
   const resolvedSrc = useMemo(() => resolveProductImageUrl(product), [product]);
@@ -18,27 +42,7 @@ const ResolvedImage = ({ product, alt, className, fallback }) => {
   }, [resolvedSrc]);
 
   if (!src) return fallback;
-  return (
-    <img
-      src={src}
-      alt={alt}
-      className={className}
-      onError={() => setSrc("")}
-    />
-  );
-};
-
-const getOrderRef = (order) =>
-  order?.invoiceNo || order?.invoice || order?.ref || order?.orderId || order?.id;
-
-const getProductFromItem = (item) => {
-  const productId = Number(item?.productId ?? item?.id ?? item?.product_id);
-  if (!Number.isFinite(productId)) return null;
-  return {
-    id: productId,
-    name: item?.name || `Product #${productId}`,
-    imageUrl: item?.imageUrl ?? item?.image ?? item?.thumbnail ?? null,
-  };
+  return <img src={src} alt={alt} className={className} onError={() => setSrc("")} />;
 };
 
 export default function AccountMyReviewPage() {
@@ -46,132 +50,50 @@ export default function AccountMyReviewPage() {
   const [activeTab, setActiveTab] = useState("need");
   const [searchParams, setSearchParams] = useSearchParams();
   const page = Math.max(1, Number(searchParams.get("page") || 1));
-  const [products, setProducts] = useState([]);
-  const [isLoadingProducts, setIsLoadingProducts] = useState(true);
   const [submitError, setSubmitError] = useState("");
+  const [submitSuccess, setSubmitSuccess] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalState, setModalState] = useState({
     open: false,
     product: null,
     review: null,
   });
 
-  const {
-    data: ordersData,
-    isLoading: isLoadingOrders,
-    isError: isOrdersError,
-    error: ordersError,
-  } = useQuery({
-    queryKey: ["account", "orders", "my", "review"],
-    queryFn: () => fetchStoreMyOrders(),
+  const needQuery = useQuery({
+    queryKey: ["account", "reviews", "need"],
+    queryFn: () => fetchMyReviewNeeds(),
   });
-
-  const {
-    data: reviewsData,
-    isLoading: isLoadingReviews,
-    isError: isReviewsError,
-    error: reviewsError,
-  } = useQuery({
-    queryKey: ["account", "reviews", "my"],
+  const reviewedQuery = useQuery({
+    queryKey: ["account", "reviews", "reviewed"],
     queryFn: () => fetchMyReviews(),
   });
 
-  const orders = Array.isArray(ordersData?.data)
-    ? ordersData.data
-    : Array.isArray(ordersData)
-      ? ordersData
-      : [];
+  const needToReview = Array.isArray(needQuery.data?.items) ? needQuery.data.items : [];
+  const reviews = Array.isArray(reviewedQuery.data?.items) ? reviewedQuery.data.items : [];
 
-  const reviews = Array.isArray(reviewsData?.data)
-    ? reviewsData.data
-    : Array.isArray(reviewsData)
-      ? reviewsData
-      : [];
-
-  useEffect(() => {
-    let active = true;
-    const loadProducts = async () => {
-      setIsLoadingProducts(true);
-      const refs = orders
-        .map(getOrderRef)
-        .filter(Boolean)
-        .map(String);
-      const uniqueRefs = Array.from(new Set(refs));
-      if (uniqueRefs.length === 0) {
-        if (active) {
-          setProducts([]);
-          setIsLoadingProducts(false);
-        }
-        return;
-      }
-      const results = await Promise.allSettled(
-        uniqueRefs.map((ref) => fetchStoreOrder(ref))
-      );
-      const productMap = new Map();
-      results.forEach((result) => {
-        if (result.status !== "fulfilled") return;
-        const payload = result.value?.data ?? result.value;
-        const items = Array.isArray(payload?.items) ? payload.items : [];
-        items.forEach((item) => {
-          const product = getProductFromItem(item);
-          if (!product || productMap.has(product.id)) return;
-          productMap.set(product.id, product);
-        });
-      });
-      if (active) {
-        setProducts(Array.from(productMap.values()));
-        setIsLoadingProducts(false);
-      }
-    };
-    loadProducts();
-    return () => {
-      active = false;
-    };
-  }, [orders]);
-
-  const productIndex = useMemo(() => {
-    const map = new Map();
-    products.forEach((product) => {
-      map.set(product.id, product);
-    });
-    return map;
-  }, [products]);
-
-  const reviewMap = useMemo(() => {
-    const map = new Map();
-    reviews.forEach((review) => {
-      if (review?.productId) {
-        map.set(review.productId, review);
-      }
-    });
-    return map;
-  }, [reviews]);
-
-  const reviewedIds = useMemo(() => new Set(reviewMap.keys()), [reviewMap]);
-
-  const reviewedProducts = useMemo(() => {
-    return reviews.map((review) => {
-      const productId = Number(review.productId);
-      const base = productIndex.get(productId) || {};
-      const product = review.product || {};
-      return {
-        id: productId,
-        name: product.name || base.name || `Product #${productId}`,
-        imageUrl: product.imageUrl || base.imageUrl || null,
-        review,
-      };
-    });
-  }, [reviews, productIndex]);
-
-  const needToReview = useMemo(() => {
-    return products.filter((product) => !reviewedIds.has(product.id));
-  }, [products, reviewedIds]);
+  const reviewedProducts = useMemo(
+    () =>
+      reviews.map((review) => {
+        const productId = Number(review?.productId);
+        const fallbackName = Number.isFinite(productId)
+          ? `Product #${productId}`
+          : "Reviewed product";
+        return {
+          id: Number.isFinite(productId) ? productId : `review-${review?.id}`,
+          productId: Number.isFinite(productId) ? productId : null,
+          name: review?.product?.name || fallbackName,
+          imageUrl: review?.product?.imageUrl || null,
+          review,
+        };
+      }),
+    [reviews]
+  );
 
   const currentList = activeTab === "need" ? needToReview : reviewedProducts;
   const totalItems = currentList.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
   const startIndex = (page - 1) * PAGE_SIZE;
   const pagedItems = currentList.slice(startIndex, startIndex + PAGE_SIZE);
-
   const startLabel = totalItems === 0 ? 0 : startIndex + 1;
   const endLabel = totalItems === 0 ? 0 : Math.min(totalItems, startIndex + PAGE_SIZE);
 
@@ -199,44 +121,78 @@ export default function AccountMyReviewPage() {
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
+    setSubmitError("");
+    setSubmitSuccess("");
     updatePage(1);
   };
 
-  const handleOpenModal = (product) => {
-    const review = reviewMap.get(product.id) || null;
+  const handleOpenModal = (product, review = null) => {
+    setSubmitError("");
+    setSubmitSuccess("");
     setModalState({ open: true, product, review });
   };
 
   const handleCloseModal = () => {
-    setSubmitError("");
     setModalState({ open: false, product: null, review: null });
   };
 
   const handleSaveReview = async (payload) => {
-    if (!modalState.product) return;
+    if (!modalState.product?.productId && !modalState.product?.id) return;
+    const productId = Number(modalState.product?.productId ?? modalState.product?.id);
+    if (!Number.isFinite(productId)) return;
+
     setSubmitError("");
+    setSubmitSuccess("");
+    setIsSubmitting(true);
     try {
-      await upsertReviewByProduct(modalState.product.id, {
-        rating: payload.rating,
-        comment: payload.comment,
-        images: payload.images || [],
-      });
-      await queryClient.invalidateQueries({
-        queryKey: ["account", "reviews", "my"],
-      });
+      const uploadedUrls =
+        Array.isArray(payload?.newFiles) && payload.newFiles.length > 0
+          ? await Promise.all(payload.newFiles.map((file) => uploadReviewImage(file)))
+          : [];
+      const existingImages = Array.isArray(payload?.existingImages)
+        ? payload.existingImages
+        : [];
+      const images = [...existingImages, ...uploadedUrls].slice(0, 4);
+
+      if (modalState.review?.id) {
+        await updateReview(Number(modalState.review.id), {
+          rating: payload.rating,
+          comment: payload.comment,
+          images,
+        });
+      } else {
+        await createReview({
+          productId,
+          rating: payload.rating,
+          comment: payload.comment,
+          images,
+        });
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["account", "reviews", "need"] }),
+        queryClient.invalidateQueries({ queryKey: ["account", "reviews", "reviewed"] }),
+      ]);
+      setActiveTab("reviewed");
+      updatePage(1);
       handleCloseModal();
+      setSubmitSuccess("Review submitted successfully.");
     } catch (err) {
-      setSubmitError(err?.response?.data?.message || "Failed to submit review.");
+      const status = err?.response?.status;
+      const message =
+        status === 409
+          ? "You already reviewed this product."
+          : err?.response?.data?.message || "Failed to submit review.";
+      setSubmitError(message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const showEmptyState =
-    !isLoadingOrders &&
-    !isLoadingProducts &&
-    !isLoadingReviews &&
-    !isOrdersError &&
-    !isReviewsError &&
-    currentList.length === 0;
+  const isLoading =
+    activeTab === "need" ? needQuery.isLoading : reviewedQuery.isLoading;
+  const activeError = activeTab === "need" ? needQuery.error : reviewedQuery.error;
+  const isActiveError = activeTab === "need" ? needQuery.isError : reviewedQuery.isError;
+  const showEmptyState = !isLoading && !isActiveError && currentList.length === 0;
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-6">
@@ -265,23 +221,19 @@ export default function AccountMyReviewPage() {
         </button>
       </div>
 
-      {isLoadingOrders || isLoadingProducts || isLoadingReviews ? (
+      {isLoading ? (
         <div className="py-10 text-sm text-slate-500">Loading reviews...</div>
-      ) : isOrdersError || isReviewsError ? (
+      ) : isActiveError ? (
         <div className="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-600">
-          {ordersError?.response?.status === 401 ||
-          reviewsError?.response?.status === 401 ? (
+          {activeError?.response?.status === 401 ? (
             <>
               Please login.{" "}
-              <Link
-                to="/auth/login"
-                className="font-medium text-rose-700 underline"
-              >
+              <Link to="/auth/login" className="font-medium text-rose-700 underline">
                 Go to login
               </Link>
             </>
           ) : (
-            "Failed to load orders."
+            "Failed to load reviews."
           )}
         </div>
       ) : showEmptyState ? (
@@ -293,15 +245,15 @@ export default function AccountMyReviewPage() {
       ) : (
         <>
           <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {pagedItems.map((product) => (
+            {pagedItems.map((item) =>
               activeTab === "need" ? (
                 <div
-                  key={product.id}
+                  key={`${item.productId}-${item.orderId ?? "na"}`}
                   className="flex items-center gap-4 rounded-xl border border-slate-200 bg-white px-4 py-4"
                 >
                   <ResolvedImage
-                    product={product}
-                    alt={product.name}
+                    product={item}
+                    alt={item.name}
                     className="h-14 w-14 rounded-lg object-cover"
                     fallback={
                       <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-slate-50 text-slate-400">
@@ -311,12 +263,12 @@ export default function AccountMyReviewPage() {
                   />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-slate-800">
-                      {product.name}
+                      {item.name}
                     </p>
                   </div>
                   <button
                     type="button"
-                    onClick={() => handleOpenModal(product)}
+                    onClick={() => handleOpenModal(item)}
                     className="ml-auto inline-flex rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
                   >
                     Write Review
@@ -324,45 +276,74 @@ export default function AccountMyReviewPage() {
                 </div>
               ) : (
                 <div
-                  key={product.id}
-                  className="flex flex-col items-center rounded-xl border border-slate-100 bg-white p-6 text-center shadow-sm transition-shadow hover:shadow-md"
+                  key={item.id}
+                  className="rounded-xl border border-slate-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
                 >
-                  <div className="flex h-24 w-24 items-center justify-center rounded-xl bg-slate-50 p-1">
-                    <ResolvedImage
-                      product={product}
-                      alt={product.name}
-                      className="h-full w-full rounded-xl object-cover"
-                      fallback={<ImageIcon className="h-8 w-8 text-slate-300" />}
-                    />
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-slate-50 p-1">
+                      <ResolvedImage
+                        product={item}
+                        alt={item.name}
+                        className="h-full w-full rounded-lg object-cover"
+                        fallback={<ImageIcon className="h-8 w-8 text-slate-300" />}
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="line-clamp-2 text-sm font-semibold text-slate-800">
+                        {item.name}
+                      </p>
+                      <div className="mt-2 flex items-center gap-1">
+                        {Array.from({ length: 5 }).map((_, idx) => {
+                          const ratingValue = Number(item.review?.rating || 0);
+                          const active = idx + 1 <= ratingValue;
+                          return (
+                            <Star
+                              key={idx}
+                              className={`h-4 w-4 ${
+                                active ? "text-yellow-400" : "text-slate-200"
+                              }`}
+                              fill={active ? "currentColor" : "none"}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
-                  <p className="mt-4 line-clamp-1 text-sm font-semibold text-slate-800">
-                    {product.name}
+                  <p className="mt-3 line-clamp-3 text-sm text-slate-600">
+                    {item.review?.comment || "-"}
                   </p>
-                  <div className="mt-2 flex items-center gap-1">
-                    {Array.from({ length: 5 }).map((_, idx) => {
-                      const ratingValue = Number(product.review?.rating || 0);
-                      const active = idx + 1 <= ratingValue;
-                      return (
-                        <Star
-                          key={idx}
-                          className={`h-4 w-4 ${
-                            active ? "text-yellow-400" : "text-slate-200"
-                          }`}
-                          fill={active ? "currentColor" : "none"}
+                  {normalizeReviewImages(item.review).length > 0 ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {normalizeReviewImages(item.review).map((image, index) => (
+                        <img
+                          key={`${item.id}-${index}`}
+                          src={image}
+                          alt=""
+                          className="h-12 w-12 rounded-md object-cover"
+                          onError={(event) => {
+                            event.currentTarget.onerror = null;
+                            event.currentTarget.src =
+                              "data:image/gif;base64,R0lGODlhAQABAAAAACw=";
+                          }}
                         />
-                      );
-                    })}
+                      ))}
+                    </div>
+                  ) : null}
+                  <div className="mt-3 flex items-center justify-between gap-2">
+                    <span className="text-xs text-slate-400">
+                      {toDateLabel(item.review?.createdAt)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenModal(item, item.review)}
+                      className="text-sm font-medium text-emerald-600 transition hover:text-emerald-700"
+                    >
+                      Edit Review
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenModal(product)}
-                    className="mt-2 text-sm font-medium text-emerald-600 transition hover:text-emerald-700"
-                  >
-                    Edit Review
-                  </button>
                 </div>
               )
-            ))}
+            )}
           </div>
 
           <div className="mt-6 flex items-center justify-between">
@@ -410,6 +391,11 @@ export default function AccountMyReviewPage() {
           {submitError}
         </div>
       ) : null}
+      {submitSuccess ? (
+        <div className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+          {submitSuccess}
+        </div>
+      ) : null}
 
       <ReviewModal
         open={modalState.open}
@@ -417,6 +403,7 @@ export default function AccountMyReviewPage() {
         review={modalState.review}
         onClose={handleCloseModal}
         onSubmit={handleSaveReview}
+        isSubmitting={isSubmitting}
       />
     </div>
   );

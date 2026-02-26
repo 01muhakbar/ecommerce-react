@@ -5,7 +5,9 @@ import { useCartStore } from "../store/cart.store.ts";
 import {
   addGuestItemSnapshot,
   getGuestCart,
+  hasGuestCartStorage,
   removeGuestItem,
+  setGuestCartItems,
   updateGuestItem,
 } from "../utils/guestCart.ts";
 
@@ -142,10 +144,46 @@ export function useCart() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<any>(null);
 
-  const cart = useMemo(
-    () => rawCart ?? buildFallbackCart(storeItems),
-    [rawCart, storeItems]
+  const fallbackCart = useMemo(() => buildFallbackCart(storeItems), [storeItems]);
+
+  const storeSignature = useMemo(
+    () =>
+      (Array.isArray(storeItems) ? storeItems : [])
+        .map((item) => {
+          const productId = Number(item?.productId ?? item?.id);
+          const qty = Math.max(0, Number(item?.qty ?? item?.quantity ?? 0));
+          return `${productId}:${qty}`;
+        })
+        .filter((value) => !value.startsWith("NaN:"))
+        .sort()
+        .join("|"),
+    [storeItems]
   );
+
+  const rawNormalizedItems = useMemo(() => normalizeCartProducts(rawCart), [rawCart]);
+  const rawSignature = useMemo(
+    () =>
+      rawNormalizedItems
+        .map((item) => `${item.productId}:${item.quantity}`)
+        .sort()
+        .join("|"),
+    [rawNormalizedItems]
+  );
+
+  const cart = useMemo(() => {
+    if (!rawCart) {
+      return fallbackCart;
+    }
+    if (mode !== "remote") {
+      return fallbackCart;
+    }
+    // Multiple useCart() instances can hold stale rawCart; prefer shared store snapshot
+    // when quantities/products are out of sync so drawer always reflects latest add/remove.
+    if (rawSignature !== storeSignature) {
+      return fallbackCart;
+    }
+    return rawCart;
+  }, [fallbackCart, mode, rawCart, rawSignature, storeSignature]);
   const items = useMemo(() => normalizeCartProducts(cart), [cart]);
   const count = useMemo(() => items.reduce((sum, item) => sum + item.quantity, 0), [items]);
   const isGuest = mode !== "remote";
@@ -172,8 +210,34 @@ export function useCart() {
   const refreshGuest = useCallback(() => {
     const guest = getGuestCart();
     const guestItems = Array.isArray(guest?.items) ? guest.items : [];
-    applyGuestItems(guestItems);
-  }, [applyGuestItems]);
+    if (guestItems.length > 0 || hasGuestCartStorage()) {
+      applyGuestItems(guestItems);
+      return;
+    }
+    const fallbackItems = (Array.isArray(storeItems) ? storeItems : [])
+      .map((item) => ({
+        productId: Number(item?.productId ?? item?.id),
+        qty: Math.max(1, Number(item?.qty ?? item?.quantity ?? 1)),
+        name: typeof item?.name === "string" ? item.name : undefined,
+        price: Number.isFinite(Number(item?.price)) ? Number(item?.price) : undefined,
+        imageUrl:
+          typeof item?.imageUrl === "string" || item?.imageUrl === null
+            ? item.imageUrl
+            : undefined,
+      }))
+      .filter(
+        (item) =>
+          Number.isFinite(item.productId) &&
+          item.productId > 0 &&
+          Number.isFinite(item.qty) &&
+          item.qty > 0
+      );
+    if (fallbackItems.length > 0) {
+      // One-time migration from persisted cart store to guest_cart_v1.
+      setGuestCartItems(fallbackItems);
+    }
+    applyGuestItems(fallbackItems);
+  }, [applyGuestItems, storeItems]);
 
   const refreshCart = useCallback(
     async (withLoading = true) => {

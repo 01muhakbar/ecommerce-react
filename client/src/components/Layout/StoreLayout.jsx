@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Home, Menu, ShoppingCart, UserRound } from "lucide-react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import StoreHeaderKacha from "../kachabazar-demo/StoreHeaderKacha.jsx";
+import { StoreCartDrawer } from "../../pages/store/StoreCartPage.jsx";
 import { useCartStore } from "../../store/cart.store.ts";
 import MobileMenuDrawer from "./MobileMenuDrawer.jsx";
 
@@ -10,19 +11,52 @@ export default function StoreLayout() {
   const isCheckoutRoute = location.pathname.startsWith("/checkout");
   const totalQty = useCartStore((state) => state.totalQty);
   const isHomeActive = location.pathname === "/";
-  const isCartActive = location.pathname.startsWith("/cart");
+  const isCartRoute = location.pathname.startsWith("/cart");
+  const isCartActive = isCartRoute;
   const isProfileActive =
     location.pathname.startsWith("/account") ||
     location.pathname.startsWith("/my-account");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isCartDrawerOpen, setIsCartDrawerOpen] = useState(false);
 
   useEffect(() => {
     setIsMenuOpen(false);
+    setIsCartDrawerOpen(false);
   }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    const onOpenDrawer = () => setIsCartDrawerOpen(true);
+    window.addEventListener("cart-drawer:open", onOpenDrawer);
+    return () => window.removeEventListener("cart-drawer:open", onOpenDrawer);
+  }, []);
+
+  useEffect(() => {
+    if (!isCartDrawerOpen || isCartRoute) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setIsCartDrawerOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isCartDrawerOpen, isCartRoute]);
+
+  const openCartDrawer = () => {
+    setIsCartDrawerOpen(true);
+  };
+
+  const closeCartDrawer = () => {
+    setIsCartDrawerOpen(false);
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <StoreHeaderKacha />
+      <StoreHeaderKacha onCartClick={openCartDrawer} />
       <main className="mx-auto w-full max-w-7xl px-4 py-8 pb-24 sm:pb-8">
         <Outlet />
       </main>
@@ -56,10 +90,11 @@ export default function StoreLayout() {
             <Home className="h-[18px] w-[18px]" />
             <span className="leading-none">Home</span>
           </Link>
-          <Link
-            to="/cart"
+          <button
+            type="button"
+            onClick={openCartDrawer}
             className={`relative flex h-full flex-col items-center justify-center rounded-lg text-xs tracking-[0.01em] hover:bg-emerald-500 ${
-              isCartActive
+              isCartActive || isCartDrawerOpen
                 ? "bg-emerald-500 font-semibold text-white"
                 : "font-medium text-white/90"
             }`}
@@ -71,7 +106,7 @@ export default function StoreLayout() {
                 {totalQty}
               </span>
             ) : null}
-          </Link>
+          </button>
           <Link
             to="/account"
             className={`flex h-full flex-col items-center justify-center rounded-lg text-xs tracking-[0.01em] hover:bg-emerald-500 ${
@@ -86,6 +121,13 @@ export default function StoreLayout() {
         </div>
       </nav>
       <MobileMenuDrawer isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} />
+      {!isCartRoute ? (
+        <StoreCartDrawer
+          isOpen={isCartDrawerOpen}
+          onClose={closeCartDrawer}
+          showBackdrop
+        />
+      ) : null}
     </div>
   );
 }

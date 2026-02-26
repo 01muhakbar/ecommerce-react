@@ -7,7 +7,7 @@ import TopInfoBar from "./TopInfoBar.jsx";
 import GreenHeaderBar from "./GreenHeaderBar.jsx";
 import NavBar from "./NavBar.jsx";
 
-export default function StoreHeaderKacha() {
+export default function StoreHeaderKacha({ onCartClick }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const totalQty = useCartStore((state) => state.totalQty);
@@ -56,6 +56,7 @@ export default function StoreHeaderKacha() {
         onSubmit={handleSearchSubmit}
         totalQty={totalQty}
         isAuthenticated={Boolean(isAuthenticated)}
+        onCartClick={onCartClick}
       />
       <div className="hidden sm:block">
         <NavBar

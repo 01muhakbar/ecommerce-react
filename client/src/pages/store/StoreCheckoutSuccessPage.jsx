@@ -1,13 +1,34 @@
+import { useEffect } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import QueryState from "../../components/UI/QueryState.jsx";
+
+const LAST_ORDER_REF_STORAGE_KEY = "store_last_order_ref";
+
+const readStoredOrderRef = () => {
+  try {
+    return String(localStorage.getItem(LAST_ORDER_REF_STORAGE_KEY) || "").trim();
+  } catch {
+    return "";
+  }
+};
 
 export default function StoreCheckoutSuccessPage() {
   const location = useLocation();
   const [params] = useSearchParams();
   const refFromParams = params.get("ref") || params.get("invoiceNo");
   const refFromState = location.state?.ref || location.state?.orderRef;
-  const orderRef = String(refFromParams || refFromState || "").trim();
+  const refFromStorage = readStoredOrderRef();
+  const orderRef = String(refFromParams || refFromState || refFromStorage || "").trim();
   const hasOrderRef = orderRef.length > 0;
+
+  useEffect(() => {
+    if (!hasOrderRef) return;
+    try {
+      localStorage.setItem(LAST_ORDER_REF_STORAGE_KEY, orderRef);
+    } catch {
+      // ignore storage errors
+    }
+  }, [hasOrderRef, orderRef]);
 
   return (
     <section className="mx-auto max-w-5xl px-3 py-6 sm:px-4 sm:py-8 lg:px-6">

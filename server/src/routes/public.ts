@@ -169,6 +169,8 @@ router.get("/products/:slug", async (req: Request, res: Response) => {
 });
 
 const UPLOAD_BASE_DIR = path.resolve(process.cwd(), "uploads");
+const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
+const ALLOWED_UPLOAD_MIME_TYPES = new Set(["image/jpeg", "image/png"]);
 const uploadStorage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     const targetDir = path.join(UPLOAD_BASE_DIR, "products");
@@ -185,16 +187,41 @@ const uploadStorage = multer.diskStorage({
   },
 });
 
-const upload = multer({ storage: uploadStorage });
+const upload = multer({
+  storage: uploadStorage,
+  limits: { fileSize: MAX_UPLOAD_BYTES },
+  fileFilter: (_req, file, cb) => {
+    if (!ALLOWED_UPLOAD_MIME_TYPES.has(file.mimetype)) {
+      cb(new Error("Only .jpeg and .png files are allowed."));
+      return;
+    }
+    cb(null, true);
+  },
+});
 
 // POST /api/upload (multipart)
-router.post("/upload", upload.single("file"), (req: Request, res: Response) => {
-  if (!req.file) {
-    return res.status(400).json({ success: false, message: "File is required" });
-  }
+router.post("/upload", (req: Request, res: Response) => {
+  upload.single("file")(req, res, (error: any) => {
+    if (error) {
+      if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+        return res.status(400).json({
+          success: false,
+          message: "Image too large (max 2MB).",
+        });
+      }
+      return res.status(400).json({
+        success: false,
+        message: error?.message || "Invalid upload payload.",
+      });
+    }
 
-  const url = `/uploads/products/${req.file.filename}`;
-  return res.status(201).json({ success: true, data: { url } });
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "File is required" });
+    }
+
+    const url = `/uploads/products/${req.file.filename}`;
+    return res.status(201).json({ success: true, data: { url } });
+  });
 });
 
 export default router;
