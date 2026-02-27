@@ -4,8 +4,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Banknote, CreditCard, Trash2, WalletCards } from "lucide-react";
 import { createOrderSchema } from "@ecommerce/schemas";
 import { useCartStore } from "../../store/cart.store.ts";
-import { createStoreOrder } from "../../api/store.service.ts";
+import { createStoreOrder, quoteStoreCoupon } from "../../api/store.service.ts";
 import { formatCurrency } from "../../utils/format.js";
+import { GENERIC_ERROR, ORDER_FAILED } from "../../constants/uiMessages.js";
 
 const INPUT_CLASS =
   "mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100";
@@ -69,6 +70,21 @@ function fieldClass(hasError) {
   }`;
 }
 
+function resolveCouponReasonMessage(reason, minSpend) {
+  switch (reason) {
+    case "not_found":
+      return "Coupon not found";
+    case "inactive":
+      return "Coupon is inactive";
+    case "expired":
+      return "Coupon has expired";
+    case "minSpend":
+      return `Minimum purchase ${formatCurrency(Number(minSpend || 0))} required`;
+    default:
+      return GENERIC_ERROR;
+  }
+}
+
 export default function CheckoutPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -93,6 +109,9 @@ export default function CheckoutPage() {
   const [paymentOptionId, setPaymentOptionId] = useState(PAYMENT_OPTIONS[0].id);
   const [couponCode, setCouponCode] = useState("");
   const [couponMessage, setCouponMessage] = useState("");
+  const [couponStatus, setCouponStatus] = useState("idle");
+  const [appliedCouponMeta, setAppliedCouponMeta] = useState(null);
+  const [couponBaseline, setCouponBaseline] = useState(null);
   const [discount, setDiscount] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -167,7 +186,10 @@ export default function CheckoutPage() {
 
   const subtotalValue = Number(subtotal || 0);
   const discountValue = Number(discount || 0);
-  const total = Math.max(0, subtotalValue + shippingCost - discountValue);
+  const quotedTotalValue = Number(appliedCouponMeta?.total);
+  const total = Number.isFinite(quotedTotalValue)
+    ? Math.max(0, quotedTotalValue)
+    : Math.max(0, subtotalValue + shippingCost - discountValue);
 
   const fullName = `${firstName} ${lastName}`.trim();
   const shippingAddress = [
@@ -193,8 +215,9 @@ export default function CheckoutPage() {
         productId: item.productId,
         qty: item.qty,
       })),
+      couponCode: appliedCouponMeta?.code || undefined,
     }),
-    [fullName, phoneValue, shippingAddress, paymentMethod, summaryItems]
+    [fullName, phoneValue, shippingAddress, paymentMethod, summaryItems, appliedCouponMeta]
   );
 
   const focusField = (ref) => {
@@ -203,16 +226,85 @@ export default function CheckoutPage() {
     ref.current.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
-  const handleApplyCoupon = () => {
-    const code = couponCode.trim();
+  const clearAppliedCoupon = (message = "", status = "idle") => {
+    setDiscount(0);
+    setAppliedCouponMeta(null);
+    setCouponBaseline(null);
+    setCouponStatus(status);
+    setCouponMessage(message);
+  };
+
+  const handleApplyCoupon = async () => {
+    if (couponStatus === "loading") return;
+
+    const code = couponCode.trim().toUpperCase();
     if (!code) {
-      setCouponMessage("Please enter coupon code.");
-      setDiscount(0);
+      if (appliedCouponMeta?.code) {
+        setCouponCode("");
+        clearAppliedCoupon("Coupon removed.", "idle");
+        return;
+      }
+      clearAppliedCoupon("Please enter coupon code.", "error");
       return;
     }
-    setCouponMessage("Coupon service is not active yet.");
-    setDiscount(0);
+
+    setCouponStatus("loading");
+    setCouponMessage("");
+    try {
+      const quoted = await quoteStoreCoupon({
+        code,
+        subtotal: subtotalValue,
+        shipping: shippingCost,
+      });
+
+      if (!quoted?.valid) {
+        clearAppliedCoupon(
+          resolveCouponReasonMessage(quoted?.reason, quoted?.minSpend),
+          "error"
+        );
+        return;
+      }
+
+      const normalizedCode = String(quoted.code || code).trim().toUpperCase();
+      const normalizedDiscount = Number(quoted.discount || 0);
+      const normalizedTotal = Number(quoted.total || 0);
+      setCouponCode(normalizedCode);
+      setDiscount(Number.isFinite(normalizedDiscount) ? normalizedDiscount : 0);
+      setAppliedCouponMeta({
+        code: normalizedCode,
+        discountType: quoted.discountType || "percent",
+        discountValue: Number(quoted.discountValue || 0),
+        minSpend: Number(quoted.minSpend || 0),
+        total: Number.isFinite(normalizedTotal) ? normalizedTotal : 0,
+      });
+      setCouponBaseline({
+        subtotal: subtotalValue,
+        shipping: shippingCost,
+      });
+      setCouponStatus("applied");
+      setCouponMessage(`Coupon ${normalizedCode} applied.`);
+    } catch (err) {
+      const serverMessage =
+        typeof err?.response?.data?.message === "string"
+          ? err.response.data.message
+          : "";
+      clearAppliedCoupon(serverMessage || GENERIC_ERROR, "error");
+    }
   };
+
+  const handleRemoveCoupon = () => {
+    setCouponCode("");
+    clearAppliedCoupon("Coupon removed.", "idle");
+  };
+
+  useEffect(() => {
+    if (!appliedCouponMeta || !couponBaseline) return;
+    const hasSubtotalChanged = Number(couponBaseline.subtotal) !== Number(subtotalValue);
+    const hasShippingChanged = Number(couponBaseline.shipping) !== Number(shippingCost);
+    if (!hasSubtotalChanged && !hasShippingChanged) return;
+
+    clearAppliedCoupon("Cart updated. Please re-apply coupon.", "idle");
+  }, [appliedCouponMeta, couponBaseline, subtotalValue, shippingCost]);
 
   const handleQtyDecrement = (item) => {
     const currentQty = Math.max(1, Number(item.qty ?? 1));
@@ -361,6 +453,10 @@ export default function CheckoutPage() {
       );
     } catch (err) {
       const data = err?.response?.data;
+      const serverMessage =
+        typeof data?.message === "string" && data.message.trim()
+          ? data.message.trim()
+          : "";
       if (err?.response?.status === 401) {
         navigate("/auth/login", { replace: true, state: { from: "/checkout" } });
         return;
@@ -369,10 +465,8 @@ export default function CheckoutPage() {
         clearCart();
         setError("Cart items are no longer available. Please add them again.");
         setTimeout(() => navigate("/search"), 800);
-      } else if (err?.response?.status === 409) {
-        setError(data?.message || "Some items are out of stock.");
       } else {
-        setError(data?.message || "Checkout failed. Please try again.");
+        setError(serverMessage || ORDER_FAILED);
       }
     } finally {
       submitLockRef.current = false;
@@ -732,7 +826,10 @@ export default function CheckoutPage() {
 
             {error ? (
               <div className="mt-6 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                {error}
+                <p>{error}</p>
+                <p className="mt-1 text-xs text-rose-600">
+                  Fix any issue and press Place Order to try again.
+                </p>
               </div>
             ) : null}
 
@@ -745,10 +842,18 @@ export default function CheckoutPage() {
               </Link>
               <button
                 type="submit"
-                disabled={isSubmitting || isRemoteSyncing}
+                disabled={isSubmitting || isRemoteSyncing || couponStatus === "loading"}
+                aria-busy={isSubmitting}
                 className="inline-flex h-11 w-full items-center justify-center rounded-full bg-emerald-600 px-7 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
               >
-                {isSubmitting ? "Confirming..." : "Confirm Order"}
+                {isSubmitting ? (
+                  <>
+                    <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                    Processing...
+                  </>
+                ) : (
+                  "Place Order"
+                )}
               </button>
             </div>
           </div>
@@ -844,21 +949,46 @@ export default function CheckoutPage() {
                   type="text"
                   value={couponCode}
                   onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || couponStatus === "loading"}
                   placeholder="Coupon Code"
                   className="h-11 min-w-0 flex-1 rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-400 focus:outline-none"
                 />
                 <button
                   type="button"
                   onClick={handleApplyCoupon}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || couponStatus === "loading"}
                   className="h-11 w-24 shrink-0 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-28"
                 >
-                  Apply
+                  {couponStatus === "loading" ? "Applying..." : "Apply"}
                 </button>
               </div>
+              {appliedCouponMeta?.code ? (
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <p className="text-xs font-medium text-emerald-600">
+                    Applied: {appliedCouponMeta.code}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleRemoveCoupon}
+                    disabled={isSubmitting || couponStatus === "loading"}
+                    className="text-xs font-semibold text-rose-600 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : null}
               {couponMessage ? (
-                <p className="mt-2 text-xs text-slate-500">{couponMessage}</p>
+                <p
+                  className={`mt-2 text-xs ${
+                    couponStatus === "error"
+                      ? "text-rose-600"
+                      : couponStatus === "applied"
+                        ? "text-emerald-600"
+                        : "text-slate-500"
+                  }`}
+                >
+                  {couponMessage}
+                </p>
               ) : null}
             </div>
 
@@ -878,7 +1008,9 @@ export default function CheckoutPage() {
               <div className="flex items-center justify-between text-slate-600">
                 <span>Discount</span>
                 <span className="font-semibold tabular-nums text-orange-500">
-                  {formatCurrency(discountValue)}
+                  {discountValue > 0
+                    ? `- ${formatCurrency(discountValue)}`
+                    : formatCurrency(0)}
                 </span>
               </div>
               <div className="border-t border-dashed border-slate-200 pt-3" />

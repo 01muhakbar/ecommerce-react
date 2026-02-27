@@ -3,6 +3,12 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { ShoppingCart, Trash2, X } from "lucide-react";
 import { useCart } from "../../hooks/useCart.ts";
 import { formatCurrency } from "../../utils/format.js";
+import {
+  UiEmptyState,
+  UiErrorState,
+  UiUpdatingBadge,
+} from "../../components/ui-states/index.js";
+import { GENERIC_ERROR, UPDATING } from "../../constants/uiMessages.js";
 
 export function StoreCartDrawer({
   isOpen = true,
@@ -16,8 +22,12 @@ export function StoreCartDrawer({
   const hasItems = items.length > 0;
   const isInitialSyncing = hasHydrated && isLoading && !hasItems;
   const showSkeleton = !hasHydrated || isInitialSyncing;
+  const isFatalError = Boolean(error) && !showSkeleton && !hasItems;
+  const showInlineError = Boolean(error) && hasItems;
   const [shouldRender, setShouldRender] = useState(isOpen);
   const lastRefreshAtRef = useRef(0);
+  const errorMessage =
+    error?.response?.data?.message ?? error?.message ?? GENERIC_ERROR;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -106,6 +116,7 @@ export function StoreCartDrawer({
             <div className="flex items-center gap-2 text-slate-900">
               <ShoppingCart className="h-4 w-4" />
               <h1 className="text-base font-semibold sm:text-lg">Shopping Cart</h1>
+              {isLoading && hasHydrated ? <UiUpdatingBadge label={UPDATING} /> : null}
             </div>
             <button
               ref={closeButtonRef}
@@ -127,27 +138,53 @@ export function StoreCartDrawer({
               </div>
             ) : null}
 
-            {!showSkeleton && !hasItems ? (
-              <div className="flex min-h-[340px] flex-col items-center justify-center px-6 text-center">
-                <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-500">
-                  <ShoppingCart className="h-5 w-5" />
-                </div>
-                <p className="mt-4 text-base font-semibold text-slate-900">No items added to cart</p>
-                <p className="mt-1 text-sm text-slate-500">
-                  Please add products to your cart
-                </p>
-                <button
-                  type="button"
-                  onClick={handleContinueShopping}
-                  className="mt-6 inline-flex h-11 items-center justify-center rounded-full bg-slate-900 px-6 text-sm font-semibold !text-white visited:!text-white active:!text-white hover:bg-slate-800 hover:no-underline"
-                >
-                  Continue Shopping
-                </button>
-              </div>
+            {isFatalError ? (
+              <UiErrorState
+                title={GENERIC_ERROR}
+                message={errorMessage}
+                onRetry={() => refreshCart(false)}
+              />
+            ) : null}
+
+            {!showSkeleton && !isFatalError && !hasItems ? (
+              <UiEmptyState
+                className="min-h-[340px]"
+                title="No items added to cart"
+                description="Start shopping and add products to your cart."
+                actions={
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleContinueShopping}
+                      className="inline-flex h-11 items-center justify-center rounded-full bg-slate-900 px-6 text-sm font-semibold !text-white visited:!text-white active:!text-white hover:bg-slate-800 hover:no-underline"
+                    >
+                      Start Shopping
+                    </button>
+                    <Link
+                      to="/"
+                      className="inline-flex h-11 items-center justify-center rounded-full border border-slate-300 bg-white px-6 text-sm font-semibold text-slate-700 hover:border-slate-400"
+                    >
+                      Back to Home
+                    </Link>
+                  </>
+                }
+              />
             ) : null}
 
             {!showSkeleton && hasItems ? (
               <div className="divide-y divide-slate-100">
+                {showInlineError ? (
+                  <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                    {errorMessage}
+                    <button
+                      type="button"
+                      onClick={() => refreshCart(false)}
+                      className="ml-2 font-semibold underline underline-offset-2"
+                    >
+                      Try again
+                    </button>
+                  </div>
+                ) : null}
                 {items.map((item) => {
                   const rowProductId = resolveProductId(item);
                   const quantity = Math.max(1, Number(item.quantity) || 1);
@@ -252,10 +289,6 @@ export function StoreCartDrawer({
             <p className="mt-1 text-xs text-slate-500">
               Shipping and taxes calculated at checkout.
             </p>
-            {isLoading ? <p className="mt-2 text-xs text-slate-400">Syncing cart...</p> : null}
-            {error ? (
-              <p className="mt-2 text-xs text-rose-600">Failed to sync cart. Please try again.</p>
-            ) : null}
 
             <div className="mt-4 grid grid-cols-2 gap-3">
               {hasItems ? (

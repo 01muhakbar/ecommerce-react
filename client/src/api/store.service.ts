@@ -42,6 +42,21 @@ export type StoreCoupon = {
   expiresAt?: string | null;
 };
 
+export type StoreCouponQuoteResponse = {
+  valid: boolean;
+  reason?: "not_found" | "inactive" | "expired" | "minSpend" | "invalid_input";
+  message?: string;
+  code: string | null;
+  discount: number;
+  discountType: "percent" | "fixed" | null;
+  discountValue: number;
+  minSpend: number;
+  expiresAt: string | null;
+  subtotal: number;
+  shipping: number;
+  total: number;
+};
+
 export type StoreProductsResponse = {
   data: StoreProduct[];
   meta: {
@@ -158,4 +173,13 @@ export const validateStoreCoupon = async (payload: { code: string; subtotal: num
     };
   }>("/store/coupons/validate", payload);
   return response;
+};
+
+export const quoteStoreCoupon = async (payload: {
+  code: string;
+  subtotal: number;
+  shipping?: number;
+}) => {
+  const { data } = await api.post<StoreCouponQuoteResponse>("/store/coupons/quote", payload);
+  return data;
 };

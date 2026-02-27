@@ -114,7 +114,7 @@ const MENU = [
   },
   { label: "Customers", to: "/admin/customers", icon: IconUsers, perm: "CUSTOMERS_VIEW" },
   { label: "Orders", to: "/admin/orders", icon: IconReceipt, perm: "ORDERS_VIEW" },
-  { label: "Our Staff", to: "/admin/staff", icon: IconStaff, perm: "STAFF_MANAGE" },
+  { label: "Our Staff", to: "/admin/our-staff", icon: IconStaff, perm: "STAFF_MANAGE" },
   { label: "Settings", to: "/admin/settings", icon: IconSettings, perm: "SETTINGS_MANAGE" },
   {
     label: "International",

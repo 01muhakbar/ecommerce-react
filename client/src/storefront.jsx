@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useCart } from "./hooks/useCart.ts";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "./api/axios.ts";
+import { prevData } from "./lib/rq.ts";
 import { formatCurrency } from "./utils/format.js";
 import { resolveProductImageUrl } from "./utils/productImage.js";
 
@@ -96,6 +97,7 @@ export const useProducts = ({ q, search, category, page, limit }) =>
       limit || 12,
     ],
     queryFn: () => fetchProducts({ q, search, category, page, limit }),
+    placeholderData: prevData,
     staleTime: 1000 * 30,
   });
 

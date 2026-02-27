@@ -19,21 +19,38 @@ async function main() {
     const passwordPlain = process.env.SEED_SUPER_PASS || "supersecure123";
     const hashed = await bcrypt.hash(passwordPlain, 10);
 
-    const [user, created] = await User.findOrCreate({
-      where: { email },
-      defaults: {
+    const existing = await User.findOne({ where: { email } });
+    if (!existing) {
+      await User.create({
         name: "Super Admin",
         email,
         password: hashed,
         role: "super_admin",
         status: "active",
-      },
-    });
-
-    if (created) {
+      });
       console.log(`[seed] ✅ Super admin created: ${email} / ${passwordPlain}`);
     } else {
-      console.log(`[seed] ℹ️ Super admin already exists: ${email}`);
+      const patch: Record<string, unknown> = {};
+
+      const currentName = String(existing.get("name") ?? "").trim();
+      const currentRole = String(existing.get("role") ?? "").trim().toLowerCase();
+      const currentStatus = String(existing.get("status") ?? "").trim().toLowerCase();
+      const currentPasswordHash = String(existing.get("password") ?? "");
+
+      if (!currentName) patch.name = "Super Admin";
+      if (currentRole !== "super_admin") patch.role = "super_admin";
+      if (currentStatus !== "active") patch.status = "active";
+
+      const passwordMatch =
+        currentPasswordHash && (await bcrypt.compare(passwordPlain, currentPasswordHash));
+      if (!passwordMatch) patch.password = hashed;
+
+      if (Object.keys(patch).length > 0) {
+        await existing.update(patch as any);
+        console.log(`[seed] ✅ Super admin repaired: ${email}`);
+      } else {
+        console.log(`[seed] ℹ️ Super admin already valid: ${email}`);
+      }
     }
 
     console.log("[seed] Done!");

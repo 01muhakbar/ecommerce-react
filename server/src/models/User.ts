@@ -18,6 +18,7 @@ export class User extends Model<
   declare password: string; // hashed
   declare role: string;     // "super_admin" | "admin" | "staff" | "user" | ...
   declare status: string;   // "active" | "inactive" | ...
+  declare isPublished: CreationOptional<boolean>;
 
   declare created_at: CreationOptional<Date>;
   declare updated_at: CreationOptional<Date>;
@@ -57,6 +58,12 @@ export function initUser(sequelize: Sequelize) {
         type: DataTypes.STRING(32),
         allowNull: false,
         defaultValue: "active",
+      },
+      isPublished: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+        field: "is_published",
       },
 
       created_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },

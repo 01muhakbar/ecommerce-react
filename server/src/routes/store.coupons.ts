@@ -1,36 +1,13 @@
 import { Router } from "express";
-import { normalizeCouponRecord, validateCoupon } from "../services/coupon.service.js";
+import {
+  normalizeCouponRecord,
+  quoteCoupon,
+  validateCoupon,
+} from "../services/coupon.service.js";
 import { Coupon } from "../models/index.js";
 import { Op } from "sequelize";
 
 const router = Router();
-
-const parseLocaleNumber = (value: any) => {
-  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
-  if (value == null) return 0;
-  const raw = String(value).trim();
-  if (!raw) return 0;
-  const cleaned = raw
-    .replace(/(rp|idr)/gi, "")
-    .replace(/\s+/g, "")
-    .replace(/[^\d,.-]/g, "");
-  if (!cleaned) return 0;
-  const hasComma = cleaned.includes(",");
-  const hasDot = cleaned.includes(".");
-  let normalized = cleaned;
-  if (hasComma && hasDot) {
-    normalized = cleaned.replace(/\./g, "").replace(",", ".");
-  } else if (hasComma) {
-    normalized = cleaned.replace(",", ".");
-  } else if (hasDot) {
-    const isThousands = /^\d{1,3}(\.\d{3})+$/.test(cleaned);
-    if (isThousands) {
-      normalized = cleaned.replace(/\./g, "");
-    }
-  }
-  const n = Number.parseFloat(normalized);
-  return Number.isFinite(n) ? n : 0;
-};
 
 // GET /api/store/coupons
 router.get("/", async (_req, res, next) => {
@@ -62,6 +39,24 @@ router.get("/", async (_req, res, next) => {
   }
 });
 
+// POST /api/store/coupons/quote
+router.post("/quote", async (req, res, next) => {
+  try {
+    const code = req.body?.code;
+    const subtotal = req.body?.subtotal;
+    const shipping = req.body?.shipping ?? 0;
+
+    const quoted = await quoteCoupon(code, subtotal, shipping);
+    if (!quoted.valid && quoted.reason === "invalid_input") {
+      return res.status(400).json(quoted);
+    }
+
+    return res.json(quoted);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // POST /api/store/coupons/validate
 router.post("/validate", async (req, res, next) => {
   try {
@@ -72,12 +67,11 @@ router.post("/validate", async (req, res, next) => {
       return res.status(400).json({ success: false, message: "Coupon code is required." });
     }
 
-    const subtotalNumber = parseLocaleNumber(subtotal);
-    if (!Number.isFinite(subtotalNumber) || subtotalNumber < 0) {
+    const quoted = await quoteCoupon(code, subtotal, 0);
+    if (!quoted.valid && quoted.reason === "invalid_input") {
       return res.status(400).json({ success: false, message: "Subtotal must be a number." });
     }
-
-    const result = await validateCoupon(code, subtotalNumber);
+    const result = await validateCoupon(code, subtotal);
     if (!result.valid) {
       return res.json({
         success: true,

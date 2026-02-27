@@ -203,10 +203,18 @@ export default function App() {
                 }
               />
               <Route
-                path="staff"
+                path="our-staff"
                 element={
                   <RequirePerm perm="STAFF_MANAGE">
                     <AdminStaffPage />
+                  </RequirePerm>
+                }
+              />
+              <Route
+                path="staff"
+                element={
+                  <RequirePerm perm="STAFF_MANAGE">
+                    <Navigate to="/admin/our-staff" replace />
                   </RequirePerm>
                 }
               />

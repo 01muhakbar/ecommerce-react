@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchAdminOrder, updateAdminOrderStatus } from "../../lib/adminApi.js";
 import { ORDER_STATUS_OPTIONS } from "../../constants/orderStatus.js";
@@ -31,11 +31,13 @@ const formatDateTime = (value) => {
 
 export default function OrderDetail() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const qc = useQueryClient();
   const [status, setStatus] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const noticeTimerRef = useRef(null);
+  const autoPrintDoneRef = useRef(false);
 
   const orderQuery = useQuery({
     queryKey: ["admin-order", id],
@@ -81,6 +83,19 @@ export default function OrderDetail() {
   const selectedStatus = status;
   const norm = (value) => (value || "").toString().trim().toLowerCase();
   const isSameStatus = norm(selectedStatus) === norm(currentStatus);
+  const shouldAutoPrint = searchParams.get("print") === "1";
+
+  useEffect(() => {
+    if (!shouldAutoPrint) return;
+    document.body.classList.add("order-print-mode");
+    return () => {
+      document.body.classList.remove("order-print-mode");
+    };
+  }, [shouldAutoPrint]);
+
+  useEffect(() => {
+    autoPrintDoneRef.current = false;
+  }, [id, shouldAutoPrint]);
 
   useEffect(() => {
     setStatus(currentStatus || "");
@@ -90,6 +105,17 @@ export default function OrderDetail() {
       clearTimeout(noticeTimerRef.current);
     }
   }, []);
+
+  useEffect(() => {
+    if (!shouldAutoPrint) return;
+    if (autoPrintDoneRef.current) return;
+    if (orderQuery.isLoading || orderQuery.isError || !order) return;
+    autoPrintDoneRef.current = true;
+    const timer = setTimeout(() => {
+      window.print();
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [shouldAutoPrint, orderQuery.isLoading, orderQuery.isError, order]);
 
   const invoiceRef = order?.invoiceNo || order?.invoice || order?.ref || id || "—";
   const createdAtLabel = formatDate(order?.createdAt);
@@ -122,7 +148,7 @@ export default function OrderDetail() {
   };
   const isEmpty = !orderQuery.isLoading && !orderQuery.isError && !order;
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-8 lg:px-6">
+    <div className="order-print-root mx-auto w-full max-w-6xl px-4 py-8 lg:px-6">
       <Link
         to="/admin/orders"
         className="admin-no-print text-sm text-slate-500 hover:text-slate-900"

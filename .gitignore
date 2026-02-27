@@ -2,9 +2,12 @@
 node_modules/
 packages/schemas/dist/
 tmp_*.json
+tmp_*.ps1
 tmp_*.out
 tmp_*.err
 tmp_*.pid
+tmp_mvp*.json
+tmp_mvp*.ps1
 **/tmp_*.json
 **/tmp_*.out
 **/tmp_*.err

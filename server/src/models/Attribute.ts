@@ -3,6 +3,7 @@ import { DataTypes, Model, Sequelize, Optional } from "sequelize";
 interface AttributeAttributes {
   id: number;
   name: string;
+  displayName?: string | null;
 }
 
 interface AttributeCreationAttributes extends Optional<AttributeAttributes, "id"> {}
@@ -10,6 +11,7 @@ interface AttributeCreationAttributes extends Optional<AttributeAttributes, "id"
 export class Attribute extends Model<AttributeAttributes, AttributeCreationAttributes> implements AttributeAttributes {
   public id!: number;
   public name!: string;
+  public displayName!: string | null;
 
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -25,6 +27,11 @@ export class Attribute extends Model<AttributeAttributes, AttributeCreationAttri
         name: {
           type: DataTypes.STRING,
           allowNull: false,
+        },
+        displayName: {
+          type: DataTypes.STRING(255),
+          allowNull: true,
+          field: "display_name",
         },
       },
       {

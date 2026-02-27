@@ -92,6 +92,53 @@ select {
     overflow: visible !important;
   }
 
+  body.order-print-mode .layout {
+    display: block !important;
+  }
+
+  body.order-print-mode .layout > .sidebar,
+  body.order-print-mode .layout .navbar,
+  body.order-print-mode .layout .layout__content > header,
+  body.order-print-mode .layout .layout__content > nav {
+    display: none !important;
+  }
+
+  body.order-print-mode .layout .layout__content,
+  body.order-print-mode .layout .layout__page {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    background: #ffffff !important;
+  }
+
+  body.order-print-mode .order-print-root {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  body.order-print-mode .order-print-root a {
+    text-decoration: none !important;
+  }
+
+  body.order-print-mode .order-print-root .rounded-2xl,
+  body.order-print-mode .order-print-root .rounded-xl {
+    border-radius: 0 !important;
+  }
+
+  body.order-print-mode .order-print-root .shadow-sm,
+  body.order-print-mode .order-print-root .shadow-lg,
+  body.order-print-mode .order-print-root .shadow-2xl {
+    box-shadow: none !important;
+  }
+
+  body.order-print-mode .order-print-root table,
+  body.order-print-mode .order-print-root tr,
+  body.order-print-mode .order-print-root td,
+  body.order-print-mode .order-print-root th {
+    page-break-inside: avoid;
+  }
+
   .admin-shell {
     background: #ffffff !important;
   }

@@ -26,7 +26,12 @@ function toStaffItem(row: any) {
     phoneNumber: row.phoneNumber ?? null,
     role: row.role,
     isActive: String(row.status ?? "").toLowerCase() !== "inactive",
-    isPublished: row.isPublished ?? true,
+    isPublished:
+      typeof row.isPublished === "boolean"
+        ? row.isPublished
+        : typeof row.is_published === "boolean"
+        ? row.is_published
+        : true,
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null,
   };
@@ -98,6 +103,7 @@ router.post("/", async (req, res, next) => {
         email: z.string().email(),
         role: z.string().optional(),
         isActive: z.boolean().optional(),
+        isPublished: z.boolean().optional(),
         password: z.string().min(6).optional(),
       })
       .parse(req.body);
@@ -112,6 +118,7 @@ router.post("/", async (req, res, next) => {
       email: body.email,
       role,
       status,
+      isPublished: body.isPublished ?? true,
       password,
     });
     res.status(201).json(toStaffItem(created));
@@ -130,6 +137,7 @@ router.patch("/:id", async (req, res, next) => {
         email: z.string().email().optional(),
         role: z.string().optional(),
         isActive: z.boolean().optional(),
+        isPublished: z.boolean().optional(),
         password: z.string().min(6).optional(),
       })
       .parse(req.body);
@@ -142,6 +150,7 @@ router.patch("/:id", async (req, res, next) => {
     if (body.email !== undefined) update.email = body.email;
     if (body.role !== undefined) update.role = normalizeRole(body.role);
     if (body.isActive !== undefined) update.status = body.isActive ? "active" : "inactive";
+    if (body.isPublished !== undefined) update.isPublished = body.isPublished;
     if (body.password) update.password = await bcrypt.hash(body.password, 10);
 
     await user.update(update);

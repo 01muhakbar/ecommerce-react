@@ -1,12 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import {
-  Pagination,
-  useCategories,
-  useProducts,
-} from "../../storefront.jsx";
-import QueryState from "../../components/UI/QueryState.jsx";
+import { Link, useSearchParams } from "react-router-dom";
+import { Pagination, useProducts } from "../../storefront.jsx";
 import SearchProductCard from "../../components/store/SearchProductCard.jsx";
+import {
+  UiEmptyState,
+  UiErrorState,
+  UiSkeleton,
+  UiUpdatingBadge,
+} from "../../components/ui-states/index.js";
+import {
+  GENERIC_ERROR,
+  NO_PRODUCTS_FOUND,
+  UPDATING,
+} from "../../constants/uiMessages.js";
 
 export default function StoreSearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -24,13 +30,6 @@ export default function StoreSearchPage() {
     setSort(searchParams.get("sort") ?? "default");
   }, [searchParams]);
 
-  const {
-    isLoading: categoriesLoading,
-    isFetching: categoriesFetching,
-    isError: categoriesError,
-    error: categoriesErrorObj,
-    refetch: refetchCategories,
-  } = useCategories();
   const {
     data: productsData,
     isLoading: productsLoading,
@@ -100,9 +99,6 @@ export default function StoreSearchPage() {
     updateParams({ search: "", category: "", sort: "default", page: 1 });
   };
 
-  const isLoading = productsLoading || categoriesLoading || productsFetching || categoriesFetching;
-  const isError = productsError || categoriesError;
-  const error = productsErrorObj || categoriesErrorObj;
   const sortedProducts = useMemo(() => {
     const items = [...normalizedProducts];
     if (sort === "price_asc") {
@@ -124,10 +120,33 @@ export default function StoreSearchPage() {
     }
     return items;
   }, [normalizedProducts, sort]);
-  const isEmpty = !isLoading && !isError && sortedProducts.length === 0;
+
+  const hasProducts = sortedProducts.length > 0;
+  const isInitialLoading = productsLoading && !productsData;
+  const isRefetching = productsFetching && !isInitialLoading;
+  const isErrorState = productsError && !hasProducts;
+  const showInlineError = productsError && hasProducts;
+  const isEmpty = !isInitialLoading && !isRefetching && !productsError && !hasProducts;
+  const activeQuery = query.trim();
+
+  const errorMessage = useMemo(() => {
+    const fromResponse = productsErrorObj?.response?.data?.message;
+    if (typeof fromResponse === "string" && fromResponse.trim()) {
+      return fromResponse.trim();
+    }
+    const fromError = productsErrorObj?.message;
+    if (typeof fromError === "string" && fromError.trim()) {
+      return fromError.trim();
+    }
+    return GENERIC_ERROR;
+  }, [productsErrorObj]);
 
   const totalCount = Number(
-    meta?.total ?? meta?.totalCount ?? meta?.count ?? productsData?.data?.total ?? sortedProducts.length
+    meta?.total ??
+      meta?.totalCount ??
+      meta?.count ??
+      productsData?.data?.total ??
+      sortedProducts.length
   );
   const safeTotalCount = Number.isFinite(totalCount) ? totalCount : sortedProducts.length;
 
@@ -138,11 +157,13 @@ export default function StoreSearchPage() {
           <p className="truncate whitespace-nowrap text-xs font-medium text-slate-700 sm:text-sm">
             Total <span className="font-semibold text-slate-900">{safeTotalCount}</span> Items Found
           </p>
-          <div className="shrink-0">
+          <div className="flex shrink-0 items-center gap-2">
+            {isRefetching ? <UiUpdatingBadge label={UPDATING} /> : null}
             <select
               id="search-sort"
               value={sort === "default" ? "__placeholder" : sort}
               onChange={handleSortChange}
+              disabled={isInitialLoading}
               className="h-8 w-36 rounded-sm border border-[#E9CDAA] bg-white px-2 text-xs font-medium text-slate-700 focus:border-slate-400 focus:outline-none"
             >
               <option value="__placeholder">Sort By Price</option>
@@ -154,21 +175,58 @@ export default function StoreSearchPage() {
         </div>
       </div>
 
-      <QueryState
-        isLoading={isLoading}
-        isError={isError}
-        error={error}
-        isEmpty={isEmpty}
-        emptyTitle="No products found"
-        emptyHint="Try adjusting your search or filters."
-        emptyActionLabel="Clear search"
-        onEmptyAction={clearFilters}
-        onRetry={() => {
-          refetchProducts();
-          refetchCategories();
-        }}
-      >
+      {isInitialLoading ? <UiSkeleton variant="grid" /> : null}
+
+      {isErrorState ? (
+        <UiErrorState
+          title={GENERIC_ERROR}
+          message={errorMessage}
+          onRetry={refetchProducts}
+        />
+      ) : null}
+
+      {isEmpty ? (
+        <UiEmptyState
+          title={NO_PRODUCTS_FOUND}
+          description={
+            activeQuery
+              ? `No results for "${activeQuery}".`
+              : "Try adjusting your search or filters."
+          }
+          actions={
+            <>
+              <button
+                type="button"
+                onClick={() => clearFilters()}
+                className="inline-flex h-10 items-center justify-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:border-slate-300"
+              >
+                Clear search
+              </button>
+              <Link
+                to="/"
+                className="inline-flex h-10 items-center justify-center rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
+              >
+                Back to Home
+              </Link>
+            </>
+          }
+        />
+      ) : null}
+
+      {!isInitialLoading && !isErrorState && !isEmpty ? (
         <div className="space-y-6">
+          {showInlineError ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 sm:text-sm">
+              Could not refresh results. Showing previous data.
+              <button
+                type="button"
+                onClick={() => refetchProducts()}
+                className="ml-2 font-semibold underline underline-offset-2"
+              >
+                Try again
+              </button>
+            </div>
+          ) : null}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-4">
             {sortedProducts.map((product, index) => {
               const title = product?.title ?? product?.name ?? "";
@@ -206,7 +264,7 @@ export default function StoreSearchPage() {
             onPageChange={(nextPage) => updateParams({ page: nextPage })}
           />
         </div>
-      </QueryState>
+      ) : null}
     </div>
   );
 }

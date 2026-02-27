@@ -16,6 +16,12 @@ const getAttr = (row: any, key: string) =>
   row?.get?.(key) ??
   row?.dataValues?.[key] ??
   undefined;
+const csvEscape = (value: unknown) => {
+  const text = String(value ?? "");
+  if (!/[",\r\n]/.test(text)) return text;
+  return `"${text.replace(/"/g, '""')}"`;
+};
+const csvRow = (values: unknown[]) => values.map((value) => csvEscape(value)).join(",");
 
 const normalizeStatusInput = (raw: unknown): DbOrderStatus | "" => {
   const value = String(raw || "").toLowerCase().trim();
@@ -156,6 +162,98 @@ router.get("/", requireStaffOrAdmin, async (req, res) => {
       totalPages: Math.max(1, Math.ceil(count / limit)),
     },
   });
+});
+
+// GET CSV export
+router.get("/export.csv", requireStaffOrAdmin, async (req, res) => {
+  try {
+    const rawStatus = String(asSingle(req.query.status) ?? "").trim().toLowerCase();
+    const normalizedStatus = normalizeStatusInput(rawStatus);
+    const q = String(asSingle(req.query.q) ?? "").trim();
+
+    const where: any = {};
+    if (q) {
+      where[Op.or] = [
+        { invoiceNo: { [Op.like]: `%${q}%` } },
+        { customerName: { [Op.like]: `%${q}%` } },
+        { customerPhone: { [Op.like]: `%${q}%` } },
+      ];
+    }
+    if (normalizedStatus) {
+      where.status = normalizedStatus as string;
+    }
+
+    const rows = await Order.findAll({
+      where,
+      attributes: [
+        "id",
+        "invoiceNo",
+        "status",
+        "createdAt",
+        "totalAmount",
+        "customerName",
+        "paymentMethod",
+      ],
+      include: [
+        {
+          model: User,
+          as: "customer",
+          attributes: ["email"],
+          required: false,
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    const header = csvRow([
+      "invoiceNo",
+      "createdAt",
+      "customerName",
+      "customerEmail",
+      "method",
+      "amount",
+      "status",
+    ]);
+
+    const lines = rows.map((orderRow: any) => {
+      const customer =
+        orderRow?.customer ??
+        orderRow?.get?.("customer") ??
+        orderRow?.dataValues?.customer ??
+        null;
+
+      const invoiceNo =
+        getAttr(orderRow, "invoiceNo") ?? String(getAttr(orderRow, "id") ?? "");
+      const createdAt = getAttr(orderRow, "createdAt")
+        ? new Date(getAttr(orderRow, "createdAt")).toISOString()
+        : "";
+      const customerName = getAttr(orderRow, "customerName") ?? customer?.name ?? "Guest";
+      const customerEmail = customer?.email ?? "";
+      const method = getAttr(orderRow, "paymentMethod") ?? "COD";
+      const amount = Number(getAttr(orderRow, "totalAmount") ?? 0);
+      const status = toUiStatus(getAttr(orderRow, "status"));
+
+      return csvRow([
+        invoiceNo,
+        createdAt,
+        customerName,
+        customerEmail,
+        method,
+        amount,
+        status,
+      ]);
+    });
+
+    const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const csv = [header, ...lines].join("\n");
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="orders-${stamp}.csv"`);
+    return res.status(200).send(csv);
+  } catch (error) {
+    console.error("[admin.orders export.csv] error", error);
+    return res.status(500).json({ message: "Failed to export orders." });
+  }
 });
 
 router.get("/:id", requireStaffOrAdmin, async (req, res) => {

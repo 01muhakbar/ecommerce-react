@@ -32,7 +32,7 @@ async function ensureMigrationsTable() {
   );
 }
 
-const allowedCjs = process.env.CJS_MIGRATIONS
+const restrictedCjs = process.env.CJS_MIGRATIONS
   ? new Set(
       process.env.CJS_MIGRATIONS.split(",")
         .map((name) => name.trim())
@@ -48,9 +48,13 @@ async function getMigrationFiles() {
     .readdirSync(migrationsDir)
     .filter((name) => {
       if (name.endsWith(".sql")) return true;
-      if (!name.endsWith(".cjs")) return false;
-      if (!allowedCjs) return false;
-      return allowedCjs.has(name);
+      if (name.endsWith(".cjs")) {
+        // Default behavior: run all CJS migrations.
+        // Optional compatibility mode: restrict to explicit filenames from env.
+        if (!restrictedCjs) return true;
+        return restrictedCjs.has(name);
+      }
+      return false;
     })
     .sort();
 }
@@ -76,9 +80,23 @@ async function run() {
     await ensureMigrationsTable();
 
     const files = await getMigrationFiles();
+    if (restrictedCjs) {
+      console.log(
+        `CJS_MIGRATIONS active. Running only selected .cjs migrations: ${Array.from(
+          restrictedCjs
+        ).join(", ")}`
+      );
+    }
+    if (files.length === 0) {
+      console.log("No migration files found.");
+      return;
+    }
     for (const filename of files) {
       const applied = await hasMigration(filename);
-      if (applied) continue;
+      if (applied) {
+        console.log(`Skipped: ${filename} (already applied)`);
+        continue;
+      }
       const fullPath = path.join(migrationsDir, filename);
       if (filename.endsWith(".sql")) {
         const sql = fs.readFileSync(fullPath, "utf8");
