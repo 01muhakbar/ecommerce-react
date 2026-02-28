@@ -17,14 +17,14 @@ export class ProductReview
   extends Model<ProductReviewAttributes, ProductReviewCreationAttributes>
   implements ProductReviewAttributes
 {
-  public id!: number;
-  public userId!: number;
-  public productId!: number;
-  public rating!: number;
-  public comment?: string | null;
-  public images?: string[] | null;
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
+  declare id: number;
+  declare userId: number;
+  declare productId: number;
+  declare rating: number;
+  declare comment?: string | null;
+  declare images?: string[] | null;
+  declare readonly createdAt: Date;
+  declare readonly updatedAt: Date;
 
   static associate(models: any) {
     ProductReview.belongsTo(models.User, {

@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { useCartStore } from "../../store/cart.store.ts";
 import { useCategories, useProducts } from "../../storefront.jsx";
 import { fetchStoreCoupons } from "../../api/store.service.ts";
 import { formatCurrency } from "../../utils/format.js";
 import CouponPanel from "../../components/kachabazar-demo/CouponPanel.jsx";
-import FloatingCartWidget from "../../components/kachabazar-demo/FloatingCartWidget.jsx";
 import FeatureStrip from "../../components/kachabazar-demo/FeatureStrip.jsx";
 import FeaturedCategoriesSection from "../../components/kachabazar-demo/FeaturedCategoriesSection.jsx";
 import ProductSection from "../../components/kachabazar-demo/ProductSection.jsx";
@@ -58,8 +56,6 @@ const dummyCoupons = [
 ];
 
 export default function KachaBazarDemoHomePage() {
-  const totalQty = useCartStore((state) => state.totalQty);
-  const subtotal = useCartStore((state) => state.subtotal);
   const { data: categoriesData } = useCategories();
   const {
     data: productsData,
@@ -134,14 +130,6 @@ export default function KachaBazarDemoHomePage() {
         }))
       : dummyCoupons;
 
-  const subtotalDisplay = useMemo(
-    () =>
-      Number.isFinite(Number(subtotal))
-        ? formatCurrency(Number(subtotal || 0))
-        : formatCurrency(0),
-    [subtotal]
-  );
-
   const safeProducts = useMemo(
     () =>
       popularProducts.map((raw) => {
@@ -209,11 +197,11 @@ export default function KachaBazarDemoHomePage() {
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <main className="mx-auto max-w-7xl space-y-14 px-4 py-8 md:px-6 lg:py-10">
         <section>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start lg:gap-5 xl:gap-6">
-            <div className="lg:col-span-8 xl:col-span-9">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_290px] lg:items-start lg:gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
+            <div>
               <HomeHeroBanners slides={slides} activeSlide={activeSlide} setActiveSlide={setActiveSlide} />
             </div>
-            <div className="lg:col-span-4 xl:col-span-3">
+            <div>
               <CouponPanel
                 couponList={couponList}
                 couponError={couponError}
@@ -224,7 +212,6 @@ export default function KachaBazarDemoHomePage() {
           </div>
         </section>
 
-        <FloatingCartWidget totalQty={totalQty} subtotalDisplay={subtotalDisplay} />
         <FeatureStrip />
         <FeaturedCategoriesSection categories={categories} products={safeProducts} />
         <ProductSection

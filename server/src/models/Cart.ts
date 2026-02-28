@@ -12,11 +12,11 @@ export class Cart
   extends Model<CartAttributes, CartCreationAttributes>
   implements CartAttributes
 {
-  public id!: number;
-  public userId!: number;
+  declare id: number;
+  declare userId: number;
 
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
+  declare readonly createdAt: Date;
+  declare readonly updatedAt: Date;
 
   static associate(models: any) {
     // Definisikan relasi di sini

@@ -32,6 +32,34 @@ const getItemQuantity = (item) => Number(item?.quantity ?? item?.qty ?? item?.am
 const getItemPrice = (item) =>
   Number(item?.price ?? item?.unitPrice ?? item?.product?.price ?? 0);
 
+const getItemImage = (item) =>
+  item?.imageUrl ??
+  item?.image ??
+  item?.product?.imageUrl ??
+  item?.product?.image ??
+  item?.product?.promoImagePath ??
+  null;
+
+const getStatusBadgeClass = (status) => {
+  const value = String(status || "").toLowerCase();
+  if (value === "pending") {
+    return "border-amber-200 bg-amber-50 text-amber-700";
+  }
+  if (value === "processing") {
+    return "border-sky-200 bg-sky-50 text-sky-700";
+  }
+  if (value === "shipping" || value === "shipped") {
+    return "border-indigo-200 bg-indigo-50 text-indigo-700";
+  }
+  if (value === "complete" || value === "delivered") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+  if (value === "cancelled" || value === "canceled") {
+    return "border-rose-200 bg-rose-50 text-rose-700";
+  }
+  return "border-slate-200 bg-slate-100 text-slate-700";
+};
+
 const normalizeTrackingPayload = (response) =>
   response?.data?.data ??
   response?.data ??
@@ -101,22 +129,25 @@ export default function StoreOrderTrackingPage() {
   if (isNotFound) {
     return (
       <section className="mx-auto max-w-6xl px-3 py-6 sm:px-4 sm:py-8 lg:px-6">
-        <UiEmptyState
-          title={ORDER_NOT_FOUND}
-          description={
-            orderRefParam
-              ? `We could not find an order for reference: ${orderRefParam}`
-              : "We could not find an order for this reference."
-          }
-          actions={
-            <Link
-              to="/"
-              className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              Back to Home
-            </Link>
-          }
-        />
+        <div className="mx-auto max-w-2xl rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_20px_45px_rgba(15,23,42,0.08)] sm:p-7">
+          <UiEmptyState
+            className="rounded-2xl"
+            title={ORDER_NOT_FOUND}
+            description={
+              orderRefParam
+                ? `We could not find an order for reference: ${orderRefParam}`
+                : "We could not find an order for this reference."
+            }
+            actions={
+              <Link
+                to="/"
+                className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Back to Home
+              </Link>
+            }
+          />
+        </div>
       </section>
     );
   }
@@ -157,31 +188,41 @@ export default function StoreOrderTrackingPage() {
   }
 
   return (
-    <section className="mx-auto max-w-6xl px-3 py-6 sm:px-4 sm:py-8 lg:px-6">
+    <section className="mx-auto max-w-7xl px-3 py-6 sm:px-4 sm:py-8 lg:px-6 lg:py-10">
       {isRefetching ? (
         <div className="no-print mb-4 flex justify-end">
           <UiUpdatingBadge label={UPDATING} />
         </div>
       ) : null}
 
-      <div className="no-print mb-6 rounded-lg bg-emerald-100 px-4 py-3 text-sm text-emerald-900 sm:mb-8 sm:px-6 sm:py-4 sm:text-base">
+      <div className="no-print mb-6 rounded-2xl border border-emerald-200 bg-emerald-100 px-4 py-3 text-sm text-emerald-900 sm:mb-8 sm:px-6 sm:py-4 sm:text-base">
         Thank You <span className="font-semibold text-emerald-700">{customerName}</span>,
         Your order have been received !
       </div>
 
-      <div className="print-area overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="print-area overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_45px_rgba(15,23,42,0.08)]">
         <div className="bg-slate-100/60 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <h1 className="text-2xl font-extrabold tracking-wide text-slate-900 sm:text-3xl">
+              <h1 className="text-3xl font-extrabold tracking-wide text-slate-900">
                 INVOICE
               </h1>
-              <p className="mt-2 text-sm text-slate-600">
-                Status : <span className="font-medium text-slate-900">{statusLabel}</span>
-              </p>
-              <p className="mt-2 break-all text-xs text-slate-500 sm:text-sm">
-                Ref: <span className="font-semibold text-slate-700">#{invoiceRef || "-"}</span>
-              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+                <span>Status:</span>
+                <span
+                  className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClass(
+                    order?.status
+                  )}`}
+                >
+                  {statusLabel}
+                </span>
+              </div>
+              <div className="mt-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Order Ref</p>
+                <p className="mt-1.5 inline-flex break-all rounded-full border border-slate-300 bg-white px-3 py-1 font-mono text-sm font-bold text-slate-900 sm:text-base">
+                  #{invoiceRef || "-"}
+                </p>
+              </div>
             </div>
             <div className="text-left text-sm text-slate-600 lg:text-right">
               <div className="text-lg font-bold text-emerald-600">KACHA BAZAR</div>
@@ -190,16 +231,16 @@ export default function StoreOrderTrackingPage() {
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-1 gap-5 border-t border-slate-200 pt-6 md:grid-cols-3">
-            <div>
+          <div className="mt-6 grid grid-cols-1 gap-4 border-t border-slate-200 pt-6 md:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Date</p>
               <p className="mt-2 text-sm text-slate-900">{formatDate(createdAt)}</p>
             </div>
-            <div>
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Invoice No.</p>
               <p className="mt-2 break-all text-sm text-slate-900">#{invoiceRef}</p>
             </div>
-            <div className="md:text-right">
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 md:text-right">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Invoice To</p>
               <p className="mt-2 text-sm font-medium text-slate-900">{customerName}</p>
               <p className="text-sm text-slate-600">{customerEmail}</p>
@@ -216,13 +257,29 @@ export default function StoreOrderTrackingPage() {
                 const quantity = getItemQuantity(item);
                 const price = getItemPrice(item);
                 const lineTotal = Number(item?.lineTotal ?? item?.total ?? price * quantity);
+                const image = getItemImage(item);
                 return (
                   <div
                     key={`${item?.id ?? item?.productId ?? index}`}
-                    className="rounded-lg border border-slate-200 bg-slate-50 p-3"
+                    className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5"
                   >
-                    <p className="text-sm font-semibold text-slate-900">{getItemName(item)}</p>
-                    <div className="mt-2 space-y-1.5 text-xs text-slate-600">
+                    <div className="flex items-start gap-3">
+                      <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white">
+                        {image ? (
+                          <img
+                            src={image}
+                            alt={getItemName(item)}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-[10px] text-slate-400">
+                            IMG
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-sm font-semibold text-slate-900">{getItemName(item)}</p>
+                    </div>
+                    <div className="mt-3 space-y-1.5 text-xs text-slate-600">
                       <div className="flex items-center justify-between gap-3">
                         <span>Quantity</span>
                         <span className="font-medium text-slate-900">{quantity}</span>
@@ -263,13 +320,31 @@ export default function StoreOrderTrackingPage() {
                     const quantity = getItemQuantity(item);
                     const price = getItemPrice(item);
                     const lineTotal = Number(item?.lineTotal ?? item?.total ?? price * quantity);
+                    const image = getItemImage(item);
                     return (
                       <tr
                         key={`${item?.id ?? item?.productId ?? index}`}
                         className="border-t border-slate-100"
                       >
                         <td className="px-4 py-3 text-slate-700">{index + 1}</td>
-                        <td className="px-4 py-3 text-slate-700">{getItemName(item)}</td>
+                        <td className="px-4 py-3 text-slate-700">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                              {image ? (
+                                <img
+                                  src={image}
+                                  alt={getItemName(item)}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center text-[10px] text-slate-400">
+                                  IMG
+                                </div>
+                              )}
+                            </div>
+                            <span>{getItemName(item)}</span>
+                          </div>
+                        </td>
                         <td className="px-4 py-3 text-right text-slate-700">{quantity}</td>
                         <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(price)}</td>
                         <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(lineTotal)}</td>
@@ -290,19 +365,19 @@ export default function StoreOrderTrackingPage() {
 
         <div className="bg-emerald-50 px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
           <div className="grid gap-6 md:grid-cols-4">
-            <div>
+            <div className="rounded-xl border border-emerald-100 bg-white/70 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Payment Method</p>
               <p className="mt-2 text-sm text-slate-900">{paymentMethod}</p>
             </div>
-            <div>
+            <div className="rounded-xl border border-emerald-100 bg-white/70 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Shipping Cost</p>
               <p className="mt-2 text-sm text-slate-900">{formatCurrency(Number(shippingCost || 0))}</p>
             </div>
-            <div>
+            <div className="rounded-xl border border-emerald-100 bg-white/70 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Discount</p>
               <p className="mt-2 text-sm text-slate-900">{formatCurrency(Number(discount || 0))}</p>
             </div>
-            <div>
+            <div className="rounded-xl border border-emerald-100 bg-white p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Total Amount</p>
               <p className="mt-3 text-3xl font-extrabold text-red-500 sm:text-4xl">
                 {formatCurrency(Number(totalAmount || 0))}
@@ -315,7 +390,7 @@ export default function StoreOrderTrackingPage() {
           <button
             type="button"
             onClick={handlePrint}
-            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 sm:w-auto"
+            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 sm:w-auto"
           >
             <Download className="h-4 w-4" />
             Download PDF
@@ -323,7 +398,7 @@ export default function StoreOrderTrackingPage() {
           <button
             type="button"
             onClick={handlePrint}
-            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 sm:w-auto"
+            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 sm:w-auto"
           >
             <Printer className="h-4 w-4" />
             Print Invoice

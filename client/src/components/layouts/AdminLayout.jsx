@@ -5,11 +5,11 @@ import "../Layout/MainLayout.css";
 
 export default function AdminLayout() {
   return (
-    <div className="layout">
+    <div className="layout admin-shell">
       <Sidebar />
-      <div className="layout__content">
+      <div className="layout__content admin-content">
         <Navbar />
-        <main className="layout__page">
+        <main className="layout__page admin-page-shell">
           <Outlet />
         </main>
       </div>

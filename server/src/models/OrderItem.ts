@@ -15,14 +15,14 @@ export class OrderItem
   extends Model<OrderItemAttributes, OrderItemCreationAttributes>
   implements OrderItemAttributes
 {
-  public id!: number;
-  public orderId!: number;
-  public productId!: number;
-  public quantity!: number;
-  public price!: number;
+  declare id: number;
+  declare orderId: number;
+  declare productId: number;
+  declare quantity: number;
+  declare price: number;
 
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
+  declare readonly createdAt: Date;
+  declare readonly updatedAt: Date;
 
   static associate(models: any) {
     OrderItem.belongsTo(models.Order, { foreignKey: "orderId" });

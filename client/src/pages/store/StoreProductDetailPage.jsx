@@ -234,38 +234,42 @@ function ProductSummaryPanel({
       className={`space-y-5 ${
         compact
           ? ""
-          : "rounded-[28px] border border-slate-200/90 bg-white p-5 shadow-[0_1px_0_rgba(15,23,42,0.02)] sm:p-6"
+          : "rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6"
       }`}
     >
       <div className="space-y-3">
-        <p className="text-sm text-slate-500">
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-500 sm:text-sm sm:normal-case sm:tracking-normal">
           In stock:{" "}
           <span className={`font-semibold ${hasStock ? "text-emerald-600" : "text-rose-600"}`}>
             {hasStock ? stockLabel : "Out of stock"}
           </span>
         </p>
         <h1
-          className={`${compact ? "text-[30px]" : "text-4xl sm:text-[46px]"} break-words font-bold leading-[1.1] tracking-tight text-slate-900`}
+          className={`${
+            compact ? "text-[30px]" : "text-[30px] sm:text-[34px] lg:text-[38px]"
+          } break-words font-bold leading-tight tracking-tight text-slate-900`}
         >
           {product?.name || "Product"}
         </h1>
-        <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+        <div className="flex flex-wrap items-center gap-1.5 text-sm text-slate-500">
           <RatingStars rating={ratingAvg} showValue />
-          <span>
+          <span className="font-medium">
             ({reviewCount} {reviewCount === 1 ? "review" : "reviews"})
           </span>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2.5">
-        <span className="text-4xl font-bold leading-none text-slate-900 sm:text-[42px]">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-3xl font-bold leading-none text-slate-900 sm:text-[38px]">
           {formatCurrency(currentPrice)}
         </span>
         {hasDiscount ? (
-          <span className="text-xl text-slate-400 line-through">{formatCurrency(originalPrice)}</span>
+          <span className="text-base font-medium text-slate-400 line-through sm:text-lg">
+            {formatCurrency(originalPrice)}
+          </span>
         ) : null}
         {hasDiscount ? (
-          <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-600">
+          <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-rose-600">
             {discountPercent.toFixed(1)}% Off
           </span>
         ) : null}
@@ -293,23 +297,23 @@ function ProductSummaryPanel({
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="grid h-12 w-full grid-cols-3 overflow-hidden rounded-xl border border-slate-300 bg-white sm:w-[260px]">
+        <div className="grid h-11 w-full grid-cols-3 overflow-hidden rounded-full border border-slate-300 bg-white sm:w-[220px]">
           <button
             type="button"
             disabled={qty <= 1}
             onClick={onDecreaseQty}
-            className="inline-flex items-center justify-center border-r border-slate-300 text-2xl text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex items-center justify-center border-r border-slate-300 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Minus className="h-4 w-4" />
           </button>
-          <span className="inline-flex items-center justify-center text-xl font-semibold text-slate-900">
+          <span className="inline-flex items-center justify-center text-lg font-semibold text-slate-900">
             {qty}
           </span>
           <button
             type="button"
             disabled={!hasStock || isAtStockLimit}
             onClick={onIncreaseQty}
-            className="inline-flex items-center justify-center border-l border-slate-300 text-2xl text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex items-center justify-center border-l border-slate-300 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Plus className="h-4 w-4" />
           </button>
@@ -318,7 +322,7 @@ function ProductSummaryPanel({
           type="button"
           disabled={!hasStock || cartLoading || isProductLoading}
           onClick={onAddToCart}
-          className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-emerald-500 px-8 text-lg font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-300 sm:flex-1 lg:min-w-[260px]"
+          className="inline-flex h-11 w-full items-center justify-center rounded-full bg-emerald-600 px-8 text-base font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:flex-1 lg:min-w-[240px]"
         >
           Add to Cart
         </button>
@@ -520,7 +524,7 @@ export default function StoreProductDetailPage() {
 
   return (
     <div className="space-y-10">
-      <section className="space-y-7">
+      <section className="space-y-6">
         <nav className="flex flex-wrap items-center gap-2 text-[15px] text-slate-500">
           <Link to="/" className="font-semibold text-slate-800 hover:text-slate-900">
             Home
@@ -540,21 +544,21 @@ export default function StoreProductDetailPage() {
           <span className="font-semibold text-slate-900">{product.name}</span>
         </nav>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start lg:gap-10">
-          <div className="order-1 overflow-hidden rounded-[28px] border border-slate-200 bg-slate-100">
-            <div className="aspect-square w-full">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start lg:gap-8">
+          <div className="order-1 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 lg:p-6">
+            <div className="aspect-square w-full overflow-hidden rounded-xl bg-slate-100">
               <ImageWithFallback
                 src={imageSrc}
                 alt={product.name}
                 wrapperClassName="h-full w-full"
-                imageClassName="h-full w-full object-contain p-3 sm:p-5 lg:p-6"
+                imageClassName="h-full w-full object-contain p-4 sm:p-5 lg:p-6"
                 iconClassName="h-9 w-9"
               />
             </div>
           </div>
 
           <aside className="order-2 lg:self-start">
-            <div className="lg:sticky lg:top-6">
+            <div>
               <ProductSummaryPanel
                 product={product}
                 qty={qty}

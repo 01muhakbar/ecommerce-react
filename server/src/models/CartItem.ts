@@ -14,13 +14,13 @@ export class CartItem
   extends Model<CartItemAttributes, CartItemCreationAttributes>
   implements CartItemAttributes
 {
-  public id!: number;
-  public cartId!: number;
-  public productId!: number;
-  public quantity!: number;
+  declare id: number;
+  declare cartId: number;
+  declare productId: number;
+  declare quantity: number;
 
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
+  declare readonly createdAt: Date;
+  declare readonly updatedAt: Date;
 
   static associate(models: any) {
     // Definisikan relasi balik ke Cart dan Product

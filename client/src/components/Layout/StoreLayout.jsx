@@ -2,14 +2,17 @@ import { useEffect, useState } from "react";
 import { Home, Menu, ShoppingCart, UserRound } from "lucide-react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import StoreHeaderKacha from "../kachabazar-demo/StoreHeaderKacha.jsx";
+import FloatingCartWidget from "../kachabazar-demo/FloatingCartWidget.jsx";
 import { StoreCartDrawer } from "../../pages/store/StoreCartPage.jsx";
 import { useCartStore } from "../../store/cart.store.ts";
 import MobileMenuDrawer from "./MobileMenuDrawer.jsx";
+import { formatCurrency } from "../../utils/format.js";
 
 export default function StoreLayout() {
   const location = useLocation();
   const isCheckoutRoute = location.pathname.startsWith("/checkout");
   const totalQty = useCartStore((state) => state.totalQty);
+  const subtotal = useCartStore((state) => state.subtotal);
   const isHomeActive = location.pathname === "/";
   const isCartRoute = location.pathname.startsWith("/cart");
   const isCartActive = isCartRoute;
@@ -54,6 +57,9 @@ export default function StoreLayout() {
     setIsCartDrawerOpen(false);
   };
 
+  const subtotalDisplay = formatCurrency(Number(subtotal || 0));
+  const showFloatingCartWidget = !isCheckoutRoute && !isCartRoute;
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <StoreHeaderKacha onCartClick={openCartDrawer} />
@@ -66,6 +72,12 @@ export default function StoreLayout() {
             Crafted for local storefront demos.
           </div>
         </footer>
+      ) : null}
+      {showFloatingCartWidget ? (
+        <FloatingCartWidget
+          totalQty={totalQty}
+          subtotalDisplay={subtotalDisplay}
+        />
       ) : null}
       <nav className="fixed inset-x-0 bottom-0 z-40 h-16 border-t border-emerald-700/70 bg-emerald-600 px-4 py-2 text-white shadow-[0_-8px_20px_rgba(5,150,105,0.35)] sm:hidden">
         <div className="mx-auto grid h-full max-w-7xl grid-cols-4 gap-1">

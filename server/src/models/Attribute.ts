@@ -9,12 +9,12 @@ interface AttributeAttributes {
 interface AttributeCreationAttributes extends Optional<AttributeAttributes, "id"> {}
 
 export class Attribute extends Model<AttributeAttributes, AttributeCreationAttributes> implements AttributeAttributes {
-  public id!: number;
-  public name!: string;
-  public displayName!: string | null;
+  declare id: number;
+  declare name: string;
+  declare displayName: string | null;
 
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
+  declare readonly createdAt: Date;
+  declare readonly updatedAt: Date;
 
   static initModel(sequelize: Sequelize): typeof Attribute {
     Attribute.init(

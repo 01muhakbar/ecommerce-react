@@ -45,6 +45,20 @@ After reset/seed:
 5) Checkout → order created
 6) Admin view `/admin/orders` and update status
 
+## QA smoke (official)
+Run official MVF smoke in one command:
+```
+pnpm qa:mvf
+```
+- Script path: `tools/qa/mvf-smoke.ps1`
+- Artifacts: `./.codex-artifacts/qa-mvf/<timestamp>/`
+- Output files:
+  - `result.json` (detailed checks)
+  - `summary.txt` (PASS/FAIL summary)
+- Exit code:
+  - `0` when all checks pass
+  - non-zero when any check fails
+
 ## Troubleshooting
 - **DB connect fail**: verify DB_HOST/DB_USER/DB_PASS/DB_NAME in `.env`, and MySQL is running.
 - **Port conflict**: server uses `PORT` (default 3001). Client uses 5173. Stop the other process or change `PORT`.

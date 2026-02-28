@@ -17,16 +17,16 @@ export class Category
   extends Model<CategoryAttributes, CategoryCreationAttributes>
   implements CategoryAttributes
 {
-  public id!: number;
-  public code!: string;
-  public name!: string;
-  public description?: string;
-  public icon?: string;
-  public published!: boolean;
-  public parentId?: number | null;
+  declare id: number;
+  declare code: string;
+  declare name: string;
+  declare description?: string;
+  declare icon?: string;
+  declare published: boolean;
+  declare parentId?: number | null;
 
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
+  declare readonly createdAt: Date;
+  declare readonly updatedAt: Date;
 
   static associate(_models: any) {
     Category.hasMany(Category, { as: "children", foreignKey: "parentId" });

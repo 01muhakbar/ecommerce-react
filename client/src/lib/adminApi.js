@@ -193,7 +193,12 @@ const normalizeOrdersMeta = (payload, params = {}) => {
   const meta = payload?.meta || payload?.pagination || payload?.data || {};
   const page = Number(meta.page ?? meta.currentPage ?? params.page ?? 1);
   const limit = Number(
-    meta.limit ?? meta.itemsPerPage ?? params.limit ?? params.pageSize ?? 10
+    meta.limit ??
+      meta.pageSize ??
+      meta.itemsPerPage ??
+      params.limit ??
+      params.pageSize ??
+      10
   );
   const total = Number(meta.total ?? meta.totalItems ?? payload?.total ?? 0);
   const rawTotalPages =
@@ -259,16 +264,33 @@ const normalizeAdminOrderDetail = (raw) => {
 };
 
 export const fetchAdminOrders = async (params) => {
-  const normalizedParams = {
-    ...params,
-    status: params?.status || undefined,
-  };
+  const normalizedParams = Object.fromEntries(
+    Object.entries({
+      page: params?.page,
+      pageSize: params?.pageSize ?? params?.limit,
+      search: params?.search ?? params?.q,
+      status: params?.status || undefined,
+      method: params?.method || undefined,
+      limitDays: params?.limitDays || undefined,
+      startDate: params?.startDate || undefined,
+      endDate: params?.endDate || undefined,
+      userId: params?.userId || undefined,
+    }).filter(([, value]) => value !== undefined && value !== null && value !== "")
+  );
   const { data } = await adminApi.get("/admin/orders", { params: normalizedParams });
   return normalizeOrdersList(data, normalizedParams);
 };
 
 export const fetchAdminOrder = async (id) => {
   const { data } = await adminApi.get(`/admin/orders/${id}`);
+  const raw = data?.data ?? data?.order ?? data;
+  return { data: normalizeAdminOrderDetail(raw) };
+};
+
+export const fetchAdminOrderByInvoice = async (invoiceNo) => {
+  const { data } = await adminApi.get(
+    `/admin/orders/by-invoice/${encodeURIComponent(invoiceNo)}`
+  );
   const raw = data?.data ?? data?.order ?? data;
   return { data: normalizeAdminOrderDetail(raw) };
 };

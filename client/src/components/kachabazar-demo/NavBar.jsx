@@ -13,10 +13,10 @@ export default function NavBar({
 }) {
   const navigate = useNavigate();
   const navItemClass = ({ isActive }) =>
-    `text-[14px] font-medium text-slate-700 transition ${
+    `inline-flex items-center whitespace-nowrap text-[14px] font-medium transition ${
       isActive
-        ? "text-emerald-700 underline decoration-2 underline-offset-4"
-        : "hover:text-emerald-600 hover:underline hover:decoration-1 hover:underline-offset-4"
+        ? "text-slate-900"
+        : "text-slate-700 hover:text-emerald-600 hover:underline hover:decoration-1 hover:underline-offset-4"
     }`;
   const categoryTree = useMemo(() => buildCategoryTree(categories || []), [categories]);
 
@@ -29,13 +29,13 @@ export default function NavBar({
 
   return (
     <div className="border-b border-slate-200 bg-white">
-      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-3 md:px-6">
-        <div className="flex flex-wrap items-center gap-5 lg:gap-7">
+      <div className="mx-auto flex h-[56px] w-full max-w-7xl items-center justify-between gap-5 px-4 sm:px-5 lg:px-6">
+        <div className="flex min-w-0 items-center gap-5 lg:gap-7">
           <div className="relative" data-demo-dropdown>
             <button
               type="button"
               onClick={() => setShowCategories((prev) => !prev)}
-              className="inline-flex h-9 items-center gap-2 rounded-full border border-slate-200 px-4 text-[14px] font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+              className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-slate-50/65 px-4 text-[14px] font-medium leading-none text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
             >
               Categories <span className="text-[10px] text-slate-500">▾</span>
             </button>
@@ -61,7 +61,7 @@ export default function NavBar({
             ) : null}
           </div>
 
-          <div className="flex flex-wrap items-center gap-6 lg:gap-7">
+          <div className="flex items-center gap-6 lg:gap-7">
             <NavLink to="/about-us" className={navItemClass}>
               About Us
             </NavLink>
@@ -72,7 +72,7 @@ export default function NavBar({
               <button
                 type="button"
                 onClick={() => setShowPages((prev) => !prev)}
-                className="inline-flex items-center gap-1.5 text-[14px] font-medium text-slate-700 transition hover:text-emerald-600 hover:underline hover:decoration-1 hover:underline-offset-4"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap text-[14px] font-medium text-slate-700 transition hover:text-emerald-600 hover:underline hover:decoration-1 hover:underline-offset-4"
               >
                 Pages <span className="text-[10px] text-slate-500">▾</span>
               </button>
@@ -96,21 +96,21 @@ export default function NavBar({
             <NavLink
               to="/offers"
               className={({ isActive }) =>
-                `relative inline-flex items-center pr-2 text-[14px] font-medium transition ${
+                `relative inline-flex items-center whitespace-nowrap pr-2 text-[14px] font-medium transition ${
                   isActive
-                    ? "font-semibold text-emerald-700 underline decoration-2 underline-offset-4"
+                    ? "text-slate-900"
                     : "text-slate-700 hover:text-emerald-600 hover:underline hover:decoration-1 hover:underline-offset-4"
                 }`
               }
             >
               Offers
-              <span className="absolute -right-0.5 top-0 h-1.5 w-1.5 rounded-full bg-rose-500" />
+              <span className="absolute right-0 top-[2px] h-1.5 w-1.5 rounded-full bg-rose-500" />
             </NavLink>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-4 text-[12px] text-slate-500">
-          <span>English</span>
+        <div className="hidden shrink-0 items-center gap-5 text-[13px] text-slate-500 lg:flex">
+          <span className="whitespace-nowrap">English</span>
           <Link to="/privacy" className="transition hover:text-emerald-600">
             Privacy Policy
           </Link>

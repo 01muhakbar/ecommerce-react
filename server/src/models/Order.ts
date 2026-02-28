@@ -39,18 +39,18 @@ export class Order
   extends Model<OrderAttributes, OrderCreationAttributes>
   implements OrderAttributes
 {
-  public id!: number;
-  public invoiceNo!: string;
-  public userId!: number;
-  public customerName?: string | null;
-  public customerPhone?: string | null;
-  public customerAddress?: string | null;
-  public customerNotes?: string | null;
-  public paymentMethod?: string | null;
-  public couponCode?: string | null;
-  public discountAmount?: number | null;
-  public totalAmount!: number;
-  public status!:
+  declare id: number;
+  declare invoiceNo: string;
+  declare userId: number;
+  declare customerName?: string | null;
+  declare customerPhone?: string | null;
+  declare customerAddress?: string | null;
+  declare customerNotes?: string | null;
+  declare paymentMethod?: string | null;
+  declare couponCode?: string | null;
+  declare discountAmount?: number | null;
+  declare totalAmount: number;
+  declare status:
     | "pending"
     | "paid"
     | "processing"
@@ -59,14 +59,14 @@ export class Order
     | "completed"
     | "cancelled";
 
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
+  declare readonly createdAt: Date;
+  declare readonly updatedAt: Date;
 
-  public getProducts!: BelongsToManyGetAssociationsMixin<Product>;
-  public getUser!: BelongsToGetAssociationMixin<User>;
+  declare getProducts: BelongsToManyGetAssociationsMixin<Product>;
+  declare getUser: BelongsToGetAssociationMixin<User>;
 
-  public readonly user?: User;
-  public readonly products?: Product[];
+  declare readonly user?: User;
+  declare readonly products?: Product[];
 
   public static associate(models: any) {
     Order.belongsTo(models.User, {

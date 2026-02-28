@@ -1,10 +1,15 @@
 .navbar {
-  background: #fff;
-  padding: 18px 28px;
-  border-bottom: 1px solid #edf1f7;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  min-height: 72px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #e2e8f0;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(6px);
+  padding: 0 24px;
 }
 
 .navbar__left {
@@ -14,47 +19,50 @@
 }
 
 .navbar__menu {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  border: 1px solid #eef2f7;
-  background: #fff;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
   display: grid;
   gap: 4px;
-  padding: 8px;
+  padding: 9px;
   cursor: pointer;
 }
 
 .navbar__menu span {
   display: block;
   height: 2px;
-  background: #10b981;
   border-radius: 999px;
+  background: #0f766e;
 }
 
 .navbar__actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .navbar__lang {
-  border: 1px solid #eef2f7;
-  background: #fff;
-  color: #4b5563;
+  height: 36px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #475569;
   font-size: 12px;
   font-weight: 600;
-  padding: 8px 12px;
-  border-radius: 999px;
+  padding: 0 12px;
   cursor: pointer;
 }
 
 .navbar__icon {
   position: relative;
-  background: #fff;
-  border: 1px solid #eef2f7;
-  border-radius: 12px;
-  padding: 8px 10px;
+  width: 38px;
+  height: 38px;
+  border: 1px solid #e2e8f0;
+  border-radius: 11px;
+  background: #ffffff;
+  color: #0f766e;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -64,34 +72,36 @@
 .navbar__icon svg {
   width: 18px;
   height: 18px;
-  stroke: #10b981;
+  stroke: currentColor;
   fill: none;
   stroke-width: 1.8;
 }
 
-.navbar__icon--notify svg {
-  stroke: #10b981;
-}
-
 .navbar__badge {
   position: absolute;
-  top: -6px;
-  right: -6px;
-  background: #ef4444;
-  color: #fff;
+  top: -5px;
+  right: -5px;
+  min-width: 18px;
+  height: 18px;
   border-radius: 999px;
-  padding: 2px 6px;
+  background: #ef4444;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
   font-size: 10px;
   font-weight: 700;
+  line-height: 1;
 }
 
 .navbar__avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: #fff;
-  border: 1px solid #d1fae5;
-  color: #10b981;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1px solid #bae6fd;
+  background: #f8fafc;
+  color: #0f172a;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchAdminOrder, updateAdminOrderStatus } from "../../lib/adminApi.js";
+import {
+  fetchAdminOrderByInvoice,
+  updateAdminOrderStatus,
+} from "../../lib/adminApi.js";
 import { ORDER_STATUS_OPTIONS } from "../../constants/orderStatus.js";
 import QueryState from "../../components/UI/QueryState.jsx";
 import OrderStatusBadge from "../../components/admin/OrderStatusBadge.jsx";
@@ -30,7 +33,7 @@ const formatDateTime = (value) => {
 };
 
 export default function OrderDetail() {
-  const { id } = useParams();
+  const { invoiceNo } = useParams();
   const [searchParams] = useSearchParams();
   const qc = useQueryClient();
   const [status, setStatus] = useState("");
@@ -40,15 +43,15 @@ export default function OrderDetail() {
   const autoPrintDoneRef = useRef(false);
 
   const orderQuery = useQuery({
-    queryKey: ["admin-order", id],
-    queryFn: () => fetchAdminOrder(id),
-    enabled: Boolean(id),
+    queryKey: ["admin-order", invoiceNo],
+    queryFn: () => fetchAdminOrderByInvoice(invoiceNo),
+    enabled: Boolean(invoiceNo),
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ orderId, payload }) => updateAdminOrderStatus(orderId, payload),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin-order", id] });
+      qc.invalidateQueries({ queryKey: ["admin-order", invoiceNo] });
       qc.invalidateQueries({ queryKey: ["admin-orders"], exact: false });
       orderQuery.refetch();
       if (noticeTimerRef.current) {
@@ -95,7 +98,7 @@ export default function OrderDetail() {
 
   useEffect(() => {
     autoPrintDoneRef.current = false;
-  }, [id, shouldAutoPrint]);
+  }, [invoiceNo, shouldAutoPrint]);
 
   useEffect(() => {
     setStatus(currentStatus || "");
@@ -117,7 +120,8 @@ export default function OrderDetail() {
     return () => clearTimeout(timer);
   }, [shouldAutoPrint, orderQuery.isLoading, orderQuery.isError, order]);
 
-  const invoiceRef = order?.invoiceNo || order?.invoice || order?.ref || id || "—";
+  const invoiceRef =
+    order?.invoiceNo || order?.invoice || order?.ref || invoiceNo || "—";
   const createdAtLabel = formatDate(order?.createdAt);
   const createdAtFull = formatDateTime(order?.createdAt);
   const updatedAtValue = order?.updatedAt || order?.updated_at || order?.updatedAt;

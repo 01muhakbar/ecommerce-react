@@ -10,7 +10,7 @@ const normalizeValue = (value) =>
 
 function ProductSkeletonCard() {
   return (
-    <div className="animate-pulse rounded-2xl border border-slate-200 bg-white p-3 sm:p-4">
+    <div className="animate-pulse rounded-2xl border border-slate-200 bg-white p-3 sm:p-3.5">
       <div className="aspect-square rounded-xl bg-slate-200" />
       <div className="mt-3 h-4 w-4/5 rounded bg-slate-200" />
       <div className="mt-2 h-3 w-1/3 rounded bg-slate-200" />
@@ -194,7 +194,7 @@ export default function ProductSection({
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3.5 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {Array.from({ length: 8 }).map((_, index) => (
             <ProductSkeletonCard key={`product-skeleton-${index}`} />
           ))}
@@ -217,7 +217,7 @@ export default function ProductSection({
           No products found for this selection.
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3.5 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {displayProducts.map((product, index) => (
             <ProductCardKacha
               key={`${product?.id ?? product?.slug ?? "product"}-${index}`}

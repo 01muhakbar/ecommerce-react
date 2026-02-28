@@ -58,7 +58,9 @@ export default function ProductCardKacha({ product }) {
   const reviewCount = Number(product?.reviewCount || 0);
   const unit = String(product?.unit || "1 pc");
   const variant = String(product?.variant || "default");
-  const showDiscountMeta = variant === "discounted" && discountPercent > 0;
+  const hasVisibleDiscount = discountPercent > 0 || (originalPriceValue > price && price > 0);
+  const showDiscountMeta = variant === "discounted" && hasVisibleDiscount;
+  const showStruckPrice = originalPriceValue > price && price > 0;
   const displayRating = ratingAvg > 0 ? ratingAvg.toFixed(1) : "0.0";
   const displayReviewCount = Number.isFinite(reviewCount) ? reviewCount : 0;
 
@@ -93,17 +95,17 @@ export default function ProductCardKacha({ product }) {
   }, []);
 
   return (
-    <article className="group relative h-full overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition duration-200 hover:border-slate-300 hover:shadow-md sm:p-4">
+    <article className="group relative h-full overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_14px_30px_rgba(15,23,42,0.12)] sm:p-3.5">
       <Link to={`/product/${productSlug}`} className="block h-full">
-        <div className="relative h-44 overflow-hidden rounded-2xl bg-slate-100 sm:h-52 lg:h-56">
+        <div className="relative aspect-square overflow-hidden rounded-xl bg-slate-100">
           <img
             src={imageSrc}
             alt={productName}
             onError={() => setImageSrc(FALLBACK_IMAGE)}
-            className="h-full w-full object-contain p-6 transition duration-300 group-hover:scale-[1.03]"
+            className="h-full w-full object-contain p-5 transition duration-300 group-hover:scale-[1.025] sm:p-6"
           />
           {showDiscountMeta ? (
-            <span className="absolute left-2.5 top-2.5 inline-flex rounded-full bg-rose-500 px-2.5 py-1 text-[10px] font-semibold text-white">
+            <span className="absolute left-2.5 top-2.5 inline-flex rounded-full bg-rose-500 px-2.5 py-1 text-[10px] font-semibold leading-none text-white">
               {discountPercent}% Off
             </span>
           ) : null}
@@ -113,25 +115,25 @@ export default function ProductCardKacha({ product }) {
             aria-label="Add to cart"
             title="Add to cart"
             disabled={isAdding || isLoading}
-            className="absolute bottom-3 right-3 inline-flex h-10 w-10 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-70"
+            className="absolute bottom-3 right-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-70 sm:h-10 sm:w-10"
           >
             {isAdding ? "✓" : <ShoppingBag className="h-5 w-5" />}
           </button>
         </div>
         <div className="mt-3 space-y-1.5">
-          <h3 className="line-clamp-2 min-h-[2.5rem] text-[13px] font-medium leading-5 text-slate-900 sm:text-sm">
+          <h3 className="line-clamp-2 min-h-[2.75rem] text-[13px] font-medium leading-[1.35rem] text-slate-900 sm:text-sm">
             {productName}
           </h3>
-          <div className="flex items-center gap-1.5 text-xs">
+          <div className="flex items-center gap-1 text-[11px] sm:text-xs">
             <StarRating value={ratingAvg} />
-            <span className="font-medium text-slate-600">{displayRating}</span>
+            <span className="font-semibold text-slate-600">{displayRating}</span>
             <span className="text-slate-400">({displayReviewCount} reviews)</span>
           </div>
           <div className="flex items-baseline gap-2">
             <p className="text-sm font-bold text-slate-900 sm:text-[15px]">
               {formatCurrency(price)}
             </p>
-            {showDiscountMeta && originalPrice ? (
+            {showStruckPrice && originalPrice ? (
               <span className="text-xs text-slate-400 line-through">
                 {formatCurrency(originalPrice)}
               </span>

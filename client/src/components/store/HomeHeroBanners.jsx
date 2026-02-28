@@ -14,26 +14,26 @@ export default function HomeHeroBanners({ slides, activeSlide, setActiveSlide })
 
   return (
     <section className="w-full">
-      <article className="relative h-[230px] overflow-hidden rounded-[28px] border border-slate-200/80 bg-[#edf3f8] shadow-[0_22px_40px_-30px_rgba(15,23,42,0.42)] sm:h-[290px] lg:h-[380px] xl:h-[400px]">
+      <article className="relative h-[230px] overflow-hidden rounded-[28px] border border-slate-200/80 bg-[#eaf2f7] shadow-[0_16px_28px_-24px_rgba(15,23,42,0.5)] sm:h-[290px] lg:h-[374px] xl:h-[386px]">
         <img
           src={heroBannerImage}
           alt="Fresh groceries"
-          className="absolute right-0 top-0 h-full w-[58%] object-cover sm:w-[54%] lg:w-[52%]"
+          className="absolute right-0 top-0 h-full w-[56%] object-cover sm:w-[53%] lg:w-[50%]"
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#edf3f8] via-[#edf3f8]/95 to-transparent" />
-        <div className="pointer-events-none absolute -left-10 top-10 h-40 w-40 rounded-full bg-white/60 blur-3xl sm:h-52 sm:w-52" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#eaf2f7] via-[#eaf2f7]/96 to-transparent" />
+        <div className="pointer-events-none absolute -left-8 top-9 h-36 w-36 rounded-full bg-white/65 blur-3xl sm:h-48 sm:w-48" />
 
-        <div className="relative z-10 flex h-full max-w-[66%] flex-col justify-center px-5 pb-12 pt-5 sm:max-w-[56%] sm:px-8 sm:pb-14 sm:pt-8 lg:max-w-[50%] lg:px-10 lg:pb-16">
-          <h1 className="text-[24px] font-bold leading-[1.1] text-slate-900 sm:text-[30px] lg:text-[42px]">
+        <div className="relative z-10 flex h-full max-w-[66%] flex-col justify-center px-5 pb-12 pt-5 sm:max-w-[56%] sm:px-8 sm:pb-14 sm:pt-8 lg:max-w-[52%] lg:px-10 lg:pb-16">
+          <h1 className="text-[24px] font-extrabold leading-[1.05] tracking-[-0.01em] text-slate-900 sm:text-[32px] lg:text-[54px]">
             {displaySlide.title}
           </h1>
-          <p className="mt-2.5 text-[12px] leading-5 text-slate-600 sm:text-[13px] lg:mt-4 lg:text-sm">
+          <p className="mt-2.5 max-w-[34ch] text-[12px] leading-5 text-slate-600 sm:text-[13px] lg:mt-4 lg:text-[22px] lg:leading-7">
             {heroSubtitle}
           </p>
 
           <Link
             to="/search?q=apple&page=1"
-            className="mt-5 inline-flex w-fit items-center rounded-full bg-emerald-600 px-6 py-2.5 text-[13px] font-semibold text-white shadow-sm transition hover:bg-emerald-700 lg:mt-7"
+            className="mt-5 inline-flex h-10 w-fit items-center rounded-full bg-emerald-600 px-6 text-[13px] font-semibold text-white shadow-sm transition hover:bg-emerald-700 sm:h-11 sm:px-7 sm:text-[14px] lg:mt-7 lg:h-12 lg:px-8 lg:text-[16px]"
           >
             {ctaLabel}
           </Link>

@@ -45,39 +45,39 @@ class Product
   extends Model<ProductAttributes, ProductCreationAttributes>
   implements ProductAttributes
 {
-  public id!: number;
-  public name!: string;
-  public slug!: string;
-  public sku!: string | null;
-  public barcode?: string;
-  public gtin?: string;
-  public salePrice?: number;
-  public price!: number;
-  public stock!: number;
-  public userId!: number;
-  public categoryId?: number;
-  public status!: "active" | "inactive" | "draft";
-  public isPublished!: boolean;
-  public description?: string;
-  public promoImagePath?: string;
-  public imagePaths?: string[];
-  public videoPath?: string;
-  public tags?: any;
-  public weight?: number;
-  public notes?: string;
-  public parentSku?: string;
-  public condition?: string;
-  public length?: number;
-  public width?: number;
-  public height?: number;
-  public dangerousProduct?: boolean;
-  public preOrder?: boolean;
-  public preorderDays?: number;
-  public youtubeLink?: string;
-  public variations?: any;
-  public wholesale?: any;
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
+  declare id: number;
+  declare name: string;
+  declare slug: string;
+  declare sku: string | null;
+  declare barcode?: string;
+  declare gtin?: string;
+  declare salePrice?: number;
+  declare price: number;
+  declare stock: number;
+  declare userId: number;
+  declare categoryId?: number;
+  declare status: "active" | "inactive" | "draft";
+  declare isPublished: boolean;
+  declare description?: string;
+  declare promoImagePath?: string;
+  declare imagePaths?: string[];
+  declare videoPath?: string;
+  declare tags?: any;
+  declare weight?: number;
+  declare notes?: string;
+  declare parentSku?: string;
+  declare condition?: string;
+  declare length?: number;
+  declare width?: number;
+  declare height?: number;
+  declare dangerousProduct?: boolean;
+  declare preOrder?: boolean;
+  declare preorderDays?: number;
+  declare youtubeLink?: string;
+  declare variations?: any;
+  declare wholesale?: any;
+  declare readonly createdAt: Date;
+  declare readonly updatedAt: Date;
 
   static associate(models: any) {
     // Define associations here

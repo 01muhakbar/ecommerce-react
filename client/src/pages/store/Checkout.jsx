@@ -9,7 +9,7 @@ import { formatCurrency } from "../../utils/format.js";
 import { GENERIC_ERROR, ORDER_FAILED } from "../../constants/uiMessages.js";
 
 const INPUT_CLASS =
-  "mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100";
+  "mt-2 h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 shadow-[0_1px_1px_rgba(15,23,42,0.03)] focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100";
 
 const SHIPPING_OPTIONS = [
   { id: "ups_today", title: "UPS Delivery", eta: "Today", cost: 60 },
@@ -54,12 +54,12 @@ const resolveOrderPayload = (response) => {
 
 function SectionTitle({ number, title, hint }) {
   return (
-    <div>
-      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-600">
+    <div className="space-y-1">
+      <div className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-600">
         {number}
       </div>
-      <h2 className="mt-1 text-lg font-semibold text-slate-900">{title}</h2>
-      {hint ? <p className="mt-1 text-sm text-slate-500">{hint}</p> : null}
+      <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+      {hint ? <p className="text-sm text-slate-500">{hint}</p> : null}
     </div>
   );
 }
@@ -514,14 +514,14 @@ export default function CheckoutPage() {
   }
 
   return (
-    <section className="mx-auto max-w-7xl px-3 py-6 sm:px-4 sm:py-8 lg:px-6">
-      <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[1.35fr_0.95fr]">
+    <section className="mx-auto max-w-[1240px] px-3 py-6 sm:px-4 sm:py-8 lg:px-6 lg:py-10">
+      <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[1.32fr_0.92fr] lg:gap-7">
         <div className="space-y-6">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 lg:p-7">
-            <div className="mb-5 flex flex-col gap-4 border-b border-slate-100 pb-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_14px_34px_rgba(15,23,42,0.08)] sm:p-6 lg:p-7">
+            <div className="mb-6 flex flex-col gap-4 border-b border-slate-100 pb-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h1 className="text-lg font-semibold text-slate-900">Checkout</h1>
-                <p className="mt-0.5 text-xs text-slate-500">
+                <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">Checkout</h1>
+                <p className="mt-1 text-sm text-slate-500">
                   Complete your delivery details and confirm order.
                 </p>
               </div>
@@ -556,14 +556,14 @@ export default function CheckoutPage() {
             </div>
 
             {useDefaultShipping ? (
-              <p className="mt-3 text-xs text-slate-500">
+              <p className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
                 Use Default Shipping Address is enabled. Fill fields below if your profile
                 address is not available.
               </p>
             ) : null}
 
-            <div className="mt-8 space-y-8">
-              <section className="space-y-4">
+            <div className="mt-7 space-y-6">
+              <section className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/60 p-4 sm:p-5">
                 <SectionTitle
                   number="01."
                   title="Personal Details"
@@ -647,7 +647,7 @@ export default function CheckoutPage() {
                 </div>
               </section>
 
-              <section className="space-y-4">
+              <section className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/60 p-4 sm:p-5">
                 <SectionTitle
                   number="02."
                   title="Shipping Details"
@@ -749,7 +749,7 @@ export default function CheckoutPage() {
                       return (
                         <label
                           key={option.id}
-                          className={`cursor-pointer rounded-2xl border p-4 transition ${
+                          className={`cursor-pointer rounded-2xl border p-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition ${
                             selected
                               ? "border-emerald-400 bg-emerald-50"
                               : "border-slate-200 bg-white hover:border-slate-300"
@@ -775,7 +775,7 @@ export default function CheckoutPage() {
                 </div>
               </section>
 
-              <section className="space-y-4">
+              <section className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/60 p-4 sm:p-5">
                 <SectionTitle
                   number="03."
                   title="Payment Method"
@@ -788,7 +788,7 @@ export default function CheckoutPage() {
                     return (
                       <label
                         key={option.id}
-                        className={`cursor-pointer rounded-2xl border p-4 transition ${
+                        className={`cursor-pointer rounded-2xl border p-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition ${
                           selected
                             ? "border-emerald-400 bg-emerald-50"
                             : "border-slate-200 bg-white hover:border-slate-300"
@@ -825,7 +825,7 @@ export default function CheckoutPage() {
             </div>
 
             {error ? (
-              <div className="mt-6 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              <div className="mt-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                 <p>{error}</p>
                 <p className="mt-1 text-xs text-rose-600">
                   Fix any issue and press Place Order to try again.
@@ -833,42 +833,27 @@ export default function CheckoutPage() {
               </div>
             ) : null}
 
-            <div className="mt-8 flex flex-col gap-3 lg:flex-row lg:justify-between">
+            <div className="mt-7 flex flex-col gap-3 lg:flex-row lg:justify-between">
               <Link
                 to="/cart"
                 className="inline-flex h-11 w-full items-center justify-center rounded-full border border-slate-200 px-6 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 lg:w-auto"
               >
-                Continue Shipping
+                Back to Cart
               </Link>
-              <button
-                type="submit"
-                disabled={isSubmitting || isRemoteSyncing || couponStatus === "loading"}
-                aria-busy={isSubmitting}
-                className="inline-flex h-11 w-full items-center justify-center rounded-full bg-emerald-600 px-7 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
-              >
-                {isSubmitting ? (
-                  <>
-                    <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                    Processing...
-                  </>
-                ) : (
-                  "Place Order"
-                )}
-              </button>
             </div>
           </div>
         </div>
 
         <aside className="space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 lg:sticky lg:top-24">
+          <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_14px_34px_rgba(15,23,42,0.08)] sm:p-6 lg:sticky lg:top-24">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-slate-900">Order Summary</h3>
+              <h3 className="text-lg font-semibold text-slate-900 sm:text-xl">Order Summary</h3>
               <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                 {totalQty} Items
               </span>
             </div>
 
-            <div className="mt-4 space-y-4">
+            <div className="mt-4 space-y-3.5">
               {summaryItems.map((item) => {
                 const stockValue = Number(item.stock);
                 const stock =
@@ -877,10 +862,10 @@ export default function CheckoutPage() {
                 return (
                   <div
                     key={item.productId}
-                    className="rounded-xl border border-slate-100 bg-slate-50/60 p-3"
+                    className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3"
                   >
                     <div className="flex items-start gap-3">
-                      <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-white">
+                      <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-white">
                         {item.imageUrl ? (
                           <img
                             src={item.imageUrl}
@@ -908,7 +893,7 @@ export default function CheckoutPage() {
                         type="button"
                         onClick={() => removeItem(item.productId)}
                         disabled={isSubmitting || isRemoteSyncing}
-                        className="rounded-lg p-1.5 text-rose-500 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-full p-1.5 text-rose-500 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
                         aria-label={`Remove ${item.name}`}
                       >
                         <Trash2 className="h-4 w-4" />
@@ -951,13 +936,13 @@ export default function CheckoutPage() {
                   onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
                   disabled={isSubmitting || couponStatus === "loading"}
                   placeholder="Coupon Code"
-                  className="h-11 min-w-0 flex-1 rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-400 focus:outline-none"
+                  className="h-11 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm focus:border-emerald-400 focus:outline-none"
                 />
                 <button
                   type="button"
                   onClick={handleApplyCoupon}
                   disabled={isSubmitting || couponStatus === "loading"}
-                  className="h-11 w-24 shrink-0 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-28"
+                  className="h-11 w-24 shrink-0 rounded-2xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-28"
                 >
                   {couponStatus === "loading" ? "Applying..." : "Apply"}
                 </button>
@@ -1021,6 +1006,22 @@ export default function CheckoutPage() {
                 </span>
               </div>
             </div>
+
+            <button
+              type="submit"
+              disabled={isSubmitting || isRemoteSyncing || couponStatus === "loading"}
+              aria-busy={isSubmitting}
+              className="mt-6 inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-7 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSubmitting ? (
+                <>
+                  <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                  Processing...
+                </>
+              ) : (
+                "Place Order"
+              )}
+            </button>
           </div>
         </aside>
       </form>

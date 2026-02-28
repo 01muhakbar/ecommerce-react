@@ -14,16 +14,16 @@ interface CouponCreationAttributes
   extends Optional<CouponAttributes, "id" | "active" | "discountType" | "minSpend" | "expiresAt"> {}
 
 export class Coupon extends Model<CouponAttributes, CouponCreationAttributes> implements CouponAttributes {
-  public id!: number;
-  public code!: string;
-  public discountType!: "percent" | "fixed";
-  public amount!: number;
-  public minSpend!: number;
-  public active!: boolean;
-  public expiresAt?: Date | null;
+  declare id: number;
+  declare code: string;
+  declare discountType: "percent" | "fixed";
+  declare amount: number;
+  declare minSpend: number;
+  declare active: boolean;
+  declare expiresAt?: Date | null;
 
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
+  declare readonly createdAt: Date;
+  declare readonly updatedAt: Date;
 
   static initModel(sequelize: Sequelize): typeof Coupon {
     Coupon.init(

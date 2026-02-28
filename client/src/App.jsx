@@ -139,7 +139,7 @@ export default function App() {
                 }
               />
               <Route
-                path="orders/:id"
+                path="orders/:invoiceNo"
                 element={
                   <RequirePerm perm="ORDERS_VIEW">
                     <AdminOrderDetail />

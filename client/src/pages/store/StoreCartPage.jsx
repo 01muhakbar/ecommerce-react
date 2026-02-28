@@ -90,7 +90,7 @@ export function StoreCartDrawer({
   return (
     <div className="mx-auto w-full max-w-[1400px] px-0 sm:px-4 sm:py-4 lg:max-w-none lg:px-0 lg:py-0">
       <div
-        className={`lg:fixed lg:inset-0 lg:z-40 lg:flex lg:justify-end ${
+        className={`fixed inset-0 z-50 flex justify-end ${
           isOpen ? "pointer-events-auto" : "pointer-events-none"
         }`}
       >
@@ -99,7 +99,7 @@ export function StoreCartDrawer({
             type="button"
             onClick={handleClose}
             aria-label="Close cart drawer"
-            className={`hidden transition-opacity duration-150 ease-out lg:block lg:flex-1 lg:bg-slate-900/50 ${
+            className={`flex-1 bg-slate-900/50 transition-opacity duration-150 ease-out ${
               isOpen ? "opacity-100" : "opacity-0"
             }`}
           />
@@ -108,13 +108,13 @@ export function StoreCartDrawer({
           role="dialog"
           aria-modal="true"
           aria-label="Shopping Cart"
-          className={`mx-auto flex h-[100dvh] max-h-[100dvh] w-full flex-col overflow-hidden rounded-none border border-slate-200 bg-white shadow-sm transition-transform duration-150 ease-out sm:max-w-[520px] sm:rounded-2xl lg:ml-auto lg:max-w-[510px] lg:rounded-none lg:border-y-0 lg:border-r-0 lg:border-l lg:shadow-none ${
+          className={`ml-auto flex h-[100dvh] max-h-[100dvh] w-full flex-col overflow-hidden rounded-none border border-slate-200 bg-white shadow-sm transition-transform duration-150 ease-out sm:h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-1.5rem)] sm:max-w-[500px] sm:rounded-[24px] sm:shadow-[0_24px_48px_rgba(15,23,42,0.16)] lg:max-w-[430px] lg:rounded-none lg:border-y-0 lg:border-r-0 lg:border-l lg:shadow-none ${
             isOpen ? "translate-x-0" : "translate-x-full"
           }`}
         >
-          <header className="flex items-center justify-between border-b border-slate-200 bg-slate-100/80 px-4 py-4 sm:px-6">
+          <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-3.5 backdrop-blur sm:px-6">
             <div className="flex items-center gap-2 text-slate-900">
-              <ShoppingCart className="h-4 w-4" />
+              <ShoppingCart className="h-4 w-4 text-emerald-600" />
               <h1 className="text-base font-semibold sm:text-lg">Shopping Cart</h1>
               {isLoading && hasHydrated ? <UiUpdatingBadge label={UPDATING} /> : null}
             </div>
@@ -122,14 +122,15 @@ export function StoreCartDrawer({
               ref={closeButtonRef}
               type="button"
               onClick={handleClose}
-              className="inline-flex items-center gap-2 rounded-full px-2 py-1 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+              aria-label="Close"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-sm font-medium text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 sm:h-auto sm:w-auto sm:gap-2 sm:px-3 sm:py-1.5"
             >
               <X className="h-4 w-4" />
-              <span>Close</span>
+              <span className="hidden sm:inline">Close</span>
             </button>
           </header>
 
-          <div className="flex-1 overflow-y-auto px-4 py-3 sm:px-6">
+          <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 px-4 py-3 sm:px-6 sm:py-4">
             {showSkeleton ? (
               <div className="space-y-4">
                 <div className="h-16 animate-pulse rounded-2xl bg-slate-100" />
@@ -147,32 +148,34 @@ export function StoreCartDrawer({
             ) : null}
 
             {!showSkeleton && !isFatalError && !hasItems ? (
-              <UiEmptyState
-                className="min-h-[340px]"
-                title="No items added to cart"
-                description="Start shopping and add products to your cart."
-                actions={
-                  <>
-                    <button
-                      type="button"
-                      onClick={handleContinueShopping}
-                      className="inline-flex h-11 items-center justify-center rounded-full bg-slate-900 px-6 text-sm font-semibold !text-white visited:!text-white active:!text-white hover:bg-slate-800 hover:no-underline"
-                    >
-                      Start Shopping
-                    </button>
-                    <Link
-                      to="/"
-                      className="inline-flex h-11 items-center justify-center rounded-full border border-slate-300 bg-white px-6 text-sm font-semibold text-slate-700 hover:border-slate-400"
-                    >
-                      Back to Home
-                    </Link>
-                  </>
-                }
-              />
+              <div className="flex min-h-full items-center justify-center py-6">
+                <UiEmptyState
+                  className="w-full max-w-sm rounded-2xl shadow-sm"
+                  title="No items added to cart"
+                  description="Start shopping and add products to your cart."
+                  actions={
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleContinueShopping}
+                        className="inline-flex h-11 items-center justify-center rounded-full bg-slate-900 px-6 text-sm font-semibold !text-white visited:!text-white active:!text-white hover:bg-slate-800 hover:no-underline"
+                      >
+                        Start Shopping
+                      </button>
+                      <Link
+                        to="/"
+                        className="inline-flex h-11 items-center justify-center rounded-full border border-slate-300 bg-white px-6 text-sm font-semibold text-slate-700 hover:border-slate-400"
+                      >
+                        Back to Home
+                      </Link>
+                    </>
+                  }
+                />
+              </div>
             ) : null}
 
             {!showSkeleton && hasItems ? (
-              <div className="divide-y divide-slate-100">
+              <div className="space-y-3 pb-3">
                 {showInlineError ? (
                   <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
                     {errorMessage}
@@ -198,9 +201,12 @@ export function StoreCartDrawer({
                     !rowProductId ||
                     (stock !== null ? quantity >= stock : false);
                   return (
-                    <article key={rowProductId ?? item.name} className="bg-white py-4">
+                    <article
+                      key={rowProductId ?? item.name}
+                      className="rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.05)]"
+                    >
                       <div className="flex items-start gap-3 sm:gap-4">
-                        <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-100 sm:h-16 sm:w-16">
+                        <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 sm:h-16 sm:w-16">
                           {item.image ? (
                             <img
                               src={item.image}
@@ -219,12 +225,12 @@ export function StoreCartDrawer({
                           <p className="mt-1 text-xs text-slate-400">
                             Item Price {formatCurrency(price)}
                           </p>
-                          <p className="mt-1 text-sm font-semibold text-emerald-600">
+                          <p className="mt-1 text-sm font-semibold text-slate-900">
                             {formatCurrency(price)}
                           </p>
                         </div>
 
-                        <div className="ml-1 flex shrink-0 flex-col items-end gap-2">
+                        <div className="ml-1 flex shrink-0 flex-col items-end gap-2.5">
                           <button
                             type="button"
                             disabled={isLoading || !rowProductId}
@@ -237,7 +243,7 @@ export function StoreCartDrawer({
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
-                          <div className="inline-flex h-8 items-center rounded-full border border-slate-200 bg-white px-1.5">
+                          <div className="inline-flex h-8 items-center rounded-full border border-slate-300 bg-white px-1.5">
                             <button
                               type="button"
                               disabled={isDecrementDisabled}
@@ -281,16 +287,16 @@ export function StoreCartDrawer({
             ) : null}
           </div>
 
-          <footer className="shrink-0 border-t border-slate-200 bg-white px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 sm:px-6">
+          <footer className="sticky bottom-0 z-10 shrink-0 border-t border-slate-200 bg-white/95 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3.5 shadow-[0_-6px_18px_rgba(15,23,42,0.08)] backdrop-blur sm:px-6">
             <div className="flex items-center justify-between text-sm font-semibold text-slate-900">
               <span>Subtotal</span>
-              <span>{formatCurrency(Number(subtotal || 0))}</span>
+              <span className="text-base">{formatCurrency(Number(subtotal || 0))}</span>
             </div>
             <p className="mt-1 text-xs text-slate-500">
               Shipping and taxes calculated at checkout.
             </p>
 
-            <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="mt-3.5 grid grid-cols-2 gap-3">
               {hasItems ? (
                 <Link
                   to="/cart"
@@ -310,7 +316,7 @@ export function StoreCartDrawer({
               {hasItems ? (
                 <Link
                   to="/checkout"
-                  className="inline-flex h-11 items-center justify-center rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
+                  className="inline-flex h-11 items-center justify-center rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
                 >
                   Checkout
                 </Link>
@@ -332,19 +338,236 @@ export function StoreCartDrawer({
 }
 
 export default function StoreCartPage() {
-  const navigate = useNavigate();
+  const { items, subtotal, hasHydrated, isLoading, error, update, remove, refreshCart } =
+    useCart();
+  const hasItems = items.length > 0;
+  const isInitialSyncing = hasHydrated && isLoading && !hasItems;
+  const showSkeleton = !hasHydrated || isInitialSyncing;
+  const isFatalError = Boolean(error) && !showSkeleton && !hasItems;
+  const showInlineError = Boolean(error) && hasItems;
+  const lastRefreshAtRef = useRef(0);
+  const errorMessage =
+    error?.response?.data?.message ?? error?.message ?? GENERIC_ERROR;
+  const subtotalValue = Number(subtotal || 0);
+
+  useEffect(() => {
+    const now = Date.now();
+    const isStale = now - lastRefreshAtRef.current > 30_000;
+    if (!hasHydrated || isStale || error) {
+      lastRefreshAtRef.current = now;
+      void refreshCart(false);
+    }
+  }, [error, hasHydrated, refreshCart]);
+
+  const resolveProductId = (item) => {
+    const id = Number(item?.productId ?? item?.id ?? item?.product?.id);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  };
 
   return (
-    <StoreCartDrawer
-      isOpen
-      showBackdrop
-      onClose={() => {
-        if (typeof window !== "undefined" && window.history.length > 1) {
-          navigate(-1);
-          return;
-        }
-        navigate("/");
-      }}
-    />
+    <section className="space-y-5">
+      <header className="space-y-1">
+        <h1 className="text-2xl font-bold leading-tight tracking-tight text-slate-900 sm:text-3xl">
+          Shopping Cart
+        </h1>
+        <p className="text-sm text-slate-500">
+          Review your items and proceed to checkout when ready.
+        </p>
+      </header>
+
+      {showSkeleton ? (
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_330px] lg:gap-6">
+          <div className="space-y-3">
+            <div className="h-24 animate-pulse rounded-2xl bg-slate-100" />
+            <div className="h-24 animate-pulse rounded-2xl bg-slate-100" />
+            <div className="h-24 animate-pulse rounded-2xl bg-slate-100" />
+          </div>
+          <div className="h-56 animate-pulse rounded-2xl bg-slate-100" />
+        </div>
+      ) : null}
+
+      {isFatalError ? (
+        <UiErrorState
+          title={GENERIC_ERROR}
+          message={errorMessage}
+          onRetry={() => refreshCart(false)}
+        />
+      ) : null}
+
+      {!showSkeleton && !isFatalError && !hasItems ? (
+        <UiEmptyState
+          className="rounded-2xl py-14"
+          title="No items added to cart"
+          description="Start shopping and add products to your cart."
+          actions={
+            <>
+              <Link
+                to="/"
+                className="inline-flex h-11 items-center justify-center rounded-full bg-slate-900 px-6 text-sm font-semibold text-white hover:bg-slate-800"
+              >
+                Start Shopping
+              </Link>
+              <Link
+                to="/"
+                className="inline-flex h-11 items-center justify-center rounded-full border border-slate-300 bg-white px-6 text-sm font-semibold text-slate-700 hover:border-slate-400"
+              >
+                Back to Home
+              </Link>
+            </>
+          }
+        />
+      ) : null}
+
+      {!showSkeleton && !isFatalError && hasItems ? (
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_330px] lg:items-start lg:gap-6">
+          <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-3 sm:p-4">
+            {showInlineError ? (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                {errorMessage}
+                <button
+                  type="button"
+                  onClick={() => refreshCart(false)}
+                  className="ml-2 font-semibold underline underline-offset-2"
+                >
+                  Try again
+                </button>
+              </div>
+            ) : null}
+
+            {items.map((item) => {
+              const rowProductId = resolveProductId(item);
+              const quantity = Math.max(1, Number(item.quantity) || 1);
+              const price = Number(item.price) || 0;
+              const stockValue = Number(item.stock);
+              const stock =
+                Number.isFinite(stockValue) && stockValue >= 0 ? stockValue : null;
+              const isDecrementDisabled = isLoading || !rowProductId;
+              const isIncrementDisabled =
+                isLoading ||
+                !rowProductId ||
+                (stock !== null ? quantity >= stock : false);
+              return (
+                <article
+                  key={rowProductId ?? item.name}
+                  className="rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.05)] sm:p-4"
+                >
+                  <div className="flex items-start gap-3 sm:gap-4">
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 sm:h-20 sm:w-20">
+                      {item.image ? (
+                        <img
+                          src={item.image}
+                          alt={item.name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-xs text-slate-400">Img</span>
+                      )}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="line-clamp-2 text-sm font-semibold leading-tight text-slate-900 sm:text-[15px]">
+                        {item.name}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        Item Price {formatCurrency(price)}
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900 sm:text-base">
+                        {formatCurrency(price)}
+                      </p>
+                    </div>
+
+                    <div className="ml-1 flex shrink-0 flex-col items-end gap-2.5">
+                      <button
+                        type="button"
+                        disabled={isLoading || !rowProductId}
+                        onClick={() => {
+                          if (!rowProductId) return;
+                          remove(rowProductId);
+                        }}
+                        aria-label={`Remove ${item.name}`}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full text-rose-500 transition hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-45"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                      <div className="inline-flex h-9 items-center rounded-full border border-slate-300 bg-white px-1.5">
+                        <button
+                          type="button"
+                          disabled={isDecrementDisabled}
+                          onClick={() => {
+                            if (!rowProductId) return;
+                            if (quantity <= 1) {
+                              remove(rowProductId);
+                              return;
+                            }
+                            update(rowProductId, quantity - 1);
+                          }}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          -
+                        </button>
+                        <span className="inline-flex min-w-8 items-center justify-center px-1.5 text-sm font-semibold text-slate-900">
+                          {quantity}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={isIncrementDisabled}
+                          onClick={() => {
+                            if (!rowProductId) return;
+                            const nextQty =
+                              stock !== null ? Math.min(stock, quantity + 1) : quantity + 1;
+                            if (nextQty > quantity) {
+                              update(rowProductId, nextQty);
+                            }
+                          }}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+
+          <aside className="lg:sticky lg:top-24">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+              <h2 className="text-lg font-semibold text-slate-900">Order Summary</h2>
+              <div className="mt-4 space-y-2.5 border-b border-slate-200 pb-4 text-sm">
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Subtotal</span>
+                  <span className="font-semibold text-slate-900">
+                    {formatCurrency(subtotalValue)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Shipping</span>
+                  <span className="font-semibold text-slate-900">Calculated at checkout</span>
+                </div>
+              </div>
+              <div className="mt-4 flex items-center justify-between">
+                <span className="text-sm font-semibold text-slate-700">Total</span>
+                <span className="text-xl font-bold text-slate-900">
+                  {formatCurrency(subtotalValue)}
+                </span>
+              </div>
+              <Link
+                to="/checkout"
+                className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+              >
+                Proceed to Checkout
+              </Link>
+              <Link
+                to="/"
+                className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-full border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:border-slate-400"
+              >
+                Continue Shopping
+              </Link>
+            </div>
+          </aside>
+        </div>
+      ) : null}
+    </section>
   );
 }

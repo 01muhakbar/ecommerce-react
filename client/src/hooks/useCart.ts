@@ -14,6 +14,7 @@ import {
 const isUnauthorized = (error: any) => error?.response?.status === 401;
 const REMOTE_HINT_KEY = "cart_remote_ok";
 const PENDING_ADD_KEY = "pending_cart_add";
+const AUTH_SESSION_KEY = "authSessionHint";
 
 const readRemoteHint = () => {
   try {
@@ -28,6 +29,16 @@ const writeRemoteHint = (value: boolean) => {
     sessionStorage.setItem(REMOTE_HINT_KEY, value ? "true" : "false");
   } catch {
     // ignore storage errors
+  }
+};
+
+const hasAuthSessionSignal = () => {
+  try {
+    const token = localStorage.getItem("authToken");
+    if (token) return true;
+    return localStorage.getItem(AUTH_SESSION_KEY) === "true";
+  } catch {
+    return false;
   }
 };
 
@@ -242,9 +253,14 @@ export function useCart() {
   const refreshCart = useCallback(
     async (withLoading = true) => {
       const shouldForceRemote = withLoading === false;
+      const hasAuthSignal = hasAuthSessionSignal();
       const shouldAttemptRemote =
-        mode === "remote" || shouldForceRemote || readRemoteHint();
+        hasAuthSignal && (mode === "remote" || shouldForceRemote || readRemoteHint());
       if (!shouldAttemptRemote) {
+        if (mode !== "guest") {
+          setMode("guest");
+        }
+        writeRemoteHint(false);
         refreshGuest();
         return;
       }

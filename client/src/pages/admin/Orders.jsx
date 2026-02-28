@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchAdminOrders, updateAdminOrderStatus } from "../../lib/adminApi.js";
-import { ORDER_STATUS_OPTIONS, toUIStatus } from "../../constants/orderStatus.js";
+import { toUIStatus } from "../../constants/orderStatus.js";
 import { prevData } from "../../lib/rq.ts";
 import { moneyIDR } from "../../utils/money.js";
 import OrderStatusBadge from "../../components/admin/OrderStatusBadge.jsx";
@@ -13,19 +13,7 @@ import {
   UiSkeleton,
   UiUpdatingBadge,
 } from "../../components/ui-states/index.js";
-import {
-  GENERIC_ERROR,
-  NO_ORDERS_FOUND,
-  UPDATING,
-} from "../../constants/uiMessages.js";
-
-const statusLabelMap = {
-  pending: "Pending",
-  processing: "Processing",
-  shipping: "Shipping",
-  complete: "Delivered",
-  cancelled: "Cancel",
-};
+import { GENERIC_ERROR, NO_ORDERS_FOUND, UPDATING } from "../../constants/uiMessages.js";
 
 const headerBtnBase =
   "inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 text-sm font-medium transition";
@@ -60,38 +48,76 @@ const getInvoiceLabel = (order) => {
   return raw.length <= 14 ? raw : raw.slice(0, 14);
 };
 
+const getInvoiceParam = (order) =>
+  toText(order?.invoiceNo || order?.invoice || order?.ref || order?.id);
+
 const getCustomerName = (order) =>
   toText(order?.customerName || order?.customer?.name || order?.customer?.email) || "Guest";
 
 const getCustomerHint = (order) => toText(order?.customer?.email || order?.ref) || "";
 
-const getMethodLabel = (order) =>
-  toText(order?.paymentMethod || order?.method || "COD").toUpperCase() || "COD";
-
-const toDayStart = (yyyyMmDd) => {
-  const parsed = new Date(`${yyyyMmDd}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed;
+const methodLabelMap = {
+  cash: "Cash",
+  card: "Card",
+  credit: "Credit",
 };
 
-const toDayEnd = (yyyyMmDd) => {
-  const parsed = new Date(`${yyyyMmDd}T23:59:59.999`);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed;
+const normalizeMethod = (raw) => {
+  const value = String(raw || "").toLowerCase().trim();
+  if (!value) return "cash";
+  if (value.includes("cod") || value.includes("cash")) return "cash";
+  if (value.includes("credit card") || value.includes("card") || value.includes("debit")) {
+    return "card";
+  }
+  if (value.includes("credit") || value.includes("paylater") || value.includes("installment")) {
+    return "credit";
+  }
+  return "cash";
+};
+
+const getMethodLabel = (order) => {
+  const method = normalizeMethod(order?.method || order?.paymentMethod || "");
+  return methodLabelMap[method] || "Cash";
+};
+
+const STATUS_FILTER_OPTIONS = [
+  { value: "", label: "All Status" },
+  { value: "pending", label: "Pending" },
+  { value: "processing", label: "Processing" },
+  { value: "shipping", label: "Shipping" },
+  { value: "delivered", label: "Delivered" },
+  { value: "cancel", label: "Cancel" },
+];
+
+const STATUS_ACTION_OPTIONS = [
+  { value: "pending", label: "Pending" },
+  { value: "processing", label: "Processing" },
+  { value: "shipping", label: "Shipping" },
+  { value: "delivered", label: "Delivered" },
+  { value: "cancel", label: "Cancel" },
+];
+
+const toActionStatusValue = (raw) => {
+  const uiStatus = toUIStatus(raw || "pending");
+  if (uiStatus === "complete") return "delivered";
+  if (uiStatus === "cancelled") return "cancel";
+  return uiStatus;
 };
 
 export default function Orders() {
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(10);
+  const pageSize = 10;
   const [searchInput, setSearchInput] = useState("");
   const [statusInput, setStatusInput] = useState("");
   const [methodInput, setMethodInput] = useState("");
+  const [limitDaysInput, setLimitDaysInput] = useState("");
   const [startDateInput, setStartDateInput] = useState("");
   const [endDateInput, setEndDateInput] = useState("");
   const [appliedFilters, setAppliedFilters] = useState({
-    q: "",
+    search: "",
     status: "",
     method: "",
+    limitDays: "",
     startDate: "",
     endDate: "",
   });
@@ -110,11 +136,15 @@ export default function Orders() {
   const params = useMemo(
     () => ({
       page,
-      limit,
-      q: appliedFilters.q || undefined,
+      pageSize,
+      search: appliedFilters.search || undefined,
       status: appliedFilters.status || undefined,
+      method: appliedFilters.method || undefined,
+      limitDays: appliedFilters.limitDays || undefined,
+      startDate: appliedFilters.startDate || undefined,
+      endDate: appliedFilters.endDate || undefined,
     }),
-    [page, limit, appliedFilters.q, appliedFilters.status]
+    [page, pageSize, appliedFilters]
   );
 
   const ordersQuery = useQuery({
@@ -140,53 +170,10 @@ export default function Orders() {
   });
 
   const items = Array.isArray(ordersQuery.data?.data) ? ordersQuery.data.data : [];
-  const methodOptions = useMemo(() => {
-    const found = new Set(["COD"]);
-    items.forEach((order) => {
-      const method = getMethodLabel(order);
-      if (method) found.add(method);
-    });
-    return Array.from(found);
-  }, [items]);
 
-  const filteredItems = useMemo(() => {
-    return items.filter((order) => {
-      const keyword = appliedFilters.q.toLowerCase();
-      if (keyword) {
-        const haystack = [
-          getCustomerName(order),
-          getCustomerHint(order),
-          getInvoiceLabel(order),
-        ]
-          .join(" ")
-          .toLowerCase();
-        if (!haystack.includes(keyword)) return false;
-      }
-
-      const uiStatus = toUIStatus(order?.status || "pending");
-      if (appliedFilters.status && uiStatus !== appliedFilters.status) return false;
-
-      if (appliedFilters.method) {
-        if (getMethodLabel(order) !== appliedFilters.method) return false;
-      }
-
-      const orderDate = getOrderDate(order);
-      if (appliedFilters.startDate) {
-        const start = toDayStart(appliedFilters.startDate);
-        if (!orderDate || !start || orderDate < start) return false;
-      }
-      if (appliedFilters.endDate) {
-        const end = toDayEnd(appliedFilters.endDate);
-        if (!orderDate || !end || orderDate > end) return false;
-      }
-
-      return true;
-    });
-  }, [items, appliedFilters]);
-
-  const meta = ordersQuery.data?.meta || { page: 1, limit, total: 0, totalPages: 1 };
+  const meta = ordersQuery.data?.meta || { page: 1, limit: pageSize, total: 0, totalPages: 1 };
   const totalPages = Math.max(1, Number(meta.totalPages || 1));
-  const hasItems = filteredItems.length > 0;
+  const hasItems = items.length > 0;
   const isInitialLoading = ordersQuery.isLoading && !ordersQuery.data;
   const isRefetching = ordersQuery.isFetching && !isInitialLoading;
   const isErrorState = ordersQuery.isError && !ordersQuery.data;
@@ -199,9 +186,10 @@ export default function Orders() {
 
   const onApplyFilters = () => {
     setAppliedFilters({
-      q: searchInput.trim(),
+      search: searchInput.trim(),
       status: statusInput,
       method: methodInput,
+      limitDays: limitDaysInput,
       startDate: startDateInput,
       endDate: endDateInput,
     });
@@ -212,10 +200,17 @@ export default function Orders() {
     setSearchInput("");
     setStatusInput("");
     setMethodInput("");
+    setLimitDaysInput("");
     setStartDateInput("");
     setEndDateInput("");
-    setAppliedFilters({ q: "", status: "", method: "", startDate: "", endDate: "" });
-    setLimit(10);
+    setAppliedFilters({
+      search: "",
+      status: "",
+      method: "",
+      limitDays: "",
+      startDate: "",
+      endDate: "",
+    });
     setPage(1);
   };
 
@@ -232,12 +227,16 @@ export default function Orders() {
     setRowError("");
     setIsDownloading(true);
     const params = new URLSearchParams();
-    if (appliedFilters.q) params.set("q", appliedFilters.q);
+    if (appliedFilters.search) params.set("search", appliedFilters.search);
     if (appliedFilters.status) params.set("status", appliedFilters.status);
+    if (appliedFilters.method) params.set("method", appliedFilters.method);
+    if (appliedFilters.limitDays) params.set("limitDays", appliedFilters.limitDays);
+    if (appliedFilters.startDate) params.set("startDate", appliedFilters.startDate);
+    if (appliedFilters.endDate) params.set("endDate", appliedFilters.endDate);
     const query = params.toString();
     const endpoint = query
-      ? `/api/admin/orders/export.csv?${query}`
-      : "/api/admin/orders/export.csv";
+      ? `/api/admin/orders/export?${query}`
+      : "/api/admin/orders/export";
 
     fetch(endpoint, { credentials: "include" })
       .then(async (response) => {
@@ -275,12 +274,15 @@ export default function Orders() {
       });
   };
 
-  const onPrintInvoice = (orderId) => {
-    if (!orderId) {
+  const onPrintInvoice = (invoiceParam) => {
+    if (!invoiceParam) {
       setRowError("Order detail is unavailable for this record.");
       return;
     }
-    const printWindow = window.open(`/admin/orders/${orderId}?print=1`, "_blank");
+    const printWindow = window.open(
+      `/admin/orders/${encodeURIComponent(invoiceParam)}?print=1`,
+      "_blank"
+    );
     if (!printWindow) {
       setRowError("Pop-up blocked. Allow pop-ups to print invoice.");
     }
@@ -294,7 +296,7 @@ export default function Orders() {
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-12">
           <input
             type="search"
             value={searchInput}
@@ -306,51 +308,48 @@ export default function Orders() {
               }
             }}
             placeholder="Search by Customer Name"
-            className="h-10 min-w-[220px] flex-1 rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none"
+            className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none xl:col-span-4"
           />
 
           <select
             value={statusInput}
             onChange={(event) => setStatusInput(event.target.value)}
-            className="h-10 min-w-[150px] rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none"
+            className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none xl:col-span-2"
           >
             <option value="">All Status</option>
-            {ORDER_STATUS_OPTIONS.map((value) => (
-              <option key={value} value={value}>
-                {statusLabelMap[value] || value}
+            {STATUS_FILTER_OPTIONS.filter((option) => option.value).map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
               </option>
             ))}
           </select>
 
           <select
-            value={limit}
-            onChange={(event) => {
-              setLimit(Number(event.target.value) || 10);
-              setPage(1);
-            }}
-            className="h-10 min-w-[130px] rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none"
+            value={limitDaysInput}
+            onChange={(event) => setLimitDaysInput(event.target.value)}
+            className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none xl:col-span-2"
           >
-            <option value={10}>10 Orders</option>
-            <option value={20}>20 Orders</option>
-            <option value={50}>50 Orders</option>
+            <option value="">Order Limits</option>
+            <option value="5">Last 5 days</option>
+            <option value="7">Last 7 days</option>
+            <option value="15">Last 15 days</option>
+            <option value="30">Last 30 days</option>
           </select>
 
           <select
             value={methodInput}
             onChange={(event) => setMethodInput(event.target.value)}
-            className="h-10 min-w-[130px] rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none"
+            className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none xl:col-span-2"
           >
             <option value="">All Methods</option>
-            {methodOptions.map((method) => (
-              <option key={method} value={method}>
-                {method}
-              </option>
-            ))}
+            <option value="cash">Cash</option>
+            <option value="card">Card</option>
+            <option value="credit">Credit</option>
           </select>
 
           <button
             type="button"
-            className={headerBtnOutline}
+            className={`${headerBtnOutline} w-full sm:w-auto xl:col-span-2`}
             onClick={onDownloadAll}
             disabled={isDownloading}
           >
@@ -359,30 +358,40 @@ export default function Orders() {
           </button>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-3">
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-12">
           <input
             type="date"
             value={startDateInput}
             onChange={(event) => setStartDateInput(event.target.value)}
-            className="h-10 min-w-[170px] rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none"
+            className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none xl:col-span-3"
           />
           <input
             type="date"
             value={endDateInput}
             onChange={(event) => setEndDateInput(event.target.value)}
-            className="h-10 min-w-[170px] rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none"
+            className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none xl:col-span-3"
           />
 
-          <button type="button" className={headerBtnGreen} onClick={onApplyFilters}>
+          <button
+            type="button"
+            className={`${headerBtnGreen} w-full sm:w-auto xl:col-span-2`}
+            onClick={onApplyFilters}
+          >
             <Filter className="h-4 w-4" />
             Filter
           </button>
-          <button type="button" className={headerBtnOutline} onClick={onResetFilters}>
+          <button
+            type="button"
+            className={`${headerBtnOutline} w-full sm:w-auto xl:col-span-2`}
+            onClick={onResetFilters}
+          >
             <RotateCcw className="h-4 w-4" />
             Reset
           </button>
 
-          {isRefetching ? <UiUpdatingBadge label={UPDATING} /> : null}
+          <div className="xl:col-span-2 xl:flex xl:items-center xl:justify-end">
+            {isRefetching ? <UiUpdatingBadge label={UPDATING} /> : null}
+          </div>
         </div>
       </div>
 
@@ -432,25 +441,27 @@ export default function Orders() {
               </button>
             </div>
           ) : null}
-          <div className="w-full overflow-x-auto">
+          <div className="-mx-4 w-auto overflow-x-auto px-4 pb-1 md:mx-0 md:w-full md:px-0">
             <table className="w-full min-w-[1100px] text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <thead className="sticky top-0 z-10 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-4 py-3">Invoice No</th>
-                <th className="px-4 py-3">Order Time</th>
-                <th className="px-4 py-3">Customer Name</th>
-                <th className="px-4 py-3">Method</th>
-                <th className="px-4 py-3">Amount</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Action</th>
-                <th className="px-4 py-3 text-right">Invoice</th>
+                <th className="whitespace-nowrap px-4 py-3">Invoice No</th>
+                <th className="whitespace-nowrap px-4 py-3">Order Time</th>
+                <th className="whitespace-nowrap px-4 py-3">Customer Name</th>
+                <th className="whitespace-nowrap px-4 py-3">Method</th>
+                <th className="whitespace-nowrap px-4 py-3">Amount</th>
+                <th className="whitespace-nowrap px-4 py-3">Status</th>
+                <th className="w-[170px] whitespace-nowrap px-4 py-3">Action</th>
+                <th className="w-[120px] whitespace-nowrap px-4 py-3 text-right">Invoice</th>
               </tr>
             </thead>
             <tbody>
-              {filteredItems.map((order) => {
+              {items.map((order) => {
                 const uiStatus = toUIStatus(order.status || "pending");
+                const actionStatus = toActionStatusValue(order.status || "pending");
                 const isUpdating = pendingUpdateId === order.id;
                 const orderId = order?.id;
+                const invoiceParam = getInvoiceParam(order);
                 const customerHint = getCustomerHint(order);
                 const rowKey = orderId || `${getInvoiceLabel(order)}-${formatOrderTime(order)}`;
                 return (
@@ -467,40 +478,38 @@ export default function Orders() {
                       <div className="text-xs text-slate-400">{customerHint}</div>
                     ) : null}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {getMethodLabel(order)}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3">{moneyIDR(order.totalAmount || 0)}</td>
+                  <td className="px-4 py-3 text-slate-600">{getMethodLabel(order)}</td>
+                  <td className="whitespace-nowrap px-4 py-3">{moneyIDR(order.totalAmount || order.amount || 0)}</td>
                   <td className="px-4 py-3">
                     <OrderStatusBadge status={uiStatus || "-"} />
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="w-[170px] px-4 py-3">
                     <select
-                      value={uiStatus}
+                      value={actionStatus}
                       onChange={(event) => onUpdateStatus(order, event.target.value)}
                       disabled={isUpdating}
-                      className="h-9 min-w-[145px] rounded-xl border border-slate-200 px-2 text-xs focus:border-emerald-500 focus:outline-none disabled:opacity-60"
+                      className="h-9 w-[140px] rounded-xl border border-slate-200 px-2 text-xs focus:border-emerald-500 focus:outline-none disabled:opacity-60"
                     >
-                      {ORDER_STATUS_OPTIONS.map((value) => (
-                        <option key={value} value={value}>
-                          {statusLabelMap[value] || value}
+                      {STATUS_ACTION_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
                         </option>
                       ))}
                     </select>
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-2">
+                  <td className="w-[120px] px-4 py-3">
+                    <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                       <button
                         type="button"
-                        onClick={() => onPrintInvoice(orderId)}
+                        onClick={() => onPrintInvoice(invoiceParam)}
                         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-100"
                         aria-label="Print invoice"
                       >
                         <Printer className="h-4 w-4" />
                       </button>
-                      {orderId ? (
+                      {invoiceParam ? (
                         <Link
-                          to={`/admin/orders/${orderId}`}
+                          to={`/admin/orders/${encodeURIComponent(invoiceParam)}`}
                           className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-100"
                           aria-label="View order detail"
                         >

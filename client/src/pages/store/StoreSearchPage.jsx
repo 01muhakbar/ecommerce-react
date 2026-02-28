@@ -151,7 +151,7 @@ export default function StoreSearchPage() {
   const safeTotalCount = Number.isFinite(totalCount) ? totalCount : sortedProducts.length;
 
   return (
-    <div className="space-y-4 px-3 pb-28 sm:px-4 sm:pb-10 lg:px-6">
+    <div className="space-y-4 px-3 pb-28 sm:px-4 sm:pb-10 lg:px-6 xl:px-8">
       <div className="rounded-sm border border-[#F3D4B6] bg-[#FDEEDC] px-3 py-1.5">
         <div className="flex items-center justify-between gap-2 whitespace-nowrap">
           <p className="truncate whitespace-nowrap text-xs font-medium text-slate-700 sm:text-sm">
@@ -227,7 +227,7 @@ export default function StoreSearchPage() {
               </button>
             </div>
           ) : null}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3.5 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {sortedProducts.map((product, index) => {
               const title = product?.title ?? product?.name ?? "";
               const category =
