@@ -40,7 +40,7 @@ const dummyCoupons = [
   {
     id: 2,
     code: "WELCOME",
-    discountLabel: "$100 Off",
+    discountLabel: `${formatCurrency(100)} Off`,
     title: "Get instant savings for your first checkout",
     countdown: "00 : 00 : 00 : 00",
     status: "Active",

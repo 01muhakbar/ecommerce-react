@@ -11,6 +11,8 @@ import { OrderItem } from "./OrderItem.js";
 import { Coupon } from "./Coupon.js";
 import { ProductReview } from "./ProductReview.js";
 import { Attribute } from "./Attribute.js";
+import { Language } from "./Language.js";
+import { Currency } from "./Currency.js";
 
 type ProductUserIdFkRow = {
   tableName: string;
@@ -89,6 +91,8 @@ function initModels() {
   Coupon.initModel(sequelize);
   ProductReview.initModel(sequelize);
   Attribute.initModel(sequelize);
+  Language.initModel(sequelize);
+  Currency.initModel(sequelize);
 
   const models: any = {
     User,
@@ -101,6 +105,8 @@ function initModels() {
     Coupon,
     ProductReview,
     Attribute,
+    Language,
+    Currency,
   };
 
   Object.values(models).forEach((model: any) => {
@@ -178,4 +184,6 @@ export {
   Coupon,
   ProductReview,
   Attribute,
+  Language,
+  Currency,
 };

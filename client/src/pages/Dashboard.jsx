@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import dayjs from "dayjs";
 import { Toaster, toast } from "react-hot-toast";
 import { statCards, orderStatusStats } from "../data/dashboardStats.js";
 import { analyticsService, orderService } from "../api/index.ts";
@@ -9,12 +8,13 @@ import OrderStatusCards from "../components/dashboard/OrderStatusCards.jsx";
 import WeeklySalesCard from "../components/dashboard/WeeklySalesCard.jsx";
 import BestSellingCard from "../components/dashboard/BestSellingCard.jsx";
 import RecentOrdersTable from "../components/dashboard/RecentOrdersTable.jsx";
-import { formatCurrency } from "../utils/format.js";
+import useAdminLocale from "../hooks/useAdminLocale.js";
 
 import "./Dashboard.css";
 
 export default function Dashboard() {
   const { user, role } = useAuth();
+  const { formatMoney, formatDateTime } = useAdminLocale();
   const currentRole = role || user?.role;
   const isAdmin =
     currentRole === "admin" || currentRole === "super_admin";
@@ -272,10 +272,10 @@ export default function Dashboard() {
       return {
         ...card,
         value: rawValue,
-        displayValue: formatCurrency(rawValue),
+        displayValue: formatMoney(rawValue),
       };
     });
-  }, [summary]);
+  }, [summary, formatMoney]);
 
   const statusCounts = overview?.statusCounts || {};
   const pendingAmount = overview?.kpis?.pendingAmount ?? 0;
@@ -290,18 +290,18 @@ export default function Dashboard() {
   const chartSales = useMemo(() => {
     return (salesData?.sales || []).map((item) => ({
       name: item.date,
-      label: dayjs(item.date).isValid() ? dayjs(item.date).format("ddd") : item.date,
+      label: formatDateTime(item.date, { includeTime: false }),
       value: Number(item.value) || 0,
     }));
-  }, [salesData]);
+  }, [salesData, formatDateTime]);
 
   const chartOrders = useMemo(() => {
     return (salesData?.orders || []).map((item) => ({
       name: item.date,
-      label: dayjs(item.date).isValid() ? dayjs(item.date).format("ddd") : item.date,
+      label: formatDateTime(item.date, { includeTime: false }),
       value: Number(item.value) || 0,
     }));
-  }, [salesData]);
+  }, [salesData, formatDateTime]);
 
   const bestSellingItems = useMemo(() => {
     return bestSelling.map((item) => ({
@@ -310,6 +310,18 @@ export default function Dashboard() {
       revenue: Number(item.revenue) || 0,
     }));
   }, [bestSelling]);
+
+  const recentOrdersDisplay = useMemo(() => {
+    return (recentOrders || []).map((order) => {
+      const amount = order?.totalAmount ?? order?.amount ?? order?.total ?? 0;
+      const orderTime = order?.createdAt || order?.orderTime || null;
+      return {
+        ...order,
+        __displayAmount: formatMoney(amount),
+        __displayOrderTime: formatDateTime(orderTime),
+      };
+    });
+  }, [recentOrders, formatDateTime, formatMoney]);
 
   return (
     <div className="dashboard">
@@ -324,12 +336,14 @@ export default function Dashboard() {
         items={isLoadingSummary || summaryError ? statCards : kpiItems}
         labelMap={statLabelMap}
         breakdowns={breakdowns}
+        formatMoney={formatMoney}
       />
 
       <OrderStatusCards
         items={isLoadingOverview || overviewError ? orderStatusStats : statusItems}
         labelMap={statusLabelMap}
         pendingAmount={pendingAmountValue}
+        formatMoney={formatMoney}
       />
 
       <div className="dashboard-charts">
@@ -338,6 +352,7 @@ export default function Dashboard() {
           ordersData={chartOrders}
           isLoading={isLoadingSales}
           error={salesError}
+          formatMoney={formatMoney}
         />
         <BestSellingCard
           items={bestSellingItems}
@@ -364,7 +379,7 @@ export default function Dashboard() {
       )}
       {!isLoadingOrders && !orderError && recentOrders.length > 0 && (
         <RecentOrdersTable
-          orders={recentOrders}
+          orders={recentOrdersDisplay}
           isAdmin={isAdmin}
           onStatusChange={handleStatusChange}
           onInvoiceAction={handleInvoiceAction}

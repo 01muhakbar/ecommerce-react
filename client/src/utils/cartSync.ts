@@ -1,6 +1,8 @@
 import type { CartItem } from "../store/cart.store.ts";
 import * as cartApi from "../api/cartApi.ts";
 
+const isDev = Boolean((import.meta as { env?: { DEV?: boolean } }).env?.DEV);
+
 const normalizeImageUrl = (value?: string | null) => {
   if (!value) return null;
   if (/^https?:\/\//i.test(value)) return value;
@@ -43,7 +45,7 @@ export const normalizeRemoteCartToItems = (remotePayload: any): CartItem[] => {
         qty,
       } as CartItem;
     })
-    .filter((item): item is CartItem => Boolean(item));
+    .filter((item: CartItem | null): item is CartItem => Boolean(item));
 };
 
 export const fetchRemoteCartItems = async (): Promise<CartItem[]> => {
@@ -77,7 +79,7 @@ export const syncCartOnLogin = async (
   return fetchRemoteCartItems();
 };
 
-if (import.meta.env.DEV && typeof window !== "undefined") {
+if (isDev && typeof window !== "undefined") {
   (window as any).cartSync = {
     syncCartOnLogin,
     fetchRemoteCartItems,

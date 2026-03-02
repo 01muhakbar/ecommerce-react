@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../../auth/useAuth.js";
 import { can } from "../../constants/permissions.js";
@@ -120,7 +120,10 @@ const MENU = [
     label: "International",
     icon: IconGlobe,
     hasCaret: true,
-    children: [{ label: "Languages", to: "/admin/languages", perm: "SETTINGS_MANAGE" }],
+    children: [
+      { label: "Languages", to: "/admin/languages", perm: "SETTINGS_MANAGE" },
+      { label: "Currencies", to: "/admin/currencies", perm: "SETTINGS_MANAGE" },
+    ],
   },
   {
     label: "Online Store",
@@ -128,7 +131,11 @@ const MENU = [
     hasCaret: true,
     children: [
       { label: "View Store", to: "/", perm: "DASHBOARD_VIEW" },
-      { label: "Store Customization", to: "/admin/store-customization", perm: "SETTINGS_MANAGE" },
+      {
+        label: "Store Customization",
+        to: "/admin/store/customization",
+        perm: "SETTINGS_MANAGE",
+      },
       { label: "Store Settings", to: "/admin/store-settings", perm: "SETTINGS_MANAGE" },
     ],
   },
@@ -137,12 +144,41 @@ const MENU = [
 export default function Sidebar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const queryClient = useQueryClient();
   const [openMenus, setOpenMenus] = useState({
     Catalog: true,
-    International: false,
-    "Online Store": false,
+    International:
+      pathname.startsWith("/admin/languages") ||
+      pathname.startsWith("/admin/currencies"),
+    "Online Store":
+      pathname.startsWith("/admin/store/") ||
+      pathname.startsWith("/admin/store-customization") ||
+      pathname.startsWith("/admin/store-settings"),
   });
+
+  useEffect(() => {
+    if (
+      pathname.startsWith("/admin/languages") ||
+      pathname.startsWith("/admin/currencies")
+    ) {
+      setOpenMenus((prev) =>
+        prev.International ? prev : { ...prev, International: true }
+      );
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    if (
+      pathname.startsWith("/admin/store/") ||
+      pathname.startsWith("/admin/store-customization") ||
+      pathname.startsWith("/admin/store-settings")
+    ) {
+      setOpenMenus((prev) =>
+        prev["Online Store"] ? prev : { ...prev, "Online Store": true }
+      );
+    }
+  }, [pathname]);
 
   const toggleMenu = (label) => {
     setOpenMenus((prev) => ({ ...prev, [label]: !prev[label] }));

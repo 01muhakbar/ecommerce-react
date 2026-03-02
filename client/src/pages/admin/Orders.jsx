@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchAdminOrders, updateAdminOrderStatus } from "../../lib/adminApi.js";
 import { toUIStatus } from "../../constants/orderStatus.js";
 import { prevData } from "../../lib/rq.ts";
-import { moneyIDR } from "../../utils/money.js";
+import useAdminLocale from "../../hooks/useAdminLocale.js";
 import OrderStatusBadge from "../../components/admin/OrderStatusBadge.jsx";
 import { Download, Eye, Filter, Printer, RotateCcw } from "lucide-react";
 import {
@@ -22,25 +22,7 @@ const headerBtnGreen = `${headerBtnBase} bg-emerald-600 text-white hover:bg-emer
 
 const toText = (value) => String(value ?? "").trim();
 
-const getOrderDate = (order) => {
-  const raw = order?.createdAt || order?.created_at || null;
-  if (!raw) return null;
-  const date = new Date(raw);
-  if (Number.isNaN(date.getTime())) return null;
-  return date;
-};
-
-const formatOrderTime = (order) => {
-  const date = getOrderDate(order);
-  if (!date) return "-";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-};
+const getOrderDateValue = (order) => order?.createdAt || order?.created_at || null;
 
 const getInvoiceLabel = (order) => {
   const raw = toText(order?.invoiceNo || order?.invoice || order?.ref || order?.id);
@@ -126,6 +108,7 @@ export default function Orders() {
   const [notice, setNotice] = useState("");
   const [isDownloading, setIsDownloading] = useState(false);
   const queryClient = useQueryClient();
+  const { formatDateTime, formatMoney } = useAdminLocale();
 
   useEffect(() => {
     if (!notice) return;
@@ -463,14 +446,17 @@ export default function Orders() {
                 const orderId = order?.id;
                 const invoiceParam = getInvoiceParam(order);
                 const customerHint = getCustomerHint(order);
-                const rowKey = orderId || `${getInvoiceLabel(order)}-${formatOrderTime(order)}`;
+                const orderDateValue = getOrderDateValue(order);
+                const rowKey =
+                  orderId ||
+                  `${getInvoiceLabel(order)}-${formatDateTime(orderDateValue)}`;
                 return (
                 <tr key={rowKey} className="border-t border-slate-100 text-slate-700 transition hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium text-slate-900">
                     {getInvoiceLabel(order)}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                    {formatOrderTime(order)}
+                    {formatDateTime(orderDateValue)}
                   </td>
                   <td className="px-4 py-3 text-slate-600">
                     <div className="font-medium text-slate-900">{getCustomerName(order)}</div>
@@ -479,7 +465,9 @@ export default function Orders() {
                     ) : null}
                   </td>
                   <td className="px-4 py-3 text-slate-600">{getMethodLabel(order)}</td>
-                  <td className="whitespace-nowrap px-4 py-3">{moneyIDR(order.totalAmount || order.amount || 0)}</td>
+                  <td className="whitespace-nowrap px-4 py-3">
+                    {formatMoney(order.totalAmount || order.amount || 0)}
+                  </td>
                   <td className="px-4 py-3">
                     <OrderStatusBadge status={uiStatus || "-"} />
                   </td>

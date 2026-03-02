@@ -51,8 +51,95 @@
   color: #475569;
   font-size: 12px;
   font-weight: 600;
-  padding: 0 12px;
+  padding: 0 10px 0 12px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.navbar__lang-wrap {
+  position: relative;
+}
+
+.navbar__lang.is-open {
+  border-color: #86efac;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+}
+
+.navbar__lang-text {
+  letter-spacing: 0.04em;
+}
+
+.navbar__lang-caret {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.navbar__lang-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 30;
+  width: 246px;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+  padding: 6px;
+}
+
+.navbar__lang-item {
+  width: 100%;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #334155;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.navbar__lang-item:hover {
+  background: #f1f5f9;
+}
+
+.navbar__lang-item.is-selected {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.navbar__lang-item-main {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.navbar__lang-item-iso {
+  color: #64748b;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.navbar__lang-empty {
+  margin: 0;
+  padding: 10px 8px;
+  color: #64748b;
+  font-size: 12px;
 }
 
 .navbar__icon {

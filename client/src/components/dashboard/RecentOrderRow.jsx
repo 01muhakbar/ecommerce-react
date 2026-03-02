@@ -1,7 +1,5 @@
-import dayjs from "dayjs";
 import { Eye, Printer } from "lucide-react";
 import StatusBadge from "../UI/StatusBadge.jsx";
-import { formatCurrency } from "../../utils/format.js";
 import { ORDER_STATUS_OPTIONS, toUIStatus } from "../../constants/orderStatus.js";
 
 const getStatusBadgeClass = (status) => {
@@ -38,15 +36,6 @@ const formatInvoice = (order) => {
   return numeric ? `#${numeric}` : `#${order?.id || "-"}`;
 };
 
-const formatDate = (value) => {
-  if (!value) {
-    return "-";
-  }
-  return dayjs(value).isValid()
-    ? dayjs(value).format("D MMM, YYYY h:mm A")
-    : String(value);
-};
-
 export default function RecentOrderRow({
   order,
   isAdmin,
@@ -56,6 +45,8 @@ export default function RecentOrderRow({
   const statusValue = toUIStatus(order?.status || "pending");
   const amount =
     order?.totalAmount ?? order?.amount ?? order?.total ?? 0;
+  const displayAmount = order?.__displayAmount || String(amount || 0);
+  const displayOrderTime = order?.__displayOrderTime || String(order?.createdAt || order?.orderTime || "-");
   const method = order?.method || order?.paymentMethod || "COD";
   const customerName =
     order?.customerName || order?.customer?.name || order?.customer || "Guest";
@@ -63,11 +54,11 @@ export default function RecentOrderRow({
   return (
     <tr>
       <td>{formatInvoice(order)}</td>
-      <td>{formatDate(order?.createdAt || order?.orderTime)}</td>
+      <td>{displayOrderTime}</td>
       <td>{customerName}</td>
       <td>{method}</td>
       <td className="dashboard-recent__amount">
-        {formatCurrency(amount)}
+        {displayAmount}
       </td>
       <td>
         <span className={getStatusBadgeClass(statusValue)}>{statusValue}</span>

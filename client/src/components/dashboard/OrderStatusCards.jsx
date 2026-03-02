@@ -28,7 +28,17 @@ const ICONS = {
   ),
 };
 
-export default function OrderStatusCards({ items, labelMap, pendingAmount }) {
+export default function OrderStatusCards({
+  items,
+  labelMap,
+  pendingAmount,
+  formatMoney,
+}) {
+  const formatPendingAmount =
+    typeof formatMoney === "function"
+      ? formatMoney
+      : (value) => formatCurrency(value);
+
   return (
     <div className="dashboard-status-row">
       {items.map((item) => (
@@ -42,7 +52,7 @@ export default function OrderStatusCards({ items, labelMap, pendingAmount }) {
             </div>
             {item.id === "pending" ? (
               <div className="status-mini-card__note">
-                ({formatCurrency(pendingAmount)})
+                ({formatPendingAmount(pendingAmount)})
               </div>
             ) : null}
             <div className="status-mini-card__value">{item.count}</div>

@@ -8,13 +8,13 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
-import { moneyIDR } from "../../utils/money.js";
 
 export default function WeeklySalesCard({
   salesData = [],
   ordersData = [],
   isLoading = false,
   error = "",
+  formatMoney,
 }) {
   const [activeTab, setActiveTab] = useState("sales");
 
@@ -26,8 +26,14 @@ export default function WeeklySalesCard({
     }));
   }, [activeTab, ordersData, salesData]);
 
-  const formatValue = (value) =>
-    activeTab === "sales" ? moneyIDR(Number(value || 0)) : value;
+  const formatValue = (value) => {
+    if (activeTab !== "sales") return value;
+    const normalized = Number(value || 0);
+    if (typeof formatMoney === "function") {
+      return formatMoney(normalized);
+    }
+    return normalized;
+  };
 
   return (
     <div className="dashboard-card dashboard-card--chart">

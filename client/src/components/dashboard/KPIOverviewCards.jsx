@@ -13,12 +13,17 @@ export default function KPIOverviewCards({
   items,
   labelMap,
   breakdowns,
+  formatMoney,
 }) {
   return (
     <div className="dashboard-kpi">
       {items.map((item) => {
         const title = labelMap[item.id] || item.label;
-        const value = item.displayValue ?? formatCurrency(item.value);
+        const value =
+          item.displayValue ??
+          (typeof formatMoney === "function"
+            ? formatMoney(item.value)
+            : formatCurrency(item.value));
         const breakdown = breakdowns[item.id];
         const Icon = ICON_MAP[item.id] || Layers;
         const valueClass =
@@ -57,7 +62,11 @@ export default function KPIOverviewCards({
                   methodList.map(([method, value]) => (
                     <div key={method}>
                       <span>{method}</span>
-                      <strong>{formatCurrency(Number(value) || 0)}</strong>
+                      <strong>
+                        {typeof formatMoney === "function"
+                          ? formatMoney(Number(value) || 0)
+                          : formatCurrency(Number(value) || 0)}
+                      </strong>
                     </div>
                   ))
                 )}

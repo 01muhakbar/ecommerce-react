@@ -1,41 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  fetchAdminOrderByInvoice,
-  updateAdminOrderStatus,
-} from "../../lib/adminApi.js";
+import { fetchAdminOrderByInvoice, updateAdminOrderStatus } from "../../lib/adminApi.js";
 import { ORDER_STATUS_OPTIONS } from "../../constants/orderStatus.js";
 import QueryState from "../../components/UI/QueryState.jsx";
 import OrderStatusBadge from "../../components/admin/OrderStatusBadge.jsx";
 import OrderStatusTimeline from "../../components/admin/OrderStatusTimeline.jsx";
-import { formatCurrency } from "../../utils/format.js";
+import useAdminLocale from "../../hooks/useAdminLocale.js";
 
 const labelize = (value) =>
   value ? value.charAt(0).toUpperCase() + value.slice(1) : "";
-
-const formatDate = (value) => {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-};
-
-const formatDateTime = (value) => {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleString("id-ID");
-};
 
 export default function OrderDetail() {
   const { invoiceNo } = useParams();
   const [searchParams] = useSearchParams();
   const qc = useQueryClient();
+  const { formatDateTime, formatMoney } = useAdminLocale();
   const [status, setStatus] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -122,7 +102,7 @@ export default function OrderDetail() {
 
   const invoiceRef =
     order?.invoiceNo || order?.invoice || order?.ref || invoiceNo || "—";
-  const createdAtLabel = formatDate(order?.createdAt);
+  const createdAtLabel = formatDateTime(order?.createdAt, { includeTime: false });
   const createdAtFull = formatDateTime(order?.createdAt);
   const updatedAtValue = order?.updatedAt || order?.updated_at || order?.updatedAt;
   const customerEmail = order?.customerEmail || order?.customer?.email || null;
@@ -276,10 +256,10 @@ export default function OrderDetail() {
                               </td>
                               <td className="px-4 py-3 text-right">{qty}</td>
                               <td className="px-4 py-3 text-right">
-                                {formatCurrency(price)}
+                                {formatMoney(price)}
                               </td>
                               <td className="px-4 py-3 text-right font-semibold text-slate-900">
-                                {formatCurrency(amount)}
+                                {formatMoney(amount)}
                               </td>
                             </tr>
                           );
@@ -304,7 +284,7 @@ export default function OrderDetail() {
                         Shipping Cost
                       </div>
                       <div className="mt-2 font-medium text-slate-900">
-                        {formatCurrency(shipping)}
+                        {formatMoney(shipping)}
                       </div>
                     </div>
                     <div>
@@ -312,7 +292,7 @@ export default function OrderDetail() {
                         Discount
                       </div>
                       <div className="mt-2 font-medium text-slate-900">
-                        {formatCurrency(discount)}
+                        {formatMoney(discount)}
                       </div>
                     </div>
                     <div>
@@ -320,7 +300,7 @@ export default function OrderDetail() {
                         Total Amount
                       </div>
                       <div className="mt-2 text-3xl font-extrabold text-red-500">
-                        {formatCurrency(totalAmount)}
+                        {formatMoney(totalAmount)}
                       </div>
                     </div>
                   </div>

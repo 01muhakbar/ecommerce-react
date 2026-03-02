@@ -13,9 +13,11 @@ export type CartItem = {
 
 const CART_STORAGE_KEY = "kb_cart_v1";
 const LEGACY_CART_STORAGE_KEY = "cart";
+const isDev = Boolean((import.meta as { env?: { DEV?: boolean } }).env?.DEV);
 
 type CartProduct = {
   id: number;
+  productId?: number;
   name: string;
   price: number;
   imageUrl?: string | null;
@@ -71,14 +73,14 @@ const normalizeCartItem = (item: any): CartItem | null => {
     }
   }
   if (productId === null) {
-    if (import.meta.env.DEV) {
+    if (isDev) {
       console.warn("[cart] dropping persisted item", item);
     }
     return null;
   }
   const qty = Number(item?.qty ?? item?.quantity ?? item?.count ?? 0);
   if (!Number.isFinite(productId) || productId <= 0 || qty <= 0) {
-    if (import.meta.env.DEV) {
+    if (isDev) {
       console.warn("[cart] dropping persisted item", item);
     }
     return null;
@@ -101,7 +103,7 @@ const readPersistedCart = (storageKey: string) => {
     const items = Array.isArray(state?.items) ? state.items : [];
     const normalized = items
       .map(normalizeCartItem)
-      .filter((item): item is CartItem => Boolean(item));
+      .filter((item: CartItem | null): item is CartItem => Boolean(item));
     if (!normalized.length) return null;
     const totals = computeTotals(normalized);
     return { items: normalized, ...totals };
@@ -113,7 +115,7 @@ const readPersistedCart = (storageKey: string) => {
 const isUnauthorized = (error: any) => error?.response?.status === 401;
 
 const warnDev = (...args: any[]) => {
-  if (import.meta.env.DEV) {
+  if (isDev) {
     console.warn(...args);
   }
 };
@@ -306,7 +308,7 @@ export const useCartStore = create<CartState>()(
         setItems: (items) => {
           const normalized = (Array.isArray(items) ? items : [])
             .map(normalizeCartItem)
-            .filter((item): item is CartItem => Boolean(item));
+            .filter((item: CartItem | null): item is CartItem => Boolean(item));
           const { totalQty, subtotal } = computeTotals(normalized);
           set({ items: normalized, totalQty, subtotal });
         },
@@ -406,7 +408,6 @@ export const useCartStore = create<CartState>()(
           });
         },
         updateQty: (productId, qty) => {
-          const isRemote = get().mode === "remote";
           const desiredQty = Math.max(0, Number(qty) || 0);
           set((state) => {
             const items =
@@ -475,7 +476,7 @@ export const useCartStore = create<CartState>()(
         const rawItems = Array.isArray(state.items) ? state.items : [];
         let normalized = rawItems
           .map(normalizeCartItem)
-          .filter((item): item is CartItem => Boolean(item));
+          .filter((item: CartItem | null): item is CartItem => Boolean(item));
         if (!normalized.length) {
           const legacy = readPersistedCart(LEGACY_CART_STORAGE_KEY);
           if (legacy) {
@@ -490,7 +491,7 @@ export const useCartStore = create<CartState>()(
           }
         }
         if (rawItems.length > 0 && normalized.length === 0) {
-          if (import.meta.env.DEV) {
+          if (isDev) {
             console.warn("[cart] keeping persisted items after normalization failure");
           }
           state.mode = "guest";
@@ -499,10 +500,7 @@ export const useCartStore = create<CartState>()(
           useCartStore.setState({ hasHydrated: true });
           return;
         }
-        if (
-          import.meta.env.DEV &&
-          normalized.length !== rawItems.length
-        ) {
+        if (isDev && normalized.length !== rawItems.length) {
           console.warn("[cart] Dropped invalid items during rehydrate");
         }
         const totals = computeTotals(normalized);

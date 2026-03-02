@@ -1,5 +1,7 @@
 import { api } from "./axios.ts";
 
+const isDev = Boolean((import.meta as { env?: { DEV?: boolean } }).env?.DEV);
+
 export const getCart = async () => {
   const { data } = await api.get("/cart");
   return data;
@@ -21,7 +23,7 @@ export const setCartItemQty = async (productId: number, qty: number) => {
 };
 
 export const debugCartApi = () => {
-  if (import.meta.env.DEV) {
+  if (isDev) {
     (window as any).cartApi = {
       getCart,
       addToCart,

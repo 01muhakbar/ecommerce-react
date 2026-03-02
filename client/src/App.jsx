@@ -36,6 +36,11 @@ const AdminCustomerDetailPage = lazy(() =>
 );
 const AdminCouponsPage = lazy(() => import("./pages/admin/AdminCouponsPage.jsx"));
 const ComingSoon = lazy(() => import("./pages/admin/ComingSoon.jsx"));
+const LanguagesPage = lazy(() => import("./pages/Languages.jsx"));
+const CurrenciesPage = lazy(() => import("./pages/Currencies.jsx"));
+const StoreCustomizationPage = lazy(() =>
+  import("./pages/admin/StoreCustomization.jsx")
+);
 import AdminStaffPage from "./pages/admin/Staff.jsx";
 const AdminForbiddenPage = lazy(() => import("./pages/admin/Forbidden.jsx"));
 import AccountGuard from "./components/AccountGuard.jsx";
@@ -222,17 +227,29 @@ export default function App() {
                 path="languages"
                 element={
                   <RequirePerm perm="SETTINGS_MANAGE">
-                    <ComingSoon title="Languages" />
+                    <LanguagesPage />
+                  </RequirePerm>
+                }
+              />
+              <Route
+                path="currencies"
+                element={
+                  <RequirePerm perm="SETTINGS_MANAGE">
+                    <CurrenciesPage />
+                  </RequirePerm>
+                }
+              />
+              <Route
+                path="store/customization"
+                element={
+                  <RequirePerm perm="SETTINGS_MANAGE">
+                    <StoreCustomizationPage />
                   </RequirePerm>
                 }
               />
               <Route
                 path="store-customization"
-                element={
-                  <RequirePerm perm="SETTINGS_MANAGE">
-                    <ComingSoon title="Store Customization" />
-                  </RequirePerm>
-                }
+                element={<Navigate to="/admin/store/customization" replace />}
               />
               <Route
                 path="store-settings"

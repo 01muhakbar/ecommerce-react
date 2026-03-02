@@ -1,27 +1,28 @@
 import { useEffect, useState } from "react";
 import PageHeroBanner from "../../components/store/PageHeroBanner.jsx";
 import heroImage from "../../assets/admin-login-hero.jpg";
+import { formatStoreMoney } from "../../utils/storeMoneyFormatters.js";
 
 const DEMO_OFFERS = [
   {
     code: "AUGUST24",
     title: "Summer Grocery Coupon",
     discountText: "10% Off For All Items",
-    minPurchase: "$200.00",
+    minPurchase: 200,
     isActive: false,
   },
   {
     code: "SUMMER24",
     title: "Fresh Weekend Offer",
     discountText: "15% Off For Selected Items",
-    minPurchase: "$150.00",
+    minPurchase: 150,
     isActive: false,
   },
   {
     code: "WINTER25",
     title: "Monthly Essentials",
     discountText: "20% Off For Groceries",
-    minPurchase: "$250.00",
+    minPurchase: 250,
     isActive: true,
     expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 26).toISOString(),
   },
@@ -29,7 +30,7 @@ const DEMO_OFFERS = [
     code: "SUMMER26",
     title: "Mega Household Promo",
     discountText: "25% Off Household Tools",
-    minPurchase: "$300.00",
+    minPurchase: 300,
     isActive: false,
   },
 ];
@@ -103,7 +104,9 @@ export default function StoreOffersPage() {
                 </div>
                 <p className="mt-3 text-xs leading-6 text-slate-500">
                   Minimum purchase required:{" "}
-                  <span className="font-semibold text-slate-700">{offer.minPurchase}</span>
+                  <span className="font-semibold text-slate-700">
+                    {formatStoreMoney(offer.minPurchase)}
+                  </span>
                 </p>
               </div>
             </div>

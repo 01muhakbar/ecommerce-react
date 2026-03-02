@@ -161,8 +161,8 @@ export function useCart() {
     () =>
       (Array.isArray(storeItems) ? storeItems : [])
         .map((item) => {
-          const productId = Number(item?.productId ?? item?.id);
-          const qty = Math.max(0, Number(item?.qty ?? item?.quantity ?? 0));
+          const productId = Number(item?.productId);
+          const qty = Math.max(0, Number(item?.qty ?? 0));
           return `${productId}:${qty}`;
         })
         .filter((value) => !value.startsWith("NaN:"))
@@ -227,8 +227,8 @@ export function useCart() {
     }
     const fallbackItems = (Array.isArray(storeItems) ? storeItems : [])
       .map((item) => ({
-        productId: Number(item?.productId ?? item?.id),
-        qty: Math.max(1, Number(item?.qty ?? item?.quantity ?? 1)),
+        productId: Number(item?.productId),
+        qty: Math.max(1, Number(item?.qty ?? 1)),
         name: typeof item?.name === "string" ? item.name : undefined,
         price: Number.isFinite(Number(item?.price)) ? Number(item?.price) : undefined,
         imageUrl:

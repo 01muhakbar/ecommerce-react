@@ -1,5 +1,7 @@
 import { api } from "./axios";
 
+const isDev = Boolean((import.meta as { env?: { DEV?: boolean } }).env?.DEV);
+
 export type StoreCategory = {
   id: number;
   name: string;
@@ -129,7 +131,7 @@ export const createStoreOrder = async (payload: {
   couponCode?: string;
 }) => {
   const url = "/store/orders";
-  if (import.meta.env.DEV) {
+  if (isDev) {
     console.log("[createStoreOrder] url", url);
   }
   const { data } = await api.post<{

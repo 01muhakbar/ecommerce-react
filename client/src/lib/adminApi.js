@@ -357,3 +357,105 @@ export const deleteAdminCoupon = async (id) => {
   const { data } = await adminApi.delete(`/admin/coupons/${id}`);
   return data;
 };
+
+export const fetchAdminSettings = async () => {
+  const { data } = await adminApi.get("/admin/settings");
+  return data;
+};
+
+export const updateAdminSettings = async (payload) => {
+  const { data } = await adminApi.put("/admin/settings", payload);
+  return data;
+};
+
+export const fetchAdminLanguages = async (params = {}) => {
+  const query = {};
+  const search = String(params?.search || "").trim();
+  if (search) query.search = search;
+
+  const { data } = await adminApi.get("/admin/languages", { params: query });
+  const items = Array.isArray(data?.data)
+    ? data.data
+    : Array.isArray(data)
+      ? data
+      : [];
+  return { data: items };
+};
+
+export const createAdminLanguage = async (payload) => {
+  const { data } = await adminApi.post("/admin/languages", payload);
+  return data;
+};
+
+export const updateAdminLanguage = async (id, payload) => {
+  const { data } = await adminApi.put(`/admin/languages/${id}`, payload);
+  return data;
+};
+
+export const deleteAdminLanguage = async (id) => {
+  const { data } = await adminApi.delete(`/admin/languages/${id}`);
+  return data;
+};
+
+export const bulkDeleteAdminLanguages = async (ids) => {
+  const { data } = await adminApi.post("/admin/languages/bulk-delete", { ids });
+  return data;
+};
+
+export const fetchAdminCurrencies = async (params = {}) => {
+  const query = {};
+  const search = String(params?.search || "").trim();
+  if (search) query.search = search;
+
+  const { data } = await adminApi.get("/admin/currencies", { params: query });
+  const items = Array.isArray(data?.data)
+    ? data.data
+    : Array.isArray(data)
+      ? data
+      : [];
+  return { data: items };
+};
+
+export const createAdminCurrency = async (payload) => {
+  const { data } = await adminApi.post("/admin/currencies", payload);
+  return data;
+};
+
+export const updateAdminCurrency = async (id, payload) => {
+  const { data } = await adminApi.put(`/admin/currencies/${id}`, payload);
+  return data;
+};
+
+export const deleteAdminCurrency = async (id) => {
+  const { data } = await adminApi.delete(`/admin/currencies/${id}`);
+  return data;
+};
+
+export const bulkDeleteAdminCurrencies = async (ids) => {
+  const { data } = await adminApi.post("/admin/currencies/bulk-delete", { ids });
+  return data;
+};
+
+export const fetchAdminStoreCustomization = async (lang) => {
+  const query = {};
+  const normalizedLang = String(lang || "").trim().toLowerCase();
+  if (normalizedLang) query.lang = normalizedLang;
+
+  const { data } = await adminApi.get("/admin/store/customization", {
+    params: query,
+  });
+  return data?.data ?? data;
+};
+
+export const updateAdminStoreCustomization = async (lang, payload) => {
+  const query = {};
+  const normalizedLang = String(lang || "").trim().toLowerCase();
+  if (normalizedLang) query.lang = normalizedLang;
+
+  const { data } = await adminApi.put(
+    "/admin/store/customization",
+    payload,
+    { params: query }
+  );
+  return data?.data ?? data;
+};
