@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { useAuth } from "../../auth/useAuth.js";
 import { api } from "../../api/axios.ts";
 import { useCart } from "../../hooks/useCart.ts";
@@ -12,6 +12,7 @@ const PENDING_ADD_CONSUMED_KEY = "pending_cart_add_consumed";
 export default function StoreRegisterPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { storeSettings } = useOutletContext() || {};
   const { refreshSession } = useAuth();
   const { refreshCart } = useCart();
   const [name, setName] = useState("");
@@ -19,6 +20,16 @@ export default function StoreRegisterPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const socialLogin = storeSettings?.socialLogin || {};
+  const socialButtons = [
+    { id: "google", label: "Continue with Google", enabled: Boolean(socialLogin.googleEnabled) },
+    { id: "github", label: "Continue with Github", enabled: Boolean(socialLogin.githubEnabled) },
+    {
+      id: "facebook",
+      label: "Continue with Facebook",
+      enabled: Boolean(socialLogin.facebookEnabled),
+    },
+  ].filter((item) => item.enabled);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -169,6 +180,25 @@ export default function StoreRegisterPage() {
         >
           {isSubmitting ? "Creating account..." : "Create account"}
         </button>
+
+        {socialButtons.length > 0 ? (
+          <div className="space-y-2 pt-1">
+            <div className="text-center text-xs font-semibold uppercase tracking-widest text-slate-400">
+              Or continue with
+            </div>
+            <div className="grid gap-2">
+              {socialButtons.map((button) => (
+                <button
+                  key={button.id}
+                  type="button"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  {button.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </form>
       <p className="mt-4 text-sm text-slate-500">
         Already have an account?{" "}

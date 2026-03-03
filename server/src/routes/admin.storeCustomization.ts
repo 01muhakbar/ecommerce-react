@@ -12,6 +12,93 @@ type CustomizationRow = {
   updatedAt: string;
 };
 
+const DEFAULT_PRIVACY_POLICY_HTML = [
+  "<h3>Consent</h3>",
+  "<p>By using KachaBazar, you consent to this privacy policy and agree to the way we collect and use data for shopping, delivery, and support services.</p>",
+  "<h3>Information we collect</h3>",
+  "<p>We may collect account details, order information, payment metadata, and customer support communications when you use our platform.</p>",
+  "<h3>How we use your information</h3>",
+  "<ol>",
+  "<li>To process and deliver your orders accurately.</li>",
+  "<li>To verify payments and prevent fraud.</li>",
+  "<li>To provide account access and order tracking updates.</li>",
+  "<li>To improve product recommendations and store experience.</li>",
+  "<li>To respond to support requests and complaints.</li>",
+  "<li>To send service notices and policy updates.</li>",
+  "<li>To comply with legal and regulatory obligations.</li>",
+  "</ol>",
+  "<h3>Data protection</h3>",
+  "<p>We apply reasonable technical and organizational safeguards to protect your personal data from unauthorized access, misuse, or disclosure.</p>",
+  "<h3>Your rights</h3>",
+  "<p>You may request access, correction, or deletion of personal data by contacting the KachaBazar support team.</p>",
+].join("");
+
+const DEFAULT_TERMS_AND_CONDITIONS_HTML = [
+  "<h2>Welcome to KachaBazar!</h2>",
+  "<p>These terms and conditions govern your use of KachaBazar services, including browsing products, placing orders, and managing your account.</p>",
+  "<h3>Cookies</h3>",
+  "<p>We use cookies to keep your session active, remember preferences, and improve site performance. By continuing to use the site, you agree to our cookie usage.</p>",
+  "<h3>License</h3>",
+  "<p>Unless otherwise stated, KachaBazar and its licensors own the intellectual property rights for all material on this site.</p>",
+  "<ol>",
+  "<li>You must not republish material from KachaBazar.</li>",
+  "<li>You must not sell, rent, or sub-license material from KachaBazar.</li>",
+  "<li>You must not reproduce, duplicate, or copy material from KachaBazar.</li>",
+  "<li>You must not redistribute content from KachaBazar without permission.</li>",
+  "</ol>",
+  "<h3>Content Liability</h3>",
+  "<p>We are not responsible for content appearing on third-party websites that link to or reference KachaBazar.</p>",
+  "<h3>Reservation of Rights</h3>",
+  "<p>We reserve the right to request removal of links or restrict access if usage violates these terms.</p>",
+  "<h3>Disclaimer</h3>",
+  "<p>To the fullest extent permitted by law, we exclude all representations and warranties relating to this website and its use.</p>",
+].join("");
+
+const FAQS_ITEM_LENGTH = 8;
+const DEFAULT_FAQS_ITEMS = [
+  {
+    title: "How does the KachaBazar work?",
+    description:
+      "KachaBazar lets customers browse daily essentials, add products to cart, and complete orders with a straightforward checkout flow.",
+  },
+  {
+    title: "Can I cancel my subscription anytime?",
+    description:
+      "Yes. You can cancel or update your subscription preferences at any time from your account settings.",
+  },
+  {
+    title: "Whice payment method you should accept?",
+    description:
+      "We currently support the configured payment methods available in your region and account setup.",
+  },
+  {
+    title: "Can I cancel my subscription anytime?",
+    description:
+      "Yes. Subscription changes take effect according to your active billing cycle and selected plan.",
+  },
+  {
+    title: "What is KachaBazar EC2 auto scaling?",
+    description:
+      "It is a scaling strategy that helps application resources handle traffic spikes while keeping performance stable.",
+  },
+  {
+    title: "What are the benefits of using KachaBazar affiliate?",
+    description:
+      "Affiliate usage can help expand reach, improve campaign tracking, and increase customer acquisition efficiency.",
+  },
+  {
+    title: "What is a affiliates product configuration?",
+    description:
+      "It is a setup that maps products, commissions, and campaign rules for partner-driven referrals.",
+  },
+  {
+    title:
+      "What is fleet management and how is it different from dynamic scaling?",
+    description:
+      "Fleet management focuses on maintaining and scheduling infrastructure capacity, while dynamic scaling adjusts resources automatically based on load.",
+  },
+];
+
 const DEFAULT_CUSTOMIZATION = {
   home: {
     header: {
@@ -193,6 +280,221 @@ const DEFAULT_CUSTOMIZATION = {
         "Guaranteed 100% organic from natural products.",
         "Delivery from our pick point Boho One, Bridge Street West, Middlesbrough, North Yorkshire, TS2 1AE.",
       ],
+    },
+  },
+  aboutUs: {
+    pageHeader: {
+      enabled: true,
+      backgroundImageDataUrl: "",
+      pageTitle: "About Us",
+    },
+    topContentLeft: {
+      enabled: true,
+      topTitle: "Welcome to our KachaBazar shop",
+      topDescription:
+        "KachaBazar helps shoppers discover fresh groceries, household essentials, and daily deals with a smooth shopping flow.",
+      boxOne: {
+        title: "10K",
+        subtitle: "Listed Products",
+        description: "Carefully curated products across grocery and daily needs.",
+      },
+      boxTwo: {
+        title: "8K",
+        subtitle: "Lovely Customer",
+        description: "Customers trust our fast fulfillment and product quality.",
+      },
+      boxThree: {
+        title: "18K",
+        subtitle: "Orders Delivered",
+        description: "Orders delivered with reliable support and transparent updates.",
+      },
+    },
+    topContentRight: {
+      enabled: true,
+      imageDataUrl: "",
+    },
+    contentSection: {
+      enabled: true,
+      firstParagraph:
+        "Our mission is to make daily shopping simpler, faster, and more affordable for every household.",
+      secondParagraph:
+        "We continue improving operations, product quality, and customer support to provide a dependable shopping experience.",
+      contentImageDataUrl: "",
+    },
+    ourTeam: {
+      enabled: true,
+      title: "Our Team",
+      description:
+        "Meet the people behind our operations, customer support, and product experience.",
+      members: [
+        { imageDataUrl: "", title: "Name 1", subTitle: "Role 1" },
+        { imageDataUrl: "", title: "Name 2", subTitle: "Role 2" },
+        { imageDataUrl: "", title: "Name 3", subTitle: "Role 3" },
+        { imageDataUrl: "", title: "Name 4", subTitle: "Role 4" },
+        { imageDataUrl: "", title: "Name 5", subTitle: "Role 5" },
+        { imageDataUrl: "", title: "Name 6", subTitle: "Role 6" },
+      ],
+    },
+  },
+  privacyPolicy: {
+    enabled: true,
+    pageHeaderBackgroundDataUrl: "",
+    pageTitle: "Privacy Policy",
+    pageTextHtml: DEFAULT_PRIVACY_POLICY_HTML,
+  },
+  termsAndConditions: {
+    enabled: true,
+    pageHeaderBackgroundDataUrl: "",
+    pageTitle: "Terms & Conditions",
+    pageTextHtml: DEFAULT_TERMS_AND_CONDITIONS_HTML,
+  },
+  faqs: {
+    pageHeader: {
+      enabled: true,
+      backgroundImageDataUrl: "",
+      pageTitle: "FAQs",
+    },
+    leftColumn: {
+      enabled: true,
+      leftImageDataUrl: "",
+    },
+    content: {
+      enabled: true,
+      items: DEFAULT_FAQS_ITEMS,
+    },
+  },
+  offers: {
+    pageHeader: {
+      enabled: true,
+      backgroundImageDataUrl: "",
+      pageTitle: "Mega Offer",
+    },
+    superDiscount: {
+      enabled: true,
+      activeCouponCode: "ALL",
+    },
+  },
+  contactUs: {
+    pageHeader: {
+      enabled: true,
+      backgroundImageDataUrl: "",
+      pageTitle: "Contact Us",
+    },
+    emailBox: {
+      enabled: true,
+      title: "Email Us",
+      email: "info@kachabazar.com",
+      text: "Interactively grow empowered for process-centric total linkage.",
+    },
+    callBox: {
+      enabled: true,
+      title: "Call Us",
+      phone: "029-00124667",
+      text: "Distinctively disseminate focused solutions clicks-and-mortar ministerate.",
+    },
+    addressBox: {
+      enabled: true,
+      title: "Location",
+      address: "Boho One, Bridge Street West, Middlesbrough, North Yorkshire, TS2 1AE.",
+    },
+    middleLeftColumn: {
+      enabled: true,
+      imageDataUrl: "",
+    },
+    contactForm: {
+      enabled: true,
+      title: "For any support just send your query",
+      description:
+        "Collaboratively promote client-focused convergence vis-a-vis customer-directed alignments via plagiarized strategic users and standardized infrastructures.",
+    },
+  },
+  checkout: {
+    personalDetails: {
+      sectionTitle: "Personal Details",
+      firstNameLabel: "First Name",
+      lastNameLabel: "Last Name",
+      emailLabel: "Email Address",
+      phoneLabel: "Phone",
+      firstNamePlaceholder: "First Name",
+      lastNamePlaceholder: "Last Name",
+      emailPlaceholder: "Email Address",
+      phonePlaceholder: "Phone Number",
+    },
+    shippingDetails: {
+      sectionTitle: "Shipping Details",
+      streetAddressLabel: "Street Address",
+      cityLabel: "City",
+      countryLabel: "Country",
+      zipLabel: "Zip / Postal",
+      streetAddressPlaceholder: "Street Address",
+      cityPlaceholder: "City",
+      countryPlaceholder: "Country",
+      zipPlaceholder: "Zip Code",
+      shippingCostLabel: "Shipping Cost",
+      shippingOneNameLabel: "Shipping One Name",
+      shippingOneNameDefault: "FedEx",
+      shippingOneDescriptionLabel: "Shipping One Description",
+      shippingOneDescriptionDefault: "Delivery: Today Cost :",
+      shippingOneCostLabel: "Shipping One Cost",
+      shippingOneCostDefault: "60",
+      shippingTwoNameLabel: "Shipping Two Name",
+      shippingTwoNameDefault: "UPS",
+      shippingTwoDescriptionLabel: "Shipping Two Description",
+      shippingTwoDescriptionDefault: "Delivery: 7 Days Cost :",
+      shippingTwoCostLabel: "Shipping Two Cost",
+      shippingTwoCostDefault: "20",
+      paymentMethodLabel: "Payment Method",
+      paymentMethodPlaceholder: "Payment Method",
+    },
+    buttons: {
+      continueButtonLabel: "Continue Shipping",
+      confirmButtonLabel: "Confirm Order",
+    },
+    cartItemSection: {
+      sectionTitle: "Cart Item Section",
+      orderSummaryLabel: "Order Summary",
+      applyButtonLabel: "Apply",
+      subTotalLabel: "Sub Total",
+      discountLabel: "Discount",
+      totalCostLabel: "Total Cost",
+    },
+  },
+  dashboardSetting: {
+    dashboard: {
+      sectionTitle: "Dashboard",
+      invoiceMessageFirstPartLabel: "Invoice Message First Part",
+      invoiceMessageFirstPartValue: "Thank You",
+      invoiceMessageLastPartLabel: "Invoice Message Last Part",
+      invoiceMessageLastPartValue: "Your order have been received !",
+      printButtonLabel: "Print Button",
+      printButtonValue: "Print Invoice",
+      downloadButtonLabel: "Download Button",
+      downloadButtonValue: "Download Invoice",
+      dashboardLabel: "Dashboard",
+      totalOrdersLabel: "Total Orders",
+      pendingOrderLabel: "Pending Order",
+      pendingOrderValue: "Pending Orders",
+      processingOrderLabel: "Processing Order",
+      processingOrderValue: "Processing Order",
+      completeOrderLabel: "Complete Order",
+      completeOrderValue: "Complete Orders",
+      recentOrderLabel: "Recent Order",
+      recentOrderValue: "Recent Orders",
+      myOrderLabel: "My Order",
+      myOrderValue: "My Orders",
+    },
+    updateProfile: {
+      sectionTitleLabel: "Update Profile",
+      sectionTitleValue: "Update Profile",
+      fullNameLabel: "Full Name",
+      addressLabel: "Address",
+      phoneMobileLabel: "Phone/Mobile",
+      emailAddressLabel: "Email Address",
+      updateButtonLabel: "Update Button",
+      updateButtonValue: "Update Profile",
+      currentPasswordLabel: "Current Password",
+      newPasswordLabel: "New Password",
+      changePasswordLabel: "Change Password",
     },
   },
   seoSettings: {
@@ -799,16 +1101,720 @@ const normalizeSeoSettings = (root: Record<string, any>) => {
   };
 };
 
-const sanitizeCustomization = (rawData: unknown) => {
+const normalizeAboutUs = (root: Record<string, any>) => {
+  const defaults = cloneDefaults().aboutUs;
+  const source = isPlainObject(root.aboutUs) ? root.aboutUs : {};
+  const pageHeaderSource = isPlainObject(source.pageHeader) ? source.pageHeader : {};
+  const topContentLeftSource = isPlainObject(source.topContentLeft)
+    ? source.topContentLeft
+    : {};
+  const topContentRightSource = isPlainObject(source.topContentRight)
+    ? source.topContentRight
+    : {};
+  const contentSectionSource = isPlainObject(source.contentSection)
+    ? source.contentSection
+    : {};
+  const ourTeamSource = isPlainObject(source.ourTeam) ? source.ourTeam : {};
+  const boxOneSource = isPlainObject(topContentLeftSource.boxOne)
+    ? topContentLeftSource.boxOne
+    : {};
+  const boxTwoSource = isPlainObject(topContentLeftSource.boxTwo)
+    ? topContentLeftSource.boxTwo
+    : {};
+  const boxThreeSource = isPlainObject(topContentLeftSource.boxThree)
+    ? topContentLeftSource.boxThree
+    : {};
+  const teamMembersSource = Array.isArray(ourTeamSource.members)
+    ? ourTeamSource.members
+    : [];
+
+  return {
+    ...defaults,
+    ...source,
+    pageHeader: {
+      ...defaults.pageHeader,
+      ...pageHeaderSource,
+      enabled: toBool(pageHeaderSource.enabled, defaults.pageHeader.enabled),
+      backgroundImageDataUrl: toText(
+        pageHeaderSource.backgroundImageDataUrl ?? pageHeaderSource.backgroundImage ?? "",
+        ""
+      ),
+      pageTitle: toText(pageHeaderSource.pageTitle, defaults.pageHeader.pageTitle),
+    },
+    topContentLeft: {
+      ...defaults.topContentLeft,
+      ...topContentLeftSource,
+      enabled: toBool(topContentLeftSource.enabled, defaults.topContentLeft.enabled),
+      topTitle: toText(topContentLeftSource.topTitle, defaults.topContentLeft.topTitle),
+      topDescription: toText(
+        topContentLeftSource.topDescription,
+        defaults.topContentLeft.topDescription
+      ),
+      boxOne: {
+        ...defaults.topContentLeft.boxOne,
+        ...boxOneSource,
+        title: toText(boxOneSource.title, defaults.topContentLeft.boxOne.title),
+        subtitle: toText(boxOneSource.subtitle, defaults.topContentLeft.boxOne.subtitle),
+        description: toText(
+          boxOneSource.description,
+          defaults.topContentLeft.boxOne.description
+        ),
+      },
+      boxTwo: {
+        ...defaults.topContentLeft.boxTwo,
+        ...boxTwoSource,
+        title: toText(boxTwoSource.title, defaults.topContentLeft.boxTwo.title),
+        subtitle: toText(boxTwoSource.subtitle, defaults.topContentLeft.boxTwo.subtitle),
+        description: toText(
+          boxTwoSource.description,
+          defaults.topContentLeft.boxTwo.description
+        ),
+      },
+      boxThree: {
+        ...defaults.topContentLeft.boxThree,
+        ...boxThreeSource,
+        title: toText(boxThreeSource.title, defaults.topContentLeft.boxThree.title),
+        subtitle: toText(
+          boxThreeSource.subtitle,
+          defaults.topContentLeft.boxThree.subtitle
+        ),
+        description: toText(
+          boxThreeSource.description,
+          defaults.topContentLeft.boxThree.description
+        ),
+      },
+    },
+    topContentRight: {
+      ...defaults.topContentRight,
+      ...topContentRightSource,
+      enabled: toBool(topContentRightSource.enabled, defaults.topContentRight.enabled),
+      imageDataUrl: toText(topContentRightSource.imageDataUrl ?? topContentRightSource.image ?? "", ""),
+    },
+    contentSection: {
+      ...defaults.contentSection,
+      ...contentSectionSource,
+      enabled: toBool(contentSectionSource.enabled, defaults.contentSection.enabled),
+      firstParagraph: toText(
+        contentSectionSource.firstParagraph,
+        defaults.contentSection.firstParagraph
+      ),
+      secondParagraph: toText(
+        contentSectionSource.secondParagraph,
+        defaults.contentSection.secondParagraph
+      ),
+      contentImageDataUrl: toText(
+        contentSectionSource.contentImageDataUrl ?? contentSectionSource.imageDataUrl ?? "",
+        ""
+      ),
+    },
+    ourTeam: {
+      ...defaults.ourTeam,
+      ...ourTeamSource,
+      enabled: toBool(ourTeamSource.enabled, defaults.ourTeam.enabled),
+      title: toText(ourTeamSource.title, defaults.ourTeam.title),
+      description: toText(ourTeamSource.description, defaults.ourTeam.description),
+      members: defaults.ourTeam.members.map((fallbackMember, index) => {
+        const sourceMember =
+          index < teamMembersSource.length && isPlainObject(teamMembersSource[index])
+            ? teamMembersSource[index]
+            : {};
+        return {
+          ...fallbackMember,
+          ...sourceMember,
+          imageDataUrl: toText(
+            sourceMember.imageDataUrl ?? sourceMember.image ?? "",
+            ""
+          ),
+          title: toText(sourceMember.title, fallbackMember.title),
+          subTitle: toText(
+            sourceMember.subTitle ?? sourceMember.subtitle,
+            fallbackMember.subTitle
+          ),
+        };
+      }),
+    },
+  };
+};
+
+const normalizePolicyPage = (
+  root: Record<string, any>,
+  key: "privacyPolicy" | "termsAndConditions"
+) => {
+  const defaults = cloneDefaults()[key];
+  const source = isPlainObject(root[key]) ? root[key] : {};
+
+  return {
+    ...defaults,
+    ...source,
+    enabled: toBool(source.enabled, defaults.enabled),
+    pageHeaderBackgroundDataUrl: toText(
+      source.pageHeaderBackgroundDataUrl ??
+        source.backgroundImageDataUrl ??
+        source.backgroundImage ??
+        "",
+      ""
+    ),
+    pageTitle: toText(source.pageTitle, defaults.pageTitle),
+    pageTextHtml: toText(
+      source.pageTextHtml ?? source.pageText ?? source.contentHtml ?? source.content ?? "",
+      defaults.pageTextHtml
+    ),
+  };
+};
+
+const normalizeFaqs = (root: Record<string, any>) => {
+  const defaults = cloneDefaults().faqs;
+  const source = isPlainObject(root.faqs)
+    ? root.faqs
+    : isPlainObject(root.faqPage)
+      ? root.faqPage
+      : {};
+  const pageHeaderSource = isPlainObject(source.pageHeader) ? source.pageHeader : {};
+  const leftColumnSource = isPlainObject(source.leftColumn) ? source.leftColumn : {};
+  const contentSource = isPlainObject(source.content) ? source.content : {};
+  const itemsSource = Array.isArray(contentSource.items) ? contentSource.items : [];
+
+  return {
+    ...defaults,
+    ...source,
+    pageHeader: {
+      ...defaults.pageHeader,
+      ...pageHeaderSource,
+      enabled: toBool(pageHeaderSource.enabled, defaults.pageHeader.enabled),
+      backgroundImageDataUrl: toText(
+        pageHeaderSource.backgroundImageDataUrl ??
+          pageHeaderSource.backgroundImage ??
+          pageHeaderSource.imageDataUrl ??
+          "",
+        ""
+      ),
+      pageTitle: toText(pageHeaderSource.pageTitle, defaults.pageHeader.pageTitle),
+    },
+    leftColumn: {
+      ...defaults.leftColumn,
+      ...leftColumnSource,
+      enabled: toBool(leftColumnSource.enabled, defaults.leftColumn.enabled),
+      leftImageDataUrl: toText(
+        leftColumnSource.leftImageDataUrl ??
+          leftColumnSource.imageDataUrl ??
+          leftColumnSource.leftImage ??
+          leftColumnSource.image ??
+          "",
+        ""
+      ),
+    },
+    content: {
+      ...defaults.content,
+      ...contentSource,
+      enabled: toBool(contentSource.enabled, defaults.content.enabled),
+      items: Array.from({ length: FAQS_ITEM_LENGTH }, (_, index) => {
+        const fallbackItem = defaults.content.items[index];
+        const sourceItem =
+          index < itemsSource.length && isPlainObject(itemsSource[index])
+            ? itemsSource[index]
+            : {};
+        return {
+          ...fallbackItem,
+          ...sourceItem,
+          title: toText(
+            sourceItem.title ?? sourceItem.question,
+            fallbackItem.title
+          ),
+          description: toText(
+            sourceItem.description ?? sourceItem.answer,
+            fallbackItem.description
+          ),
+        };
+      }),
+    },
+  };
+};
+
+const normalizeOffers = (root: Record<string, any>) => {
+  const defaults = cloneDefaults().offers;
+  const source = isPlainObject(root.offers) ? root.offers : {};
+  const pageHeaderSource = isPlainObject(source.pageHeader) ? source.pageHeader : {};
+  const superDiscountSource = isPlainObject(source.superDiscount)
+    ? source.superDiscount
+    : {};
+
+  return {
+    ...defaults,
+    ...source,
+    pageHeader: {
+      ...defaults.pageHeader,
+      ...pageHeaderSource,
+      enabled: toBool(pageHeaderSource.enabled, defaults.pageHeader.enabled),
+      backgroundImageDataUrl: toText(
+        pageHeaderSource.backgroundImageDataUrl ??
+          pageHeaderSource.backgroundImage ??
+          pageHeaderSource.imageDataUrl ??
+          "",
+        ""
+      ),
+      pageTitle: toText(pageHeaderSource.pageTitle, defaults.pageHeader.pageTitle),
+    },
+    superDiscount: {
+      ...defaults.superDiscount,
+      ...superDiscountSource,
+      enabled: toBool(superDiscountSource.enabled, defaults.superDiscount.enabled),
+      activeCouponCode: toText(
+        superDiscountSource.activeCouponCode ?? superDiscountSource.couponCode ?? "",
+        defaults.superDiscount.activeCouponCode
+      ).toUpperCase(),
+    },
+  };
+};
+
+const normalizeContactUs = (root: Record<string, any>) => {
+  const defaults = cloneDefaults().contactUs;
+  const source = isPlainObject(root.contactUs) ? root.contactUs : {};
+  const pageHeaderSource = isPlainObject(source.pageHeader) ? source.pageHeader : {};
+  const emailBoxSource = isPlainObject(source.emailBox) ? source.emailBox : {};
+  const callBoxSource = isPlainObject(source.callBox) ? source.callBox : {};
+  const addressBoxSource = isPlainObject(source.addressBox) ? source.addressBox : {};
+  const middleLeftColumnSource = isPlainObject(source.middleLeftColumn)
+    ? source.middleLeftColumn
+    : {};
+  const contactFormSource = isPlainObject(source.contactForm) ? source.contactForm : {};
+
+  return {
+    ...defaults,
+    ...source,
+    pageHeader: {
+      ...defaults.pageHeader,
+      ...pageHeaderSource,
+      enabled: toBool(pageHeaderSource.enabled, defaults.pageHeader.enabled),
+      backgroundImageDataUrl: toText(
+        pageHeaderSource.backgroundImageDataUrl ??
+          pageHeaderSource.backgroundImage ??
+          pageHeaderSource.imageDataUrl ??
+          "",
+        ""
+      ),
+      pageTitle: toText(pageHeaderSource.pageTitle, defaults.pageHeader.pageTitle),
+    },
+    emailBox: {
+      ...defaults.emailBox,
+      ...emailBoxSource,
+      enabled: toBool(emailBoxSource.enabled, defaults.emailBox.enabled),
+      title: toText(emailBoxSource.title, defaults.emailBox.title),
+      email: toText(emailBoxSource.email, defaults.emailBox.email),
+      text: toText(emailBoxSource.text, defaults.emailBox.text),
+    },
+    callBox: {
+      ...defaults.callBox,
+      ...callBoxSource,
+      enabled: toBool(callBoxSource.enabled, defaults.callBox.enabled),
+      title: toText(callBoxSource.title, defaults.callBox.title),
+      phone: toText(callBoxSource.phone, defaults.callBox.phone),
+      text: toText(callBoxSource.text, defaults.callBox.text),
+    },
+    addressBox: {
+      ...defaults.addressBox,
+      ...addressBoxSource,
+      enabled: toBool(addressBoxSource.enabled, defaults.addressBox.enabled),
+      title: toText(addressBoxSource.title, defaults.addressBox.title),
+      address: toText(addressBoxSource.address, defaults.addressBox.address),
+    },
+    middleLeftColumn: {
+      ...defaults.middleLeftColumn,
+      ...middleLeftColumnSource,
+      enabled: toBool(
+        middleLeftColumnSource.enabled,
+        defaults.middleLeftColumn.enabled
+      ),
+      imageDataUrl: toText(
+        middleLeftColumnSource.imageDataUrl ?? middleLeftColumnSource.image ?? "",
+        ""
+      ),
+    },
+    contactForm: {
+      ...defaults.contactForm,
+      ...contactFormSource,
+      enabled: toBool(contactFormSource.enabled, defaults.contactForm.enabled),
+      title: toText(contactFormSource.title, defaults.contactForm.title),
+      description: toText(
+        contactFormSource.description,
+        defaults.contactForm.description
+      ),
+    },
+  };
+};
+
+const normalizeCheckout = (root: Record<string, any>) => {
+  const defaults = cloneDefaults().checkout;
+  const source = isPlainObject(root.checkout) ? root.checkout : {};
+  const personalDetailsSource = isPlainObject(source.personalDetails)
+    ? source.personalDetails
+    : {};
+  const shippingDetailsSource = isPlainObject(source.shippingDetails)
+    ? source.shippingDetails
+    : {};
+  const buttonsSource = isPlainObject(source.buttons) ? source.buttons : {};
+  const cartItemSectionSource = isPlainObject(source.cartItemSection)
+    ? source.cartItemSection
+    : {};
+
+  return {
+    ...defaults,
+    ...source,
+    personalDetails: {
+      ...defaults.personalDetails,
+      ...personalDetailsSource,
+      sectionTitle: toText(
+        personalDetailsSource.sectionTitle,
+        defaults.personalDetails.sectionTitle
+      ),
+      firstNameLabel: toText(
+        personalDetailsSource.firstNameLabel,
+        defaults.personalDetails.firstNameLabel
+      ),
+      lastNameLabel: toText(
+        personalDetailsSource.lastNameLabel,
+        defaults.personalDetails.lastNameLabel
+      ),
+      emailLabel: toText(
+        personalDetailsSource.emailLabel,
+        defaults.personalDetails.emailLabel
+      ),
+      phoneLabel: toText(
+        personalDetailsSource.phoneLabel,
+        defaults.personalDetails.phoneLabel
+      ),
+      firstNamePlaceholder: toText(
+        personalDetailsSource.firstNamePlaceholder,
+        defaults.personalDetails.firstNamePlaceholder
+      ),
+      lastNamePlaceholder: toText(
+        personalDetailsSource.lastNamePlaceholder,
+        defaults.personalDetails.lastNamePlaceholder
+      ),
+      emailPlaceholder: toText(
+        personalDetailsSource.emailPlaceholder,
+        defaults.personalDetails.emailPlaceholder
+      ),
+      phonePlaceholder: toText(
+        personalDetailsSource.phonePlaceholder,
+        defaults.personalDetails.phonePlaceholder
+      ),
+    },
+    shippingDetails: {
+      ...defaults.shippingDetails,
+      ...shippingDetailsSource,
+      sectionTitle: toText(
+        shippingDetailsSource.sectionTitle,
+        defaults.shippingDetails.sectionTitle
+      ),
+      streetAddressLabel: toText(
+        shippingDetailsSource.streetAddressLabel,
+        defaults.shippingDetails.streetAddressLabel
+      ),
+      cityLabel: toText(shippingDetailsSource.cityLabel, defaults.shippingDetails.cityLabel),
+      countryLabel: toText(
+        shippingDetailsSource.countryLabel,
+        defaults.shippingDetails.countryLabel
+      ),
+      zipLabel: toText(shippingDetailsSource.zipLabel, defaults.shippingDetails.zipLabel),
+      streetAddressPlaceholder: toText(
+        shippingDetailsSource.streetAddressPlaceholder,
+        defaults.shippingDetails.streetAddressPlaceholder
+      ),
+      cityPlaceholder: toText(
+        shippingDetailsSource.cityPlaceholder,
+        defaults.shippingDetails.cityPlaceholder
+      ),
+      countryPlaceholder: toText(
+        shippingDetailsSource.countryPlaceholder,
+        defaults.shippingDetails.countryPlaceholder
+      ),
+      zipPlaceholder: toText(
+        shippingDetailsSource.zipPlaceholder,
+        defaults.shippingDetails.zipPlaceholder
+      ),
+      shippingCostLabel: toText(
+        shippingDetailsSource.shippingCostLabel,
+        defaults.shippingDetails.shippingCostLabel
+      ),
+      shippingOneNameLabel: toText(
+        shippingDetailsSource.shippingOneNameLabel,
+        defaults.shippingDetails.shippingOneNameLabel
+      ),
+      shippingOneNameDefault: toText(
+        shippingDetailsSource.shippingOneNameDefault,
+        defaults.shippingDetails.shippingOneNameDefault
+      ),
+      shippingOneDescriptionLabel: toText(
+        shippingDetailsSource.shippingOneDescriptionLabel,
+        defaults.shippingDetails.shippingOneDescriptionLabel
+      ),
+      shippingOneDescriptionDefault: toText(
+        shippingDetailsSource.shippingOneDescriptionDefault,
+        defaults.shippingDetails.shippingOneDescriptionDefault
+      ),
+      shippingOneCostLabel: toText(
+        shippingDetailsSource.shippingOneCostLabel,
+        defaults.shippingDetails.shippingOneCostLabel
+      ),
+      shippingOneCostDefault: toText(
+        shippingDetailsSource.shippingOneCostDefault,
+        defaults.shippingDetails.shippingOneCostDefault
+      ),
+      shippingTwoNameLabel: toText(
+        shippingDetailsSource.shippingTwoNameLabel,
+        defaults.shippingDetails.shippingTwoNameLabel
+      ),
+      shippingTwoNameDefault: toText(
+        shippingDetailsSource.shippingTwoNameDefault,
+        defaults.shippingDetails.shippingTwoNameDefault
+      ),
+      shippingTwoDescriptionLabel: toText(
+        shippingDetailsSource.shippingTwoDescriptionLabel,
+        defaults.shippingDetails.shippingTwoDescriptionLabel
+      ),
+      shippingTwoDescriptionDefault: toText(
+        shippingDetailsSource.shippingTwoDescriptionDefault,
+        defaults.shippingDetails.shippingTwoDescriptionDefault
+      ),
+      shippingTwoCostLabel: toText(
+        shippingDetailsSource.shippingTwoCostLabel,
+        defaults.shippingDetails.shippingTwoCostLabel
+      ),
+      shippingTwoCostDefault: toText(
+        shippingDetailsSource.shippingTwoCostDefault,
+        defaults.shippingDetails.shippingTwoCostDefault
+      ),
+      paymentMethodLabel: toText(
+        shippingDetailsSource.paymentMethodLabel,
+        defaults.shippingDetails.paymentMethodLabel
+      ),
+      paymentMethodPlaceholder: toText(
+        shippingDetailsSource.paymentMethodPlaceholder,
+        defaults.shippingDetails.paymentMethodPlaceholder
+      ),
+    },
+    buttons: {
+      ...defaults.buttons,
+      ...buttonsSource,
+      continueButtonLabel: toText(
+        buttonsSource.continueButtonLabel,
+        defaults.buttons.continueButtonLabel
+      ),
+      confirmButtonLabel: toText(
+        buttonsSource.confirmButtonLabel,
+        defaults.buttons.confirmButtonLabel
+      ),
+    },
+    cartItemSection: {
+      ...defaults.cartItemSection,
+      ...cartItemSectionSource,
+      sectionTitle: toText(
+        cartItemSectionSource.sectionTitle,
+        defaults.cartItemSection.sectionTitle
+      ),
+      orderSummaryLabel: toText(
+        cartItemSectionSource.orderSummaryLabel,
+        defaults.cartItemSection.orderSummaryLabel
+      ),
+      applyButtonLabel: toText(
+        cartItemSectionSource.applyButtonLabel,
+        defaults.cartItemSection.applyButtonLabel
+      ),
+      subTotalLabel: toText(
+        cartItemSectionSource.subTotalLabel,
+        defaults.cartItemSection.subTotalLabel
+      ),
+      discountLabel: toText(
+        cartItemSectionSource.discountLabel,
+        defaults.cartItemSection.discountLabel
+      ),
+      totalCostLabel: toText(
+        cartItemSectionSource.totalCostLabel,
+        defaults.cartItemSection.totalCostLabel
+      ),
+    },
+  };
+};
+
+const normalizeDashboardSetting = (root: Record<string, any>) => {
+  const defaults = cloneDefaults().dashboardSetting;
+  const source = isPlainObject(root.dashboardSetting) ? root.dashboardSetting : {};
+  const dashboardSource = isPlainObject(source.dashboard) ? source.dashboard : {};
+  const updateProfileSource = isPlainObject(source.updateProfile)
+    ? source.updateProfile
+    : {};
+
+  return {
+    ...defaults,
+    ...source,
+    dashboard: {
+      ...defaults.dashboard,
+      ...dashboardSource,
+      sectionTitle: toText(
+        dashboardSource.sectionTitle,
+        defaults.dashboard.sectionTitle
+      ),
+      invoiceMessageFirstPartLabel: toText(
+        dashboardSource.invoiceMessageFirstPartLabel,
+        defaults.dashboard.invoiceMessageFirstPartLabel
+      ),
+      invoiceMessageFirstPartValue: toText(
+        dashboardSource.invoiceMessageFirstPartValue,
+        defaults.dashboard.invoiceMessageFirstPartValue
+      ),
+      invoiceMessageLastPartLabel: toText(
+        dashboardSource.invoiceMessageLastPartLabel,
+        defaults.dashboard.invoiceMessageLastPartLabel
+      ),
+      invoiceMessageLastPartValue: toText(
+        dashboardSource.invoiceMessageLastPartValue,
+        defaults.dashboard.invoiceMessageLastPartValue
+      ),
+      printButtonLabel: toText(
+        dashboardSource.printButtonLabel,
+        defaults.dashboard.printButtonLabel
+      ),
+      printButtonValue: toText(
+        dashboardSource.printButtonValue,
+        defaults.dashboard.printButtonValue
+      ),
+      downloadButtonLabel: toText(
+        dashboardSource.downloadButtonLabel,
+        defaults.dashboard.downloadButtonLabel
+      ),
+      downloadButtonValue: toText(
+        dashboardSource.downloadButtonValue,
+        defaults.dashboard.downloadButtonValue
+      ),
+      dashboardLabel: toText(
+        dashboardSource.dashboardLabel,
+        defaults.dashboard.dashboardLabel
+      ),
+      totalOrdersLabel: toText(
+        dashboardSource.totalOrdersLabel,
+        defaults.dashboard.totalOrdersLabel
+      ),
+      pendingOrderLabel: toText(
+        dashboardSource.pendingOrderLabel,
+        defaults.dashboard.pendingOrderLabel
+      ),
+      pendingOrderValue: toText(
+        dashboardSource.pendingOrderValue,
+        defaults.dashboard.pendingOrderValue
+      ),
+      processingOrderLabel: toText(
+        dashboardSource.processingOrderLabel,
+        defaults.dashboard.processingOrderLabel
+      ),
+      processingOrderValue: toText(
+        dashboardSource.processingOrderValue,
+        defaults.dashboard.processingOrderValue
+      ),
+      completeOrderLabel: toText(
+        dashboardSource.completeOrderLabel,
+        defaults.dashboard.completeOrderLabel
+      ),
+      completeOrderValue: toText(
+        dashboardSource.completeOrderValue,
+        defaults.dashboard.completeOrderValue
+      ),
+      recentOrderLabel: toText(
+        dashboardSource.recentOrderLabel,
+        defaults.dashboard.recentOrderLabel
+      ),
+      recentOrderValue: toText(
+        dashboardSource.recentOrderValue,
+        defaults.dashboard.recentOrderValue
+      ),
+      myOrderLabel: toText(
+        dashboardSource.myOrderLabel,
+        defaults.dashboard.myOrderLabel
+      ),
+      myOrderValue: toText(
+        dashboardSource.myOrderValue,
+        defaults.dashboard.myOrderValue
+      ),
+    },
+    updateProfile: {
+      ...defaults.updateProfile,
+      ...updateProfileSource,
+      sectionTitleLabel: toText(
+        updateProfileSource.sectionTitleLabel,
+        defaults.updateProfile.sectionTitleLabel
+      ),
+      sectionTitleValue: toText(
+        updateProfileSource.sectionTitleValue,
+        defaults.updateProfile.sectionTitleValue
+      ),
+      fullNameLabel: toText(
+        updateProfileSource.fullNameLabel,
+        defaults.updateProfile.fullNameLabel
+      ),
+      addressLabel: toText(
+        updateProfileSource.addressLabel,
+        defaults.updateProfile.addressLabel
+      ),
+      phoneMobileLabel: toText(
+        updateProfileSource.phoneMobileLabel,
+        defaults.updateProfile.phoneMobileLabel
+      ),
+      emailAddressLabel: toText(
+        updateProfileSource.emailAddressLabel,
+        defaults.updateProfile.emailAddressLabel
+      ),
+      updateButtonLabel: toText(
+        updateProfileSource.updateButtonLabel,
+        defaults.updateProfile.updateButtonLabel
+      ),
+      updateButtonValue: toText(
+        updateProfileSource.updateButtonValue,
+        defaults.updateProfile.updateButtonValue
+      ),
+      currentPasswordLabel: toText(
+        updateProfileSource.currentPasswordLabel,
+        defaults.updateProfile.currentPasswordLabel
+      ),
+      newPasswordLabel: toText(
+        updateProfileSource.newPasswordLabel,
+        defaults.updateProfile.newPasswordLabel
+      ),
+      changePasswordLabel: toText(
+        updateProfileSource.changePasswordLabel,
+        defaults.updateProfile.changePasswordLabel
+      ),
+    },
+  };
+};
+
+export const sanitizeCustomization = (rawData: unknown) => {
   const source = isPlainObject(rawData) ? rawData : {};
   const merged = mergeDeep(cloneDefaults(), source);
   const normalizedHome = normalizeHome(source);
   const normalizedProductSlugPage = normalizeProductSlugPage(source);
+  const normalizedAboutUs = normalizeAboutUs(source);
+  const normalizedPrivacyPolicy = normalizePolicyPage(source, "privacyPolicy");
+  const normalizedTermsAndConditions = normalizePolicyPage(
+    source,
+    "termsAndConditions"
+  );
+  const normalizedFaqs = normalizeFaqs(source);
+  const normalizedOffers = normalizeOffers(source);
+  const normalizedContactUs = normalizeContactUs(source);
+  const normalizedCheckout = normalizeCheckout(source);
+  const normalizedDashboardSetting = normalizeDashboardSetting(source);
   const normalizedSeoSettings = normalizeSeoSettings(source);
   const output = {
     ...merged,
     home: normalizedHome,
     productSlugPage: normalizedProductSlugPage,
+    aboutUs: normalizedAboutUs,
+    privacyPolicy: normalizedPrivacyPolicy,
+    termsAndConditions: normalizedTermsAndConditions,
+    faqs: normalizedFaqs,
+    offers: normalizedOffers,
+    contactUs: normalizedContactUs,
+    checkout: normalizedCheckout,
+    dashboardSetting: normalizedDashboardSetting,
     seoSettings: normalizedSeoSettings,
   };
   delete output.homePage;

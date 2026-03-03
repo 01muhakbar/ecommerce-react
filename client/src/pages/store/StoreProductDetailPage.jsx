@@ -20,8 +20,10 @@ import {
 import { useCart } from "../../hooks/useCart.ts";
 import { useProduct, useProducts } from "../../storefront.jsx";
 import QueryState from "../../components/UI/QueryState.jsx";
+import { UiEmptyState, UiErrorState, UiSkeleton } from "../../components/ui-states/index.js";
 import { formatCurrency } from "../../utils/format.js";
 import { resolveProductImageUrl } from "../../utils/productImage.js";
+import { GENERIC_ERROR } from "../../constants/uiMessages.js";
 
 const COLOR_OPTIONS = [
   {
@@ -380,6 +382,7 @@ export default function StoreProductDetailPage() {
     isLoading,
     isError,
     error,
+    refetch: refetchProduct,
   } = useProduct(slug);
   const product = productData?.data ?? null;
 
@@ -443,6 +446,10 @@ export default function StoreProductDetailPage() {
   const keyword = (product?.name || "").trim().split(/\s+/)[0] || "";
   const safeKeyword = keyword.length >= 3 ? keyword : "";
   const browseUrl = safeKeyword ? `/search?q=${encodeURIComponent(safeKeyword)}` : "/search";
+  const productErrorMessage =
+    error?.response?.data?.message ||
+    error?.message ||
+    GENERIC_ERROR;
 
   const categoryName = product?.category?.name || "Uncategorized";
   const categorySlug = product?.category?.slug ?? product?.category?.code ?? null;
@@ -502,23 +509,70 @@ export default function StoreProductDetailPage() {
   };
 
   if (isLoading) {
-    return <p className="text-sm text-slate-500">Loading product...</p>;
+    return (
+      <section className="space-y-5">
+        <UiSkeleton variant="invoice" rows={6} />
+      </section>
+    );
   }
 
   if (isError) {
     const status = error?.response?.status;
+    if (status === 404) {
+      return (
+        <section className="space-y-5">
+          <UiEmptyState
+            className="rounded-2xl py-12"
+            title="Product not found"
+            description="This product may have been removed or the link is no longer valid."
+            actions={
+              <>
+                <Link
+                  to={browseUrl}
+                  className="inline-flex h-10 items-center justify-center rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
+                >
+                  Browse Products
+                </Link>
+                <Link
+                  to="/"
+                  className="inline-flex h-10 items-center justify-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:border-slate-300"
+                >
+                  Back to Home
+                </Link>
+              </>
+            }
+          />
+        </section>
+      );
+    }
     return (
-      <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-        {status === 404 ? "Product not found." : "Failed to load product."}
-      </div>
+      <section className="space-y-5">
+        <UiErrorState
+          title={GENERIC_ERROR}
+          message={productErrorMessage}
+          onRetry={() => refetchProduct()}
+        />
+      </section>
     );
   }
 
   if (!product) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500">
-        Product not found.
-      </div>
+      <section className="space-y-5">
+        <UiEmptyState
+          className="rounded-2xl py-12"
+          title="Product not found"
+          description="Try opening another product from search results."
+          actions={
+            <Link
+              to={browseUrl}
+              className="inline-flex h-10 items-center justify-center rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
+            >
+              Browse Products
+            </Link>
+          }
+        />
+      </section>
     );
   }
 
@@ -755,9 +809,9 @@ export default function StoreProductDetailPage() {
         </div>
         <QueryState
           isLoading={relatedQuery.isLoading}
-          isError={false}
+          isError={relatedQuery.isError}
           error={relatedQuery.error}
-          isEmpty={!relatedQuery.isLoading && (relatedQuery.isError || relatedProducts.length === 0)}
+          isEmpty={!relatedQuery.isLoading && !relatedQuery.isError && relatedProducts.length === 0}
           emptyTitle="No related products"
           emptyHint="Coba jelajahi produk lainnya."
           onRetry={() => relatedQuery.refetch()}

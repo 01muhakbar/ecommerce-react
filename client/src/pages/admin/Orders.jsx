@@ -6,19 +6,20 @@ import { toUIStatus } from "../../constants/orderStatus.js";
 import { prevData } from "../../lib/rq.ts";
 import useAdminLocale from "../../hooks/useAdminLocale.js";
 import OrderStatusBadge from "../../components/admin/OrderStatusBadge.jsx";
-import { Download, Eye, Filter, Printer, RotateCcw } from "lucide-react";
+import { Download, Eye, Filter, Printer, RotateCcw, Search } from "lucide-react";
 import {
-  UiEmptyState,
   UiErrorState,
   UiSkeleton,
   UiUpdatingBadge,
 } from "../../components/ui-states/index.js";
-import { GENERIC_ERROR, NO_ORDERS_FOUND, UPDATING } from "../../constants/uiMessages.js";
+import { GENERIC_ERROR, UPDATING } from "../../constants/uiMessages.js";
 
 const headerBtnBase =
   "inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 text-sm font-medium transition";
 const headerBtnOutline = `${headerBtnBase} border border-slate-200 bg-white text-slate-700 hover:border-slate-300`;
 const headerBtnGreen = `${headerBtnBase} bg-emerald-600 text-white hover:bg-emerald-700`;
+const fieldClass =
+  "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none";
 
 const toText = (value) => String(value ?? "").trim();
 
@@ -104,6 +105,7 @@ export default function Orders() {
     endDate: "",
   });
   const [pendingUpdateId, setPendingUpdateId] = useState(null);
+  const [lastStatusAttempt, setLastStatusAttempt] = useState(null);
   const [rowError, setRowError] = useState("");
   const [notice, setNotice] = useState("");
   const [isDownloading, setIsDownloading] = useState(false);
@@ -140,6 +142,7 @@ export default function Orders() {
     mutationFn: ({ orderId, payload }) => updateAdminOrderStatus(orderId, payload),
     onSuccess: () => {
       setRowError("");
+      setNotice("Order status updated.");
       queryClient.invalidateQueries({ queryKey: ["admin-orders"], exact: false });
     },
     onSettled: () => {
@@ -161,7 +164,6 @@ export default function Orders() {
   const isRefetching = ordersQuery.isFetching && !isInitialLoading;
   const isErrorState = ordersQuery.isError && !ordersQuery.data;
   const showInlineError = ordersQuery.isError && Boolean(ordersQuery.data);
-  const isEmpty = !isInitialLoading && !ordersQuery.isError && !hasItems;
   const errorMessage =
     ordersQuery.error?.response?.data?.message ||
     ordersQuery.error?.message ||
@@ -201,8 +203,19 @@ export default function Orders() {
     if (!nextStatus) return;
     if (!order?.id) return;
     setRowError("");
+    setNotice("");
     setPendingUpdateId(order.id);
-    updateMutation.mutate({ orderId: order.id, payload: { status: nextStatus } });
+    const requestPayload = { orderId: order.id, payload: { status: nextStatus } };
+    setLastStatusAttempt(requestPayload);
+    updateMutation.mutate(requestPayload);
+  };
+
+  const retryLastStatusUpdate = () => {
+    if (!lastStatusAttempt || updateMutation.isPending) return;
+    setRowError("");
+    setNotice("");
+    setPendingUpdateId(lastStatusAttempt.orderId);
+    updateMutation.mutate(lastStatusAttempt);
   };
 
   const onDownloadAll = () => {
@@ -273,113 +286,123 @@ export default function Orders() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Orders</h1>
-        <p className="text-sm text-slate-500">Track and manage order flow.</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Orders</h1>
+          <p className="text-sm text-slate-500">Track and manage order flow.</p>
+        </div>
+        <div className="text-xs text-slate-500">
+          Total records: <span className="font-semibold text-slate-700">{meta.total || 0}</span>
+        </div>
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-12">
-          <input
-            type="search"
-            value={searchInput}
-            onChange={(event) => setSearchInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                onApplyFilters();
-              }
-            }}
-            placeholder="Search by Customer Name"
-            className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none xl:col-span-4"
-          />
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="relative w-full xl:max-w-md">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="search"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  onApplyFilters();
+                }
+              }}
+              placeholder="Search by customer, email, or invoice"
+              className={`${fieldClass} pl-9`}
+            />
+          </div>
 
-          <select
-            value={statusInput}
-            onChange={(event) => setStatusInput(event.target.value)}
-            className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none xl:col-span-2"
-          >
-            <option value="">All Status</option>
-            {STATUS_FILTER_OPTIONS.filter((option) => option.value).map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 xl:w-auto xl:min-w-[560px]">
+            <select
+              value={statusInput}
+              onChange={(event) => setStatusInput(event.target.value)}
+              className={fieldClass}
+            >
+              <option value="">All Status</option>
+              {STATUS_FILTER_OPTIONS.filter((option) => option.value).map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
 
-          <select
-            value={limitDaysInput}
-            onChange={(event) => setLimitDaysInput(event.target.value)}
-            className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none xl:col-span-2"
-          >
-            <option value="">Order Limits</option>
-            <option value="5">Last 5 days</option>
-            <option value="7">Last 7 days</option>
-            <option value="15">Last 15 days</option>
-            <option value="30">Last 30 days</option>
-          </select>
+            <select
+              value={limitDaysInput}
+              onChange={(event) => setLimitDaysInput(event.target.value)}
+              className={fieldClass}
+            >
+              <option value="">Order Limit</option>
+              <option value="5">Last 5 days</option>
+              <option value="7">Last 7 days</option>
+              <option value="15">Last 15 days</option>
+              <option value="30">Last 30 days</option>
+            </select>
 
-          <select
-            value={methodInput}
-            onChange={(event) => setMethodInput(event.target.value)}
-            className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none xl:col-span-2"
-          >
-            <option value="">All Methods</option>
-            <option value="cash">Cash</option>
-            <option value="card">Card</option>
-            <option value="credit">Credit</option>
-          </select>
-
-          <button
-            type="button"
-            className={`${headerBtnOutline} w-full sm:w-auto xl:col-span-2`}
-            onClick={onDownloadAll}
-            disabled={isDownloading}
-          >
-            <Download className="h-4 w-4" />
-            {isDownloading ? "Downloading..." : "Download All Orders"}
-          </button>
+            <select
+              value={methodInput}
+              onChange={(event) => setMethodInput(event.target.value)}
+              className={fieldClass}
+            >
+              <option value="">All Methods</option>
+              <option value="cash">Cash</option>
+              <option value="card">Card</option>
+              <option value="credit">Credit</option>
+            </select>
+          </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-12">
-          <input
-            type="date"
-            value={startDateInput}
-            onChange={(event) => setStartDateInput(event.target.value)}
-            className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none xl:col-span-3"
-          />
-          <input
-            type="date"
-            value={endDateInput}
-            onChange={(event) => setEndDateInput(event.target.value)}
-            className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none xl:col-span-3"
-          />
+        <div className="mt-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:w-auto xl:min-w-[330px]">
+            <input
+              type="date"
+              value={startDateInput}
+              onChange={(event) => setStartDateInput(event.target.value)}
+              className={fieldClass}
+            />
+            <input
+              type="date"
+              value={endDateInput}
+              onChange={(event) => setEndDateInput(event.target.value)}
+              className={fieldClass}
+            />
+          </div>
 
-          <button
-            type="button"
-            className={`${headerBtnGreen} w-full sm:w-auto xl:col-span-2`}
-            onClick={onApplyFilters}
-          >
-            <Filter className="h-4 w-4" />
-            Filter
-          </button>
-          <button
-            type="button"
-            className={`${headerBtnOutline} w-full sm:w-auto xl:col-span-2`}
-            onClick={onResetFilters}
-          >
-            <RotateCcw className="h-4 w-4" />
-            Reset
-          </button>
-
-          <div className="xl:col-span-2 xl:flex xl:items-center xl:justify-end">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className={headerBtnGreen}
+              onClick={onApplyFilters}
+            >
+              <Filter className="h-4 w-4" />
+              Apply
+            </button>
+            <button
+              type="button"
+              className={headerBtnOutline}
+              onClick={onResetFilters}
+            >
+              <RotateCcw className="h-4 w-4" />
+              Reset
+            </button>
+            <button
+              type="button"
+              className={headerBtnOutline}
+              onClick={onDownloadAll}
+              disabled={isDownloading}
+            >
+              <Download className="h-4 w-4" />
+              {isDownloading ? "Downloading..." : "Export"}
+            </button>
             {isRefetching ? <UiUpdatingBadge label={UPDATING} /> : null}
           </div>
         </div>
       </div>
 
       {notice ? (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
+        <div className="pointer-events-none fixed bottom-4 right-4 z-50 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700 shadow-sm">
           {notice}
         </div>
       ) : null}
@@ -394,23 +417,7 @@ export default function Orders() {
         />
       ) : null}
 
-      {isEmpty ? (
-        <UiEmptyState
-          title={NO_ORDERS_FOUND}
-          description="Try adjusting or clearing your search and status filter."
-          actions={
-            <button
-              type="button"
-              onClick={onResetFilters}
-              className="inline-flex h-10 items-center justify-center rounded-full border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:border-slate-300"
-            >
-              Clear filters
-            </button>
-          }
-        />
-      ) : null}
-
-      {!isInitialLoading && !isErrorState && !isEmpty ? (
+      {!isInitialLoading && !isErrorState ? (
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           {showInlineError ? (
             <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -439,7 +446,7 @@ export default function Orders() {
               </tr>
             </thead>
             <tbody>
-              {items.map((order) => {
+              {hasItems ? items.map((order, rowIndex) => {
                 const uiStatus = toUIStatus(order.status || "pending");
                 const actionStatus = toActionStatusValue(order.status || "pending");
                 const isUpdating = pendingUpdateId === order.id;
@@ -451,7 +458,12 @@ export default function Orders() {
                   orderId ||
                   `${getInvoiceLabel(order)}-${formatDateTime(orderDateValue)}`;
                 return (
-                <tr key={rowKey} className="border-t border-slate-100 text-slate-700 transition hover:bg-slate-50">
+                <tr
+                  key={rowKey}
+                  className={`border-t border-slate-100 text-slate-700 transition hover:bg-slate-50 ${
+                    rowIndex % 2 === 0 ? "bg-white" : "bg-slate-50/35"
+                  }`}
+                >
                   <td className="px-4 py-3 font-medium text-slate-900">
                     {getInvoiceLabel(order)}
                   </td>
@@ -472,18 +484,23 @@ export default function Orders() {
                     <OrderStatusBadge status={uiStatus || "-"} />
                   </td>
                   <td className="w-[170px] px-4 py-3">
-                    <select
-                      value={actionStatus}
-                      onChange={(event) => onUpdateStatus(order, event.target.value)}
-                      disabled={isUpdating}
-                      className="h-9 w-[140px] rounded-xl border border-slate-200 px-2 text-xs focus:border-emerald-500 focus:outline-none disabled:opacity-60"
-                    >
-                      {STATUS_ACTION_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={actionStatus}
+                        onChange={(event) => onUpdateStatus(order, event.target.value)}
+                        disabled={isUpdating}
+                        className="h-9 w-[140px] rounded-xl border border-slate-200 px-2 text-xs focus:border-emerald-500 focus:outline-none disabled:opacity-60"
+                      >
+                        {STATUS_ACTION_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      {isUpdating ? (
+                        <UiUpdatingBadge label="Saving..." />
+                      ) : null}
+                    </div>
                   </td>
                   <td className="w-[120px] px-4 py-3">
                     <div className="flex items-center justify-end gap-2 whitespace-nowrap">
@@ -517,7 +534,23 @@ export default function Orders() {
                   </td>
                 </tr>
               );
-              })}
+              }) : (
+                <tr className="border-t border-slate-100">
+                  <td colSpan={8} className="px-4 py-14 text-center">
+                    <p className="text-base font-semibold text-slate-800">No orders found</p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Try adjusting search or filter values.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={onResetFilters}
+                      className="mt-4 inline-flex h-10 items-center justify-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:border-slate-300"
+                    >
+                      Clear Filters
+                    </button>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
           </div>
@@ -526,11 +559,21 @@ export default function Orders() {
 
       {rowError ? (
         <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-600">
-          {rowError}
+          <p>{rowError}</p>
+          {lastStatusAttempt ? (
+            <button
+              type="button"
+              onClick={retryLastStatusUpdate}
+              disabled={updateMutation.isPending}
+              className="mt-2 inline-flex h-9 items-center justify-center rounded-full border border-rose-200 bg-white px-4 text-xs font-semibold text-rose-700 hover:border-rose-300 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {updateMutation.isPending ? "Retrying..." : "Retry status update"}
+            </button>
+          ) : null}
         </div>
       ) : null}
 
-      <div className="flex items-center justify-between text-sm">
+      <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
         <button
           type="button"
           className="rounded-full border border-slate-200 px-3 py-1.5 text-slate-700 disabled:opacity-50"

@@ -59,6 +59,54 @@ export type StoreCouponQuoteResponse = {
   total: number;
 };
 
+export type StoreCustomizationResponse = {
+  success: boolean;
+  lang: string;
+  customization: {
+    aboutUs?: Record<string, any>;
+    privacyPolicy?: Record<string, any>;
+    termsAndConditions?: Record<string, any>;
+    faqs?: Record<string, any>;
+    offers?: Record<string, any>;
+    contactUs?: Record<string, any>;
+    checkout?: Record<string, any>;
+    dashboardSetting?: Record<string, any>;
+  };
+};
+
+export type PublicStoreSettings = {
+  payments: {
+    cashOnDeliveryEnabled: boolean;
+    stripeEnabled: boolean;
+    razorPayEnabled: boolean;
+    stripeKey: string;
+  };
+  socialLogin: {
+    googleEnabled: boolean;
+    githubEnabled: boolean;
+    facebookEnabled: boolean;
+    googleClientId: string;
+    githubId: string;
+    facebookId: string;
+  };
+  analytics: {
+    googleAnalyticsEnabled: boolean;
+    googleAnalyticKey: string;
+  };
+  chat: {
+    tawkEnabled: boolean;
+    tawkPropertyId: string;
+    tawkWidgetId: string;
+  };
+};
+
+export type StoreSettingsResponse = {
+  success: boolean;
+  data?: {
+    storeSettings?: PublicStoreSettings;
+  };
+};
+
 export type StoreProductsResponse = {
   data: StoreProduct[];
   meta: {
@@ -162,6 +210,33 @@ export const createStoreOrder = async (payload: {
 
 export const fetchStoreCoupons = async () => {
   const { data } = await api.get<{ data: StoreCoupon[] }>("/store/coupons");
+  return data;
+};
+
+export const getStoreCustomization = async (params?: {
+  lang?: string;
+  include?: string;
+}) => {
+  const normalizedLang = String(params?.lang || "en").trim().toLowerCase() || "en";
+  const include = String(params?.include || "").trim();
+  const query: Record<string, string> = { lang: normalizedLang };
+  if (include) {
+    query.include = include;
+  }
+
+  const { data } = await api.get<StoreCustomizationResponse>("/store/customization", {
+    params: query,
+  });
+  return data;
+};
+
+export const fetchStoreCustomization = async (lang = "en") => {
+  const normalizedLang = String(lang || "en").trim().toLowerCase() || "en";
+  return getStoreCustomization({ lang: normalizedLang });
+};
+
+export const getStoreSettings = async () => {
+  const { data } = await api.get<StoreSettingsResponse>("/store/settings");
   return data;
 };
 

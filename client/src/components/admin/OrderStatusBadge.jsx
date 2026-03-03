@@ -6,5 +6,11 @@ import {
 export default function OrderStatusBadge({ status }) {
   const label = getOrderStatusLabel(status);
   const styles = getOrderStatusBadgeClass(status);
-  return <span className={`rounded-full px-2 py-0.5 text-xs ${styles}`}>{label}</span>;
+  return (
+    <span
+      className={`inline-flex min-h-7 items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${styles}`}
+    >
+      {label}
+    </span>
+  );
 }

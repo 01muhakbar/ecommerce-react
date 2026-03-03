@@ -136,7 +136,11 @@ const MENU = [
         to: "/admin/store/customization",
         perm: "SETTINGS_MANAGE",
       },
-      { label: "Store Settings", to: "/admin/store-settings", perm: "SETTINGS_MANAGE" },
+      {
+        label: "Store Settings",
+        to: "/admin/store/store-settings",
+        perm: "SETTINGS_MANAGE",
+      },
     ],
   },
 ];

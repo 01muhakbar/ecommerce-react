@@ -33,8 +33,11 @@ import adminSettingsRouter from "./routes/admin.settings.js";
 import adminLanguagesRouter from "./routes/admin.languages.js";
 import adminCurrenciesRouter from "./routes/admin.currencies.js";
 import adminStoreCustomizationRouter from "./routes/admin.storeCustomization.js";
+import adminStoreSettingsRouter from "./routes/admin.storeSettings.js";
 import storeRouter from "./routes/store.js";
 import storeCouponsRouter from "./routes/store.coupons.js";
+import storeCustomizationRouter from "./routes/store.customization.js";
+import storeSettingsRouter from "./routes/store.settings.js";
 import publicRouter from "./routes/public.js";
 import healthRouter from "./routes/health.js";
 
@@ -65,6 +68,8 @@ app.use("/api/auth", authRouter);
 app.use("/api/cart", cartRouter);
 app.use("/api/store", storeRouter);
 app.use("/api/store/coupons", storeCouponsRouter);
+app.use("/api/store/customization", storeCustomizationRouter);
+app.use("/api/store/settings", storeSettingsRouter);
 
 // serve uploaded files from all known locations (priority: runtime uploads first)
 const uploadsCandidates = [
@@ -100,6 +105,7 @@ app.use(
   requireAdmin,
   adminStoreCustomizationRouter
 );
+app.use("/api/admin/store/settings", requireAdmin, adminStoreSettingsRouter);
 app.use("/api/admin", requireAdmin, adminAttributeValuesRouter);
 app.use("/api/admin", requireAdmin, adminProductAttributesRouter);
 

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useOutletContext } from "react-router-dom";
 import { CheckCircle, Eye, RotateCw, ShoppingCart, Truck } from "lucide-react";
 import { api } from "../../api/axios.ts";
+import { getStoreCustomization } from "../../api/store.service.ts";
 import { formatCurrency } from "../../utils/format.js";
 import {
   getOrderStatusBadgeClass,
@@ -35,8 +36,34 @@ const getOrderTimestamp = (order) => {
 
 const getOrderRef = (order) => order?.invoiceNo || order?.orderId || order?.id || null;
 
+const toText = (value, fallback) => {
+  const normalized = String(value ?? "").trim();
+  return normalized || fallback;
+};
+
+const normalizeDashboardSettingCopy = (raw) => {
+  const source = raw && typeof raw === "object" ? raw : {};
+  const dashboard = source.dashboard && typeof source.dashboard === "object" ? source.dashboard : {};
+  return {
+    dashboardLabel: toText(dashboard.dashboardLabel, "Dashboard"),
+    totalOrdersLabel: toText(dashboard.totalOrdersLabel, "Total Orders"),
+    pendingOrderValue: toText(dashboard.pendingOrderValue, "Pending Orders"),
+    processingOrderValue: toText(dashboard.processingOrderValue, "Processing Orders"),
+    completeOrderValue: toText(dashboard.completeOrderValue, "Complete Orders"),
+    recentOrderValue: toText(dashboard.recentOrderValue, "Recent Orders"),
+  };
+};
+
 export default function AccountDashboardPage() {
   const { user } = useOutletContext() || {};
+  const dashboardSettingQuery = useQuery({
+    queryKey: ["store-customization", "dashboard-setting", "en"],
+    queryFn: () => getStoreCustomization({ lang: "en", include: "dashboardSetting" }),
+    staleTime: 60_000,
+  });
+  const dashboardSettingCopy = normalizeDashboardSettingCopy(
+    dashboardSettingQuery.data?.customization?.dashboardSetting
+  );
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["account", "orders", "my"],
     queryFn: () => fetchOrders(),
@@ -56,25 +83,25 @@ export default function AccountDashboardPage() {
 
   const statCards = [
     {
-      label: "Total Orders",
+      label: dashboardSettingCopy.totalOrdersLabel,
       value: totalOrders,
       Icon: ShoppingCart,
       tone: "bg-rose-100 text-rose-600",
     },
     {
-      label: "Pending Orders",
+      label: dashboardSettingCopy.pendingOrderValue,
       value: pendingOrders,
       Icon: RotateCw,
       tone: "bg-amber-100 text-amber-600",
     },
     {
-      label: "Processing Orders",
+      label: dashboardSettingCopy.processingOrderValue,
       value: processingOrders,
       Icon: Truck,
       tone: "bg-sky-100 text-sky-600",
     },
     {
-      label: "Complete Orders",
+      label: dashboardSettingCopy.completeOrderValue,
       value: completeOrders,
       Icon: CheckCircle,
       tone: "bg-emerald-100 text-emerald-600",
@@ -87,7 +114,9 @@ export default function AccountDashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">
+          {dashboardSettingCopy.dashboardLabel}
+        </h1>
         <p className="mt-1 text-sm text-slate-500">
           {user?.name ? `Welcome back, ${user.name}.` : "Welcome back."}
         </p>
@@ -111,7 +140,9 @@ export default function AccountDashboardPage() {
       </div>
 
       <div className="space-y-3">
-        <h2 className="text-lg font-semibold text-slate-900">Recent Orders</h2>
+        <h2 className="text-lg font-semibold text-slate-900">
+          {dashboardSettingCopy.recentOrderValue}
+        </h2>
         <div className="rounded-xl border border-slate-200 bg-white">
           {isLoading ? (
             <div className="p-4 text-sm text-slate-500">Loading...</div>

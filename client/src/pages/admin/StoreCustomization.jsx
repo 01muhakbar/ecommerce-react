@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Plus, Settings, Upload, X } from "lucide-react";
 import {
   fetchAdminLanguages,
+  fetchAdminCoupons,
   createAdminLanguage,
   fetchAdminStoreCustomization,
   updateAdminStoreCustomization,
@@ -78,6 +79,8 @@ const MAIN_SLIDER_TABS = [
 ];
 
 const MAIN_SLIDER_LENGTH = 5;
+const ABOUT_US_MEMBER_LENGTH = 6;
+const FAQS_ITEM_LENGTH = 8;
 const PRODUCTS_LIMIT_OPTIONS = [6, 12, 18, 24];
 const PRODUCT_SLUG_DESCRIPTION_LABELS = [
   "Description One",
@@ -88,11 +91,160 @@ const PRODUCT_SLUG_DESCRIPTION_LABELS = [
   "Description Six",
   "Description Seven",
 ];
+const FAQ_ITEM_ORDINALS = [
+  "One",
+  "Two",
+  "Three",
+  "Four",
+  "Five",
+  "Six",
+  "Seven",
+  "Eight",
+];
+const DASHBOARD_SETTING_DASHBOARD_FIELDS = [
+  { field: "invoiceMessageFirstPartValue", label: "Invoice Message First Part" },
+  { field: "invoiceMessageLastPartValue", label: "Invoice Message Last Part" },
+  { field: "printButtonValue", label: "Print Button" },
+  { field: "downloadButtonValue", label: "Download Button" },
+  { field: "dashboardLabel", label: "Dashboard" },
+  { field: "totalOrdersLabel", label: "Total Orders" },
+  { field: "pendingOrderValue", label: "Pending Order" },
+  { field: "processingOrderValue", label: "Processing Order" },
+  { field: "completeOrderValue", label: "Complete Order" },
+  { field: "recentOrderValue", label: "Recent Order" },
+  { field: "myOrderValue", label: "My Order" },
+];
+const DASHBOARD_SETTING_UPDATE_PROFILE_FIELDS = [
+  { field: "fullNameLabel", label: "Full Name" },
+  { field: "addressLabel", label: "Address" },
+  { field: "phoneMobileLabel", label: "Phone/Mobile" },
+  { field: "emailAddressLabel", label: "Email Address" },
+  { field: "updateButtonLabel", label: "Update Button Label" },
+  { field: "updateButtonValue", label: "Update Button" },
+  { field: "currentPasswordLabel", label: "Current Password" },
+  { field: "newPasswordLabel", label: "New Password" },
+  { field: "changePasswordLabel", label: "Change Password" },
+];
 
 const inputBase =
   "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 transition focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100";
 const sectionCard =
   "rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.05)]";
+const textAreaBase =
+  "mt-2 min-h-[92px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100";
+const ABOUT_US_MEMBER_TABS = Array.from({ length: ABOUT_US_MEMBER_LENGTH }, (_, index) => ({
+  key: `member-${index}`,
+  index,
+  label: `Member ${index + 1}`,
+}));
+const ABOUT_US_IMAGE_FIELD_KEYS = {
+  pageHeaderBackground: "pageHeaderBackground",
+  topContentRightImage: "topContentRightImage",
+  contentSectionImage: "contentSectionImage",
+};
+const getAboutUsMemberImageFieldKey = (memberIndex) => `teamMemberImage-${memberIndex}`;
+const POLICY_IMAGE_FIELD_KEYS = {
+  privacyPolicyBackground: "privacyPolicyBackground",
+  termsAndConditionsBackground: "termsAndConditionsBackground",
+};
+const POLICY_FIELD_KEY_BY_IMAGE_FIELD = {
+  [POLICY_IMAGE_FIELD_KEYS.privacyPolicyBackground]: "privacyPolicy",
+  [POLICY_IMAGE_FIELD_KEYS.termsAndConditionsBackground]: "termsAndConditions",
+};
+const FAQS_IMAGE_FIELD_KEYS = {
+  pageHeaderBackground: "pageHeaderBackground",
+  leftColumnImage: "leftColumnImage",
+};
+const OFFERS_IMAGE_FIELD_KEYS = {
+  pageHeaderBackground: "pageHeaderBackground",
+};
+const CONTACT_US_IMAGE_FIELD_KEYS = {
+  pageHeaderBackground: "pageHeaderBackground",
+  middleLeftColumnImage: "middleLeftColumnImage",
+};
+const DEFAULT_FAQS_ITEMS = [
+  {
+    title: "How does the KachaBazar work?",
+    description:
+      "KachaBazar lets customers browse daily essentials, add products to cart, and complete orders with a straightforward checkout flow.",
+  },
+  {
+    title: "Can I cancel my subscription anytime?",
+    description:
+      "Yes. You can cancel or update your subscription preferences at any time from your account settings.",
+  },
+  {
+    title: "Whice payment method you should accept?",
+    description:
+      "We currently support the configured payment methods available in your region and account setup.",
+  },
+  {
+    title: "Can I cancel my subscription anytime?",
+    description:
+      "Yes. Subscription changes take effect according to your active billing cycle and selected plan.",
+  },
+  {
+    title: "What is KachaBazar EC2 auto scaling?",
+    description:
+      "It is a scaling strategy that helps application resources handle traffic spikes while keeping performance stable.",
+  },
+  {
+    title: "What are the benefits of using KachaBazar affiliate?",
+    description:
+      "Affiliate usage can help expand reach, improve campaign tracking, and increase customer acquisition efficiency.",
+  },
+  {
+    title: "What is a affiliates product configuration?",
+    description:
+      "It is a setup that maps products, commissions, and campaign rules for partner-driven referrals.",
+  },
+  {
+    title:
+      "What is fleet management and how is it different from dynamic scaling?",
+    description:
+      "Fleet management focuses on maintaining and scheduling infrastructure capacity, while dynamic scaling adjusts resources automatically based on load.",
+  },
+];
+const DEFAULT_PRIVACY_POLICY_HTML = [
+  "<h3>Consent</h3>",
+  "<p>By using KachaBazar, you consent to this privacy policy and agree to the way we collect and use data for shopping, delivery, and support services.</p>",
+  "<h3>Information we collect</h3>",
+  "<p>We may collect account details, order information, payment metadata, and customer support communications when you use our platform.</p>",
+  "<h3>How we use your information</h3>",
+  "<ol>",
+  "<li>To process and deliver your orders accurately.</li>",
+  "<li>To verify payments and prevent fraud.</li>",
+  "<li>To provide account access and order tracking updates.</li>",
+  "<li>To improve product recommendations and store experience.</li>",
+  "<li>To respond to support requests and complaints.</li>",
+  "<li>To send service notices and policy updates.</li>",
+  "<li>To comply with legal and regulatory obligations.</li>",
+  "</ol>",
+  "<h3>Data protection</h3>",
+  "<p>We apply reasonable technical and organizational safeguards to protect your personal data from unauthorized access, misuse, or disclosure.</p>",
+  "<h3>Your rights</h3>",
+  "<p>You may request access, correction, or deletion of personal data by contacting the KachaBazar support team.</p>",
+].join("");
+const DEFAULT_TERMS_AND_CONDITIONS_HTML = [
+  "<h2>Welcome to KachaBazar!</h2>",
+  "<p>These terms and conditions govern your use of KachaBazar services, including browsing products, placing orders, and managing your account.</p>",
+  "<h3>Cookies</h3>",
+  "<p>We use cookies to keep your session active, remember preferences, and improve site performance. By continuing to use the site, you agree to our cookie usage.</p>",
+  "<h3>License</h3>",
+  "<p>Unless otherwise stated, KachaBazar and its licensors own the intellectual property rights for all material on this site.</p>",
+  "<ol>",
+  "<li>You must not republish material from KachaBazar.</li>",
+  "<li>You must not sell, rent, or sub-license material from KachaBazar.</li>",
+  "<li>You must not reproduce, duplicate, or copy material from KachaBazar.</li>",
+  "<li>You must not redistribute content from KachaBazar without permission.</li>",
+  "</ol>",
+  "<h3>Content Liability</h3>",
+  "<p>We are not responsible for content appearing on third-party websites that link to or reference KachaBazar.</p>",
+  "<h3>Reservation of Rights</h3>",
+  "<p>We reserve the right to request removal of links or restrict access if usage violates these terms.</p>",
+  "<h3>Disclaimer</h3>",
+  "<p>To the fullest extent permitted by law, we exclude all representations and warranties relating to this website and its use.</p>",
+].join("");
 
 const getDefaultCustomization = () => ({
   home: {
@@ -276,6 +428,218 @@ const getDefaultCustomization = () => ({
       ],
     },
   },
+  aboutUs: {
+    pageHeader: {
+      enabled: true,
+      backgroundImageDataUrl: "",
+      pageTitle: "About Us",
+    },
+    topContentLeft: {
+      enabled: true,
+      topTitle: "Welcome to our KachaBazar shop",
+      topDescription:
+        "KachaBazar helps shoppers discover fresh groceries, household essentials, and daily deals with a smooth shopping flow.",
+      boxOne: {
+        title: "10K",
+        subtitle: "Listed Products",
+        description: "Carefully curated products across grocery and daily needs.",
+      },
+      boxTwo: {
+        title: "8K",
+        subtitle: "Lovely Customer",
+        description: "Customers trust our fast fulfillment and product quality.",
+      },
+      boxThree: {
+        title: "18K",
+        subtitle: "Orders Delivered",
+        description: "Orders delivered with reliable support and transparent updates.",
+      },
+    },
+    topContentRight: {
+      enabled: true,
+      imageDataUrl: "",
+    },
+    contentSection: {
+      enabled: true,
+      firstParagraph:
+        "Our mission is to make daily shopping simpler, faster, and more affordable for every household.",
+      secondParagraph:
+        "We continue improving operations, product quality, and customer support to provide a dependable shopping experience.",
+      contentImageDataUrl: "",
+    },
+    ourTeam: {
+      enabled: true,
+      title: "Our Team",
+      description:
+        "Meet the people behind our operations, customer support, and product experience.",
+      members: Array.from({ length: ABOUT_US_MEMBER_LENGTH }, (_, index) => ({
+        imageDataUrl: "",
+        title: `Name ${index + 1}`,
+        subTitle: `Role ${index + 1}`,
+      })),
+    },
+  },
+  privacyPolicy: {
+    enabled: true,
+    pageHeaderBackgroundDataUrl: "",
+    pageTitle: "Privacy Policy",
+    pageTextHtml: DEFAULT_PRIVACY_POLICY_HTML,
+  },
+  termsAndConditions: {
+    enabled: true,
+    pageHeaderBackgroundDataUrl: "",
+    pageTitle: "Terms & Conditions",
+    pageTextHtml: DEFAULT_TERMS_AND_CONDITIONS_HTML,
+  },
+  faqs: {
+    pageHeader: {
+      enabled: true,
+      backgroundImageDataUrl: "",
+      pageTitle: "FAQs",
+    },
+    leftColumn: {
+      enabled: true,
+      leftImageDataUrl: "",
+    },
+    content: {
+      enabled: true,
+      items: DEFAULT_FAQS_ITEMS,
+    },
+  },
+  offers: {
+    pageHeader: {
+      enabled: true,
+      backgroundImageDataUrl: "",
+      pageTitle: "Mega Offer",
+    },
+    superDiscount: {
+      enabled: true,
+      activeCouponCode: "ALL",
+    },
+  },
+  contactUs: {
+    pageHeader: {
+      enabled: true,
+      backgroundImageDataUrl: "",
+      pageTitle: "Contact Us",
+    },
+    emailBox: {
+      enabled: true,
+      title: "Email Us",
+      email: "info@kachabazar.com",
+      text: "Interactively grow empowered for process-centric total linkage.",
+    },
+    callBox: {
+      enabled: true,
+      title: "Call Us",
+      phone: "029-00124667",
+      text: "Distinctively disseminate focused solutions clicks-and-mortar ministerate.",
+    },
+    addressBox: {
+      enabled: true,
+      title: "Location",
+      address: "Boho One, Bridge Street West, Middlesbrough, North Yorkshire, TS2 1AE.",
+    },
+    middleLeftColumn: {
+      enabled: true,
+      imageDataUrl: "",
+    },
+    contactForm: {
+      enabled: true,
+      title: "For any support just send your query",
+      description:
+        "Collaboratively promote client-focused convergence vis-a-vis customer-directed alignments via plagiarized strategic users and standardized infrastructures.",
+    },
+  },
+  checkout: {
+    personalDetails: {
+      sectionTitle: "Personal Details",
+      firstNameLabel: "First Name",
+      lastNameLabel: "Last Name",
+      emailLabel: "Email Address",
+      phoneLabel: "Phone",
+      firstNamePlaceholder: "First Name",
+      lastNamePlaceholder: "Last Name",
+      emailPlaceholder: "Email Address",
+      phonePlaceholder: "Phone Number",
+    },
+    shippingDetails: {
+      sectionTitle: "Shipping Details",
+      streetAddressLabel: "Street Address",
+      cityLabel: "City",
+      countryLabel: "Country",
+      zipLabel: "Zip / Postal",
+      streetAddressPlaceholder: "Street Address",
+      cityPlaceholder: "City",
+      countryPlaceholder: "Country",
+      zipPlaceholder: "Zip Code",
+      shippingCostLabel: "Shipping Cost",
+      shippingOneNameLabel: "Shipping One Name",
+      shippingOneNameDefault: "FedEx",
+      shippingOneDescriptionLabel: "Shipping One Description",
+      shippingOneDescriptionDefault: "Delivery: Today Cost :",
+      shippingOneCostLabel: "Shipping One Cost",
+      shippingOneCostDefault: "60",
+      shippingTwoNameLabel: "Shipping Two Name",
+      shippingTwoNameDefault: "UPS",
+      shippingTwoDescriptionLabel: "Shipping Two Description",
+      shippingTwoDescriptionDefault: "Delivery: 7 Days Cost :",
+      shippingTwoCostLabel: "Shipping Two Cost",
+      shippingTwoCostDefault: "20",
+      paymentMethodLabel: "Payment Method",
+      paymentMethodPlaceholder: "Payment Method",
+    },
+    buttons: {
+      continueButtonLabel: "Continue Shipping",
+      confirmButtonLabel: "Confirm Order",
+    },
+    cartItemSection: {
+      sectionTitle: "Cart Item Section",
+      orderSummaryLabel: "Order Summary",
+      applyButtonLabel: "Apply",
+      subTotalLabel: "Sub Total",
+      discountLabel: "Discount",
+      totalCostLabel: "Total Cost",
+    },
+  },
+  dashboardSetting: {
+    dashboard: {
+      sectionTitle: "Dashboard",
+      invoiceMessageFirstPartLabel: "Invoice Message First Part",
+      invoiceMessageFirstPartValue: "Thank You",
+      invoiceMessageLastPartLabel: "Invoice Message Last Part",
+      invoiceMessageLastPartValue: "Your order have been received !",
+      printButtonLabel: "Print Button",
+      printButtonValue: "Print Invoice",
+      downloadButtonLabel: "Download Button",
+      downloadButtonValue: "Download Invoice",
+      dashboardLabel: "Dashboard",
+      totalOrdersLabel: "Total Orders",
+      pendingOrderLabel: "Pending Order",
+      pendingOrderValue: "Pending Orders",
+      processingOrderLabel: "Processing Order",
+      processingOrderValue: "Processing Order",
+      completeOrderLabel: "Complete Order",
+      completeOrderValue: "Complete Orders",
+      recentOrderLabel: "Recent Order",
+      recentOrderValue: "Recent Orders",
+      myOrderLabel: "My Order",
+      myOrderValue: "My Orders",
+    },
+    updateProfile: {
+      sectionTitleLabel: "Update Profile",
+      sectionTitleValue: "Update Profile",
+      fullNameLabel: "Full Name",
+      addressLabel: "Address",
+      phoneMobileLabel: "Phone/Mobile",
+      emailAddressLabel: "Email Address",
+      updateButtonLabel: "Update Button",
+      updateButtonValue: "Update Profile",
+      currentPasswordLabel: "Current Password",
+      newPasswordLabel: "New Password",
+      changePasswordLabel: "Change Password",
+    },
+  },
   seoSettings: {
     faviconDataUrl: "",
     metaTitle: "",
@@ -386,6 +750,557 @@ const normalizeRightBoxDescriptions = (value, fallback = [], legacySource = {}) 
   });
 };
 
+const normalizeAboutUsMembers = (value, fallback = []) => {
+  const rawItems = Array.isArray(value) ? value : [];
+  return fallback.map((fallbackItem, index) => {
+    const sourceItem =
+      index < rawItems.length && isPlainObject(rawItems[index]) ? rawItems[index] : {};
+    return {
+      ...fallbackItem,
+      ...sourceItem,
+      imageDataUrl: toText(sourceItem.imageDataUrl ?? sourceItem.image ?? "", ""),
+      title: toText(sourceItem.title, fallbackItem.title),
+      subTitle: toText(sourceItem.subTitle ?? sourceItem.subtitle, fallbackItem.subTitle),
+    };
+  });
+};
+
+const normalizePolicyPage = (source, defaults) => {
+  const policySource = isPlainObject(source) ? source : {};
+  return {
+    ...defaults,
+    ...policySource,
+    enabled: toBool(policySource.enabled, defaults.enabled),
+    pageHeaderBackgroundDataUrl: toText(
+      policySource.pageHeaderBackgroundDataUrl ??
+        policySource.backgroundImageDataUrl ??
+        policySource.backgroundImage ??
+        "",
+      ""
+    ),
+    pageTitle: toText(policySource.pageTitle, defaults.pageTitle),
+    pageTextHtml: toText(
+      policySource.pageTextHtml ??
+        policySource.pageText ??
+        policySource.contentHtml ??
+        policySource.content ??
+        "",
+      defaults.pageTextHtml
+    ),
+  };
+};
+
+const normalizeFaqItems = (value, fallback = []) => {
+  const rawItems = Array.isArray(value) ? value : [];
+  return Array.from({ length: FAQS_ITEM_LENGTH }, (_, index) => {
+    const fallbackItem = fallback[index] || { title: "", description: "" };
+    const sourceItem =
+      index < rawItems.length && isPlainObject(rawItems[index]) ? rawItems[index] : {};
+    return {
+      ...fallbackItem,
+      ...sourceItem,
+      title: toText(sourceItem.title ?? sourceItem.question, fallbackItem.title),
+      description: toText(
+        sourceItem.description ?? sourceItem.answer,
+        fallbackItem.description
+      ),
+    };
+  });
+};
+
+const normalizeFaqs = (source, defaults) => {
+  const faqsSource = isPlainObject(source) ? source : {};
+  const pageHeaderSource = isPlainObject(faqsSource.pageHeader) ? faqsSource.pageHeader : {};
+  const leftColumnSource = isPlainObject(faqsSource.leftColumn) ? faqsSource.leftColumn : {};
+  const contentSource = isPlainObject(faqsSource.content) ? faqsSource.content : {};
+
+  return {
+    ...defaults,
+    ...faqsSource,
+    pageHeader: {
+      ...defaults.pageHeader,
+      ...pageHeaderSource,
+      enabled: toBool(pageHeaderSource.enabled, defaults.pageHeader.enabled),
+      backgroundImageDataUrl: toText(
+        pageHeaderSource.backgroundImageDataUrl ??
+          pageHeaderSource.backgroundImage ??
+          pageHeaderSource.imageDataUrl ??
+          "",
+        ""
+      ),
+      pageTitle: toText(pageHeaderSource.pageTitle, defaults.pageHeader.pageTitle),
+    },
+    leftColumn: {
+      ...defaults.leftColumn,
+      ...leftColumnSource,
+      enabled: toBool(leftColumnSource.enabled, defaults.leftColumn.enabled),
+      leftImageDataUrl: toText(
+        leftColumnSource.leftImageDataUrl ??
+          leftColumnSource.imageDataUrl ??
+          leftColumnSource.leftImage ??
+          leftColumnSource.image ??
+          "",
+        ""
+      ),
+    },
+    content: {
+      ...defaults.content,
+      ...contentSource,
+      enabled: toBool(contentSource.enabled, defaults.content.enabled),
+      items: normalizeFaqItems(contentSource.items, defaults.content.items),
+    },
+  };
+};
+
+const normalizeOffers = (source, defaults) => {
+  const offersSource = isPlainObject(source) ? source : {};
+  const pageHeaderSource = isPlainObject(offersSource.pageHeader)
+    ? offersSource.pageHeader
+    : {};
+  const superDiscountSource = isPlainObject(offersSource.superDiscount)
+    ? offersSource.superDiscount
+    : {};
+
+  return {
+    ...defaults,
+    ...offersSource,
+    pageHeader: {
+      ...defaults.pageHeader,
+      ...pageHeaderSource,
+      enabled: toBool(pageHeaderSource.enabled, defaults.pageHeader.enabled),
+      backgroundImageDataUrl: toText(
+        pageHeaderSource.backgroundImageDataUrl ??
+          pageHeaderSource.backgroundImage ??
+          pageHeaderSource.imageDataUrl ??
+          "",
+        ""
+      ),
+      pageTitle: toText(pageHeaderSource.pageTitle, defaults.pageHeader.pageTitle),
+    },
+    superDiscount: {
+      ...defaults.superDiscount,
+      ...superDiscountSource,
+      enabled: toBool(superDiscountSource.enabled, defaults.superDiscount.enabled),
+      activeCouponCode: toText(
+        superDiscountSource.activeCouponCode ?? superDiscountSource.couponCode ?? "",
+        defaults.superDiscount.activeCouponCode
+      ).toUpperCase(),
+    },
+  };
+};
+
+const normalizeContactUs = (source, defaults) => {
+  const contactSource = isPlainObject(source) ? source : {};
+  const pageHeaderSource = isPlainObject(contactSource.pageHeader)
+    ? contactSource.pageHeader
+    : {};
+  const emailBoxSource = isPlainObject(contactSource.emailBox) ? contactSource.emailBox : {};
+  const callBoxSource = isPlainObject(contactSource.callBox) ? contactSource.callBox : {};
+  const addressBoxSource = isPlainObject(contactSource.addressBox)
+    ? contactSource.addressBox
+    : {};
+  const middleLeftColumnSource = isPlainObject(contactSource.middleLeftColumn)
+    ? contactSource.middleLeftColumn
+    : {};
+  const contactFormSource = isPlainObject(contactSource.contactForm)
+    ? contactSource.contactForm
+    : {};
+
+  return {
+    ...defaults,
+    ...contactSource,
+    pageHeader: {
+      ...defaults.pageHeader,
+      ...pageHeaderSource,
+      enabled: toBool(pageHeaderSource.enabled, defaults.pageHeader.enabled),
+      backgroundImageDataUrl: toText(
+        pageHeaderSource.backgroundImageDataUrl ??
+          pageHeaderSource.backgroundImage ??
+          pageHeaderSource.imageDataUrl ??
+          "",
+        ""
+      ),
+      pageTitle: toText(pageHeaderSource.pageTitle, defaults.pageHeader.pageTitle),
+    },
+    emailBox: {
+      ...defaults.emailBox,
+      ...emailBoxSource,
+      enabled: toBool(emailBoxSource.enabled, defaults.emailBox.enabled),
+      title: toText(emailBoxSource.title, defaults.emailBox.title),
+      email: toText(emailBoxSource.email, defaults.emailBox.email),
+      text: toText(emailBoxSource.text, defaults.emailBox.text),
+    },
+    callBox: {
+      ...defaults.callBox,
+      ...callBoxSource,
+      enabled: toBool(callBoxSource.enabled, defaults.callBox.enabled),
+      title: toText(callBoxSource.title, defaults.callBox.title),
+      phone: toText(callBoxSource.phone, defaults.callBox.phone),
+      text: toText(callBoxSource.text, defaults.callBox.text),
+    },
+    addressBox: {
+      ...defaults.addressBox,
+      ...addressBoxSource,
+      enabled: toBool(addressBoxSource.enabled, defaults.addressBox.enabled),
+      title: toText(addressBoxSource.title, defaults.addressBox.title),
+      address: toText(addressBoxSource.address, defaults.addressBox.address),
+    },
+    middleLeftColumn: {
+      ...defaults.middleLeftColumn,
+      ...middleLeftColumnSource,
+      enabled: toBool(
+        middleLeftColumnSource.enabled,
+        defaults.middleLeftColumn.enabled
+      ),
+      imageDataUrl: toText(
+        middleLeftColumnSource.imageDataUrl ?? middleLeftColumnSource.image ?? "",
+        ""
+      ),
+    },
+    contactForm: {
+      ...defaults.contactForm,
+      ...contactFormSource,
+      enabled: toBool(contactFormSource.enabled, defaults.contactForm.enabled),
+      title: toText(contactFormSource.title, defaults.contactForm.title),
+      description: toText(
+        contactFormSource.description,
+        defaults.contactForm.description
+      ),
+    },
+  };
+};
+
+const normalizeCheckout = (source, defaults) => {
+  const checkoutSource = isPlainObject(source) ? source : {};
+  const personalDetailsSource = isPlainObject(checkoutSource.personalDetails)
+    ? checkoutSource.personalDetails
+    : {};
+  const shippingDetailsSource = isPlainObject(checkoutSource.shippingDetails)
+    ? checkoutSource.shippingDetails
+    : {};
+  const buttonsSource = isPlainObject(checkoutSource.buttons)
+    ? checkoutSource.buttons
+    : {};
+  const cartItemSectionSource = isPlainObject(checkoutSource.cartItemSection)
+    ? checkoutSource.cartItemSection
+    : {};
+
+  return {
+    ...defaults,
+    ...checkoutSource,
+    personalDetails: {
+      ...defaults.personalDetails,
+      ...personalDetailsSource,
+      sectionTitle: toText(
+        personalDetailsSource.sectionTitle,
+        defaults.personalDetails.sectionTitle
+      ),
+      firstNameLabel: toText(
+        personalDetailsSource.firstNameLabel,
+        defaults.personalDetails.firstNameLabel
+      ),
+      lastNameLabel: toText(
+        personalDetailsSource.lastNameLabel,
+        defaults.personalDetails.lastNameLabel
+      ),
+      emailLabel: toText(
+        personalDetailsSource.emailLabel,
+        defaults.personalDetails.emailLabel
+      ),
+      phoneLabel: toText(
+        personalDetailsSource.phoneLabel,
+        defaults.personalDetails.phoneLabel
+      ),
+      firstNamePlaceholder: toText(
+        personalDetailsSource.firstNamePlaceholder,
+        defaults.personalDetails.firstNamePlaceholder
+      ),
+      lastNamePlaceholder: toText(
+        personalDetailsSource.lastNamePlaceholder,
+        defaults.personalDetails.lastNamePlaceholder
+      ),
+      emailPlaceholder: toText(
+        personalDetailsSource.emailPlaceholder,
+        defaults.personalDetails.emailPlaceholder
+      ),
+      phonePlaceholder: toText(
+        personalDetailsSource.phonePlaceholder,
+        defaults.personalDetails.phonePlaceholder
+      ),
+    },
+    shippingDetails: {
+      ...defaults.shippingDetails,
+      ...shippingDetailsSource,
+      sectionTitle: toText(
+        shippingDetailsSource.sectionTitle,
+        defaults.shippingDetails.sectionTitle
+      ),
+      streetAddressLabel: toText(
+        shippingDetailsSource.streetAddressLabel,
+        defaults.shippingDetails.streetAddressLabel
+      ),
+      cityLabel: toText(shippingDetailsSource.cityLabel, defaults.shippingDetails.cityLabel),
+      countryLabel: toText(
+        shippingDetailsSource.countryLabel,
+        defaults.shippingDetails.countryLabel
+      ),
+      zipLabel: toText(shippingDetailsSource.zipLabel, defaults.shippingDetails.zipLabel),
+      streetAddressPlaceholder: toText(
+        shippingDetailsSource.streetAddressPlaceholder,
+        defaults.shippingDetails.streetAddressPlaceholder
+      ),
+      cityPlaceholder: toText(
+        shippingDetailsSource.cityPlaceholder,
+        defaults.shippingDetails.cityPlaceholder
+      ),
+      countryPlaceholder: toText(
+        shippingDetailsSource.countryPlaceholder,
+        defaults.shippingDetails.countryPlaceholder
+      ),
+      zipPlaceholder: toText(
+        shippingDetailsSource.zipPlaceholder,
+        defaults.shippingDetails.zipPlaceholder
+      ),
+      shippingCostLabel: toText(
+        shippingDetailsSource.shippingCostLabel,
+        defaults.shippingDetails.shippingCostLabel
+      ),
+      shippingOneNameLabel: toText(
+        shippingDetailsSource.shippingOneNameLabel,
+        defaults.shippingDetails.shippingOneNameLabel
+      ),
+      shippingOneNameDefault: toText(
+        shippingDetailsSource.shippingOneNameDefault,
+        defaults.shippingDetails.shippingOneNameDefault
+      ),
+      shippingOneDescriptionLabel: toText(
+        shippingDetailsSource.shippingOneDescriptionLabel,
+        defaults.shippingDetails.shippingOneDescriptionLabel
+      ),
+      shippingOneDescriptionDefault: toText(
+        shippingDetailsSource.shippingOneDescriptionDefault,
+        defaults.shippingDetails.shippingOneDescriptionDefault
+      ),
+      shippingOneCostLabel: toText(
+        shippingDetailsSource.shippingOneCostLabel,
+        defaults.shippingDetails.shippingOneCostLabel
+      ),
+      shippingOneCostDefault: toText(
+        shippingDetailsSource.shippingOneCostDefault,
+        defaults.shippingDetails.shippingOneCostDefault
+      ),
+      shippingTwoNameLabel: toText(
+        shippingDetailsSource.shippingTwoNameLabel,
+        defaults.shippingDetails.shippingTwoNameLabel
+      ),
+      shippingTwoNameDefault: toText(
+        shippingDetailsSource.shippingTwoNameDefault,
+        defaults.shippingDetails.shippingTwoNameDefault
+      ),
+      shippingTwoDescriptionLabel: toText(
+        shippingDetailsSource.shippingTwoDescriptionLabel,
+        defaults.shippingDetails.shippingTwoDescriptionLabel
+      ),
+      shippingTwoDescriptionDefault: toText(
+        shippingDetailsSource.shippingTwoDescriptionDefault,
+        defaults.shippingDetails.shippingTwoDescriptionDefault
+      ),
+      shippingTwoCostLabel: toText(
+        shippingDetailsSource.shippingTwoCostLabel,
+        defaults.shippingDetails.shippingTwoCostLabel
+      ),
+      shippingTwoCostDefault: toText(
+        shippingDetailsSource.shippingTwoCostDefault,
+        defaults.shippingDetails.shippingTwoCostDefault
+      ),
+      paymentMethodLabel: toText(
+        shippingDetailsSource.paymentMethodLabel,
+        defaults.shippingDetails.paymentMethodLabel
+      ),
+      paymentMethodPlaceholder: toText(
+        shippingDetailsSource.paymentMethodPlaceholder,
+        defaults.shippingDetails.paymentMethodPlaceholder
+      ),
+    },
+    buttons: {
+      ...defaults.buttons,
+      ...buttonsSource,
+      continueButtonLabel: toText(
+        buttonsSource.continueButtonLabel,
+        defaults.buttons.continueButtonLabel
+      ),
+      confirmButtonLabel: toText(
+        buttonsSource.confirmButtonLabel,
+        defaults.buttons.confirmButtonLabel
+      ),
+    },
+    cartItemSection: {
+      ...defaults.cartItemSection,
+      ...cartItemSectionSource,
+      sectionTitle: toText(
+        cartItemSectionSource.sectionTitle,
+        defaults.cartItemSection.sectionTitle
+      ),
+      orderSummaryLabel: toText(
+        cartItemSectionSource.orderSummaryLabel,
+        defaults.cartItemSection.orderSummaryLabel
+      ),
+      applyButtonLabel: toText(
+        cartItemSectionSource.applyButtonLabel,
+        defaults.cartItemSection.applyButtonLabel
+      ),
+      subTotalLabel: toText(
+        cartItemSectionSource.subTotalLabel,
+        defaults.cartItemSection.subTotalLabel
+      ),
+      discountLabel: toText(
+        cartItemSectionSource.discountLabel,
+        defaults.cartItemSection.discountLabel
+      ),
+      totalCostLabel: toText(
+        cartItemSectionSource.totalCostLabel,
+        defaults.cartItemSection.totalCostLabel
+      ),
+    },
+  };
+};
+
+const normalizeDashboardSetting = (source, defaults) => {
+  const dashboardSettingSource = isPlainObject(source) ? source : {};
+  const dashboardSource = isPlainObject(dashboardSettingSource.dashboard)
+    ? dashboardSettingSource.dashboard
+    : {};
+  const updateProfileSource = isPlainObject(dashboardSettingSource.updateProfile)
+    ? dashboardSettingSource.updateProfile
+    : {};
+
+  return {
+    ...defaults,
+    ...dashboardSettingSource,
+    dashboard: {
+      ...defaults.dashboard,
+      ...dashboardSource,
+      sectionTitle: toText(dashboardSource.sectionTitle, defaults.dashboard.sectionTitle),
+      invoiceMessageFirstPartLabel: toText(
+        dashboardSource.invoiceMessageFirstPartLabel,
+        defaults.dashboard.invoiceMessageFirstPartLabel
+      ),
+      invoiceMessageFirstPartValue: toText(
+        dashboardSource.invoiceMessageFirstPartValue,
+        defaults.dashboard.invoiceMessageFirstPartValue
+      ),
+      invoiceMessageLastPartLabel: toText(
+        dashboardSource.invoiceMessageLastPartLabel,
+        defaults.dashboard.invoiceMessageLastPartLabel
+      ),
+      invoiceMessageLastPartValue: toText(
+        dashboardSource.invoiceMessageLastPartValue,
+        defaults.dashboard.invoiceMessageLastPartValue
+      ),
+      printButtonLabel: toText(
+        dashboardSource.printButtonLabel,
+        defaults.dashboard.printButtonLabel
+      ),
+      printButtonValue: toText(
+        dashboardSource.printButtonValue,
+        defaults.dashboard.printButtonValue
+      ),
+      downloadButtonLabel: toText(
+        dashboardSource.downloadButtonLabel,
+        defaults.dashboard.downloadButtonLabel
+      ),
+      downloadButtonValue: toText(
+        dashboardSource.downloadButtonValue,
+        defaults.dashboard.downloadButtonValue
+      ),
+      dashboardLabel: toText(dashboardSource.dashboardLabel, defaults.dashboard.dashboardLabel),
+      totalOrdersLabel: toText(
+        dashboardSource.totalOrdersLabel,
+        defaults.dashboard.totalOrdersLabel
+      ),
+      pendingOrderLabel: toText(
+        dashboardSource.pendingOrderLabel,
+        defaults.dashboard.pendingOrderLabel
+      ),
+      pendingOrderValue: toText(
+        dashboardSource.pendingOrderValue,
+        defaults.dashboard.pendingOrderValue
+      ),
+      processingOrderLabel: toText(
+        dashboardSource.processingOrderLabel,
+        defaults.dashboard.processingOrderLabel
+      ),
+      processingOrderValue: toText(
+        dashboardSource.processingOrderValue,
+        defaults.dashboard.processingOrderValue
+      ),
+      completeOrderLabel: toText(
+        dashboardSource.completeOrderLabel,
+        defaults.dashboard.completeOrderLabel
+      ),
+      completeOrderValue: toText(
+        dashboardSource.completeOrderValue,
+        defaults.dashboard.completeOrderValue
+      ),
+      recentOrderLabel: toText(
+        dashboardSource.recentOrderLabel,
+        defaults.dashboard.recentOrderLabel
+      ),
+      recentOrderValue: toText(
+        dashboardSource.recentOrderValue,
+        defaults.dashboard.recentOrderValue
+      ),
+      myOrderLabel: toText(dashboardSource.myOrderLabel, defaults.dashboard.myOrderLabel),
+      myOrderValue: toText(dashboardSource.myOrderValue, defaults.dashboard.myOrderValue),
+    },
+    updateProfile: {
+      ...defaults.updateProfile,
+      ...updateProfileSource,
+      sectionTitleLabel: toText(
+        updateProfileSource.sectionTitleLabel,
+        defaults.updateProfile.sectionTitleLabel
+      ),
+      sectionTitleValue: toText(
+        updateProfileSource.sectionTitleValue,
+        defaults.updateProfile.sectionTitleValue
+      ),
+      fullNameLabel: toText(
+        updateProfileSource.fullNameLabel,
+        defaults.updateProfile.fullNameLabel
+      ),
+      addressLabel: toText(updateProfileSource.addressLabel, defaults.updateProfile.addressLabel),
+      phoneMobileLabel: toText(
+        updateProfileSource.phoneMobileLabel,
+        defaults.updateProfile.phoneMobileLabel
+      ),
+      emailAddressLabel: toText(
+        updateProfileSource.emailAddressLabel,
+        defaults.updateProfile.emailAddressLabel
+      ),
+      updateButtonLabel: toText(
+        updateProfileSource.updateButtonLabel,
+        defaults.updateProfile.updateButtonLabel
+      ),
+      updateButtonValue: toText(
+        updateProfileSource.updateButtonValue,
+        defaults.updateProfile.updateButtonValue
+      ),
+      currentPasswordLabel: toText(
+        updateProfileSource.currentPasswordLabel,
+        defaults.updateProfile.currentPasswordLabel
+      ),
+      newPasswordLabel: toText(
+        updateProfileSource.newPasswordLabel,
+        defaults.updateProfile.newPasswordLabel
+      ),
+      changePasswordLabel: toText(
+        updateProfileSource.changePasswordLabel,
+        defaults.updateProfile.changePasswordLabel
+      ),
+    },
+  };
+};
+
 const normalizeCustomizationPayload = (raw) => {
   const defaults = getDefaultCustomization();
   const source = isPlainObject(raw) ? raw : {};
@@ -461,6 +1376,46 @@ const normalizeCustomizationPayload = (raw) => {
     : {};
   const productSlugRightBoxSource = isPlainObject(productSlugPageSource.rightBox)
     ? productSlugPageSource.rightBox
+    : {};
+  const aboutUsSource = isPlainObject(source.aboutUs) ? source.aboutUs : {};
+  const aboutUsPageHeaderSource = isPlainObject(aboutUsSource.pageHeader)
+    ? aboutUsSource.pageHeader
+    : {};
+  const aboutUsTopContentLeftSource = isPlainObject(aboutUsSource.topContentLeft)
+    ? aboutUsSource.topContentLeft
+    : {};
+  const aboutUsTopContentRightSource = isPlainObject(aboutUsSource.topContentRight)
+    ? aboutUsSource.topContentRight
+    : {};
+  const aboutUsContentSectionSource = isPlainObject(aboutUsSource.contentSection)
+    ? aboutUsSource.contentSection
+    : {};
+  const aboutUsOurTeamSource = isPlainObject(aboutUsSource.ourTeam)
+    ? aboutUsSource.ourTeam
+    : {};
+  const aboutUsBoxOneSource = isPlainObject(aboutUsTopContentLeftSource.boxOne)
+    ? aboutUsTopContentLeftSource.boxOne
+    : {};
+  const aboutUsBoxTwoSource = isPlainObject(aboutUsTopContentLeftSource.boxTwo)
+    ? aboutUsTopContentLeftSource.boxTwo
+    : {};
+  const aboutUsBoxThreeSource = isPlainObject(aboutUsTopContentLeftSource.boxThree)
+    ? aboutUsTopContentLeftSource.boxThree
+    : {};
+  const privacyPolicySource = isPlainObject(source.privacyPolicy) ? source.privacyPolicy : {};
+  const termsAndConditionsSource = isPlainObject(source.termsAndConditions)
+    ? source.termsAndConditions
+    : {};
+  const faqsSource = isPlainObject(source.faqs)
+    ? source.faqs
+    : isPlainObject(source.faqPage)
+      ? source.faqPage
+      : {};
+  const offersSource = isPlainObject(source.offers) ? source.offers : {};
+  const contactUsSource = isPlainObject(source.contactUs) ? source.contactUs : {};
+  const checkoutSource = isPlainObject(source.checkout) ? source.checkout : {};
+  const dashboardSettingSource = isPlainObject(source.dashboardSetting)
+    ? source.dashboardSetting
     : {};
   const seoSettingsSource = isPlainObject(source.seoSettings)
     ? source.seoSettings
@@ -554,6 +1509,14 @@ const normalizeCustomizationPayload = (raw) => {
 
   const defaultsHome = defaults.home;
   const defaultsProductSlugPage = defaults.productSlugPage;
+  const defaultsAboutUs = defaults.aboutUs;
+  const defaultsPrivacyPolicy = defaults.privacyPolicy;
+  const defaultsTermsAndConditions = defaults.termsAndConditions;
+  const defaultsFaqs = defaults.faqs;
+  const defaultsOffers = defaults.offers;
+  const defaultsContactUs = defaults.contactUs;
+  const defaultsCheckout = defaults.checkout;
+  const defaultsDashboardSetting = defaults.dashboardSetting;
   const defaultsSeoSettings = defaults.seoSettings;
   return {
     ...merged,
@@ -888,6 +1851,141 @@ const normalizeCustomizationPayload = (raw) => {
         ),
       },
     },
+    aboutUs: {
+      ...defaultsAboutUs,
+      ...aboutUsSource,
+      pageHeader: {
+        ...defaultsAboutUs.pageHeader,
+        ...aboutUsPageHeaderSource,
+        enabled: toBool(aboutUsPageHeaderSource.enabled, defaultsAboutUs.pageHeader.enabled),
+        backgroundImageDataUrl: toText(
+          aboutUsPageHeaderSource.backgroundImageDataUrl ??
+            aboutUsPageHeaderSource.backgroundImage ??
+            "",
+          ""
+        ),
+        pageTitle: toText(aboutUsPageHeaderSource.pageTitle, defaultsAboutUs.pageHeader.pageTitle),
+      },
+      topContentLeft: {
+        ...defaultsAboutUs.topContentLeft,
+        ...aboutUsTopContentLeftSource,
+        enabled: toBool(
+          aboutUsTopContentLeftSource.enabled,
+          defaultsAboutUs.topContentLeft.enabled
+        ),
+        topTitle: toText(
+          aboutUsTopContentLeftSource.topTitle,
+          defaultsAboutUs.topContentLeft.topTitle
+        ),
+        topDescription: toText(
+          aboutUsTopContentLeftSource.topDescription,
+          defaultsAboutUs.topContentLeft.topDescription
+        ),
+        boxOne: {
+          ...defaultsAboutUs.topContentLeft.boxOne,
+          ...aboutUsBoxOneSource,
+          title: toText(aboutUsBoxOneSource.title, defaultsAboutUs.topContentLeft.boxOne.title),
+          subtitle: toText(
+            aboutUsBoxOneSource.subtitle,
+            defaultsAboutUs.topContentLeft.boxOne.subtitle
+          ),
+          description: toText(
+            aboutUsBoxOneSource.description,
+            defaultsAboutUs.topContentLeft.boxOne.description
+          ),
+        },
+        boxTwo: {
+          ...defaultsAboutUs.topContentLeft.boxTwo,
+          ...aboutUsBoxTwoSource,
+          title: toText(aboutUsBoxTwoSource.title, defaultsAboutUs.topContentLeft.boxTwo.title),
+          subtitle: toText(
+            aboutUsBoxTwoSource.subtitle,
+            defaultsAboutUs.topContentLeft.boxTwo.subtitle
+          ),
+          description: toText(
+            aboutUsBoxTwoSource.description,
+            defaultsAboutUs.topContentLeft.boxTwo.description
+          ),
+        },
+        boxThree: {
+          ...defaultsAboutUs.topContentLeft.boxThree,
+          ...aboutUsBoxThreeSource,
+          title: toText(
+            aboutUsBoxThreeSource.title,
+            defaultsAboutUs.topContentLeft.boxThree.title
+          ),
+          subtitle: toText(
+            aboutUsBoxThreeSource.subtitle,
+            defaultsAboutUs.topContentLeft.boxThree.subtitle
+          ),
+          description: toText(
+            aboutUsBoxThreeSource.description,
+            defaultsAboutUs.topContentLeft.boxThree.description
+          ),
+        },
+      },
+      topContentRight: {
+        ...defaultsAboutUs.topContentRight,
+        ...aboutUsTopContentRightSource,
+        enabled: toBool(
+          aboutUsTopContentRightSource.enabled,
+          defaultsAboutUs.topContentRight.enabled
+        ),
+        imageDataUrl: toText(
+          aboutUsTopContentRightSource.imageDataUrl ?? aboutUsTopContentRightSource.image ?? "",
+          ""
+        ),
+      },
+      contentSection: {
+        ...defaultsAboutUs.contentSection,
+        ...aboutUsContentSectionSource,
+        enabled: toBool(
+          aboutUsContentSectionSource.enabled,
+          defaultsAboutUs.contentSection.enabled
+        ),
+        firstParagraph: toText(
+          aboutUsContentSectionSource.firstParagraph,
+          defaultsAboutUs.contentSection.firstParagraph
+        ),
+        secondParagraph: toText(
+          aboutUsContentSectionSource.secondParagraph,
+          defaultsAboutUs.contentSection.secondParagraph
+        ),
+        contentImageDataUrl: toText(
+          aboutUsContentSectionSource.contentImageDataUrl ??
+            aboutUsContentSectionSource.imageDataUrl ??
+            "",
+          ""
+        ),
+      },
+      ourTeam: {
+        ...defaultsAboutUs.ourTeam,
+        ...aboutUsOurTeamSource,
+        enabled: toBool(aboutUsOurTeamSource.enabled, defaultsAboutUs.ourTeam.enabled),
+        title: toText(aboutUsOurTeamSource.title, defaultsAboutUs.ourTeam.title),
+        description: toText(
+          aboutUsOurTeamSource.description,
+          defaultsAboutUs.ourTeam.description
+        ),
+        members: normalizeAboutUsMembers(
+          aboutUsOurTeamSource.members,
+          defaultsAboutUs.ourTeam.members
+        ),
+      },
+    },
+    privacyPolicy: normalizePolicyPage(privacyPolicySource, defaultsPrivacyPolicy),
+    termsAndConditions: normalizePolicyPage(
+      termsAndConditionsSource,
+      defaultsTermsAndConditions
+    ),
+    faqs: normalizeFaqs(faqsSource, defaultsFaqs),
+    offers: normalizeOffers(offersSource, defaultsOffers),
+    contactUs: normalizeContactUs(contactUsSource, defaultsContactUs),
+    checkout: normalizeCheckout(checkoutSource, defaultsCheckout),
+    dashboardSetting: normalizeDashboardSetting(
+      dashboardSettingSource,
+      defaultsDashboardSetting
+    ),
     seoSettings: {
       ...defaultsSeoSettings,
       ...seoSettingsSource,
@@ -963,6 +2061,238 @@ function SegmentedToggle({ value, onChange }) {
   );
 }
 
+function RichTextEditor({ id, label, value, onChange }) {
+  const editorRef = useRef(null);
+  const [linkInput, setLinkInput] = useState("");
+  const [imageInput, setImageInput] = useState("");
+
+  useEffect(() => {
+    if (!editorRef.current) return;
+    const nextValue = String(value || "");
+    if (editorRef.current.innerHTML !== nextValue) {
+      editorRef.current.innerHTML = nextValue || "<p></p>";
+    }
+  }, [value]);
+
+  const emitChange = () => {
+    onChange(editorRef.current?.innerHTML || "");
+  };
+
+  const applyCommand = (command, commandValue) => {
+    editorRef.current?.focus();
+    document.execCommand(command, false, commandValue);
+    emitChange();
+  };
+
+  return (
+    <div className="space-y-2">
+      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {label}
+      </span>
+      <div className="rounded-xl border border-slate-200 bg-white">
+        <div className="flex flex-wrap gap-2 border-b border-slate-200 bg-slate-50 p-2">
+          <button
+            type="button"
+            onClick={() => applyCommand("bold")}
+            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            Bold
+          </button>
+          <button
+            type="button"
+            onClick={() => applyCommand("italic")}
+            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            Italic
+          </button>
+          <button
+            type="button"
+            onClick={() => applyCommand("underline")}
+            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            Underline
+          </button>
+          <button
+            type="button"
+            onClick={() => applyCommand("formatBlock", "<h2>")}
+            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            H2
+          </button>
+          <button
+            type="button"
+            onClick={() => applyCommand("formatBlock", "<h3>")}
+            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            H3
+          </button>
+          <button
+            type="button"
+            onClick={() => applyCommand("insertUnorderedList")}
+            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            Bullet
+          </button>
+          <button
+            type="button"
+            onClick={() => applyCommand("insertOrderedList")}
+            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            Number
+          </button>
+          <button
+            type="button"
+            onClick={() => applyCommand("fontSize", "3")}
+            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            A
+          </button>
+          <button
+            type="button"
+            onClick={() => applyCommand("fontSize", "5")}
+            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            A+
+          </button>
+          <button
+            type="button"
+            onClick={() => applyCommand("undo")}
+            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            Undo
+          </button>
+          <button
+            type="button"
+            onClick={() => applyCommand("redo")}
+            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            Redo
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-2 border-b border-slate-200 bg-white p-2 lg:grid-cols-[1fr_auto]">
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={linkInput}
+              onChange={(event) => setLinkInput(event.target.value)}
+              placeholder="https://example.com"
+              className="h-9 w-full rounded-lg border border-slate-200 px-3 text-xs text-slate-700 focus:border-emerald-500 focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                if (!linkInput.trim()) return;
+                applyCommand("createLink", linkInput.trim());
+                setLinkInput("");
+              }}
+              className="h-9 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              Link
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={imageInput}
+              onChange={(event) => setImageInput(event.target.value)}
+              placeholder="Image URL or Data URL"
+              className="h-9 w-full rounded-lg border border-slate-200 px-3 text-xs text-slate-700 focus:border-emerald-500 focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                if (!imageInput.trim()) return;
+                applyCommand("insertImage", imageInput.trim());
+                setImageInput("");
+              }}
+              className="h-9 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              Image
+            </button>
+          </div>
+        </div>
+
+        <div
+          id={id}
+          ref={editorRef}
+          contentEditable
+          suppressContentEditableWarning
+          onInput={emitChange}
+          className="min-h-[220px] w-full px-4 py-3 text-sm text-slate-700 focus:outline-none"
+        />
+      </div>
+    </div>
+  );
+}
+
+function ImageUploadField({
+  id,
+  label,
+  error,
+  dropActive,
+  onDropActiveChange,
+  onInputChange,
+  onDrop,
+  previewDataUrl,
+  onRemove,
+  previewAlt,
+  previewClassName = "h-20 w-24",
+}) {
+  return (
+    <div className="space-y-2">
+      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {label}
+      </span>
+      <input
+        id={id}
+        type="file"
+        accept=".png,.jpeg,.jpg,.webp"
+        onChange={onInputChange}
+        className="hidden"
+      />
+      <label
+        htmlFor={id}
+        onDragOver={(event) => {
+          event.preventDefault();
+          onDropActiveChange(true);
+        }}
+        onDragLeave={() => onDropActiveChange(false)}
+        onDrop={onDrop}
+        className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-6 text-center transition ${
+          dropActive
+            ? "border-emerald-400 bg-emerald-50"
+            : "border-slate-300 bg-white hover:border-slate-400"
+        }`}
+      >
+        <Upload className="h-5 w-5 text-slate-500" />
+        <p className="mt-2 text-sm font-medium text-slate-700">Drag your images here</p>
+        <p className="mt-1 text-xs text-slate-500">
+          (Only *.jpeg, *.webp and *.png images will be accepted)
+        </p>
+      </label>
+      {error ? <p className="text-xs text-rose-600">{error}</p> : null}
+      {previewDataUrl ? (
+        <div className="relative inline-flex rounded-xl border border-slate-200 bg-white p-2">
+          <img
+            src={previewDataUrl}
+            alt={previewAlt}
+            className={`${previewClassName} rounded-md object-cover`}
+          />
+          <button
+            type="button"
+            onClick={onRemove}
+            className="absolute -right-2 -top-2 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 hover:bg-slate-100"
+            aria-label={`Remove ${label}`}
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function StoreCustomizationPage() {
   const queryClient = useQueryClient();
   const presetRef = useRef(null);
@@ -971,10 +2301,29 @@ export default function StoreCustomizationPage() {
 
   const [activeTab, setActiveTab] = useState("home");
   const [activeMainSliderTab, setActiveMainSliderTab] = useState("slider-0");
+  const [activeAboutUsMemberTab, setActiveAboutUsMemberTab] = useState("member-0");
   const [lang, setLang] = useState(getStoredAdminLanguageIso);
   const [homeState, setHomeState] = useState(() => getDefaultCustomization().home);
   const [productSlugPageState, setProductSlugPageState] = useState(
     () => getDefaultCustomization().productSlugPage
+  );
+  const [aboutUsState, setAboutUsState] = useState(() => getDefaultCustomization().aboutUs);
+  const [privacyPolicyState, setPrivacyPolicyState] = useState(
+    () => getDefaultCustomization().privacyPolicy
+  );
+  const [termsAndConditionsState, setTermsAndConditionsState] = useState(
+    () => getDefaultCustomization().termsAndConditions
+  );
+  const [faqsState, setFaqsState] = useState(() => getDefaultCustomization().faqs);
+  const [offersState, setOffersState] = useState(() => getDefaultCustomization().offers);
+  const [contactUsState, setContactUsState] = useState(
+    () => getDefaultCustomization().contactUs
+  );
+  const [checkoutState, setCheckoutState] = useState(
+    () => getDefaultCustomization().checkout
+  );
+  const [dashboardSettingState, setDashboardSettingState] = useState(
+    () => getDefaultCustomization().dashboardSetting
   );
   const [seoSettingsState, setSeoSettingsState] = useState(
     () => getDefaultCustomization().seoSettings
@@ -1015,6 +2364,16 @@ export default function StoreCustomizationPage() {
     faviconDataUrl: false,
     metaImageDataUrl: false,
   });
+  const [aboutUsImageErrors, setAboutUsImageErrors] = useState({});
+  const [aboutUsDropActive, setAboutUsDropActive] = useState({});
+  const [policyImageErrors, setPolicyImageErrors] = useState({});
+  const [policyDropActive, setPolicyDropActive] = useState({});
+  const [faqsImageErrors, setFaqsImageErrors] = useState({});
+  const [faqsDropActive, setFaqsDropActive] = useState({});
+  const [offersImageErrors, setOffersImageErrors] = useState({});
+  const [offersDropActive, setOffersDropActive] = useState({});
+  const [contactUsImageErrors, setContactUsImageErrors] = useState({});
+  const [contactUsDropActive, setContactUsDropActive] = useState({});
 
   const [isAddLanguageOpen, setIsAddLanguageOpen] = useState(false);
   const [presetOpen, setPresetOpen] = useState(false);
@@ -1057,12 +2416,27 @@ export default function StoreCustomizationPage() {
     queryFn: () => fetchAdminStoreCustomization(lang),
   });
 
+  const offersCouponsQuery = useQuery({
+    queryKey: ["admin-coupons", "offers-select"],
+    enabled: activeTab === "offers",
+    staleTime: 60_000,
+    queryFn: () => fetchAdminCoupons({ page: 1, limit: 100 }),
+  });
+
   useEffect(() => {
     const payload = customizationQuery.data?.customization || customizationQuery.data;
     if (!payload) return;
     const normalized = normalizeCustomizationPayload(payload);
     setHomeState(normalized.home);
     setProductSlugPageState(normalized.productSlugPage);
+    setAboutUsState(normalized.aboutUs);
+    setPrivacyPolicyState(normalized.privacyPolicy);
+    setTermsAndConditionsState(normalized.termsAndConditions);
+    setFaqsState(normalized.faqs);
+    setOffersState(normalized.offers);
+    setContactUsState(normalized.contactUs);
+    setCheckoutState(normalized.checkout);
+    setDashboardSettingState(normalized.dashboardSetting);
     setSeoSettingsState(normalized.seoSettings);
     setLogoError("");
     setMainSliderImageErrors({});
@@ -1098,6 +2472,17 @@ export default function StoreCustomizationPage() {
       faviconDataUrl: false,
       metaImageDataUrl: false,
     });
+    setAboutUsImageErrors({});
+    setAboutUsDropActive({});
+    setPolicyImageErrors({});
+    setPolicyDropActive({});
+    setFaqsImageErrors({});
+    setFaqsDropActive({});
+    setOffersImageErrors({});
+    setOffersDropActive({});
+    setContactUsImageErrors({});
+    setContactUsDropActive({});
+    setActiveAboutUsMemberTab("member-0");
   }, [customizationQuery.data]);
 
   const updateMutation = useMutation({
@@ -1108,6 +2493,14 @@ export default function StoreCustomizationPage() {
       const normalized = normalizeCustomizationPayload(payload);
       setHomeState(normalized.home);
       setProductSlugPageState(normalized.productSlugPage);
+      setAboutUsState(normalized.aboutUs);
+      setPrivacyPolicyState(normalized.privacyPolicy);
+      setTermsAndConditionsState(normalized.termsAndConditions);
+      setFaqsState(normalized.faqs);
+      setOffersState(normalized.offers);
+      setContactUsState(normalized.contactUs);
+      setCheckoutState(normalized.checkout);
+      setDashboardSettingState(normalized.dashboardSetting);
       setSeoSettingsState(normalized.seoSettings);
       setNotice({ type: "success", message: "Store customization updated." });
       await queryClient.invalidateQueries({
@@ -1375,6 +2768,360 @@ export default function StoreCustomizationPage() {
           descriptions: normalizeRightBoxDescriptions(
             productSlugPageState?.rightBox?.descriptions,
             getDefaultCustomization().productSlugPage.rightBox.descriptions
+          ),
+        },
+      },
+      aboutUs: {
+        ...currentCustomization.aboutUs,
+        pageHeader: {
+          ...currentCustomization.aboutUs?.pageHeader,
+          ...aboutUsState?.pageHeader,
+          enabled: Boolean(aboutUsState?.pageHeader?.enabled),
+          backgroundImageDataUrl: toText(aboutUsState?.pageHeader?.backgroundImageDataUrl),
+          pageTitle: toText(aboutUsState?.pageHeader?.pageTitle),
+        },
+        topContentLeft: {
+          ...currentCustomization.aboutUs?.topContentLeft,
+          ...aboutUsState?.topContentLeft,
+          enabled: Boolean(aboutUsState?.topContentLeft?.enabled),
+          topTitle: toText(aboutUsState?.topContentLeft?.topTitle),
+          topDescription: toText(aboutUsState?.topContentLeft?.topDescription),
+          boxOne: {
+            ...currentCustomization.aboutUs?.topContentLeft?.boxOne,
+            ...aboutUsState?.topContentLeft?.boxOne,
+            title: toText(aboutUsState?.topContentLeft?.boxOne?.title),
+            subtitle: toText(aboutUsState?.topContentLeft?.boxOne?.subtitle),
+            description: toText(aboutUsState?.topContentLeft?.boxOne?.description),
+          },
+          boxTwo: {
+            ...currentCustomization.aboutUs?.topContentLeft?.boxTwo,
+            ...aboutUsState?.topContentLeft?.boxTwo,
+            title: toText(aboutUsState?.topContentLeft?.boxTwo?.title),
+            subtitle: toText(aboutUsState?.topContentLeft?.boxTwo?.subtitle),
+            description: toText(aboutUsState?.topContentLeft?.boxTwo?.description),
+          },
+          boxThree: {
+            ...currentCustomization.aboutUs?.topContentLeft?.boxThree,
+            ...aboutUsState?.topContentLeft?.boxThree,
+            title: toText(aboutUsState?.topContentLeft?.boxThree?.title),
+            subtitle: toText(aboutUsState?.topContentLeft?.boxThree?.subtitle),
+            description: toText(aboutUsState?.topContentLeft?.boxThree?.description),
+          },
+        },
+        topContentRight: {
+          ...currentCustomization.aboutUs?.topContentRight,
+          ...aboutUsState?.topContentRight,
+          enabled: Boolean(aboutUsState?.topContentRight?.enabled),
+          imageDataUrl: toText(aboutUsState?.topContentRight?.imageDataUrl),
+        },
+        contentSection: {
+          ...currentCustomization.aboutUs?.contentSection,
+          ...aboutUsState?.contentSection,
+          enabled: Boolean(aboutUsState?.contentSection?.enabled),
+          firstParagraph: toText(aboutUsState?.contentSection?.firstParagraph),
+          secondParagraph: toText(aboutUsState?.contentSection?.secondParagraph),
+          contentImageDataUrl: toText(aboutUsState?.contentSection?.contentImageDataUrl),
+        },
+        ourTeam: {
+          ...currentCustomization.aboutUs?.ourTeam,
+          ...aboutUsState?.ourTeam,
+          enabled: Boolean(aboutUsState?.ourTeam?.enabled),
+          title: toText(aboutUsState?.ourTeam?.title),
+          description: toText(aboutUsState?.ourTeam?.description),
+          members: normalizeAboutUsMembers(
+            aboutUsState?.ourTeam?.members,
+            getDefaultCustomization().aboutUs.ourTeam.members
+          ).map((member) => ({
+            imageDataUrl: toText(member?.imageDataUrl),
+            title: toText(member?.title),
+            subTitle: toText(member?.subTitle),
+          })),
+        },
+      },
+      privacyPolicy: {
+        ...currentCustomization.privacyPolicy,
+        ...privacyPolicyState,
+        enabled: Boolean(privacyPolicyState?.enabled),
+        pageHeaderBackgroundDataUrl: toText(
+          privacyPolicyState?.pageHeaderBackgroundDataUrl
+        ),
+        pageTitle: toText(privacyPolicyState?.pageTitle),
+        pageTextHtml: toText(
+          privacyPolicyState?.pageTextHtml,
+          getDefaultCustomization().privacyPolicy.pageTextHtml
+        ),
+      },
+      termsAndConditions: {
+        ...currentCustomization.termsAndConditions,
+        ...termsAndConditionsState,
+        enabled: Boolean(termsAndConditionsState?.enabled),
+        pageHeaderBackgroundDataUrl: toText(
+          termsAndConditionsState?.pageHeaderBackgroundDataUrl
+        ),
+        pageTitle: toText(termsAndConditionsState?.pageTitle),
+        pageTextHtml: toText(
+          termsAndConditionsState?.pageTextHtml,
+          getDefaultCustomization().termsAndConditions.pageTextHtml
+        ),
+      },
+      faqs: {
+        ...currentCustomization.faqs,
+        ...faqsState,
+        pageHeader: {
+          ...currentCustomization.faqs?.pageHeader,
+          ...faqsState?.pageHeader,
+          enabled: Boolean(faqsState?.pageHeader?.enabled),
+          backgroundImageDataUrl: toText(
+            faqsState?.pageHeader?.backgroundImageDataUrl
+          ),
+          pageTitle: toText(faqsState?.pageHeader?.pageTitle),
+        },
+        leftColumn: {
+          ...currentCustomization.faqs?.leftColumn,
+          ...faqsState?.leftColumn,
+          enabled: Boolean(faqsState?.leftColumn?.enabled),
+          leftImageDataUrl: toText(faqsState?.leftColumn?.leftImageDataUrl),
+        },
+        content: {
+          ...currentCustomization.faqs?.content,
+          ...faqsState?.content,
+          enabled: Boolean(faqsState?.content?.enabled),
+          items: normalizeFaqItems(
+            faqsState?.content?.items,
+            getDefaultCustomization().faqs.content.items
+          ).map((item) => ({
+            title: toText(item?.title),
+            description: toText(item?.description),
+          })),
+        },
+      },
+      offers: {
+        ...currentCustomization.offers,
+        ...offersState,
+        pageHeader: {
+          ...currentCustomization.offers?.pageHeader,
+          ...offersState?.pageHeader,
+          enabled: Boolean(offersState?.pageHeader?.enabled),
+          backgroundImageDataUrl: toText(
+            offersState?.pageHeader?.backgroundImageDataUrl
+          ),
+          pageTitle: toText(offersState?.pageHeader?.pageTitle),
+        },
+        superDiscount: {
+          ...currentCustomization.offers?.superDiscount,
+          ...offersState?.superDiscount,
+          enabled: Boolean(offersState?.superDiscount?.enabled),
+          activeCouponCode: toText(
+            offersState?.superDiscount?.activeCouponCode,
+            "ALL"
+          ).toUpperCase(),
+        },
+      },
+      contactUs: {
+        ...currentCustomization.contactUs,
+        ...contactUsState,
+        pageHeader: {
+          ...currentCustomization.contactUs?.pageHeader,
+          ...contactUsState?.pageHeader,
+          enabled: Boolean(contactUsState?.pageHeader?.enabled),
+          backgroundImageDataUrl: toText(
+            contactUsState?.pageHeader?.backgroundImageDataUrl
+          ),
+          pageTitle: toText(contactUsState?.pageHeader?.pageTitle),
+        },
+        emailBox: {
+          ...currentCustomization.contactUs?.emailBox,
+          ...contactUsState?.emailBox,
+          enabled: Boolean(contactUsState?.emailBox?.enabled),
+          title: toText(contactUsState?.emailBox?.title),
+          email: toText(contactUsState?.emailBox?.email),
+          text: toText(contactUsState?.emailBox?.text),
+        },
+        callBox: {
+          ...currentCustomization.contactUs?.callBox,
+          ...contactUsState?.callBox,
+          enabled: Boolean(contactUsState?.callBox?.enabled),
+          title: toText(contactUsState?.callBox?.title),
+          phone: toText(contactUsState?.callBox?.phone),
+          text: toText(contactUsState?.callBox?.text),
+        },
+        addressBox: {
+          ...currentCustomization.contactUs?.addressBox,
+          ...contactUsState?.addressBox,
+          enabled: Boolean(contactUsState?.addressBox?.enabled),
+          title: toText(contactUsState?.addressBox?.title),
+          address: toText(contactUsState?.addressBox?.address),
+        },
+        middleLeftColumn: {
+          ...currentCustomization.contactUs?.middleLeftColumn,
+          ...contactUsState?.middleLeftColumn,
+          enabled: Boolean(contactUsState?.middleLeftColumn?.enabled),
+          imageDataUrl: toText(contactUsState?.middleLeftColumn?.imageDataUrl),
+        },
+        contactForm: {
+          ...currentCustomization.contactUs?.contactForm,
+          ...contactUsState?.contactForm,
+          enabled: Boolean(contactUsState?.contactForm?.enabled),
+          title: toText(contactUsState?.contactForm?.title),
+          description: toText(contactUsState?.contactForm?.description),
+        },
+      },
+      checkout: {
+        ...currentCustomization.checkout,
+        ...checkoutState,
+        personalDetails: {
+          ...currentCustomization.checkout?.personalDetails,
+          ...checkoutState?.personalDetails,
+          sectionTitle: toText(checkoutState?.personalDetails?.sectionTitle),
+          firstNameLabel: toText(checkoutState?.personalDetails?.firstNameLabel),
+          lastNameLabel: toText(checkoutState?.personalDetails?.lastNameLabel),
+          emailLabel: toText(checkoutState?.personalDetails?.emailLabel),
+          phoneLabel: toText(checkoutState?.personalDetails?.phoneLabel),
+          firstNamePlaceholder: toText(
+            checkoutState?.personalDetails?.firstNamePlaceholder
+          ),
+          lastNamePlaceholder: toText(checkoutState?.personalDetails?.lastNamePlaceholder),
+          emailPlaceholder: toText(checkoutState?.personalDetails?.emailPlaceholder),
+          phonePlaceholder: toText(checkoutState?.personalDetails?.phonePlaceholder),
+        },
+        shippingDetails: {
+          ...currentCustomization.checkout?.shippingDetails,
+          ...checkoutState?.shippingDetails,
+          sectionTitle: toText(checkoutState?.shippingDetails?.sectionTitle),
+          streetAddressLabel: toText(checkoutState?.shippingDetails?.streetAddressLabel),
+          cityLabel: toText(checkoutState?.shippingDetails?.cityLabel),
+          countryLabel: toText(checkoutState?.shippingDetails?.countryLabel),
+          zipLabel: toText(checkoutState?.shippingDetails?.zipLabel),
+          streetAddressPlaceholder: toText(
+            checkoutState?.shippingDetails?.streetAddressPlaceholder
+          ),
+          cityPlaceholder: toText(checkoutState?.shippingDetails?.cityPlaceholder),
+          countryPlaceholder: toText(checkoutState?.shippingDetails?.countryPlaceholder),
+          zipPlaceholder: toText(checkoutState?.shippingDetails?.zipPlaceholder),
+          shippingCostLabel: toText(checkoutState?.shippingDetails?.shippingCostLabel),
+          shippingOneNameLabel: toText(
+            checkoutState?.shippingDetails?.shippingOneNameLabel
+          ),
+          shippingOneNameDefault: toText(
+            checkoutState?.shippingDetails?.shippingOneNameDefault
+          ),
+          shippingOneDescriptionLabel: toText(
+            checkoutState?.shippingDetails?.shippingOneDescriptionLabel
+          ),
+          shippingOneDescriptionDefault: toText(
+            checkoutState?.shippingDetails?.shippingOneDescriptionDefault
+          ),
+          shippingOneCostLabel: toText(
+            checkoutState?.shippingDetails?.shippingOneCostLabel
+          ),
+          shippingOneCostDefault: toText(
+            checkoutState?.shippingDetails?.shippingOneCostDefault
+          ),
+          shippingTwoNameLabel: toText(
+            checkoutState?.shippingDetails?.shippingTwoNameLabel
+          ),
+          shippingTwoNameDefault: toText(
+            checkoutState?.shippingDetails?.shippingTwoNameDefault
+          ),
+          shippingTwoDescriptionLabel: toText(
+            checkoutState?.shippingDetails?.shippingTwoDescriptionLabel
+          ),
+          shippingTwoDescriptionDefault: toText(
+            checkoutState?.shippingDetails?.shippingTwoDescriptionDefault
+          ),
+          shippingTwoCostLabel: toText(
+            checkoutState?.shippingDetails?.shippingTwoCostLabel
+          ),
+          shippingTwoCostDefault: toText(
+            checkoutState?.shippingDetails?.shippingTwoCostDefault
+          ),
+          paymentMethodLabel: toText(checkoutState?.shippingDetails?.paymentMethodLabel),
+          paymentMethodPlaceholder: toText(
+            checkoutState?.shippingDetails?.paymentMethodPlaceholder
+          ),
+        },
+        buttons: {
+          ...currentCustomization.checkout?.buttons,
+          ...checkoutState?.buttons,
+          continueButtonLabel: toText(checkoutState?.buttons?.continueButtonLabel),
+          confirmButtonLabel: toText(checkoutState?.buttons?.confirmButtonLabel),
+        },
+        cartItemSection: {
+          ...currentCustomization.checkout?.cartItemSection,
+          ...checkoutState?.cartItemSection,
+          sectionTitle: toText(checkoutState?.cartItemSection?.sectionTitle),
+          orderSummaryLabel: toText(checkoutState?.cartItemSection?.orderSummaryLabel),
+          applyButtonLabel: toText(checkoutState?.cartItemSection?.applyButtonLabel),
+          subTotalLabel: toText(checkoutState?.cartItemSection?.subTotalLabel),
+          discountLabel: toText(checkoutState?.cartItemSection?.discountLabel),
+          totalCostLabel: toText(checkoutState?.cartItemSection?.totalCostLabel),
+        },
+      },
+      dashboardSetting: {
+        ...currentCustomization.dashboardSetting,
+        ...dashboardSettingState,
+        dashboard: {
+          ...currentCustomization.dashboardSetting?.dashboard,
+          ...dashboardSettingState?.dashboard,
+          sectionTitle: toText(dashboardSettingState?.dashboard?.sectionTitle),
+          invoiceMessageFirstPartLabel: toText(
+            dashboardSettingState?.dashboard?.invoiceMessageFirstPartLabel
+          ),
+          invoiceMessageFirstPartValue: toText(
+            dashboardSettingState?.dashboard?.invoiceMessageFirstPartValue
+          ),
+          invoiceMessageLastPartLabel: toText(
+            dashboardSettingState?.dashboard?.invoiceMessageLastPartLabel
+          ),
+          invoiceMessageLastPartValue: toText(
+            dashboardSettingState?.dashboard?.invoiceMessageLastPartValue
+          ),
+          printButtonLabel: toText(dashboardSettingState?.dashboard?.printButtonLabel),
+          printButtonValue: toText(dashboardSettingState?.dashboard?.printButtonValue),
+          downloadButtonLabel: toText(dashboardSettingState?.dashboard?.downloadButtonLabel),
+          downloadButtonValue: toText(dashboardSettingState?.dashboard?.downloadButtonValue),
+          dashboardLabel: toText(dashboardSettingState?.dashboard?.dashboardLabel),
+          totalOrdersLabel: toText(dashboardSettingState?.dashboard?.totalOrdersLabel),
+          pendingOrderLabel: toText(dashboardSettingState?.dashboard?.pendingOrderLabel),
+          pendingOrderValue: toText(dashboardSettingState?.dashboard?.pendingOrderValue),
+          processingOrderLabel: toText(
+            dashboardSettingState?.dashboard?.processingOrderLabel
+          ),
+          processingOrderValue: toText(
+            dashboardSettingState?.dashboard?.processingOrderValue
+          ),
+          completeOrderLabel: toText(dashboardSettingState?.dashboard?.completeOrderLabel),
+          completeOrderValue: toText(dashboardSettingState?.dashboard?.completeOrderValue),
+          recentOrderLabel: toText(dashboardSettingState?.dashboard?.recentOrderLabel),
+          recentOrderValue: toText(dashboardSettingState?.dashboard?.recentOrderValue),
+          myOrderLabel: toText(dashboardSettingState?.dashboard?.myOrderLabel),
+          myOrderValue: toText(dashboardSettingState?.dashboard?.myOrderValue),
+        },
+        updateProfile: {
+          ...currentCustomization.dashboardSetting?.updateProfile,
+          ...dashboardSettingState?.updateProfile,
+          sectionTitleLabel: toText(
+            dashboardSettingState?.updateProfile?.sectionTitleLabel
+          ),
+          sectionTitleValue: toText(
+            dashboardSettingState?.updateProfile?.sectionTitleValue
+          ),
+          fullNameLabel: toText(dashboardSettingState?.updateProfile?.fullNameLabel),
+          addressLabel: toText(dashboardSettingState?.updateProfile?.addressLabel),
+          phoneMobileLabel: toText(
+            dashboardSettingState?.updateProfile?.phoneMobileLabel
+          ),
+          emailAddressLabel: toText(
+            dashboardSettingState?.updateProfile?.emailAddressLabel
+          ),
+          updateButtonLabel: toText(dashboardSettingState?.updateProfile?.updateButtonLabel),
+          updateButtonValue: toText(dashboardSettingState?.updateProfile?.updateButtonValue),
+          currentPasswordLabel: toText(
+            dashboardSettingState?.updateProfile?.currentPasswordLabel
+          ),
+          newPasswordLabel: toText(dashboardSettingState?.updateProfile?.newPasswordLabel),
+          changePasswordLabel: toText(
+            dashboardSettingState?.updateProfile?.changePasswordLabel
           ),
         },
       },
@@ -1991,6 +3738,555 @@ export default function StoreCustomizationPage() {
     onChangeSeoField(fieldKey, "");
   };
 
+  const onChangeAboutUsBlockEnabled = (blockKey, value) => {
+    setAboutUsState((prev) => ({
+      ...prev,
+      [blockKey]: {
+        ...prev?.[blockKey],
+        enabled: Boolean(value),
+      },
+    }));
+  };
+
+  const onChangeAboutUsPageHeaderField = (field, value) => {
+    setAboutUsState((prev) => ({
+      ...prev,
+      pageHeader: {
+        ...prev?.pageHeader,
+        [field]: value,
+      },
+    }));
+  };
+
+  const onChangeAboutUsTopContentLeftField = (field, value) => {
+    setAboutUsState((prev) => ({
+      ...prev,
+      topContentLeft: {
+        ...prev?.topContentLeft,
+        [field]: value,
+      },
+    }));
+  };
+
+  const onChangeAboutUsTopContentLeftBoxField = (boxKey, field, value) => {
+    setAboutUsState((prev) => ({
+      ...prev,
+      topContentLeft: {
+        ...prev?.topContentLeft,
+        [boxKey]: {
+          ...prev?.topContentLeft?.[boxKey],
+          [field]: value,
+        },
+      },
+    }));
+  };
+
+  const onChangeAboutUsContentSectionField = (field, value) => {
+    setAboutUsState((prev) => ({
+      ...prev,
+      contentSection: {
+        ...prev?.contentSection,
+        [field]: value,
+      },
+    }));
+  };
+
+  const onChangeAboutUsOurTeamField = (field, value) => {
+    setAboutUsState((prev) => ({
+      ...prev,
+      ourTeam: {
+        ...prev?.ourTeam,
+        [field]: value,
+      },
+    }));
+  };
+
+  const onChangeAboutUsMemberField = (memberIndex, field, value) => {
+    setAboutUsState((prev) => {
+      const fallbackMembers = getDefaultCustomization().aboutUs.ourTeam.members;
+      const members = normalizeAboutUsMembers(prev?.ourTeam?.members, fallbackMembers);
+      const current = members[memberIndex] || fallbackMembers[memberIndex];
+      members[memberIndex] = {
+        ...current,
+        [field]: value,
+      };
+      return {
+        ...prev,
+        ourTeam: {
+          ...prev?.ourTeam,
+          members,
+        },
+      };
+    });
+  };
+
+  const setAboutUsDropActiveField = (fieldKey, value) => {
+    setAboutUsDropActive((prev) => ({
+      ...prev,
+      [fieldKey]: Boolean(value),
+    }));
+  };
+
+  const onChangeAboutUsImageField = (fieldKey, dataUrl) => {
+    if (fieldKey === ABOUT_US_IMAGE_FIELD_KEYS.pageHeaderBackground) {
+      onChangeAboutUsPageHeaderField("backgroundImageDataUrl", dataUrl);
+      return;
+    }
+    if (fieldKey === ABOUT_US_IMAGE_FIELD_KEYS.topContentRightImage) {
+      setAboutUsState((prev) => ({
+        ...prev,
+        topContentRight: {
+          ...prev?.topContentRight,
+          imageDataUrl: dataUrl,
+        },
+      }));
+      return;
+    }
+    if (fieldKey === ABOUT_US_IMAGE_FIELD_KEYS.contentSectionImage) {
+      onChangeAboutUsContentSectionField("contentImageDataUrl", dataUrl);
+      return;
+    }
+    if (String(fieldKey).startsWith("teamMemberImage-")) {
+      const memberIndex = Number(String(fieldKey).replace("teamMemberImage-", ""));
+      if (Number.isInteger(memberIndex) && memberIndex >= 0) {
+        onChangeAboutUsMemberField(memberIndex, "imageDataUrl", dataUrl);
+      }
+    }
+  };
+
+  const onHandleAboutUsImage = async (fieldKey, file) => {
+    if (!file) return;
+    const validation = validateCustomizationLogoFile(file);
+    if (!validation.valid) {
+      setAboutUsImageErrors((prev) => ({
+        ...prev,
+        [fieldKey]: validation.error,
+      }));
+      return;
+    }
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      setAboutUsImageErrors((prev) => ({
+        ...prev,
+        [fieldKey]: "",
+      }));
+      onChangeAboutUsImageField(fieldKey, dataUrl);
+    } catch (error) {
+      setAboutUsImageErrors((prev) => ({
+        ...prev,
+        [fieldKey]: error?.message || "Failed to process image.",
+      }));
+    }
+  };
+
+  const onAboutUsImageInputChange = async (fieldKey, event) => {
+    const file = event.target.files?.[0];
+    await onHandleAboutUsImage(fieldKey, file);
+    event.target.value = "";
+  };
+
+  const onDropAboutUsImage = async (fieldKey, event) => {
+    event.preventDefault();
+    setAboutUsDropActiveField(fieldKey, false);
+    const file = event.dataTransfer?.files?.[0];
+    await onHandleAboutUsImage(fieldKey, file);
+  };
+
+  const onRemoveAboutUsImage = (fieldKey) => {
+    setAboutUsImageErrors((prev) => ({
+      ...prev,
+      [fieldKey]: "",
+    }));
+    onChangeAboutUsImageField(fieldKey, "");
+  };
+
+  const updatePolicyState = (policyKey, updater) => {
+    if (policyKey === "termsAndConditions") {
+      setTermsAndConditionsState((prev) =>
+        updater(prev || getDefaultCustomization().termsAndConditions)
+      );
+      return;
+    }
+    setPrivacyPolicyState((prev) =>
+      updater(prev || getDefaultCustomization().privacyPolicy)
+    );
+  };
+
+  const onChangePolicyEnabled = (policyKey, value) => {
+    updatePolicyState(policyKey, (prev) => ({
+      ...prev,
+      enabled: Boolean(value),
+    }));
+  };
+
+  const onChangePolicyField = (policyKey, field, value) => {
+    updatePolicyState(policyKey, (prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const setPolicyDropActiveField = (fieldKey, value) => {
+    setPolicyDropActive((prev) => ({
+      ...prev,
+      [fieldKey]: Boolean(value),
+    }));
+  };
+
+  const onChangePolicyImageField = (fieldKey, dataUrl) => {
+    const policyKey = POLICY_FIELD_KEY_BY_IMAGE_FIELD[fieldKey];
+    if (!policyKey) return;
+    onChangePolicyField(policyKey, "pageHeaderBackgroundDataUrl", dataUrl);
+  };
+
+  const onHandlePolicyImage = async (fieldKey, file) => {
+    if (!file) return;
+    const validation = validateCustomizationLogoFile(file);
+    if (!validation.valid) {
+      setPolicyImageErrors((prev) => ({
+        ...prev,
+        [fieldKey]: validation.error,
+      }));
+      return;
+    }
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      setPolicyImageErrors((prev) => ({
+        ...prev,
+        [fieldKey]: "",
+      }));
+      onChangePolicyImageField(fieldKey, dataUrl);
+    } catch (error) {
+      setPolicyImageErrors((prev) => ({
+        ...prev,
+        [fieldKey]: error?.message || "Failed to process image.",
+      }));
+    }
+  };
+
+  const onPolicyImageInputChange = async (fieldKey, event) => {
+    const file = event.target.files?.[0];
+    await onHandlePolicyImage(fieldKey, file);
+    event.target.value = "";
+  };
+
+  const onDropPolicyImage = async (fieldKey, event) => {
+    event.preventDefault();
+    setPolicyDropActiveField(fieldKey, false);
+    const file = event.dataTransfer?.files?.[0];
+    await onHandlePolicyImage(fieldKey, file);
+  };
+
+  const onRemovePolicyImage = (fieldKey) => {
+    setPolicyImageErrors((prev) => ({
+      ...prev,
+      [fieldKey]: "",
+    }));
+    onChangePolicyImageField(fieldKey, "");
+  };
+
+  const onChangeFaqsBlockEnabled = (blockKey, value) => {
+    setFaqsState((prev) => ({
+      ...prev,
+      [blockKey]: {
+        ...prev?.[blockKey],
+        enabled: Boolean(value),
+      },
+    }));
+  };
+
+  const onChangeFaqsPageHeaderField = (field, value) => {
+    setFaqsState((prev) => ({
+      ...prev,
+      pageHeader: {
+        ...prev?.pageHeader,
+        [field]: value,
+      },
+    }));
+  };
+
+  const onChangeFaqsLeftColumnField = (field, value) => {
+    setFaqsState((prev) => ({
+      ...prev,
+      leftColumn: {
+        ...prev?.leftColumn,
+        [field]: value,
+      },
+    }));
+  };
+
+  const onChangeFaqsItemField = (index, field, value) => {
+    setFaqsState((prev) => {
+      const defaults = getDefaultCustomization().faqs.content.items;
+      const nextItems = normalizeFaqItems(prev?.content?.items, defaults);
+      nextItems[index] = {
+        ...nextItems[index],
+        [field]: value,
+      };
+      return {
+        ...prev,
+        content: {
+          ...prev?.content,
+          items: normalizeFaqItems(nextItems, defaults),
+        },
+      };
+    });
+  };
+
+  const setFaqsDropActiveField = (fieldKey, value) => {
+    setFaqsDropActive((prev) => ({
+      ...prev,
+      [fieldKey]: Boolean(value),
+    }));
+  };
+
+  const onChangeFaqsImageField = (fieldKey, dataUrl) => {
+    if (fieldKey === FAQS_IMAGE_FIELD_KEYS.pageHeaderBackground) {
+      onChangeFaqsPageHeaderField("backgroundImageDataUrl", dataUrl);
+      return;
+    }
+    if (fieldKey === FAQS_IMAGE_FIELD_KEYS.leftColumnImage) {
+      onChangeFaqsLeftColumnField("leftImageDataUrl", dataUrl);
+    }
+  };
+
+  const onHandleFaqsImage = async (fieldKey, file) => {
+    if (!file) return;
+    const validation = validateCustomizationLogoFile(file);
+    if (!validation.valid) {
+      setFaqsImageErrors((prev) => ({
+        ...prev,
+        [fieldKey]: validation.error,
+      }));
+      return;
+    }
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      setFaqsImageErrors((prev) => ({
+        ...prev,
+        [fieldKey]: "",
+      }));
+      onChangeFaqsImageField(fieldKey, dataUrl);
+    } catch (error) {
+      setFaqsImageErrors((prev) => ({
+        ...prev,
+        [fieldKey]: error?.message || "Failed to process image.",
+      }));
+    }
+  };
+
+  const onFaqsImageInputChange = async (fieldKey, event) => {
+    const file = event.target.files?.[0];
+    await onHandleFaqsImage(fieldKey, file);
+    event.target.value = "";
+  };
+
+  const onDropFaqsImage = async (fieldKey, event) => {
+    event.preventDefault();
+    setFaqsDropActiveField(fieldKey, false);
+    const file = event.dataTransfer?.files?.[0];
+    await onHandleFaqsImage(fieldKey, file);
+  };
+
+  const onRemoveFaqsImage = (fieldKey) => {
+    setFaqsImageErrors((prev) => ({
+      ...prev,
+      [fieldKey]: "",
+    }));
+    onChangeFaqsImageField(fieldKey, "");
+  };
+
+  const onChangeOffersBlockEnabled = (blockKey, value) => {
+    setOffersState((prev) => ({
+      ...prev,
+      [blockKey]: {
+        ...prev?.[blockKey],
+        enabled: Boolean(value),
+      },
+    }));
+  };
+
+  const onChangeOffersPageHeaderField = (field, value) => {
+    setOffersState((prev) => ({
+      ...prev,
+      pageHeader: {
+        ...prev?.pageHeader,
+        [field]: value,
+      },
+    }));
+  };
+
+  const onChangeOffersSuperDiscountField = (field, value) => {
+    setOffersState((prev) => ({
+      ...prev,
+      superDiscount: {
+        ...prev?.superDiscount,
+        [field]: field === "activeCouponCode" ? String(value || "").toUpperCase() : value,
+      },
+    }));
+  };
+
+  const setOffersDropActiveField = (fieldKey, value) => {
+    setOffersDropActive((prev) => ({
+      ...prev,
+      [fieldKey]: Boolean(value),
+    }));
+  };
+
+  const onChangeOffersImageField = (fieldKey, dataUrl) => {
+    if (fieldKey !== OFFERS_IMAGE_FIELD_KEYS.pageHeaderBackground) return;
+    onChangeOffersPageHeaderField("backgroundImageDataUrl", dataUrl);
+  };
+
+  const onHandleOffersImage = async (fieldKey, file) => {
+    if (!file) return;
+    const validation = validateCustomizationLogoFile(file);
+    if (!validation.valid) {
+      setOffersImageErrors((prev) => ({
+        ...prev,
+        [fieldKey]: validation.error,
+      }));
+      return;
+    }
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      setOffersImageErrors((prev) => ({
+        ...prev,
+        [fieldKey]: "",
+      }));
+      onChangeOffersImageField(fieldKey, dataUrl);
+    } catch (error) {
+      setOffersImageErrors((prev) => ({
+        ...prev,
+        [fieldKey]: error?.message || "Failed to process image.",
+      }));
+    }
+  };
+
+  const onOffersImageInputChange = async (fieldKey, event) => {
+    const file = event.target.files?.[0];
+    await onHandleOffersImage(fieldKey, file);
+    event.target.value = "";
+  };
+
+  const onDropOffersImage = async (fieldKey, event) => {
+    event.preventDefault();
+    setOffersDropActiveField(fieldKey, false);
+    const file = event.dataTransfer?.files?.[0];
+    await onHandleOffersImage(fieldKey, file);
+  };
+
+  const onRemoveOffersImage = (fieldKey) => {
+    setOffersImageErrors((prev) => ({
+      ...prev,
+      [fieldKey]: "",
+    }));
+    onChangeOffersImageField(fieldKey, "");
+  };
+
+  const onChangeContactUsSectionEnabled = (sectionKey, value) => {
+    setContactUsState((prev) => ({
+      ...prev,
+      [sectionKey]: {
+        ...prev?.[sectionKey],
+        enabled: Boolean(value),
+      },
+    }));
+  };
+
+  const onChangeContactUsSectionField = (sectionKey, field, value) => {
+    setContactUsState((prev) => ({
+      ...prev,
+      [sectionKey]: {
+        ...prev?.[sectionKey],
+        [field]: value,
+      },
+    }));
+  };
+
+  const setContactUsDropActiveField = (fieldKey, value) => {
+    setContactUsDropActive((prev) => ({
+      ...prev,
+      [fieldKey]: Boolean(value),
+    }));
+  };
+
+  const onChangeContactUsImageField = (fieldKey, dataUrl) => {
+    if (fieldKey === CONTACT_US_IMAGE_FIELD_KEYS.pageHeaderBackground) {
+      onChangeContactUsSectionField("pageHeader", "backgroundImageDataUrl", dataUrl);
+      return;
+    }
+    if (fieldKey === CONTACT_US_IMAGE_FIELD_KEYS.middleLeftColumnImage) {
+      onChangeContactUsSectionField("middleLeftColumn", "imageDataUrl", dataUrl);
+    }
+  };
+
+  const onHandleContactUsImage = async (fieldKey, file) => {
+    if (!file) return;
+    const validation = validateCustomizationLogoFile(file);
+    if (!validation.valid) {
+      setContactUsImageErrors((prev) => ({
+        ...prev,
+        [fieldKey]: validation.error,
+      }));
+      return;
+    }
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      setContactUsImageErrors((prev) => ({
+        ...prev,
+        [fieldKey]: "",
+      }));
+      onChangeContactUsImageField(fieldKey, dataUrl);
+    } catch (error) {
+      setContactUsImageErrors((prev) => ({
+        ...prev,
+        [fieldKey]: error?.message || "Failed to process image.",
+      }));
+    }
+  };
+
+  const onContactUsImageInputChange = async (fieldKey, event) => {
+    const file = event.target.files?.[0];
+    await onHandleContactUsImage(fieldKey, file);
+    event.target.value = "";
+  };
+
+  const onDropContactUsImage = async (fieldKey, event) => {
+    event.preventDefault();
+    setContactUsDropActiveField(fieldKey, false);
+    const file = event.dataTransfer?.files?.[0];
+    await onHandleContactUsImage(fieldKey, file);
+  };
+
+  const onRemoveContactUsImage = (fieldKey) => {
+    setContactUsImageErrors((prev) => ({
+      ...prev,
+      [fieldKey]: "",
+    }));
+    onChangeContactUsImageField(fieldKey, "");
+  };
+
+  const onChangeCheckoutField = (sectionKey, field, value) => {
+    setCheckoutState((prev) => ({
+      ...prev,
+      [sectionKey]: {
+        ...prev?.[sectionKey],
+        [field]: value,
+      },
+    }));
+  };
+
+  const onChangeDashboardSettingField = (sectionKey, field, value) => {
+    setDashboardSettingState((prev) => ({
+      ...prev,
+      [sectionKey]: {
+        ...prev?.[sectionKey],
+        [field]: value,
+      },
+    }));
+  };
+
   const activeMainSliderMeta = MAIN_SLIDER_TABS.find(
     (tab) => tab.key === activeMainSliderTab
   );
@@ -2128,6 +4424,557 @@ export default function StoreCustomizationPage() {
     metaKeywords: toText(seoSettingsState?.metaKeywords, ""),
     metaImageDataUrl: toText(seoSettingsState?.metaImageDataUrl, ""),
   };
+  const aboutUsDefaults = getDefaultCustomization().aboutUs;
+  const aboutUs = {
+    ...aboutUsDefaults,
+    ...(aboutUsState || {}),
+    pageHeader: {
+      ...aboutUsDefaults.pageHeader,
+      ...(aboutUsState?.pageHeader || {}),
+      enabled: Boolean(aboutUsState?.pageHeader?.enabled),
+      backgroundImageDataUrl: toText(aboutUsState?.pageHeader?.backgroundImageDataUrl, ""),
+      pageTitle: toText(aboutUsState?.pageHeader?.pageTitle, ""),
+    },
+    topContentLeft: {
+      ...aboutUsDefaults.topContentLeft,
+      ...(aboutUsState?.topContentLeft || {}),
+      enabled: Boolean(aboutUsState?.topContentLeft?.enabled),
+      topTitle: toText(aboutUsState?.topContentLeft?.topTitle, ""),
+      topDescription: toText(aboutUsState?.topContentLeft?.topDescription, ""),
+      boxOne: {
+        ...aboutUsDefaults.topContentLeft.boxOne,
+        ...(aboutUsState?.topContentLeft?.boxOne || {}),
+      },
+      boxTwo: {
+        ...aboutUsDefaults.topContentLeft.boxTwo,
+        ...(aboutUsState?.topContentLeft?.boxTwo || {}),
+      },
+      boxThree: {
+        ...aboutUsDefaults.topContentLeft.boxThree,
+        ...(aboutUsState?.topContentLeft?.boxThree || {}),
+      },
+    },
+    topContentRight: {
+      ...aboutUsDefaults.topContentRight,
+      ...(aboutUsState?.topContentRight || {}),
+      enabled: Boolean(aboutUsState?.topContentRight?.enabled),
+      imageDataUrl: toText(aboutUsState?.topContentRight?.imageDataUrl, ""),
+    },
+    contentSection: {
+      ...aboutUsDefaults.contentSection,
+      ...(aboutUsState?.contentSection || {}),
+      enabled: Boolean(aboutUsState?.contentSection?.enabled),
+      firstParagraph: toText(aboutUsState?.contentSection?.firstParagraph, ""),
+      secondParagraph: toText(aboutUsState?.contentSection?.secondParagraph, ""),
+      contentImageDataUrl: toText(aboutUsState?.contentSection?.contentImageDataUrl, ""),
+    },
+    ourTeam: {
+      ...aboutUsDefaults.ourTeam,
+      ...(aboutUsState?.ourTeam || {}),
+      enabled: Boolean(aboutUsState?.ourTeam?.enabled),
+      title: toText(aboutUsState?.ourTeam?.title, ""),
+      description: toText(aboutUsState?.ourTeam?.description, ""),
+      members: normalizeAboutUsMembers(
+        aboutUsState?.ourTeam?.members,
+        aboutUsDefaults.ourTeam.members
+      ),
+    },
+  };
+  const privacyPolicyDefaults = getDefaultCustomization().privacyPolicy;
+  const privacyPolicy = {
+    ...privacyPolicyDefaults,
+    ...(privacyPolicyState || {}),
+    enabled: Boolean(privacyPolicyState?.enabled),
+    pageHeaderBackgroundDataUrl: toText(
+      privacyPolicyState?.pageHeaderBackgroundDataUrl,
+      ""
+    ),
+    pageTitle: toText(privacyPolicyState?.pageTitle, privacyPolicyDefaults.pageTitle),
+    pageTextHtml: toText(
+      privacyPolicyState?.pageTextHtml,
+      privacyPolicyDefaults.pageTextHtml
+    ),
+  };
+  const termsAndConditionsDefaults = getDefaultCustomization().termsAndConditions;
+  const termsAndConditions = {
+    ...termsAndConditionsDefaults,
+    ...(termsAndConditionsState || {}),
+    enabled: Boolean(termsAndConditionsState?.enabled),
+    pageHeaderBackgroundDataUrl: toText(
+      termsAndConditionsState?.pageHeaderBackgroundDataUrl,
+      ""
+    ),
+    pageTitle: toText(
+      termsAndConditionsState?.pageTitle,
+      termsAndConditionsDefaults.pageTitle
+    ),
+    pageTextHtml: toText(
+      termsAndConditionsState?.pageTextHtml,
+      termsAndConditionsDefaults.pageTextHtml
+    ),
+  };
+  const faqsDefaults = getDefaultCustomization().faqs;
+  const faqs = {
+    ...faqsDefaults,
+    ...(faqsState || {}),
+    pageHeader: {
+      ...faqsDefaults.pageHeader,
+      ...(faqsState?.pageHeader || {}),
+      enabled: Boolean(faqsState?.pageHeader?.enabled),
+      backgroundImageDataUrl: toText(faqsState?.pageHeader?.backgroundImageDataUrl, ""),
+      pageTitle: toText(faqsState?.pageHeader?.pageTitle, faqsDefaults.pageHeader.pageTitle),
+    },
+    leftColumn: {
+      ...faqsDefaults.leftColumn,
+      ...(faqsState?.leftColumn || {}),
+      enabled: Boolean(faqsState?.leftColumn?.enabled),
+      leftImageDataUrl: toText(faqsState?.leftColumn?.leftImageDataUrl, ""),
+    },
+    content: {
+      ...faqsDefaults.content,
+      ...(faqsState?.content || {}),
+      enabled: Boolean(faqsState?.content?.enabled),
+      items: normalizeFaqItems(faqsState?.content?.items, faqsDefaults.content.items),
+    },
+  };
+  const offersDefaults = getDefaultCustomization().offers;
+  const offers = {
+    ...offersDefaults,
+    ...(offersState || {}),
+    pageHeader: {
+      ...offersDefaults.pageHeader,
+      ...(offersState?.pageHeader || {}),
+      enabled: Boolean(offersState?.pageHeader?.enabled),
+      backgroundImageDataUrl: toText(offersState?.pageHeader?.backgroundImageDataUrl, ""),
+      pageTitle: toText(offersState?.pageHeader?.pageTitle, offersDefaults.pageHeader.pageTitle),
+    },
+    superDiscount: {
+      ...offersDefaults.superDiscount,
+      ...(offersState?.superDiscount || {}),
+      enabled: Boolean(offersState?.superDiscount?.enabled),
+      activeCouponCode: toText(
+        offersState?.superDiscount?.activeCouponCode,
+        offersDefaults.superDiscount.activeCouponCode
+      ).toUpperCase(),
+    },
+  };
+  const contactUsDefaults = getDefaultCustomization().contactUs;
+  const contactUs = {
+    ...contactUsDefaults,
+    ...(contactUsState || {}),
+    pageHeader: {
+      ...contactUsDefaults.pageHeader,
+      ...(contactUsState?.pageHeader || {}),
+      enabled: Boolean(contactUsState?.pageHeader?.enabled),
+      backgroundImageDataUrl: toText(contactUsState?.pageHeader?.backgroundImageDataUrl, ""),
+      pageTitle: toText(
+        contactUsState?.pageHeader?.pageTitle,
+        contactUsDefaults.pageHeader.pageTitle
+      ),
+    },
+    emailBox: {
+      ...contactUsDefaults.emailBox,
+      ...(contactUsState?.emailBox || {}),
+      enabled: Boolean(contactUsState?.emailBox?.enabled),
+      title: toText(contactUsState?.emailBox?.title, contactUsDefaults.emailBox.title),
+      email: toText(contactUsState?.emailBox?.email, contactUsDefaults.emailBox.email),
+      text: toText(contactUsState?.emailBox?.text, contactUsDefaults.emailBox.text),
+    },
+    callBox: {
+      ...contactUsDefaults.callBox,
+      ...(contactUsState?.callBox || {}),
+      enabled: Boolean(contactUsState?.callBox?.enabled),
+      title: toText(contactUsState?.callBox?.title, contactUsDefaults.callBox.title),
+      phone: toText(contactUsState?.callBox?.phone, contactUsDefaults.callBox.phone),
+      text: toText(contactUsState?.callBox?.text, contactUsDefaults.callBox.text),
+    },
+    addressBox: {
+      ...contactUsDefaults.addressBox,
+      ...(contactUsState?.addressBox || {}),
+      enabled: Boolean(contactUsState?.addressBox?.enabled),
+      title: toText(contactUsState?.addressBox?.title, contactUsDefaults.addressBox.title),
+      address: toText(contactUsState?.addressBox?.address, contactUsDefaults.addressBox.address),
+    },
+    middleLeftColumn: {
+      ...contactUsDefaults.middleLeftColumn,
+      ...(contactUsState?.middleLeftColumn || {}),
+      enabled: Boolean(contactUsState?.middleLeftColumn?.enabled),
+      imageDataUrl: toText(contactUsState?.middleLeftColumn?.imageDataUrl, ""),
+    },
+    contactForm: {
+      ...contactUsDefaults.contactForm,
+      ...(contactUsState?.contactForm || {}),
+      enabled: Boolean(contactUsState?.contactForm?.enabled),
+      title: toText(contactUsState?.contactForm?.title, contactUsDefaults.contactForm.title),
+      description: toText(
+        contactUsState?.contactForm?.description,
+        contactUsDefaults.contactForm.description
+      ),
+    },
+  };
+  const checkoutDefaults = getDefaultCustomization().checkout;
+  const checkout = {
+    ...checkoutDefaults,
+    ...(checkoutState || {}),
+    personalDetails: {
+      ...checkoutDefaults.personalDetails,
+      ...(checkoutState?.personalDetails || {}),
+      sectionTitle: toText(
+        checkoutState?.personalDetails?.sectionTitle,
+        checkoutDefaults.personalDetails.sectionTitle
+      ),
+      firstNameLabel: toText(
+        checkoutState?.personalDetails?.firstNameLabel,
+        checkoutDefaults.personalDetails.firstNameLabel
+      ),
+      lastNameLabel: toText(
+        checkoutState?.personalDetails?.lastNameLabel,
+        checkoutDefaults.personalDetails.lastNameLabel
+      ),
+      emailLabel: toText(
+        checkoutState?.personalDetails?.emailLabel,
+        checkoutDefaults.personalDetails.emailLabel
+      ),
+      phoneLabel: toText(
+        checkoutState?.personalDetails?.phoneLabel,
+        checkoutDefaults.personalDetails.phoneLabel
+      ),
+      firstNamePlaceholder: toText(
+        checkoutState?.personalDetails?.firstNamePlaceholder,
+        checkoutDefaults.personalDetails.firstNamePlaceholder
+      ),
+      lastNamePlaceholder: toText(
+        checkoutState?.personalDetails?.lastNamePlaceholder,
+        checkoutDefaults.personalDetails.lastNamePlaceholder
+      ),
+      emailPlaceholder: toText(
+        checkoutState?.personalDetails?.emailPlaceholder,
+        checkoutDefaults.personalDetails.emailPlaceholder
+      ),
+      phonePlaceholder: toText(
+        checkoutState?.personalDetails?.phonePlaceholder,
+        checkoutDefaults.personalDetails.phonePlaceholder
+      ),
+    },
+    shippingDetails: {
+      ...checkoutDefaults.shippingDetails,
+      ...(checkoutState?.shippingDetails || {}),
+      sectionTitle: toText(
+        checkoutState?.shippingDetails?.sectionTitle,
+        checkoutDefaults.shippingDetails.sectionTitle
+      ),
+      streetAddressLabel: toText(
+        checkoutState?.shippingDetails?.streetAddressLabel,
+        checkoutDefaults.shippingDetails.streetAddressLabel
+      ),
+      cityLabel: toText(
+        checkoutState?.shippingDetails?.cityLabel,
+        checkoutDefaults.shippingDetails.cityLabel
+      ),
+      countryLabel: toText(
+        checkoutState?.shippingDetails?.countryLabel,
+        checkoutDefaults.shippingDetails.countryLabel
+      ),
+      zipLabel: toText(
+        checkoutState?.shippingDetails?.zipLabel,
+        checkoutDefaults.shippingDetails.zipLabel
+      ),
+      streetAddressPlaceholder: toText(
+        checkoutState?.shippingDetails?.streetAddressPlaceholder,
+        checkoutDefaults.shippingDetails.streetAddressPlaceholder
+      ),
+      cityPlaceholder: toText(
+        checkoutState?.shippingDetails?.cityPlaceholder,
+        checkoutDefaults.shippingDetails.cityPlaceholder
+      ),
+      countryPlaceholder: toText(
+        checkoutState?.shippingDetails?.countryPlaceholder,
+        checkoutDefaults.shippingDetails.countryPlaceholder
+      ),
+      zipPlaceholder: toText(
+        checkoutState?.shippingDetails?.zipPlaceholder,
+        checkoutDefaults.shippingDetails.zipPlaceholder
+      ),
+      shippingCostLabel: toText(
+        checkoutState?.shippingDetails?.shippingCostLabel,
+        checkoutDefaults.shippingDetails.shippingCostLabel
+      ),
+      shippingOneNameLabel: toText(
+        checkoutState?.shippingDetails?.shippingOneNameLabel,
+        checkoutDefaults.shippingDetails.shippingOneNameLabel
+      ),
+      shippingOneNameDefault: toText(
+        checkoutState?.shippingDetails?.shippingOneNameDefault,
+        checkoutDefaults.shippingDetails.shippingOneNameDefault
+      ),
+      shippingOneDescriptionLabel: toText(
+        checkoutState?.shippingDetails?.shippingOneDescriptionLabel,
+        checkoutDefaults.shippingDetails.shippingOneDescriptionLabel
+      ),
+      shippingOneDescriptionDefault: toText(
+        checkoutState?.shippingDetails?.shippingOneDescriptionDefault,
+        checkoutDefaults.shippingDetails.shippingOneDescriptionDefault
+      ),
+      shippingOneCostLabel: toText(
+        checkoutState?.shippingDetails?.shippingOneCostLabel,
+        checkoutDefaults.shippingDetails.shippingOneCostLabel
+      ),
+      shippingOneCostDefault: toText(
+        checkoutState?.shippingDetails?.shippingOneCostDefault,
+        checkoutDefaults.shippingDetails.shippingOneCostDefault
+      ),
+      shippingTwoNameLabel: toText(
+        checkoutState?.shippingDetails?.shippingTwoNameLabel,
+        checkoutDefaults.shippingDetails.shippingTwoNameLabel
+      ),
+      shippingTwoNameDefault: toText(
+        checkoutState?.shippingDetails?.shippingTwoNameDefault,
+        checkoutDefaults.shippingDetails.shippingTwoNameDefault
+      ),
+      shippingTwoDescriptionLabel: toText(
+        checkoutState?.shippingDetails?.shippingTwoDescriptionLabel,
+        checkoutDefaults.shippingDetails.shippingTwoDescriptionLabel
+      ),
+      shippingTwoDescriptionDefault: toText(
+        checkoutState?.shippingDetails?.shippingTwoDescriptionDefault,
+        checkoutDefaults.shippingDetails.shippingTwoDescriptionDefault
+      ),
+      shippingTwoCostLabel: toText(
+        checkoutState?.shippingDetails?.shippingTwoCostLabel,
+        checkoutDefaults.shippingDetails.shippingTwoCostLabel
+      ),
+      shippingTwoCostDefault: toText(
+        checkoutState?.shippingDetails?.shippingTwoCostDefault,
+        checkoutDefaults.shippingDetails.shippingTwoCostDefault
+      ),
+      paymentMethodLabel: toText(
+        checkoutState?.shippingDetails?.paymentMethodLabel,
+        checkoutDefaults.shippingDetails.paymentMethodLabel
+      ),
+      paymentMethodPlaceholder: toText(
+        checkoutState?.shippingDetails?.paymentMethodPlaceholder,
+        checkoutDefaults.shippingDetails.paymentMethodPlaceholder
+      ),
+    },
+    buttons: {
+      ...checkoutDefaults.buttons,
+      ...(checkoutState?.buttons || {}),
+      continueButtonLabel: toText(
+        checkoutState?.buttons?.continueButtonLabel,
+        checkoutDefaults.buttons.continueButtonLabel
+      ),
+      confirmButtonLabel: toText(
+        checkoutState?.buttons?.confirmButtonLabel,
+        checkoutDefaults.buttons.confirmButtonLabel
+      ),
+    },
+    cartItemSection: {
+      ...checkoutDefaults.cartItemSection,
+      ...(checkoutState?.cartItemSection || {}),
+      sectionTitle: toText(
+        checkoutState?.cartItemSection?.sectionTitle,
+        checkoutDefaults.cartItemSection.sectionTitle
+      ),
+      orderSummaryLabel: toText(
+        checkoutState?.cartItemSection?.orderSummaryLabel,
+        checkoutDefaults.cartItemSection.orderSummaryLabel
+      ),
+      applyButtonLabel: toText(
+        checkoutState?.cartItemSection?.applyButtonLabel,
+        checkoutDefaults.cartItemSection.applyButtonLabel
+      ),
+      subTotalLabel: toText(
+        checkoutState?.cartItemSection?.subTotalLabel,
+        checkoutDefaults.cartItemSection.subTotalLabel
+      ),
+      discountLabel: toText(
+        checkoutState?.cartItemSection?.discountLabel,
+        checkoutDefaults.cartItemSection.discountLabel
+      ),
+      totalCostLabel: toText(
+        checkoutState?.cartItemSection?.totalCostLabel,
+        checkoutDefaults.cartItemSection.totalCostLabel
+      ),
+    },
+  };
+  const dashboardSettingDefaults = getDefaultCustomization().dashboardSetting;
+  const dashboardSetting = {
+    ...dashboardSettingDefaults,
+    ...(dashboardSettingState || {}),
+    dashboard: {
+      ...dashboardSettingDefaults.dashboard,
+      ...(dashboardSettingState?.dashboard || {}),
+      sectionTitle: toText(
+        dashboardSettingState?.dashboard?.sectionTitle,
+        dashboardSettingDefaults.dashboard.sectionTitle
+      ),
+      invoiceMessageFirstPartLabel: toText(
+        dashboardSettingState?.dashboard?.invoiceMessageFirstPartLabel,
+        dashboardSettingDefaults.dashboard.invoiceMessageFirstPartLabel
+      ),
+      invoiceMessageFirstPartValue: toText(
+        dashboardSettingState?.dashboard?.invoiceMessageFirstPartValue,
+        dashboardSettingDefaults.dashboard.invoiceMessageFirstPartValue
+      ),
+      invoiceMessageLastPartLabel: toText(
+        dashboardSettingState?.dashboard?.invoiceMessageLastPartLabel,
+        dashboardSettingDefaults.dashboard.invoiceMessageLastPartLabel
+      ),
+      invoiceMessageLastPartValue: toText(
+        dashboardSettingState?.dashboard?.invoiceMessageLastPartValue,
+        dashboardSettingDefaults.dashboard.invoiceMessageLastPartValue
+      ),
+      printButtonLabel: toText(
+        dashboardSettingState?.dashboard?.printButtonLabel,
+        dashboardSettingDefaults.dashboard.printButtonLabel
+      ),
+      printButtonValue: toText(
+        dashboardSettingState?.dashboard?.printButtonValue,
+        dashboardSettingDefaults.dashboard.printButtonValue
+      ),
+      downloadButtonLabel: toText(
+        dashboardSettingState?.dashboard?.downloadButtonLabel,
+        dashboardSettingDefaults.dashboard.downloadButtonLabel
+      ),
+      downloadButtonValue: toText(
+        dashboardSettingState?.dashboard?.downloadButtonValue,
+        dashboardSettingDefaults.dashboard.downloadButtonValue
+      ),
+      dashboardLabel: toText(
+        dashboardSettingState?.dashboard?.dashboardLabel,
+        dashboardSettingDefaults.dashboard.dashboardLabel
+      ),
+      totalOrdersLabel: toText(
+        dashboardSettingState?.dashboard?.totalOrdersLabel,
+        dashboardSettingDefaults.dashboard.totalOrdersLabel
+      ),
+      pendingOrderLabel: toText(
+        dashboardSettingState?.dashboard?.pendingOrderLabel,
+        dashboardSettingDefaults.dashboard.pendingOrderLabel
+      ),
+      pendingOrderValue: toText(
+        dashboardSettingState?.dashboard?.pendingOrderValue,
+        dashboardSettingDefaults.dashboard.pendingOrderValue
+      ),
+      processingOrderLabel: toText(
+        dashboardSettingState?.dashboard?.processingOrderLabel,
+        dashboardSettingDefaults.dashboard.processingOrderLabel
+      ),
+      processingOrderValue: toText(
+        dashboardSettingState?.dashboard?.processingOrderValue,
+        dashboardSettingDefaults.dashboard.processingOrderValue
+      ),
+      completeOrderLabel: toText(
+        dashboardSettingState?.dashboard?.completeOrderLabel,
+        dashboardSettingDefaults.dashboard.completeOrderLabel
+      ),
+      completeOrderValue: toText(
+        dashboardSettingState?.dashboard?.completeOrderValue,
+        dashboardSettingDefaults.dashboard.completeOrderValue
+      ),
+      recentOrderLabel: toText(
+        dashboardSettingState?.dashboard?.recentOrderLabel,
+        dashboardSettingDefaults.dashboard.recentOrderLabel
+      ),
+      recentOrderValue: toText(
+        dashboardSettingState?.dashboard?.recentOrderValue,
+        dashboardSettingDefaults.dashboard.recentOrderValue
+      ),
+      myOrderLabel: toText(
+        dashboardSettingState?.dashboard?.myOrderLabel,
+        dashboardSettingDefaults.dashboard.myOrderLabel
+      ),
+      myOrderValue: toText(
+        dashboardSettingState?.dashboard?.myOrderValue,
+        dashboardSettingDefaults.dashboard.myOrderValue
+      ),
+    },
+    updateProfile: {
+      ...dashboardSettingDefaults.updateProfile,
+      ...(dashboardSettingState?.updateProfile || {}),
+      sectionTitleLabel: toText(
+        dashboardSettingState?.updateProfile?.sectionTitleLabel,
+        dashboardSettingDefaults.updateProfile.sectionTitleLabel
+      ),
+      sectionTitleValue: toText(
+        dashboardSettingState?.updateProfile?.sectionTitleValue,
+        dashboardSettingDefaults.updateProfile.sectionTitleValue
+      ),
+      fullNameLabel: toText(
+        dashboardSettingState?.updateProfile?.fullNameLabel,
+        dashboardSettingDefaults.updateProfile.fullNameLabel
+      ),
+      addressLabel: toText(
+        dashboardSettingState?.updateProfile?.addressLabel,
+        dashboardSettingDefaults.updateProfile.addressLabel
+      ),
+      phoneMobileLabel: toText(
+        dashboardSettingState?.updateProfile?.phoneMobileLabel,
+        dashboardSettingDefaults.updateProfile.phoneMobileLabel
+      ),
+      emailAddressLabel: toText(
+        dashboardSettingState?.updateProfile?.emailAddressLabel,
+        dashboardSettingDefaults.updateProfile.emailAddressLabel
+      ),
+      updateButtonLabel: toText(
+        dashboardSettingState?.updateProfile?.updateButtonLabel,
+        dashboardSettingDefaults.updateProfile.updateButtonLabel
+      ),
+      updateButtonValue: toText(
+        dashboardSettingState?.updateProfile?.updateButtonValue,
+        dashboardSettingDefaults.updateProfile.updateButtonValue
+      ),
+      currentPasswordLabel: toText(
+        dashboardSettingState?.updateProfile?.currentPasswordLabel,
+        dashboardSettingDefaults.updateProfile.currentPasswordLabel
+      ),
+      newPasswordLabel: toText(
+        dashboardSettingState?.updateProfile?.newPasswordLabel,
+        dashboardSettingDefaults.updateProfile.newPasswordLabel
+      ),
+      changePasswordLabel: toText(
+        dashboardSettingState?.updateProfile?.changePasswordLabel,
+        dashboardSettingDefaults.updateProfile.changePasswordLabel
+      ),
+    },
+  };
+  const offersCouponItems = Array.isArray(offersCouponsQuery.data?.data?.items)
+    ? offersCouponsQuery.data.data.items
+    : [];
+  const offersCouponOptions = Array.from(
+    new Map(
+      offersCouponItems
+        .map((coupon) => {
+          const code = toText(coupon?.code, "").toUpperCase();
+          if (!code) return null;
+          const discountType = toText(coupon?.discountType, "");
+          const amount = Number(coupon?.amount ?? 0);
+          const amountLabel =
+            discountType === "percent"
+              ? `${Number.isFinite(amount) ? amount : 0}%`
+              : Number.isFinite(amount)
+                ? amount.toString()
+                : "";
+          const nameLabel = amountLabel ? ` - ${amountLabel}` : "";
+          return [code, `${code}${nameLabel}`];
+        })
+        .filter(Boolean)
+    )
+  ).map(([value, label]) => ({ value, label }));
+  const selectedOfferCouponCode = offers.superDiscount.activeCouponCode || "ALL";
+  const hasSelectedOfferCouponOption =
+    selectedOfferCouponCode === "ALL" ||
+    offersCouponOptions.some((item) => item.value === selectedOfferCouponCode);
+  const activeAboutUsMemberMeta =
+    ABOUT_US_MEMBER_TABS.find((tab) => tab.key === activeAboutUsMemberTab) ||
+    ABOUT_US_MEMBER_TABS[0];
+  const activeAboutUsMemberIndex = Number(activeAboutUsMemberMeta?.index ?? 0);
+  const activeAboutUsMember =
+    aboutUs.ourTeam.members?.[activeAboutUsMemberIndex] ||
+    aboutUsDefaults.ourTeam.members[activeAboutUsMemberIndex];
+  const activeAboutUsMemberImageField = getAboutUsMemberImageFieldKey(
+    activeAboutUsMemberIndex
+  );
 
   return (
     <div className="mx-auto w-full max-w-[1200px] space-y-5 px-1 sm:px-2">
@@ -2250,6 +5097,2129 @@ export default function StoreCustomizationPage() {
                       onChangeProductSlugRightBoxDescription(index, event.target.value)
                     }
                     className="mt-2 min-h-[92px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                  />
+                </label>
+              ))}
+            </div>
+          </section>
+        </div>
+      ) : activeTab === "aboutUs" ? (
+        <div className="flex flex-col gap-5">
+          <section className={sectionCard}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="h-4 w-4" />
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">About Us</h2>
+            </div>
+            <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Page Header
+            </p>
+            <div className="mt-4 h-px w-full bg-slate-200" />
+
+            <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[320px_1fr]">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Enable This Block
+                </p>
+                <SegmentedToggle
+                  value={Boolean(aboutUs.pageHeader.enabled)}
+                  onChange={(value) => onChangeAboutUsBlockEnabled("pageHeader", value)}
+                />
+              </div>
+              <ImageUploadField
+                id="about-us-page-header-background-image-input"
+                label="Page Header Background"
+                error={aboutUsImageErrors[ABOUT_US_IMAGE_FIELD_KEYS.pageHeaderBackground]}
+                dropActive={Boolean(
+                  aboutUsDropActive[ABOUT_US_IMAGE_FIELD_KEYS.pageHeaderBackground]
+                )}
+                onDropActiveChange={(value) =>
+                  setAboutUsDropActiveField(
+                    ABOUT_US_IMAGE_FIELD_KEYS.pageHeaderBackground,
+                    value
+                  )
+                }
+                onInputChange={(event) =>
+                  onAboutUsImageInputChange(
+                    ABOUT_US_IMAGE_FIELD_KEYS.pageHeaderBackground,
+                    event
+                  )
+                }
+                onDrop={(event) =>
+                  onDropAboutUsImage(
+                    ABOUT_US_IMAGE_FIELD_KEYS.pageHeaderBackground,
+                    event
+                  )
+                }
+                previewDataUrl={aboutUs.pageHeader.backgroundImageDataUrl}
+                onRemove={() =>
+                  onRemoveAboutUsImage(ABOUT_US_IMAGE_FIELD_KEYS.pageHeaderBackground)
+                }
+                previewAlt="About Us page header background"
+              />
+              <label className="block xl:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Page Title
+                </span>
+                <input
+                  type="text"
+                  value={aboutUs.pageHeader.pageTitle}
+                  onChange={(event) =>
+                    onChangeAboutUsPageHeaderField("pageTitle", event.target.value)
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className={sectionCard}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="h-4 w-4" />
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">
+                About Page Top Content Left
+              </h2>
+            </div>
+            <div className="mt-4 h-px w-full bg-slate-200" />
+
+            <div className="mt-4 grid grid-cols-1 gap-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Enable This Block
+                </p>
+                <SegmentedToggle
+                  value={Boolean(aboutUs.topContentLeft.enabled)}
+                  onChange={(value) => onChangeAboutUsBlockEnabled("topContentLeft", value)}
+                />
+              </div>
+
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Top Title
+                </span>
+                <input
+                  type="text"
+                  value={aboutUs.topContentLeft.topTitle}
+                  onChange={(event) =>
+                    onChangeAboutUsTopContentLeftField("topTitle", event.target.value)
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Top Description
+                </span>
+                <textarea
+                  value={aboutUs.topContentLeft.topDescription}
+                  onChange={(event) =>
+                    onChangeAboutUsTopContentLeftField("topDescription", event.target.value)
+                  }
+                  className={textAreaBase}
+                />
+              </label>
+
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                {[
+                  { key: "boxOne", label: "Box One" },
+                  { key: "boxTwo", label: "Box Two" },
+                  { key: "boxThree", label: "Box Three" },
+                ].map((box) => {
+                  const boxValue = aboutUs.topContentLeft?.[box.key] || {};
+                  return (
+                    <div
+                      key={box.key}
+                      className="rounded-xl border border-slate-200 bg-slate-50/60 p-4"
+                    >
+                      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        {box.label}
+                      </p>
+                      <div className="space-y-3">
+                        <label className="block">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Title
+                          </span>
+                          <input
+                            type="text"
+                            value={boxValue.title || ""}
+                            onChange={(event) =>
+                              onChangeAboutUsTopContentLeftBoxField(
+                                box.key,
+                                "title",
+                                event.target.value
+                              )
+                            }
+                            className={`${inputBase} mt-2`}
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Sub Title
+                          </span>
+                          <input
+                            type="text"
+                            value={boxValue.subtitle || ""}
+                            onChange={(event) =>
+                              onChangeAboutUsTopContentLeftBoxField(
+                                box.key,
+                                "subtitle",
+                                event.target.value
+                              )
+                            }
+                            className={`${inputBase} mt-2`}
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Description
+                          </span>
+                          <textarea
+                            value={boxValue.description || ""}
+                            onChange={(event) =>
+                              onChangeAboutUsTopContentLeftBoxField(
+                                box.key,
+                                "description",
+                                event.target.value
+                              )
+                            }
+                            className={textAreaBase}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+
+          <section className={sectionCard}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="h-4 w-4" />
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">
+                Page Top Content Right
+              </h2>
+            </div>
+            <div className="mt-4 h-px w-full bg-slate-200" />
+
+            <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[320px_1fr]">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Enable This Block
+                </p>
+                <SegmentedToggle
+                  value={Boolean(aboutUs.topContentRight.enabled)}
+                  onChange={(value) => onChangeAboutUsBlockEnabled("topContentRight", value)}
+                />
+              </div>
+              <ImageUploadField
+                id="about-us-top-content-right-image-input"
+                label="Top Content Right Image"
+                error={aboutUsImageErrors[ABOUT_US_IMAGE_FIELD_KEYS.topContentRightImage]}
+                dropActive={Boolean(
+                  aboutUsDropActive[ABOUT_US_IMAGE_FIELD_KEYS.topContentRightImage]
+                )}
+                onDropActiveChange={(value) =>
+                  setAboutUsDropActiveField(
+                    ABOUT_US_IMAGE_FIELD_KEYS.topContentRightImage,
+                    value
+                  )
+                }
+                onInputChange={(event) =>
+                  onAboutUsImageInputChange(ABOUT_US_IMAGE_FIELD_KEYS.topContentRightImage, event)
+                }
+                onDrop={(event) =>
+                  onDropAboutUsImage(ABOUT_US_IMAGE_FIELD_KEYS.topContentRightImage, event)
+                }
+                previewDataUrl={aboutUs.topContentRight.imageDataUrl}
+                onRemove={() =>
+                  onRemoveAboutUsImage(ABOUT_US_IMAGE_FIELD_KEYS.topContentRightImage)
+                }
+                previewAlt="About Us top content right"
+              />
+            </div>
+          </section>
+
+          <section className={sectionCard}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="h-4 w-4" />
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">Content Section</h2>
+            </div>
+            <div className="mt-4 h-px w-full bg-slate-200" />
+
+            <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[320px_1fr]">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Enable This Block
+                </p>
+                <SegmentedToggle
+                  value={Boolean(aboutUs.contentSection.enabled)}
+                  onChange={(value) => onChangeAboutUsBlockEnabled("contentSection", value)}
+                />
+              </div>
+              <ImageUploadField
+                id="about-us-content-image-input"
+                label="Content Image"
+                error={aboutUsImageErrors[ABOUT_US_IMAGE_FIELD_KEYS.contentSectionImage]}
+                dropActive={Boolean(
+                  aboutUsDropActive[ABOUT_US_IMAGE_FIELD_KEYS.contentSectionImage]
+                )}
+                onDropActiveChange={(value) =>
+                  setAboutUsDropActiveField(
+                    ABOUT_US_IMAGE_FIELD_KEYS.contentSectionImage,
+                    value
+                  )
+                }
+                onInputChange={(event) =>
+                  onAboutUsImageInputChange(ABOUT_US_IMAGE_FIELD_KEYS.contentSectionImage, event)
+                }
+                onDrop={(event) =>
+                  onDropAboutUsImage(ABOUT_US_IMAGE_FIELD_KEYS.contentSectionImage, event)
+                }
+                previewDataUrl={aboutUs.contentSection.contentImageDataUrl}
+                onRemove={() =>
+                  onRemoveAboutUsImage(ABOUT_US_IMAGE_FIELD_KEYS.contentSectionImage)
+                }
+                previewAlt="About Us content section image"
+              />
+              <label className="block xl:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  First Paragraph
+                </span>
+                <textarea
+                  value={aboutUs.contentSection.firstParagraph}
+                  onChange={(event) =>
+                    onChangeAboutUsContentSectionField("firstParagraph", event.target.value)
+                  }
+                  className={textAreaBase}
+                />
+              </label>
+              <label className="block xl:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Second Paragraph
+                </span>
+                <textarea
+                  value={aboutUs.contentSection.secondParagraph}
+                  onChange={(event) =>
+                    onChangeAboutUsContentSectionField("secondParagraph", event.target.value)
+                  }
+                  className={textAreaBase}
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className={sectionCard}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="h-4 w-4" />
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">Our Team</h2>
+            </div>
+            <div className="mt-4 h-px w-full bg-slate-200" />
+
+            <div className="mt-4 grid grid-cols-1 gap-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Enable This Block
+                </p>
+                <SegmentedToggle
+                  value={Boolean(aboutUs.ourTeam.enabled)}
+                  onChange={(value) => onChangeAboutUsBlockEnabled("ourTeam", value)}
+                />
+              </div>
+
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Our Team Title
+                </span>
+                <input
+                  type="text"
+                  value={aboutUs.ourTeam.title}
+                  onChange={(event) =>
+                    onChangeAboutUsOurTeamField("title", event.target.value)
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Our Team Description
+                </span>
+                <textarea
+                  value={aboutUs.ourTeam.description}
+                  onChange={(event) =>
+                    onChangeAboutUsOurTeamField("description", event.target.value)
+                  }
+                  className={textAreaBase}
+                />
+              </label>
+
+              <div className="overflow-hidden rounded-xl border border-slate-200">
+                <div className="flex flex-wrap gap-1 border-b border-slate-200 bg-slate-50 px-2 py-2">
+                  {ABOUT_US_MEMBER_TABS.map((memberTab) => (
+                    <button
+                      key={memberTab.key}
+                      type="button"
+                      onClick={() => setActiveAboutUsMemberTab(memberTab.key)}
+                      className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                        activeAboutUsMemberTab === memberTab.key
+                          ? "border border-slate-200 bg-white text-emerald-700 shadow-sm"
+                          : "text-slate-600 hover:bg-white"
+                      }`}
+                    >
+                      {memberTab.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="bg-white p-4 sm:p-5">
+                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-[320px_1fr]">
+                    <ImageUploadField
+                      id={`about-us-team-member-image-input-${activeAboutUsMemberIndex}`}
+                      label={`Our Team ${activeAboutUsMemberIndex + 1} Image`}
+                      error={aboutUsImageErrors[activeAboutUsMemberImageField]}
+                      dropActive={Boolean(aboutUsDropActive[activeAboutUsMemberImageField])}
+                      onDropActiveChange={(value) =>
+                        setAboutUsDropActiveField(activeAboutUsMemberImageField, value)
+                      }
+                      onInputChange={(event) =>
+                        onAboutUsImageInputChange(activeAboutUsMemberImageField, event)
+                      }
+                      onDrop={(event) =>
+                        onDropAboutUsImage(activeAboutUsMemberImageField, event)
+                      }
+                      previewDataUrl={activeAboutUsMember.imageDataUrl}
+                      onRemove={() => onRemoveAboutUsImage(activeAboutUsMemberImageField)}
+                      previewAlt={`About Us team member ${activeAboutUsMemberIndex + 1}`}
+                    />
+
+                    <div className="grid grid-cols-1 gap-4">
+                      <label className="block">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Our Team {activeAboutUsMemberIndex + 1} Title
+                        </span>
+                        <input
+                          type="text"
+                          value={activeAboutUsMember.title || ""}
+                          onChange={(event) =>
+                            onChangeAboutUsMemberField(
+                              activeAboutUsMemberIndex,
+                              "title",
+                              event.target.value
+                            )
+                          }
+                          className={`${inputBase} mt-2`}
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Our Team {activeAboutUsMemberIndex + 1} Sub Title
+                        </span>
+                        <input
+                          type="text"
+                          value={activeAboutUsMember.subTitle || ""}
+                          onChange={(event) =>
+                            onChangeAboutUsMemberField(
+                              activeAboutUsMemberIndex,
+                              "subTitle",
+                              event.target.value
+                            )
+                          }
+                          className={`${inputBase} mt-2`}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : activeTab === "privacyPolicyTerms" ? (
+        <div className="flex flex-col gap-5">
+          <section className={sectionCard}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="h-4 w-4" />
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">Privacy Policy</h2>
+            </div>
+            <div className="mt-4 h-px w-full bg-slate-200" />
+
+            <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[320px_1fr]">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Enable This Block
+                </p>
+                <SegmentedToggle
+                  value={Boolean(privacyPolicy.enabled)}
+                  onChange={(value) => onChangePolicyEnabled("privacyPolicy", value)}
+                />
+              </div>
+              <ImageUploadField
+                id="privacy-policy-background-image-input"
+                label="Page Header Background"
+                error={policyImageErrors[POLICY_IMAGE_FIELD_KEYS.privacyPolicyBackground]}
+                dropActive={Boolean(
+                  policyDropActive[POLICY_IMAGE_FIELD_KEYS.privacyPolicyBackground]
+                )}
+                onDropActiveChange={(value) =>
+                  setPolicyDropActiveField(
+                    POLICY_IMAGE_FIELD_KEYS.privacyPolicyBackground,
+                    value
+                  )
+                }
+                onInputChange={(event) =>
+                  onPolicyImageInputChange(
+                    POLICY_IMAGE_FIELD_KEYS.privacyPolicyBackground,
+                    event
+                  )
+                }
+                onDrop={(event) =>
+                  onDropPolicyImage(POLICY_IMAGE_FIELD_KEYS.privacyPolicyBackground, event)
+                }
+                previewDataUrl={privacyPolicy.pageHeaderBackgroundDataUrl}
+                onRemove={() =>
+                  onRemovePolicyImage(POLICY_IMAGE_FIELD_KEYS.privacyPolicyBackground)
+                }
+                previewAlt="Privacy policy page header background"
+              />
+              <label className="block xl:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Page Title
+                </span>
+                <input
+                  type="text"
+                  value={privacyPolicy.pageTitle}
+                  onChange={(event) =>
+                    onChangePolicyField("privacyPolicy", "pageTitle", event.target.value)
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <div className="xl:col-span-2">
+                <RichTextEditor
+                  id="privacy-policy-page-text-editor"
+                  label="Page Text"
+                  value={privacyPolicy.pageTextHtml}
+                  onChange={(nextValue) =>
+                    onChangePolicyField("privacyPolicy", "pageTextHtml", nextValue)
+                  }
+                />
+              </div>
+            </div>
+          </section>
+
+          <section className={sectionCard}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="h-4 w-4" />
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">
+                Terms & Conditions
+              </h2>
+            </div>
+            <div className="mt-4 h-px w-full bg-slate-200" />
+
+            <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[320px_1fr]">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Enable This Block
+                </p>
+                <SegmentedToggle
+                  value={Boolean(termsAndConditions.enabled)}
+                  onChange={(value) => onChangePolicyEnabled("termsAndConditions", value)}
+                />
+              </div>
+              <ImageUploadField
+                id="terms-and-conditions-background-image-input"
+                label="Page Header Background"
+                error={
+                  policyImageErrors[POLICY_IMAGE_FIELD_KEYS.termsAndConditionsBackground]
+                }
+                dropActive={Boolean(
+                  policyDropActive[POLICY_IMAGE_FIELD_KEYS.termsAndConditionsBackground]
+                )}
+                onDropActiveChange={(value) =>
+                  setPolicyDropActiveField(
+                    POLICY_IMAGE_FIELD_KEYS.termsAndConditionsBackground,
+                    value
+                  )
+                }
+                onInputChange={(event) =>
+                  onPolicyImageInputChange(
+                    POLICY_IMAGE_FIELD_KEYS.termsAndConditionsBackground,
+                    event
+                  )
+                }
+                onDrop={(event) =>
+                  onDropPolicyImage(
+                    POLICY_IMAGE_FIELD_KEYS.termsAndConditionsBackground,
+                    event
+                  )
+                }
+                previewDataUrl={termsAndConditions.pageHeaderBackgroundDataUrl}
+                onRemove={() =>
+                  onRemovePolicyImage(POLICY_IMAGE_FIELD_KEYS.termsAndConditionsBackground)
+                }
+                previewAlt="Terms and conditions page header background"
+              />
+              <label className="block xl:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Page Title
+                </span>
+                <input
+                  type="text"
+                  value={termsAndConditions.pageTitle}
+                  onChange={(event) =>
+                    onChangePolicyField("termsAndConditions", "pageTitle", event.target.value)
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <div className="xl:col-span-2">
+                <RichTextEditor
+                  id="terms-and-conditions-page-text-editor"
+                  label="Page Text"
+                  value={termsAndConditions.pageTextHtml}
+                  onChange={(nextValue) =>
+                    onChangePolicyField("termsAndConditions", "pageTextHtml", nextValue)
+                  }
+                />
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : activeTab === "faqs" ? (
+        <div className="flex flex-col gap-5">
+          <section className={sectionCard}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="h-4 w-4" />
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">FAQs Page Header</h2>
+            </div>
+            <div className="mt-4 h-px w-full bg-slate-200" />
+
+            <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[320px_1fr]">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Enable This Block
+                </p>
+                <SegmentedToggle
+                  value={Boolean(faqs.pageHeader.enabled)}
+                  onChange={(value) => onChangeFaqsBlockEnabled("pageHeader", value)}
+                />
+              </div>
+              <ImageUploadField
+                id="faqs-page-header-background-image-input"
+                label="Page Header Background"
+                error={faqsImageErrors[FAQS_IMAGE_FIELD_KEYS.pageHeaderBackground]}
+                dropActive={Boolean(
+                  faqsDropActive[FAQS_IMAGE_FIELD_KEYS.pageHeaderBackground]
+                )}
+                onDropActiveChange={(value) =>
+                  setFaqsDropActiveField(FAQS_IMAGE_FIELD_KEYS.pageHeaderBackground, value)
+                }
+                onInputChange={(event) =>
+                  onFaqsImageInputChange(FAQS_IMAGE_FIELD_KEYS.pageHeaderBackground, event)
+                }
+                onDrop={(event) =>
+                  onDropFaqsImage(FAQS_IMAGE_FIELD_KEYS.pageHeaderBackground, event)
+                }
+                previewDataUrl={faqs.pageHeader.backgroundImageDataUrl}
+                onRemove={() =>
+                  onRemoveFaqsImage(FAQS_IMAGE_FIELD_KEYS.pageHeaderBackground)
+                }
+                previewAlt="FAQs page header background"
+              />
+              <label className="block xl:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Page Title
+                </span>
+                <input
+                  type="text"
+                  value={faqs.pageHeader.pageTitle}
+                  onChange={(event) =>
+                    onChangeFaqsPageHeaderField("pageTitle", event.target.value)
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className={sectionCard}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="h-4 w-4" />
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">FAQs Left Column</h2>
+            </div>
+            <div className="mt-4 h-px w-full bg-slate-200" />
+
+            <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[320px_1fr]">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Enable This Block
+                </p>
+                <SegmentedToggle
+                  value={Boolean(faqs.leftColumn.enabled)}
+                  onChange={(value) => onChangeFaqsBlockEnabled("leftColumn", value)}
+                />
+              </div>
+              <ImageUploadField
+                id="faqs-left-column-image-input"
+                label="Left Image"
+                error={faqsImageErrors[FAQS_IMAGE_FIELD_KEYS.leftColumnImage]}
+                dropActive={Boolean(faqsDropActive[FAQS_IMAGE_FIELD_KEYS.leftColumnImage])}
+                onDropActiveChange={(value) =>
+                  setFaqsDropActiveField(FAQS_IMAGE_FIELD_KEYS.leftColumnImage, value)
+                }
+                onInputChange={(event) =>
+                  onFaqsImageInputChange(FAQS_IMAGE_FIELD_KEYS.leftColumnImage, event)
+                }
+                onDrop={(event) =>
+                  onDropFaqsImage(FAQS_IMAGE_FIELD_KEYS.leftColumnImage, event)
+                }
+                previewDataUrl={faqs.leftColumn.leftImageDataUrl}
+                onRemove={() => onRemoveFaqsImage(FAQS_IMAGE_FIELD_KEYS.leftColumnImage)}
+                previewAlt="FAQs left column image"
+              />
+            </div>
+          </section>
+
+          <section className={sectionCard}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="h-4 w-4" />
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">FAQs</h2>
+            </div>
+            <div className="mt-4 h-px w-full bg-slate-200" />
+
+            <div className="mt-4 grid grid-cols-1 gap-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Enable This Block
+                </p>
+                <SegmentedToggle
+                  value={Boolean(faqs.content.enabled)}
+                  onChange={(value) => onChangeFaqsBlockEnabled("content", value)}
+                />
+              </div>
+
+              {faqs.content.items.map((item, index) => (
+                <div
+                  key={`faqs-item-${index}`}
+                  className="rounded-xl border border-slate-200 bg-slate-50/60 p-4"
+                >
+                  <label className="block">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Faq Title {FAQ_ITEM_ORDINALS[index] || index + 1}
+                    </span>
+                    <input
+                      type="text"
+                      value={item.title}
+                      onChange={(event) =>
+                        onChangeFaqsItemField(index, "title", event.target.value)
+                      }
+                      className={`${inputBase} mt-2`}
+                    />
+                  </label>
+                  <label className="mt-4 block">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Faq Description {FAQ_ITEM_ORDINALS[index] || index + 1}
+                    </span>
+                    <textarea
+                      value={item.description}
+                      onChange={(event) =>
+                        onChangeFaqsItemField(index, "description", event.target.value)
+                      }
+                      className={textAreaBase}
+                    />
+                  </label>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      ) : activeTab === "offers" ? (
+        <div className="flex flex-col gap-5">
+          <section className={sectionCard}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="h-4 w-4" />
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">Page Header</h2>
+            </div>
+            <div className="mt-4 h-px w-full bg-slate-200" />
+
+            <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[320px_1fr]">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Enable This Block
+                </p>
+                <SegmentedToggle
+                  value={Boolean(offers.pageHeader.enabled)}
+                  onChange={(value) => onChangeOffersBlockEnabled("pageHeader", value)}
+                />
+              </div>
+              <ImageUploadField
+                id="offers-page-header-background-image-input"
+                label="Page Header Background"
+                error={offersImageErrors[OFFERS_IMAGE_FIELD_KEYS.pageHeaderBackground]}
+                dropActive={Boolean(
+                  offersDropActive[OFFERS_IMAGE_FIELD_KEYS.pageHeaderBackground]
+                )}
+                onDropActiveChange={(value) =>
+                  setOffersDropActiveField(
+                    OFFERS_IMAGE_FIELD_KEYS.pageHeaderBackground,
+                    value
+                  )
+                }
+                onInputChange={(event) =>
+                  onOffersImageInputChange(
+                    OFFERS_IMAGE_FIELD_KEYS.pageHeaderBackground,
+                    event
+                  )
+                }
+                onDrop={(event) =>
+                  onDropOffersImage(OFFERS_IMAGE_FIELD_KEYS.pageHeaderBackground, event)
+                }
+                previewDataUrl={offers.pageHeader.backgroundImageDataUrl}
+                onRemove={() =>
+                  onRemoveOffersImage(OFFERS_IMAGE_FIELD_KEYS.pageHeaderBackground)
+                }
+                previewAlt="Offers page header background"
+              />
+              <label className="block xl:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Page Title
+                </span>
+                <input
+                  type="text"
+                  value={offers.pageHeader.pageTitle}
+                  onChange={(event) =>
+                    onChangeOffersPageHeaderField("pageTitle", event.target.value)
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className={sectionCard}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="h-4 w-4" />
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">
+                Super Discount Active Coupon Code
+              </h2>
+            </div>
+            <div className="mt-4 h-px w-full bg-slate-200" />
+
+            <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[320px_1fr]">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Enable This Block
+                </p>
+                <SegmentedToggle
+                  value={Boolean(offers.superDiscount.enabled)}
+                  onChange={(value) => onChangeOffersBlockEnabled("superDiscount", value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Super Discount Active Coupon Code
+                </span>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <select
+                      value={selectedOfferCouponCode}
+                      onChange={(event) =>
+                        onChangeOffersSuperDiscountField(
+                          "activeCouponCode",
+                          event.target.value
+                        )
+                      }
+                      className={`${inputBase} appearance-none pr-9`}
+                    >
+                      <option value="ALL">All items are selected.</option>
+                      {offersCouponOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                      {!hasSelectedOfferCouponOption &&
+                      selectedOfferCouponCode !== "ALL" ? (
+                        <option value={selectedOfferCouponCode}>
+                          {selectedOfferCouponCode}
+                        </option>
+                      ) : null}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onChangeOffersSuperDiscountField("activeCouponCode", "ALL")
+                    }
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    aria-label="Clear selected coupon"
+                    disabled={selectedOfferCouponCode === "ALL"}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                {offersCouponsQuery.isLoading ? (
+                  <p className="text-xs text-slate-500">Loading coupons...</p>
+                ) : null}
+                {offersCouponsQuery.isError ? (
+                  <p className="text-xs text-rose-600">
+                    Failed to load coupons list. You can still save the selected code.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : activeTab === "contactUs" ? (
+        <div className="flex flex-col gap-5">
+          <section className={sectionCard}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="h-4 w-4" />
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">Page Header</h2>
+            </div>
+            <div className="mt-4 h-px w-full bg-slate-200" />
+
+            <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[320px_1fr]">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Enable This Block
+                </p>
+                <SegmentedToggle
+                  value={Boolean(contactUs.pageHeader.enabled)}
+                  onChange={(value) =>
+                    onChangeContactUsSectionEnabled("pageHeader", value)
+                  }
+                />
+              </div>
+              <ImageUploadField
+                id="contact-us-page-header-background-image-input"
+                label="Page Header Background"
+                error={contactUsImageErrors[CONTACT_US_IMAGE_FIELD_KEYS.pageHeaderBackground]}
+                dropActive={Boolean(
+                  contactUsDropActive[CONTACT_US_IMAGE_FIELD_KEYS.pageHeaderBackground]
+                )}
+                onDropActiveChange={(value) =>
+                  setContactUsDropActiveField(
+                    CONTACT_US_IMAGE_FIELD_KEYS.pageHeaderBackground,
+                    value
+                  )
+                }
+                onInputChange={(event) =>
+                  onContactUsImageInputChange(
+                    CONTACT_US_IMAGE_FIELD_KEYS.pageHeaderBackground,
+                    event
+                  )
+                }
+                onDrop={(event) =>
+                  onDropContactUsImage(
+                    CONTACT_US_IMAGE_FIELD_KEYS.pageHeaderBackground,
+                    event
+                  )
+                }
+                previewDataUrl={contactUs.pageHeader.backgroundImageDataUrl}
+                onRemove={() =>
+                  onRemoveContactUsImage(CONTACT_US_IMAGE_FIELD_KEYS.pageHeaderBackground)
+                }
+                previewAlt="Contact Us page header background"
+              />
+              <label className="block xl:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Page Title
+                </span>
+                <input
+                  type="text"
+                  value={contactUs.pageHeader.pageTitle}
+                  onChange={(event) =>
+                    onChangeContactUsSectionField(
+                      "pageHeader",
+                      "pageTitle",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className={sectionCard}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="h-4 w-4" />
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">Email Us Box</h2>
+            </div>
+            <div className="mt-4 h-px w-full bg-slate-200" />
+
+            <div className="mt-4 grid grid-cols-1 gap-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Enable This Block
+                </p>
+                <SegmentedToggle
+                  value={Boolean(contactUs.emailBox.enabled)}
+                  onChange={(value) => onChangeContactUsSectionEnabled("emailBox", value)}
+                />
+              </div>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Title
+                </span>
+                <input
+                  type="text"
+                  value={contactUs.emailBox.title}
+                  onChange={(event) =>
+                    onChangeContactUsSectionField("emailBox", "title", event.target.value)
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Email
+                </span>
+                <input
+                  type="text"
+                  value={contactUs.emailBox.email}
+                  onChange={(event) =>
+                    onChangeContactUsSectionField("emailBox", "email", event.target.value)
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Text
+                </span>
+                <textarea
+                  value={contactUs.emailBox.text}
+                  onChange={(event) =>
+                    onChangeContactUsSectionField("emailBox", "text", event.target.value)
+                  }
+                  className={textAreaBase}
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className={sectionCard}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="h-4 w-4" />
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">Call Us Box</h2>
+            </div>
+            <div className="mt-4 h-px w-full bg-slate-200" />
+
+            <div className="mt-4 grid grid-cols-1 gap-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Enable This Block
+                </p>
+                <SegmentedToggle
+                  value={Boolean(contactUs.callBox.enabled)}
+                  onChange={(value) => onChangeContactUsSectionEnabled("callBox", value)}
+                />
+              </div>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Title
+                </span>
+                <input
+                  type="text"
+                  value={contactUs.callBox.title}
+                  onChange={(event) =>
+                    onChangeContactUsSectionField("callBox", "title", event.target.value)
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Phone
+                </span>
+                <input
+                  type="text"
+                  value={contactUs.callBox.phone}
+                  onChange={(event) =>
+                    onChangeContactUsSectionField("callBox", "phone", event.target.value)
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Text
+                </span>
+                <textarea
+                  value={contactUs.callBox.text}
+                  onChange={(event) =>
+                    onChangeContactUsSectionField("callBox", "text", event.target.value)
+                  }
+                  className={textAreaBase}
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className={sectionCard}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="h-4 w-4" />
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">Address Box</h2>
+            </div>
+            <div className="mt-4 h-px w-full bg-slate-200" />
+
+            <div className="mt-4 grid grid-cols-1 gap-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Enable This Block
+                </p>
+                <SegmentedToggle
+                  value={Boolean(contactUs.addressBox.enabled)}
+                  onChange={(value) => onChangeContactUsSectionEnabled("addressBox", value)}
+                />
+              </div>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Title
+                </span>
+                <input
+                  type="text"
+                  value={contactUs.addressBox.title}
+                  onChange={(event) =>
+                    onChangeContactUsSectionField("addressBox", "title", event.target.value)
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Address
+                </span>
+                <textarea
+                  value={contactUs.addressBox.address}
+                  onChange={(event) =>
+                    onChangeContactUsSectionField(
+                      "addressBox",
+                      "address",
+                      event.target.value
+                    )
+                  }
+                  className={textAreaBase}
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className={sectionCard}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="h-4 w-4" />
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">Middle Left Column</h2>
+            </div>
+            <div className="mt-4 h-px w-full bg-slate-200" />
+
+            <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[320px_1fr]">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Enable This Block
+                </p>
+                <SegmentedToggle
+                  value={Boolean(contactUs.middleLeftColumn.enabled)}
+                  onChange={(value) =>
+                    onChangeContactUsSectionEnabled("middleLeftColumn", value)
+                  }
+                />
+              </div>
+              <ImageUploadField
+                id="contact-us-middle-left-image-input"
+                label="Middle Left Image"
+                error={contactUsImageErrors[CONTACT_US_IMAGE_FIELD_KEYS.middleLeftColumnImage]}
+                dropActive={Boolean(
+                  contactUsDropActive[CONTACT_US_IMAGE_FIELD_KEYS.middleLeftColumnImage]
+                )}
+                onDropActiveChange={(value) =>
+                  setContactUsDropActiveField(
+                    CONTACT_US_IMAGE_FIELD_KEYS.middleLeftColumnImage,
+                    value
+                  )
+                }
+                onInputChange={(event) =>
+                  onContactUsImageInputChange(
+                    CONTACT_US_IMAGE_FIELD_KEYS.middleLeftColumnImage,
+                    event
+                  )
+                }
+                onDrop={(event) =>
+                  onDropContactUsImage(
+                    CONTACT_US_IMAGE_FIELD_KEYS.middleLeftColumnImage,
+                    event
+                  )
+                }
+                previewDataUrl={contactUs.middleLeftColumn.imageDataUrl}
+                onRemove={() =>
+                  onRemoveContactUsImage(CONTACT_US_IMAGE_FIELD_KEYS.middleLeftColumnImage)
+                }
+                previewAlt="Contact Us middle left image"
+              />
+            </div>
+          </section>
+
+          <section className={sectionCard}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="h-4 w-4" />
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">Contact Form</h2>
+            </div>
+            <div className="mt-4 h-px w-full bg-slate-200" />
+
+            <div className="mt-4 grid grid-cols-1 gap-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Enable This Block
+                </p>
+                <SegmentedToggle
+                  value={Boolean(contactUs.contactForm.enabled)}
+                  onChange={(value) => onChangeContactUsSectionEnabled("contactForm", value)}
+                />
+              </div>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Contact Form Title
+                </span>
+                <input
+                  type="text"
+                  value={contactUs.contactForm.title}
+                  onChange={(event) =>
+                    onChangeContactUsSectionField("contactForm", "title", event.target.value)
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Contact Form Description
+                </span>
+                <textarea
+                  value={contactUs.contactForm.description}
+                  onChange={(event) =>
+                    onChangeContactUsSectionField(
+                      "contactForm",
+                      "description",
+                      event.target.value
+                    )
+                  }
+                  className={textAreaBase}
+                />
+              </label>
+            </div>
+          </section>
+        </div>
+      ) : activeTab === "checkout" ? (
+        <div className="flex flex-col gap-5">
+          <section className={sectionCard}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="h-4 w-4" />
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">Personal Details</h2>
+            </div>
+            <div className="mt-4 h-px w-full bg-slate-200" />
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <label className="block md:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Section Title
+                </span>
+                <input
+                  type="text"
+                  value={checkout.personalDetails.sectionTitle}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "personalDetails",
+                      "sectionTitle",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  First Name Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.personalDetails.firstNameLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "personalDetails",
+                      "firstNameLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  First Name Placeholder
+                </span>
+                <input
+                  type="text"
+                  value={checkout.personalDetails.firstNamePlaceholder}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "personalDetails",
+                      "firstNamePlaceholder",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Last Name Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.personalDetails.lastNameLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "personalDetails",
+                      "lastNameLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Last Name Placeholder
+                </span>
+                <input
+                  type="text"
+                  value={checkout.personalDetails.lastNamePlaceholder}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "personalDetails",
+                      "lastNamePlaceholder",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Email Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.personalDetails.emailLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "personalDetails",
+                      "emailLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Email Placeholder
+                </span>
+                <input
+                  type="text"
+                  value={checkout.personalDetails.emailPlaceholder}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "personalDetails",
+                      "emailPlaceholder",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Phone Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.personalDetails.phoneLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "personalDetails",
+                      "phoneLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Phone Placeholder
+                </span>
+                <input
+                  type="text"
+                  value={checkout.personalDetails.phonePlaceholder}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "personalDetails",
+                      "phonePlaceholder",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className={sectionCard}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="h-4 w-4" />
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">Shipping Details</h2>
+            </div>
+            <div className="mt-4 h-px w-full bg-slate-200" />
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <label className="block md:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Section Title
+                </span>
+                <input
+                  type="text"
+                  value={checkout.shippingDetails.sectionTitle}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "shippingDetails",
+                      "sectionTitle",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Street Address Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.shippingDetails.streetAddressLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "shippingDetails",
+                      "streetAddressLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Street Address Placeholder
+                </span>
+                <input
+                  type="text"
+                  value={checkout.shippingDetails.streetAddressPlaceholder}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "shippingDetails",
+                      "streetAddressPlaceholder",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  City Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.shippingDetails.cityLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField("shippingDetails", "cityLabel", event.target.value)
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  City Placeholder
+                </span>
+                <input
+                  type="text"
+                  value={checkout.shippingDetails.cityPlaceholder}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "shippingDetails",
+                      "cityPlaceholder",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Country Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.shippingDetails.countryLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "shippingDetails",
+                      "countryLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Country Placeholder
+                </span>
+                <input
+                  type="text"
+                  value={checkout.shippingDetails.countryPlaceholder}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "shippingDetails",
+                      "countryPlaceholder",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Zip / Postal Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.shippingDetails.zipLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField("shippingDetails", "zipLabel", event.target.value)
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Zip Placeholder
+                </span>
+                <input
+                  type="text"
+                  value={checkout.shippingDetails.zipPlaceholder}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "shippingDetails",
+                      "zipPlaceholder",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block md:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Shipping Cost Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.shippingDetails.shippingCostLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "shippingDetails",
+                      "shippingCostLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+            </div>
+
+            <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+              <h3 className="text-sm font-semibold text-slate-900">Shipping One</h3>
+              <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Shipping One Name Label
+                  </span>
+                  <input
+                    type="text"
+                    value={checkout.shippingDetails.shippingOneNameLabel}
+                    onChange={(event) =>
+                      onChangeCheckoutField(
+                        "shippingDetails",
+                        "shippingOneNameLabel",
+                        event.target.value
+                      )
+                    }
+                    className={`${inputBase} mt-2`}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Shipping One Name Default
+                  </span>
+                  <input
+                    type="text"
+                    value={checkout.shippingDetails.shippingOneNameDefault}
+                    onChange={(event) =>
+                      onChangeCheckoutField(
+                        "shippingDetails",
+                        "shippingOneNameDefault",
+                        event.target.value
+                      )
+                    }
+                    className={`${inputBase} mt-2`}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Shipping One Description Label
+                  </span>
+                  <input
+                    type="text"
+                    value={checkout.shippingDetails.shippingOneDescriptionLabel}
+                    onChange={(event) =>
+                      onChangeCheckoutField(
+                        "shippingDetails",
+                        "shippingOneDescriptionLabel",
+                        event.target.value
+                      )
+                    }
+                    className={`${inputBase} mt-2`}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Shipping One Description Default
+                  </span>
+                  <input
+                    type="text"
+                    value={checkout.shippingDetails.shippingOneDescriptionDefault}
+                    onChange={(event) =>
+                      onChangeCheckoutField(
+                        "shippingDetails",
+                        "shippingOneDescriptionDefault",
+                        event.target.value
+                      )
+                    }
+                    className={`${inputBase} mt-2`}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Shipping One Cost Label
+                  </span>
+                  <input
+                    type="text"
+                    value={checkout.shippingDetails.shippingOneCostLabel}
+                    onChange={(event) =>
+                      onChangeCheckoutField(
+                        "shippingDetails",
+                        "shippingOneCostLabel",
+                        event.target.value
+                      )
+                    }
+                    className={`${inputBase} mt-2`}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Shipping One Cost Default
+                  </span>
+                  <input
+                    type="text"
+                    value={checkout.shippingDetails.shippingOneCostDefault}
+                    onChange={(event) =>
+                      onChangeCheckoutField(
+                        "shippingDetails",
+                        "shippingOneCostDefault",
+                        event.target.value
+                      )
+                    }
+                    className={`${inputBase} mt-2`}
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+              <h3 className="text-sm font-semibold text-slate-900">Shipping Two</h3>
+              <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Shipping Two Name Label
+                  </span>
+                  <input
+                    type="text"
+                    value={checkout.shippingDetails.shippingTwoNameLabel}
+                    onChange={(event) =>
+                      onChangeCheckoutField(
+                        "shippingDetails",
+                        "shippingTwoNameLabel",
+                        event.target.value
+                      )
+                    }
+                    className={`${inputBase} mt-2`}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Shipping Two Name Default
+                  </span>
+                  <input
+                    type="text"
+                    value={checkout.shippingDetails.shippingTwoNameDefault}
+                    onChange={(event) =>
+                      onChangeCheckoutField(
+                        "shippingDetails",
+                        "shippingTwoNameDefault",
+                        event.target.value
+                      )
+                    }
+                    className={`${inputBase} mt-2`}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Shipping Two Description Label
+                  </span>
+                  <input
+                    type="text"
+                    value={checkout.shippingDetails.shippingTwoDescriptionLabel}
+                    onChange={(event) =>
+                      onChangeCheckoutField(
+                        "shippingDetails",
+                        "shippingTwoDescriptionLabel",
+                        event.target.value
+                      )
+                    }
+                    className={`${inputBase} mt-2`}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Shipping Two Description Default
+                  </span>
+                  <input
+                    type="text"
+                    value={checkout.shippingDetails.shippingTwoDescriptionDefault}
+                    onChange={(event) =>
+                      onChangeCheckoutField(
+                        "shippingDetails",
+                        "shippingTwoDescriptionDefault",
+                        event.target.value
+                      )
+                    }
+                    className={`${inputBase} mt-2`}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Shipping Two Cost Label
+                  </span>
+                  <input
+                    type="text"
+                    value={checkout.shippingDetails.shippingTwoCostLabel}
+                    onChange={(event) =>
+                      onChangeCheckoutField(
+                        "shippingDetails",
+                        "shippingTwoCostLabel",
+                        event.target.value
+                      )
+                    }
+                    className={`${inputBase} mt-2`}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Shipping Two Cost Default
+                  </span>
+                  <input
+                    type="text"
+                    value={checkout.shippingDetails.shippingTwoCostDefault}
+                    onChange={(event) =>
+                      onChangeCheckoutField(
+                        "shippingDetails",
+                        "shippingTwoCostDefault",
+                        event.target.value
+                      )
+                    }
+                    className={`${inputBase} mt-2`}
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Payment Method Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.shippingDetails.paymentMethodLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "shippingDetails",
+                      "paymentMethodLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Payment Method Placeholder
+                </span>
+                <input
+                  type="text"
+                  value={checkout.shippingDetails.paymentMethodPlaceholder}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "shippingDetails",
+                      "paymentMethodPlaceholder",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className={sectionCard}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="h-4 w-4" />
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">Buttons</h2>
+            </div>
+            <div className="mt-4 h-px w-full bg-slate-200" />
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Continue Button Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.buttons.continueButtonLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "buttons",
+                      "continueButtonLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Confirm Button Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.buttons.confirmButtonLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "buttons",
+                      "confirmButtonLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className={sectionCard}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="h-4 w-4" />
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">Cart Item Section</h2>
+            </div>
+            <div className="mt-4 h-px w-full bg-slate-200" />
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <label className="block md:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Section Title
+                </span>
+                <input
+                  type="text"
+                  value={checkout.cartItemSection.sectionTitle}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "cartItemSection",
+                      "sectionTitle",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Order Summary Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.cartItemSection.orderSummaryLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "cartItemSection",
+                      "orderSummaryLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Apply Button Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.cartItemSection.applyButtonLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "cartItemSection",
+                      "applyButtonLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Sub Total Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.cartItemSection.subTotalLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "cartItemSection",
+                      "subTotalLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Discount Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.cartItemSection.discountLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "cartItemSection",
+                      "discountLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block md:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Total Cost Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.cartItemSection.totalCostLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "cartItemSection",
+                      "totalCostLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+            </div>
+          </section>
+        </div>
+      ) : activeTab === "dashboardSetting" ? (
+        <div className="flex flex-col gap-5">
+          <section className={sectionCard}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="h-4 w-4" />
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">Dashboard</h2>
+            </div>
+            <div className="mt-4 h-px w-full bg-slate-200" />
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <label className="block md:col-span-2 xl:col-span-3">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Section Title
+                </span>
+                <input
+                  type="text"
+                  value={dashboardSetting.dashboard.sectionTitle}
+                  onChange={(event) =>
+                    onChangeDashboardSettingField(
+                      "dashboard",
+                      "sectionTitle",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              {DASHBOARD_SETTING_DASHBOARD_FIELDS.map((field) => (
+                <label key={field.field} className="block">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {field.label}
+                  </span>
+                  <input
+                    type="text"
+                    value={toText(dashboardSetting.dashboard?.[field.field], "")}
+                    onChange={(event) =>
+                      onChangeDashboardSettingField(
+                        "dashboard",
+                        field.field,
+                        event.target.value
+                      )
+                    }
+                    className={`${inputBase} mt-2`}
+                  />
+                </label>
+              ))}
+            </div>
+          </section>
+
+          <section className={sectionCard}>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings className="h-4 w-4" />
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">Update Profile</h2>
+            </div>
+            <div className="mt-4 h-px w-full bg-slate-200" />
+
+            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[220px_1fr]">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {dashboardSetting.updateProfile.sectionTitleLabel}
+                </p>
+              </div>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Section Title Value
+                </span>
+                <input
+                  type="text"
+                  value={dashboardSetting.updateProfile.sectionTitleValue}
+                  onChange={(event) =>
+                    onChangeDashboardSettingField(
+                      "updateProfile",
+                      "sectionTitleValue",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Section Title Label
+                </span>
+                <input
+                  type="text"
+                  value={dashboardSetting.updateProfile.sectionTitleLabel}
+                  onChange={(event) =>
+                    onChangeDashboardSettingField(
+                      "updateProfile",
+                      "sectionTitleLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              {DASHBOARD_SETTING_UPDATE_PROFILE_FIELDS.map((field) => (
+                <label key={field.field} className="block">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {field.label}
+                  </span>
+                  <input
+                    type="text"
+                    value={toText(dashboardSetting.updateProfile?.[field.field], "")}
+                    onChange={(event) =>
+                      onChangeDashboardSettingField(
+                        "updateProfile",
+                        field.field,
+                        event.target.value
+                      )
+                    }
+                    className={`${inputBase} mt-2`}
                   />
                 </label>
               ))}

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Eye } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../../api/axios.ts";
+import { getStoreCustomization } from "../../api/store.service.ts";
 import { formatCurrency } from "../../utils/format.js";
 import {
   normalizeOrderStatus,
@@ -28,8 +29,29 @@ const getOrderDateValue = (order) =>
 
 const getOrderRef = (order) => order?.invoiceNo || order?.orderId || order?.id || null;
 
+const toText = (value, fallback) => {
+  const normalized = String(value ?? "").trim();
+  return normalized || fallback;
+};
+
+const normalizeDashboardSettingCopy = (raw) => {
+  const source = raw && typeof raw === "object" ? raw : {};
+  const dashboard = source.dashboard && typeof source.dashboard === "object" ? source.dashboard : {};
+  return {
+    myOrderValue: toText(dashboard.myOrderValue, "My Orders"),
+  };
+};
+
 export default function AccountOrdersPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const dashboardSettingQuery = useQuery({
+    queryKey: ["store-customization", "dashboard-setting", "en"],
+    queryFn: () => getStoreCustomization({ lang: "en", include: "dashboardSetting" }),
+    staleTime: 60_000,
+  });
+  const dashboardSettingCopy = normalizeDashboardSettingCopy(
+    dashboardSettingQuery.data?.customization?.dashboardSetting
+  );
   const page = Math.max(1, Number(searchParams.get("page") || 1));
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["account", "orders", "my", page],
@@ -82,7 +104,9 @@ export default function AccountOrdersPage() {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-slate-900">My Orders</h1>
+        <h1 className="text-2xl font-bold text-slate-900">
+          {dashboardSettingCopy.myOrderValue}
+        </h1>
         <div className="text-sm text-slate-500">Page {page}</div>
       </div>
       <div className="mt-4 border-t border-slate-100" />

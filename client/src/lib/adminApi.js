@@ -459,3 +459,13 @@ export const updateAdminStoreCustomization = async (lang, payload) => {
   );
   return data?.data ?? data;
 };
+
+export const fetchAdminStoreSettings = async () => {
+  const { data } = await adminApi.get("/admin/store/settings");
+  return data?.data ?? data;
+};
+
+export const updateAdminStoreSettings = async (payload) => {
+  const { data } = await adminApi.put("/admin/store/settings", payload);
+  return data?.data ?? data;
+};

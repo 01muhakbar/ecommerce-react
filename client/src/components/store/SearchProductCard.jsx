@@ -52,7 +52,7 @@ export default function SearchProductCard({ product }) {
   };
 
   return (
-    <article className="h-full w-full min-w-0 overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_14px_30px_rgba(15,23,42,0.12)] sm:p-3.5">
+    <article className="h-full w-full min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_14px_30px_rgba(15,23,42,0.12)] sm:p-3.5">
       <div
         role="button"
         tabIndex={0}
@@ -108,7 +108,10 @@ export default function SearchProductCard({ product }) {
         </div>
 
         <div className="mt-3 space-y-1.5">
-          <h3 className="line-clamp-2 min-h-[2.75rem] text-[13px] font-medium leading-[1.35rem] text-slate-900 sm:text-sm">
+          <p className="line-clamp-1 text-[11px] uppercase tracking-wide text-slate-400">
+            {product?.category?.name || "Uncategorized"}
+          </p>
+          <h3 className="line-clamp-2 min-h-[2.6rem] text-[13px] font-medium leading-[1.35rem] text-slate-900 sm:text-sm">
             {productName}
           </h3>
           <p className="text-[11px] leading-4 text-amber-500 sm:text-xs">

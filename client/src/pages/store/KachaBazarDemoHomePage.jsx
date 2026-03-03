@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useCategories, useProducts } from "../../storefront.jsx";
 import { fetchStoreCoupons } from "../../api/store.service.ts";
 import { formatCurrency } from "../../utils/format.js";
@@ -9,6 +10,12 @@ import ProductSection from "../../components/kachabazar-demo/ProductSection.jsx"
 import PromoDeliveryBanner from "../../components/kachabazar-demo/PromoDeliveryBanner.jsx";
 import DiscountedProductsSection from "../../components/kachabazar-demo/DiscountedProductsSection.jsx";
 import HomeHeroBanners from "../../components/store/HomeHeroBanners.jsx";
+import {
+  UiEmptyState,
+  UiErrorState,
+  UiSkeleton,
+} from "../../components/ui-states/index.js";
+import { GENERIC_ERROR } from "../../constants/uiMessages.js";
 
 const slides = [
   {
@@ -56,7 +63,13 @@ const dummyCoupons = [
 ];
 
 export default function KachaBazarDemoHomePage() {
-  const { data: categoriesData } = useCategories();
+  const {
+    data: categoriesData,
+    isLoading: isCategoriesLoading,
+    isError: isCategoriesError,
+    error: categoriesError,
+    refetch: refetchCategories,
+  } = useCategories();
   const {
     data: productsData,
     isLoading,
@@ -64,6 +77,13 @@ export default function KachaBazarDemoHomePage() {
     refetch: refetchProducts,
   } = useProducts({ page: 1, limit: 30 });
   const categories = categoriesData?.data?.items ?? [];
+  const hasCategories = categories.length > 0;
+  const showCategoriesLoading = isCategoriesLoading && !categoriesData;
+  const showCategoriesError = isCategoriesError && !hasCategories;
+  const categoriesErrorMessage =
+    categoriesError?.response?.data?.message ||
+    categoriesError?.message ||
+    GENERIC_ERROR;
   const categoriesById = useMemo(() => {
     const map = new Map();
     (categories || []).forEach((category) => {
@@ -213,7 +233,60 @@ export default function KachaBazarDemoHomePage() {
         </section>
 
         <FeatureStrip />
-        <FeaturedCategoriesSection categories={categories} products={safeProducts} />
+        {showCategoriesLoading ? (
+          <section className="space-y-6 rounded-3xl bg-slate-100 px-3 py-8 sm:px-5">
+            <header className="text-center">
+              <h2 className="text-2xl font-semibold text-slate-900 sm:text-3xl">
+                Featured Categories
+              </h2>
+              <p className="mt-2 text-sm text-slate-500">
+                Loading categories for your shopping flow.
+              </p>
+            </header>
+            <UiSkeleton variant="grid" rows={6} />
+          </section>
+        ) : null}
+
+        {showCategoriesError ? (
+          <section className="space-y-6 rounded-3xl bg-slate-100 px-3 py-8 sm:px-5">
+            <header className="text-center">
+              <h2 className="text-2xl font-semibold text-slate-900 sm:text-3xl">
+                Featured Categories
+              </h2>
+            </header>
+            <UiErrorState
+              title="Failed to load categories."
+              message={categoriesErrorMessage}
+              onRetry={() => refetchCategories()}
+            />
+          </section>
+        ) : null}
+
+        {!showCategoriesLoading && !showCategoriesError && !hasCategories ? (
+          <section className="space-y-6 rounded-3xl bg-slate-100 px-3 py-8 sm:px-5">
+            <header className="text-center">
+              <h2 className="text-2xl font-semibold text-slate-900 sm:text-3xl">
+                Featured Categories
+              </h2>
+            </header>
+            <UiEmptyState
+              title="No categories available yet"
+              description="Browse products directly while categories are being prepared."
+              actions={
+                <Link
+                  to="/search"
+                  className="inline-flex h-10 items-center justify-center rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
+                >
+                  Browse Products
+                </Link>
+              }
+            />
+          </section>
+        ) : null}
+
+        {!showCategoriesLoading && !showCategoriesError && hasCategories ? (
+          <FeaturedCategoriesSection categories={categories} products={safeProducts} />
+        ) : null}
         <ProductSection
           title="Popular Products for Daily Shopping"
           subtitle="Fresh picks and essentials you can add in one click."

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/axios.ts";
+import { getStoreCustomization } from "../../api/store.service.ts";
 
 const fetchMe = async () => {
   const { data } = await api.get("/auth/me");
@@ -12,8 +13,35 @@ const updateProfile = async (payload) => {
   return data;
 };
 
+const toText = (value, fallback) => {
+  const normalized = String(value ?? "").trim();
+  return normalized || fallback;
+};
+
+const normalizeDashboardSettingCopy = (raw) => {
+  const source = raw && typeof raw === "object" ? raw : {};
+  const updateProfile =
+    source.updateProfile && typeof source.updateProfile === "object"
+      ? source.updateProfile
+      : {};
+  return {
+    sectionTitleValue: toText(updateProfile.sectionTitleValue, "Update Profile"),
+    fullNameLabel: toText(updateProfile.fullNameLabel, "Name"),
+    emailAddressLabel: toText(updateProfile.emailAddressLabel, "Email"),
+    updateButtonValue: toText(updateProfile.updateButtonValue, "Save changes"),
+  };
+};
+
 export default function AccountProfilePage() {
   const qc = useQueryClient();
+  const dashboardSettingQuery = useQuery({
+    queryKey: ["store-customization", "dashboard-setting", "en"],
+    queryFn: () => getStoreCustomization({ lang: "en", include: "dashboardSetting" }),
+    staleTime: 60_000,
+  });
+  const dashboardSettingCopy = normalizeDashboardSettingCopy(
+    dashboardSettingQuery.data?.customization?.dashboardSetting
+  );
   const { data, isLoading } = useQuery({
     queryKey: ["account", "me"],
     queryFn: fetchMe,
@@ -55,8 +83,13 @@ export default function AccountProfilePage() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
+        <h1 className="text-2xl font-semibold text-slate-900">
+          {dashboardSettingCopy.sectionTitleValue}
+        </h1>
+      </div>
+      <div>
         <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-          Name
+          {dashboardSettingCopy.fullNameLabel}
         </label>
         <input
           type="text"
@@ -68,7 +101,7 @@ export default function AccountProfilePage() {
       </div>
       <div>
         <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-          Email
+          {dashboardSettingCopy.emailAddressLabel}
         </label>
         <input
           type="email"
@@ -96,7 +129,7 @@ export default function AccountProfilePage() {
         disabled={mutation.isPending}
         className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-60"
       >
-        {mutation.isPending ? "Saving..." : "Save changes"}
+        {mutation.isPending ? "Saving..." : dashboardSettingCopy.updateButtonValue}
       </button>
     </form>
   );

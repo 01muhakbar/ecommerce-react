@@ -1,19 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { Link, useNavigate, useOutletContext } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Banknote, CreditCard, Trash2, WalletCards } from "lucide-react";
 import { createOrderSchema } from "@ecommerce/schemas";
 import { useCartStore } from "../../store/cart.store.ts";
-import { createStoreOrder, quoteStoreCoupon } from "../../api/store.service.ts";
+import {
+  createStoreOrder,
+  getStoreCustomization,
+  quoteStoreCoupon,
+} from "../../api/store.service.ts";
 import { formatCurrency } from "../../utils/format.js";
 import { GENERIC_ERROR, ORDER_FAILED } from "../../constants/uiMessages.js";
 
 const INPUT_CLASS =
   "mt-2 h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 shadow-[0_1px_1px_rgba(15,23,42,0.03)] focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100";
 
-const SHIPPING_OPTIONS = [
-  { id: "ups_today", title: "UPS Delivery", eta: "Today", cost: 60 },
-  { id: "ups_7_days", title: "UPS Delivery", eta: "7 Days", cost: 20 },
+const SHIPPING_OPTIONS_BASE = [
+  { id: "ups_today", cost: 60 },
+  { id: "ups_7_days", cost: 20 },
 ];
 
 const PAYMENT_OPTIONS = [
@@ -37,7 +41,245 @@ const PAYMENT_OPTIONS = [
   },
 ];
 
+const DEFAULT_STORE_SETTINGS_FLAGS = {
+  payments: {
+    cashOnDeliveryEnabled: true,
+    stripeEnabled: true,
+    razorPayEnabled: false,
+  },
+};
+
+const normalizeStoreSettingsFlags = (raw) => {
+  const source = raw && typeof raw === "object" ? raw : {};
+  const payments =
+    source.payments && typeof source.payments === "object" ? source.payments : {};
+  return {
+    payments: {
+      cashOnDeliveryEnabled:
+        typeof payments.cashOnDeliveryEnabled === "boolean"
+          ? payments.cashOnDeliveryEnabled
+          : DEFAULT_STORE_SETTINGS_FLAGS.payments.cashOnDeliveryEnabled,
+      stripeEnabled:
+        typeof payments.stripeEnabled === "boolean"
+          ? payments.stripeEnabled
+          : DEFAULT_STORE_SETTINGS_FLAGS.payments.stripeEnabled,
+      razorPayEnabled:
+        typeof payments.razorPayEnabled === "boolean"
+          ? payments.razorPayEnabled
+          : DEFAULT_STORE_SETTINGS_FLAGS.payments.razorPayEnabled,
+    },
+  };
+};
+
 const LAST_ORDER_REF_STORAGE_KEY = "store_last_order_ref";
+const DEFAULT_CHECKOUT_COPY = {
+  personalDetails: {
+    sectionTitle: "Personal Details",
+    firstNameLabel: "First Name",
+    lastNameLabel: "Last Name",
+    emailLabel: "Email Address",
+    phoneLabel: "Phone Number",
+    firstNamePlaceholder: "First Name",
+    lastNamePlaceholder: "Last Name",
+    emailPlaceholder: "Email Address",
+    phonePlaceholder: "Phone Number",
+  },
+  shippingDetails: {
+    sectionTitle: "Shipping Details",
+    streetAddressLabel: "Street Address",
+    cityLabel: "City",
+    countryLabel: "Country",
+    zipLabel: "Zip Code",
+    streetAddressPlaceholder: "Street Address",
+    cityPlaceholder: "City",
+    countryPlaceholder: "Country",
+    zipPlaceholder: "Zip Code",
+    shippingCostLabel: "Shipping Cost",
+    shippingOneNameDefault: "UPS Delivery",
+    shippingOneDescriptionDefault: "Delivery: Today Cost :",
+    shippingTwoNameDefault: "UPS Delivery",
+    shippingTwoDescriptionDefault: "Delivery: 7 Days Cost :",
+    paymentMethodLabel: "Payment Method",
+    paymentMethodPlaceholder: "Select a preferred payment option.",
+  },
+  buttons: {
+    continueButtonLabel: "Back to Cart",
+    confirmButtonLabel: "Place Order",
+  },
+  cartItemSection: {
+    sectionTitle: "Cart Item Section",
+    orderSummaryLabel: "Order Summary",
+    applyButtonLabel: "Apply",
+    subTotalLabel: "Subtotal",
+    discountLabel: "Discount",
+    totalCostLabel: "TOTAL COST",
+  },
+};
+
+const toCopyText = (value, fallback = "") => {
+  const normalized = String(value ?? "").trim();
+  return normalized || fallback;
+};
+
+const normalizeCheckoutCopy = (raw) => {
+  const source = raw && typeof raw === "object" ? raw : {};
+  const personalDetails =
+    source.personalDetails && typeof source.personalDetails === "object"
+      ? source.personalDetails
+      : {};
+  const shippingDetails =
+    source.shippingDetails && typeof source.shippingDetails === "object"
+      ? source.shippingDetails
+      : {};
+  const buttons = source.buttons && typeof source.buttons === "object" ? source.buttons : {};
+  const cartItemSection =
+    source.cartItemSection && typeof source.cartItemSection === "object"
+      ? source.cartItemSection
+      : {};
+
+  return {
+    personalDetails: {
+      sectionTitle: toCopyText(
+        personalDetails.sectionTitle,
+        DEFAULT_CHECKOUT_COPY.personalDetails.sectionTitle
+      ),
+      firstNameLabel: toCopyText(
+        personalDetails.firstNameLabel,
+        DEFAULT_CHECKOUT_COPY.personalDetails.firstNameLabel
+      ),
+      lastNameLabel: toCopyText(
+        personalDetails.lastNameLabel,
+        DEFAULT_CHECKOUT_COPY.personalDetails.lastNameLabel
+      ),
+      emailLabel: toCopyText(
+        personalDetails.emailLabel,
+        DEFAULT_CHECKOUT_COPY.personalDetails.emailLabel
+      ),
+      phoneLabel: toCopyText(
+        personalDetails.phoneLabel,
+        DEFAULT_CHECKOUT_COPY.personalDetails.phoneLabel
+      ),
+      firstNamePlaceholder: toCopyText(
+        personalDetails.firstNamePlaceholder,
+        DEFAULT_CHECKOUT_COPY.personalDetails.firstNamePlaceholder
+      ),
+      lastNamePlaceholder: toCopyText(
+        personalDetails.lastNamePlaceholder,
+        DEFAULT_CHECKOUT_COPY.personalDetails.lastNamePlaceholder
+      ),
+      emailPlaceholder: toCopyText(
+        personalDetails.emailPlaceholder,
+        DEFAULT_CHECKOUT_COPY.personalDetails.emailPlaceholder
+      ),
+      phonePlaceholder: toCopyText(
+        personalDetails.phonePlaceholder,
+        DEFAULT_CHECKOUT_COPY.personalDetails.phonePlaceholder
+      ),
+    },
+    shippingDetails: {
+      sectionTitle: toCopyText(
+        shippingDetails.sectionTitle,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.sectionTitle
+      ),
+      streetAddressLabel: toCopyText(
+        shippingDetails.streetAddressLabel,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.streetAddressLabel
+      ),
+      cityLabel: toCopyText(
+        shippingDetails.cityLabel,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.cityLabel
+      ),
+      countryLabel: toCopyText(
+        shippingDetails.countryLabel,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.countryLabel
+      ),
+      zipLabel: toCopyText(
+        shippingDetails.zipLabel,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.zipLabel
+      ),
+      streetAddressPlaceholder: toCopyText(
+        shippingDetails.streetAddressPlaceholder,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.streetAddressPlaceholder
+      ),
+      cityPlaceholder: toCopyText(
+        shippingDetails.cityPlaceholder,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.cityPlaceholder
+      ),
+      countryPlaceholder: toCopyText(
+        shippingDetails.countryPlaceholder,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.countryPlaceholder
+      ),
+      zipPlaceholder: toCopyText(
+        shippingDetails.zipPlaceholder,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.zipPlaceholder
+      ),
+      shippingCostLabel: toCopyText(
+        shippingDetails.shippingCostLabel,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.shippingCostLabel
+      ),
+      shippingOneNameDefault: toCopyText(
+        shippingDetails.shippingOneNameDefault,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.shippingOneNameDefault
+      ),
+      shippingOneDescriptionDefault: toCopyText(
+        shippingDetails.shippingOneDescriptionDefault,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.shippingOneDescriptionDefault
+      ),
+      shippingTwoNameDefault: toCopyText(
+        shippingDetails.shippingTwoNameDefault,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.shippingTwoNameDefault
+      ),
+      shippingTwoDescriptionDefault: toCopyText(
+        shippingDetails.shippingTwoDescriptionDefault,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.shippingTwoDescriptionDefault
+      ),
+      paymentMethodLabel: toCopyText(
+        shippingDetails.paymentMethodLabel,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.paymentMethodLabel
+      ),
+      paymentMethodPlaceholder: toCopyText(
+        shippingDetails.paymentMethodPlaceholder,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.paymentMethodPlaceholder
+      ),
+    },
+    buttons: {
+      continueButtonLabel: toCopyText(
+        buttons.continueButtonLabel,
+        DEFAULT_CHECKOUT_COPY.buttons.continueButtonLabel
+      ),
+      confirmButtonLabel: toCopyText(
+        buttons.confirmButtonLabel,
+        DEFAULT_CHECKOUT_COPY.buttons.confirmButtonLabel
+      ),
+    },
+    cartItemSection: {
+      sectionTitle: toCopyText(
+        cartItemSection.sectionTitle,
+        DEFAULT_CHECKOUT_COPY.cartItemSection.sectionTitle
+      ),
+      orderSummaryLabel: toCopyText(
+        cartItemSection.orderSummaryLabel,
+        DEFAULT_CHECKOUT_COPY.cartItemSection.orderSummaryLabel
+      ),
+      applyButtonLabel: toCopyText(
+        cartItemSection.applyButtonLabel,
+        DEFAULT_CHECKOUT_COPY.cartItemSection.applyButtonLabel
+      ),
+      subTotalLabel: toCopyText(
+        cartItemSection.subTotalLabel,
+        DEFAULT_CHECKOUT_COPY.cartItemSection.subTotalLabel
+      ),
+      discountLabel: toCopyText(
+        cartItemSection.discountLabel,
+        DEFAULT_CHECKOUT_COPY.cartItemSection.discountLabel
+      ),
+      totalCostLabel: toCopyText(
+        cartItemSection.totalCostLabel,
+        DEFAULT_CHECKOUT_COPY.cartItemSection.totalCostLabel
+      ),
+    },
+  };
+};
 
 const resolveOrderPayload = (response) => {
   const candidates = [
@@ -87,6 +329,7 @@ function resolveCouponReasonMessage(reason, minSpend) {
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
+  const { storeSettings } = useOutletContext() || {};
   const queryClient = useQueryClient();
   const items = useCartStore((state) => state.items);
   const hasHydrated = useCartStore((state) => state.hasHydrated);
@@ -105,7 +348,7 @@ export default function CheckoutPage() {
   const [country, setCountry] = useState("");
   const [zipCode, setZipCode] = useState("");
   const [useDefaultShipping, setUseDefaultShipping] = useState(false);
-  const [shippingOptionId, setShippingOptionId] = useState(SHIPPING_OPTIONS[0].id);
+  const [shippingOptionId, setShippingOptionId] = useState(SHIPPING_OPTIONS_BASE[0].id);
   const [paymentOptionId, setPaymentOptionId] = useState(PAYMENT_OPTIONS[0].id);
   const [couponCode, setCouponCode] = useState("");
   const [couponMessage, setCouponMessage] = useState("");
@@ -128,6 +371,59 @@ export default function CheckoutPage() {
   const firstNameRef = useRef(null);
   const phoneRef = useRef(null);
   const streetRef = useRef(null);
+  const checkoutCustomizationQuery = useQuery({
+    queryKey: ["store-customization", "checkout", "en"],
+    queryFn: () => getStoreCustomization({ lang: "en", include: "checkout" }),
+    staleTime: 60_000,
+    retry: 1,
+  });
+
+  const checkoutCopy = useMemo(
+    () => normalizeCheckoutCopy(checkoutCustomizationQuery.data?.customization?.checkout),
+    [checkoutCustomizationQuery.data]
+  );
+  const storeSettingsFlags = useMemo(
+    () => normalizeStoreSettingsFlags(storeSettings),
+    [storeSettings]
+  );
+  const paymentOptions = useMemo(
+    () =>
+      PAYMENT_OPTIONS.filter((option) => {
+        if (option.id === "cash") return storeSettingsFlags.payments.cashOnDeliveryEnabled;
+        if (option.id === "card") return storeSettingsFlags.payments.stripeEnabled;
+        if (option.id === "razorpay") return storeSettingsFlags.payments.razorPayEnabled;
+        return true;
+      }),
+    [storeSettingsFlags]
+  );
+
+  useEffect(() => {
+    if (paymentOptions.length === 0) return;
+    const hasSelected = paymentOptions.some((option) => option.id === paymentOptionId);
+    if (hasSelected) return;
+    setPaymentOptionId(paymentOptions[0].id);
+  }, [paymentOptions, paymentOptionId]);
+
+  const shippingOptions = useMemo(
+    () => [
+      {
+        ...SHIPPING_OPTIONS_BASE[0],
+        title: checkoutCopy.shippingDetails.shippingOneNameDefault,
+        descriptionText: checkoutCopy.shippingDetails.shippingOneDescriptionDefault,
+      },
+      {
+        ...SHIPPING_OPTIONS_BASE[1],
+        title: checkoutCopy.shippingDetails.shippingTwoNameDefault,
+        descriptionText: checkoutCopy.shippingDetails.shippingTwoDescriptionDefault,
+      },
+    ],
+    [checkoutCopy]
+  );
+
+  useEffect(() => {
+    if (!checkoutCustomizationQuery.isError) return;
+    console.warn("[checkout] failed to load checkout customization; using defaults.");
+  }, [checkoutCustomizationQuery.isError]);
 
   useEffect(() => {
     let mounted = true;
@@ -167,8 +463,8 @@ export default function CheckoutPage() {
 
   const hasItems = items.length > 0;
   const shippingOption =
-    SHIPPING_OPTIONS.find((option) => option.id === shippingOptionId) ||
-    SHIPPING_OPTIONS[0];
+    shippingOptions.find((option) => option.id === shippingOptionId) ||
+    shippingOptions[0];
   const shippingCost = Number(shippingOption?.cost || 0);
 
   const summaryItems = useMemo(
@@ -515,15 +811,26 @@ export default function CheckoutPage() {
 
   return (
     <section className="mx-auto max-w-[1240px] px-3 py-6 sm:px-4 sm:py-8 lg:px-6 lg:py-10">
-      <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[1.32fr_0.92fr] lg:gap-7">
+      <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[1.25fr_0.95fr] lg:gap-8">
         <div className="space-y-6">
-          <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_14px_34px_rgba(15,23,42,0.08)] sm:p-6 lg:p-7">
-            <div className="mb-6 flex flex-col gap-4 border-b border-slate-100 pb-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="rounded-[30px] border border-slate-200 bg-white p-4 shadow-[0_16px_34px_rgba(15,23,42,0.06)] sm:p-6 lg:p-7">
+            <div className="mb-6 flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-600">
+                  Secure Checkout
+                </p>
                 <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">Checkout</h1>
                 <p className="mt-1 text-sm text-slate-500">
                   Complete your delivery details and confirm order.
                 </p>
+                {checkoutCustomizationQuery.isLoading ? (
+                  <p className="mt-2 text-xs text-slate-500">Loading checkout labels...</p>
+                ) : null}
+                {checkoutCustomizationQuery.isError ? (
+                  <p className="mt-2 text-xs text-amber-600">
+                    Using default checkout labels.
+                  </p>
+                ) : null}
               </div>
               <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:w-auto sm:flex-nowrap sm:justify-end sm:gap-3">
                 <span className="text-sm font-medium text-slate-700">
@@ -563,16 +870,16 @@ export default function CheckoutPage() {
             ) : null}
 
             <div className="mt-7 space-y-6">
-              <section className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/60 p-4 sm:p-5">
+              <section className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4 sm:p-5">
                 <SectionTitle
                   number="01."
-                  title="Personal Details"
+                  title={checkoutCopy.personalDetails.sectionTitle}
                   hint="Enter your contact details."
                 />
                 <div className="grid gap-4 lg:grid-cols-2">
                   <div>
                     <label className="text-sm font-medium text-slate-700">
-                      First Name *
+                      {checkoutCopy.personalDetails.firstNameLabel} *
                     </label>
                     <input
                       ref={firstNameRef}
@@ -585,6 +892,7 @@ export default function CheckoutPage() {
                         }
                       }}
                       disabled={isSubmitting}
+                      placeholder={checkoutCopy.personalDetails.firstNamePlaceholder}
                       className={fieldClass(Boolean(fieldErrors.firstName))}
                     />
                     {fieldErrors.firstName ? (
@@ -593,7 +901,7 @@ export default function CheckoutPage() {
                   </div>
                   <div>
                     <label className="text-sm font-medium text-slate-700">
-                      Last Name *
+                      {checkoutCopy.personalDetails.lastNameLabel} *
                     </label>
                     <input
                       type="text"
@@ -605,6 +913,7 @@ export default function CheckoutPage() {
                         }
                       }}
                       disabled={isSubmitting}
+                      placeholder={checkoutCopy.personalDetails.lastNamePlaceholder}
                       className={fieldClass(Boolean(fieldErrors.lastName))}
                     />
                     {fieldErrors.lastName ? (
@@ -613,19 +922,20 @@ export default function CheckoutPage() {
                   </div>
                   <div>
                     <label className="text-sm font-medium text-slate-700">
-                      Email Address
+                      {checkoutCopy.personalDetails.emailLabel}
                     </label>
                     <input
                       type="email"
                       value={email}
                       onChange={(event) => setEmail(event.target.value)}
                       disabled={isSubmitting}
+                      placeholder={checkoutCopy.personalDetails.emailPlaceholder}
                       className={INPUT_CLASS}
                     />
                   </div>
                   <div>
                     <label className="text-sm font-medium text-slate-700">
-                      Phone Number *
+                      {checkoutCopy.personalDetails.phoneLabel} *
                     </label>
                     <input
                       ref={phoneRef}
@@ -638,6 +948,7 @@ export default function CheckoutPage() {
                         }
                       }}
                       disabled={isSubmitting}
+                      placeholder={checkoutCopy.personalDetails.phonePlaceholder}
                       className={fieldClass(Boolean(fieldErrors.phone))}
                     />
                     {fieldErrors.phone ? (
@@ -647,16 +958,16 @@ export default function CheckoutPage() {
                 </div>
               </section>
 
-              <section className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/60 p-4 sm:p-5">
+              <section className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4 sm:p-5">
                 <SectionTitle
                   number="02."
-                  title="Shipping Details"
+                  title={checkoutCopy.shippingDetails.sectionTitle}
                   hint="Choose destination and shipping option."
                 />
                 <div className="space-y-4">
                   <div>
                     <label className="text-sm font-medium text-slate-700">
-                      Street Address *
+                      {checkoutCopy.shippingDetails.streetAddressLabel} *
                     </label>
                     <input
                       ref={streetRef}
@@ -669,6 +980,7 @@ export default function CheckoutPage() {
                         }
                       }}
                       disabled={isSubmitting}
+                      placeholder={checkoutCopy.shippingDetails.streetAddressPlaceholder}
                       className={fieldClass(Boolean(fieldErrors.streetAddress))}
                     />
                     {fieldErrors.streetAddress ? (
@@ -678,7 +990,7 @@ export default function CheckoutPage() {
                   <div className="grid gap-4 lg:grid-cols-3">
                     <div>
                       <label className="text-sm font-medium text-slate-700">
-                        City *
+                        {checkoutCopy.shippingDetails.cityLabel} *
                       </label>
                       <input
                         type="text"
@@ -690,6 +1002,7 @@ export default function CheckoutPage() {
                           }
                         }}
                         disabled={isSubmitting}
+                        placeholder={checkoutCopy.shippingDetails.cityPlaceholder}
                         className={fieldClass(Boolean(fieldErrors.city))}
                       />
                       {fieldErrors.city ? (
@@ -698,7 +1011,7 @@ export default function CheckoutPage() {
                     </div>
                     <div>
                       <label className="text-sm font-medium text-slate-700">
-                        Country *
+                        {checkoutCopy.shippingDetails.countryLabel} *
                       </label>
                       <input
                         type="text"
@@ -710,6 +1023,7 @@ export default function CheckoutPage() {
                           }
                         }}
                         disabled={isSubmitting}
+                        placeholder={checkoutCopy.shippingDetails.countryPlaceholder}
                         className={fieldClass(Boolean(fieldErrors.country))}
                       />
                       {fieldErrors.country ? (
@@ -718,7 +1032,7 @@ export default function CheckoutPage() {
                     </div>
                     <div>
                       <label className="text-sm font-medium text-slate-700">
-                        Zip Code *
+                        {checkoutCopy.shippingDetails.zipLabel} *
                       </label>
                       <input
                         type="text"
@@ -730,6 +1044,7 @@ export default function CheckoutPage() {
                           }
                         }}
                         disabled={isSubmitting}
+                        placeholder={checkoutCopy.shippingDetails.zipPlaceholder}
                         className={fieldClass(Boolean(fieldErrors.zipCode))}
                       />
                       {fieldErrors.zipCode ? (
@@ -741,10 +1056,10 @@ export default function CheckoutPage() {
 
                 <div className="pt-1">
                   <p className="text-xs font-semibold uppercase text-slate-600">
-                    Shipping Cost
+                    {checkoutCopy.shippingDetails.shippingCostLabel}
                   </p>
                   <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                    {SHIPPING_OPTIONS.map((option) => {
+                    {shippingOptions.map((option) => {
                       const selected = shippingOptionId === option.id;
                       return (
                         <label
@@ -766,7 +1081,7 @@ export default function CheckoutPage() {
                             {option.title}
                           </div>
                           <div className="mt-1 text-xs text-slate-500">
-                            {option.eta} Cost: {formatCurrency(option.cost)}
+                            {option.descriptionText} {formatCurrency(option.cost)}
                           </div>
                         </label>
                       );
@@ -775,48 +1090,55 @@ export default function CheckoutPage() {
                 </div>
               </section>
 
-              <section className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/60 p-4 sm:p-5">
+              <section className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4 sm:p-5">
                 <SectionTitle
                   number="03."
-                  title="Payment Method"
-                  hint="Select a preferred payment option."
+                  title={checkoutCopy.shippingDetails.paymentMethodLabel}
+                  hint={checkoutCopy.shippingDetails.paymentMethodPlaceholder}
                 />
-                <div className="grid gap-3 lg:grid-cols-3">
-                  {PAYMENT_OPTIONS.map((option) => {
-                    const selected = paymentOptionId === option.id;
-                    const Icon = option.Icon;
-                    return (
-                      <label
-                        key={option.id}
-                        className={`cursor-pointer rounded-2xl border p-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition ${
-                          selected
-                            ? "border-emerald-400 bg-emerald-50"
-                            : "border-slate-200 bg-white hover:border-slate-300"
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="paymentOption"
-                          className="sr-only"
-                          checked={selected}
-                          onChange={() => setPaymentOptionId(option.id)}
-                        />
-                        <div className="flex items-center gap-2">
-                          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white text-slate-700">
-                            <Icon className="h-4 w-4" />
-                          </span>
-                          <div>
-                            <div className="text-sm font-semibold text-slate-900">
-                              {option.title}
+                {paymentOptions.length > 0 ? (
+                  <div className="grid gap-3 lg:grid-cols-3">
+                    {paymentOptions.map((option) => {
+                      const selected = paymentOptionId === option.id;
+                      const Icon = option.Icon;
+                      return (
+                        <label
+                          key={option.id}
+                            className={`cursor-pointer rounded-2xl border p-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition ${
+                              selected
+                                ? "border-emerald-400 bg-emerald-50"
+                                : "border-slate-200 bg-white hover:border-slate-300"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="paymentOption"
+                            className="sr-only"
+                            checked={selected}
+                            onChange={() => setPaymentOptionId(option.id)}
+                          />
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white text-slate-700">
+                              <Icon className="h-4 w-4" />
+                            </span>
+                            <div>
+                              <div className="text-sm font-semibold text-slate-900">
+                                {option.title}
+                              </div>
+                              <div className="text-xs text-slate-500">{option.hint}</div>
                             </div>
-                            <div className="text-xs text-slate-500">{option.hint}</div>
                           </div>
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
-                {paymentOptionId !== "cash" ? (
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    No payment options are configured. Orders are processed as COD in this
+                    environment.
+                  </div>
+                )}
+                {paymentOptionId !== "cash" && paymentOptions.length > 0 ? (
                   <p className="text-xs text-amber-600">
                     For now, checkout is processed as COD in this environment.
                   </p>
@@ -828,7 +1150,7 @@ export default function CheckoutPage() {
               <div className="mt-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                 <p>{error}</p>
                 <p className="mt-1 text-xs text-rose-600">
-                  Fix any issue and press Place Order to try again.
+                  Fix any issue and press {checkoutCopy.buttons.confirmButtonLabel} to try again.
                 </p>
               </div>
             ) : null}
@@ -838,22 +1160,27 @@ export default function CheckoutPage() {
                 to="/cart"
                 className="inline-flex h-11 w-full items-center justify-center rounded-full border border-slate-200 px-6 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 lg:w-auto"
               >
-                Back to Cart
+                {checkoutCopy.buttons.continueButtonLabel}
               </Link>
             </div>
           </div>
         </div>
 
-        <aside className="space-y-4">
-          <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_14px_34px_rgba(15,23,42,0.08)] sm:p-6 lg:sticky lg:top-24">
+        <aside className="space-y-4 lg:sticky lg:top-24">
+          <div className="rounded-[30px] border border-slate-200 bg-white p-4 shadow-[0_16px_34px_rgba(15,23,42,0.06)] sm:p-6">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              {checkoutCopy.cartItemSection.sectionTitle}
+            </p>
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-slate-900 sm:text-xl">Order Summary</h3>
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+              <h3 className="text-lg font-semibold text-slate-900 sm:text-xl">
+                {checkoutCopy.cartItemSection.orderSummaryLabel}
+              </h3>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                 {totalQty} Items
               </span>
             </div>
 
-            <div className="mt-4 space-y-3.5">
+            <div className="mt-4 space-y-3">
               {summaryItems.map((item) => {
                 const stockValue = Number(item.stock);
                 const stock =
@@ -862,10 +1189,10 @@ export default function CheckoutPage() {
                 return (
                   <div
                     key={item.productId}
-                    className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3"
+                    className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5"
                   >
                     <div className="flex items-start gap-3">
-                      <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-white">
+                      <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-white">
                         {item.imageUrl ? (
                           <img
                             src={item.imageUrl}
@@ -900,23 +1227,23 @@ export default function CheckoutPage() {
                       </button>
                     </div>
                     <div className="mt-3 flex items-center justify-end">
-                      <div className="inline-flex items-center rounded-full border border-slate-200 bg-white px-0.5 shadow-sm">
+                      <div className="inline-flex items-center rounded-full border border-slate-300 bg-white px-1 shadow-sm">
                         <button
                           type="button"
                           disabled={item.qty <= 1 || isSubmitting || isRemoteSyncing}
                           onClick={() => handleQtyDecrement(item)}
-                          className="h-6 w-6 rounded-full border border-transparent text-xs font-semibold text-slate-700 hover:border-slate-200 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="h-7 w-7 rounded-full border border-transparent text-xs font-semibold text-slate-700 hover:border-slate-200 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           -
                         </button>
-                        <span className="min-w-7 text-center text-xs font-semibold text-slate-900">
+                        <span className="min-w-8 text-center text-xs font-semibold text-slate-900">
                           {item.qty}
                         </span>
                         <button
                           type="button"
                           disabled={!canIncrement || isSubmitting || isRemoteSyncing}
                           onClick={() => handleQtyIncrement(item)}
-                          className="h-6 w-6 rounded-full border border-transparent text-xs font-semibold text-slate-700 hover:border-slate-200 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="h-7 w-7 rounded-full border border-transparent text-xs font-semibold text-slate-700 hover:border-slate-200 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           +
                         </button>
@@ -944,7 +1271,9 @@ export default function CheckoutPage() {
                   disabled={isSubmitting || couponStatus === "loading"}
                   className="h-11 w-24 shrink-0 rounded-2xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-28"
                 >
-                  {couponStatus === "loading" ? "Applying..." : "Apply"}
+                  {couponStatus === "loading"
+                    ? "Applying..."
+                    : checkoutCopy.cartItemSection.applyButtonLabel}
                 </button>
               </div>
               {appliedCouponMeta?.code ? (
@@ -977,21 +1306,21 @@ export default function CheckoutPage() {
               ) : null}
             </div>
 
-            <div className="mt-6 space-y-2 border-t border-slate-200 pt-5 text-sm">
+            <div className="mt-6 space-y-2.5 border-t border-slate-200 pt-5 text-sm">
               <div className="flex items-center justify-between text-slate-600">
-                <span>Subtotal</span>
+                <span>{checkoutCopy.cartItemSection.subTotalLabel}</span>
                 <span className="font-medium tabular-nums text-slate-900">
                   {formatCurrency(subtotalValue)}
                 </span>
               </div>
               <div className="flex items-center justify-between text-slate-600">
-                <span>Shipping Cost</span>
+                <span>{checkoutCopy.shippingDetails.shippingCostLabel}</span>
                 <span className="font-medium tabular-nums text-slate-900">
                   {formatCurrency(shippingCost)}
                 </span>
               </div>
               <div className="flex items-center justify-between text-slate-600">
-                <span>Discount</span>
+                <span>{checkoutCopy.cartItemSection.discountLabel}</span>
                 <span className="font-semibold tabular-nums text-orange-500">
                   {discountValue > 0
                     ? `- ${formatCurrency(discountValue)}`
@@ -1000,7 +1329,9 @@ export default function CheckoutPage() {
               </div>
               <div className="border-t border-dashed border-slate-200 pt-3" />
               <div className="flex items-center justify-between">
-                <span className="text-base font-semibold text-slate-900">TOTAL COST</span>
+                <span className="text-base font-semibold text-slate-900">
+                  {checkoutCopy.cartItemSection.totalCostLabel}
+                </span>
                 <span className="text-2xl font-extrabold tabular-nums text-slate-900">
                   {formatCurrency(total)}
                 </span>
@@ -1011,16 +1342,16 @@ export default function CheckoutPage() {
               type="submit"
               disabled={isSubmitting || isRemoteSyncing || couponStatus === "loading"}
               aria-busy={isSubmitting}
-              className="mt-6 inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-7 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-emerald-600 px-7 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isSubmitting ? (
-                <>
-                  <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                  Processing...
-                </>
-              ) : (
-                "Place Order"
-              )}
+              <span
+                className={`h-4 w-4 rounded-full border-2 border-white/40 border-t-white ${
+                  isSubmitting ? "animate-spin" : "opacity-0"
+                }`}
+              />
+              <span>
+                {isSubmitting ? "Processing..." : checkoutCopy.buttons.confirmButtonLabel}
+              </span>
             </button>
           </div>
         </aside>

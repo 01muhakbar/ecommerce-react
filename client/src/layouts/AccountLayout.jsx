@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useNavigate, useOutletContext } from "react-router-dom";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   ClipboardList,
   KeyRound,
@@ -10,15 +11,31 @@ import {
 } from "lucide-react";
 import { useAuth } from "../auth/useAuth.js";
 import { useCartStore } from "../store/cart.store.ts";
+import { getStoreCustomization } from "../api/store.service.ts";
 
-const navItems = [
-  { to: "/account", label: "Dashboard", Icon: LayoutDashboard },
-  { to: "/account/orders", label: "My Orders", Icon: ClipboardList },
-  { to: "/account/my-review", label: "My Review", Icon: Star },
-  { to: "/account/profile", label: "Update Profile", Icon: User },
-];
+const toText = (value, fallback) => {
+  const normalized = String(value ?? "").trim();
+  return normalized || fallback;
+};
 
-const disabledItems = [{ label: "Change Password", Icon: KeyRound }];
+const normalizeDashboardSettingCopy = (raw) => {
+  const source = raw && typeof raw === "object" ? raw : {};
+  const dashboard = source.dashboard && typeof source.dashboard === "object" ? source.dashboard : {};
+  const updateProfile =
+    source.updateProfile && typeof source.updateProfile === "object"
+      ? source.updateProfile
+      : {};
+  return {
+    dashboard: {
+      dashboardLabel: toText(dashboard.dashboardLabel, "Dashboard"),
+      myOrderValue: toText(dashboard.myOrderValue, "My Orders"),
+    },
+    updateProfile: {
+      sectionTitleValue: toText(updateProfile.sectionTitleValue, "Update Profile"),
+      changePasswordLabel: toText(updateProfile.changePasswordLabel, "Change Password"),
+    },
+  };
+};
 
 const getInitials = (value) => {
   const text = String(value || "").trim();
@@ -31,10 +48,34 @@ const getInitials = (value) => {
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 };
 
-function AccountSidebar({ user, onLogout, isLoggingOut }) {
+function AccountSidebar({ user, onLogout, isLoggingOut, dashboardSettingCopy }) {
   const displayName = user?.name || user?.fullName || "Guest User";
   const email = user?.email || "No email provided";
   const initials = getInitials(user?.name || user?.email || "User");
+  const navItems = [
+    {
+      to: "/account",
+      label: dashboardSettingCopy.dashboard.dashboardLabel,
+      Icon: LayoutDashboard,
+    },
+    {
+      to: "/account/orders",
+      label: dashboardSettingCopy.dashboard.myOrderValue,
+      Icon: ClipboardList,
+    },
+    { to: "/account/my-review", label: "My Review", Icon: Star },
+    {
+      to: "/account/profile",
+      label: dashboardSettingCopy.updateProfile.sectionTitleValue,
+      Icon: User,
+    },
+  ];
+  const disabledItems = [
+    {
+      label: dashboardSettingCopy.updateProfile.changePasswordLabel,
+      Icon: KeyRound,
+    },
+  ];
   return (
     <aside className="lg:sticky lg:top-6">
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -102,6 +143,14 @@ export default function AccountLayout() {
   const { user } = useOutletContext() || {};
   const { logout } = useAuth() || {};
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const dashboardSettingQuery = useQuery({
+    queryKey: ["store-customization", "dashboard-setting", "en"],
+    queryFn: () => getStoreCustomization({ lang: "en", include: "dashboardSetting" }),
+    staleTime: 60_000,
+  });
+  const dashboardSettingCopy = normalizeDashboardSettingCopy(
+    dashboardSettingQuery.data?.customization?.dashboardSetting
+  );
 
   const handleLogout = async () => {
     if (isLoggingOut) return;
@@ -126,7 +175,12 @@ export default function AccountLayout() {
   };
   return (
     <section className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
-      <AccountSidebar user={user} onLogout={handleLogout} isLoggingOut={isLoggingOut} />
+      <AccountSidebar
+        user={user}
+        onLogout={handleLogout}
+        isLoggingOut={isLoggingOut}
+        dashboardSettingCopy={dashboardSettingCopy}
+      />
       <main className="rounded-xl border border-slate-200 bg-white p-6">
         <Outlet context={{ user }} />
       </main>

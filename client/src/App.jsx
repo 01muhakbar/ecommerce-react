@@ -14,6 +14,9 @@ import StoreSearchPage from "./pages/store/StoreSearchPage.jsx";
 import StoreOffersPage from "./pages/store/StoreOffersPage.jsx";
 import StoreAboutUsPage from "./pages/store/StoreAboutUsPage.jsx";
 import StoreContactUsPage from "./pages/store/StoreContactUsPage.jsx";
+import StorePrivacyPolicyPage from "./pages/store/StorePrivacyPolicyPage.jsx";
+import StoreTermsAndConditionsPage from "./pages/store/StoreTermsAndConditionsPage.jsx";
+import StoreFaqPage from "./pages/store/StoreFaqPage.jsx";
 import KachaBazarDemoHomePage from "./pages/store/KachaBazarDemoHomePage.jsx";
 import AdminGuard from "./components/AdminGuard.jsx";
 import AdminLayout from "./components/layouts/AdminLayout.jsx";
@@ -41,6 +44,7 @@ const CurrenciesPage = lazy(() => import("./pages/Currencies.jsx"));
 const StoreCustomizationPage = lazy(() =>
   import("./pages/admin/StoreCustomization.jsx")
 );
+const StoreSettingsPage = lazy(() => import("./pages/admin/StoreSettings.jsx"));
 import AdminStaffPage from "./pages/admin/Staff.jsx";
 const AdminForbiddenPage = lazy(() => import("./pages/admin/Forbidden.jsx"));
 import AccountGuard from "./components/AccountGuard.jsx";
@@ -72,6 +76,14 @@ export default function App() {
             <Route path="checkout/success" element={<StoreCheckoutSuccessPage />} />
             <Route path="order/:ref" element={<StoreOrderTrackingPage />} />
             <Route path="about-us" element={<StoreAboutUsPage />} />
+            <Route path="privacy-policy" element={<StorePrivacyPolicyPage />} />
+            <Route path="faq" element={<StoreFaqPage />} />
+            <Route path="faqs" element={<StoreFaqPage />} />
+            <Route path="terms" element={<StoreTermsAndConditionsPage />} />
+            <Route
+              path="terms-and-conditions"
+              element={<StoreTermsAndConditionsPage />}
+            />
             <Route path="contact-us" element={<StoreContactUsPage />} />
             <Route path="offers" element={<StoreOffersPage />} />
             <Route path="about" element={<Navigate to="/about-us" replace />} />
@@ -252,12 +264,16 @@ export default function App() {
                 element={<Navigate to="/admin/store/customization" replace />}
               />
               <Route
-                path="store-settings"
+                path="store/store-settings"
                 element={
                   <RequirePerm perm="SETTINGS_MANAGE">
-                    <ComingSoon title="Store Settings" />
+                    <StoreSettingsPage />
                   </RequirePerm>
                 }
+              />
+              <Route
+                path="store-settings"
+                element={<Navigate to="/admin/store/store-settings" replace />}
               />
               <Route
                 path="settings"
