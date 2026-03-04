@@ -55,14 +55,14 @@ const fieldInputClass =
   "h-11 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-700 transition focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100";
 const fieldTextareaClass =
   "h-32 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-700 transition focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100";
+const sectionCardClass = "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm";
+const sectionTitleClass = "text-base font-semibold text-slate-900";
 
 function FormRow({ label, helper, children }) {
   return (
-    <div className="grid gap-4 border-b border-slate-200 py-6 md:grid-cols-[260px_minmax(0,1fr)]">
+    <div className="space-y-2">
       <div>
-        <p className="pt-1 text-[18px] font-medium leading-tight text-slate-800">
-          {label}
-        </p>
+        <p className="text-sm font-semibold text-slate-700">{label}</p>
         {helper ? <p className="mt-1 text-xs text-slate-500">{helper}</p> : null}
       </div>
       <div>{children}</div>
@@ -426,27 +426,32 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
             : "overflow-hidden rounded-xl border border-slate-200 shadow-[0_6px_20px_-16px_rgba(15,23,42,0.3)]"
         }`}
       >
-        <div className="shrink-0 flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 px-5 py-5 md:px-6">
-          <div>
-            <h1 className="text-[36px] font-semibold leading-tight text-slate-900">
-              {isEdit ? "Edit Product" : "Add Product"}
-            </h1>
-            <p className="mt-1 text-sm text-slate-600">
-              Add your product and necessary information from here
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <select className="h-10 min-w-[82px] rounded-[10px] border border-emerald-500 bg-white px-3 text-sm font-medium text-slate-700 focus:outline-none">
-              <option value="en">en</option>
-            </select>
-            <button
-              type="button"
-              onClick={closeForm}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-rose-500 shadow-[0_6px_14px_-8px_rgba(15,23,42,0.3)] transition hover:bg-slate-50"
-              aria-label="Close add product page"
-            >
-              <X className="h-4 w-4" />
-            </button>
+        <div className="shrink-0 border-b border-slate-200 px-5 py-5 md:px-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div className="space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
+                Admin / Products / {isEdit ? "Edit" : "Add"}
+              </p>
+              <h1 className="text-3xl font-semibold leading-tight text-slate-900 sm:text-4xl">
+                {isEdit ? "Edit Product" : "Add Product"}
+              </h1>
+              <p className="text-sm text-slate-600">
+                Create and manage product information with consistent catalog details.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 self-start md:self-auto">
+              <select className="h-10 min-w-[82px] rounded-[10px] border border-emerald-500 bg-white px-3 text-sm font-medium text-slate-700 focus:outline-none">
+                <option value="en">en</option>
+              </select>
+              <button
+                type="button"
+                onClick={closeForm}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-rose-500 shadow-[0_6px_14px_-8px_rgba(15,23,42,0.3)] transition hover:bg-slate-50"
+                aria-label="Close add product page"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -466,305 +471,373 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
           onSubmit={handleSubmit}
           className={
             isDrawerMode
-              ? "flex min-h-0 flex-1 flex-col px-5 pb-0 pt-3 md:px-6"
-              : "px-5 pb-0 pt-3 md:px-6"
+              ? "flex min-h-0 flex-1 flex-col px-5 pb-0 pt-4 md:px-6"
+              : "px-5 pb-0 pt-4 md:px-6"
           }
         >
-          <div className="mb-0 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
-            <div className="relative text-[20px] font-semibold leading-none text-emerald-700">
-              Basic Info
-              <span className="absolute -bottom-4 left-0 h-0.5 w-24 bg-emerald-600" />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-orange-500">
-                Does this product have variants?
-              </span>
-              <button
-                type="button"
-                onClick={() => setHasVariants((prev) => !prev)}
-                className={`relative inline-flex h-8 w-[66px] items-center rounded-full px-1 transition ${
-                  hasVariants ? "bg-emerald-500" : "bg-rose-500"
-                }`}
-                aria-label="Toggle variants"
-              >
-                <span
-                  className={`inline-block h-6 w-6 rounded-full bg-white shadow transition ${
-                    hasVariants ? "translate-x-[34px]" : "translate-x-0"
-                  }`}
-                />
-                <span className="absolute right-2 text-sm font-semibold text-white">
-                  {hasVariants ? "Yes" : "No"}
-                </span>
-              </button>
-            </div>
-          </div>
-
           <div
             className={
-              isDrawerMode
-                ? "min-h-0 flex-1 space-y-0 overflow-y-auto pr-1 pb-4"
-                : "space-y-0"
+              isDrawerMode ? "min-h-0 flex-1 overflow-y-auto pb-4 pr-1" : "pb-4"
             }
           >
             {isEdit && productQuery.isLoading ? (
-              <div className="flex min-h-[320px] items-center justify-center border-b border-slate-200 py-10 text-sm text-slate-500">
+              <div className="flex min-h-[320px] items-center justify-center py-10 text-sm text-slate-500">
                 Loading product details...
               </div>
             ) : null}
             {isEdit && productQuery.isLoading ? null : (
-              <>
-            <FormRow label="Product Title/Name">
-              <input
-                type="text"
-                required
-                value={form.name}
-                onChange={(event) => handleNameChange(event.target.value)}
-                placeholder="Product Title/Name"
-                className={fieldInputClass}
-              />
-            </FormRow>
-
-            <FormRow label="Product Description">
-              <textarea
-                value={form.description}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, description: event.target.value }))
-                }
-                placeholder="Product Description"
-                rows={4}
-                className={fieldTextareaClass}
-              />
-            </FormRow>
-
-            <FormRow label="Product Images">
-              <div className="space-y-3">
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => fileInputRef.current?.click()}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    setDragActive(false);
-                    addFiles(event.dataTransfer.files);
-                  }}
-                  onDragOver={(event) => {
-                    event.preventDefault();
-                    setDragActive(true);
-                  }}
-                  onDragLeave={() => setDragActive(false)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      fileInputRef.current?.click();
-                    }
-                  }}
-                  className={`flex h-[150px] cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-6 text-center transition ${
-                    dragActive
-                      ? "border-emerald-400 bg-emerald-50"
-                      : "border-slate-300 bg-slate-50 hover:border-slate-400"
-                  }`}
-                >
-                  <UploadCloud className="mb-2 h-8 w-8 text-emerald-500" />
-                  <p className="text-[16px] font-medium leading-tight text-slate-700">
-                    Drag your images here
-                  </p>
-                  <p className="mt-2 text-xs italic text-slate-500">
-                    (Only *.jpeg, *.webp and *.png images will be accepted)
-                  </p>
-                </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={(event) => addFiles(event.target.files)}
-                  className="hidden"
-                />
-                {localImages.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    {localImages.map((image) => (
-                      <div
-                        key={image.id}
-                        className="relative overflow-hidden rounded-lg border border-slate-200 bg-white"
-                      >
-                        <img src={image.url} alt={image.name} className="h-20 w-full object-cover" />
-                        <button
-                          type="button"
-                          onClick={() => removeImage(image.id)}
-                          className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/90 text-slate-600 hover:bg-white"
-                          aria-label="Remove image"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))}
+              <div className="space-y-5">
+                <section className={sectionCardClass}>
+                  <div className="mb-4">
+                    <h2 className={sectionTitleClass}>Basic Info</h2>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Set product identity and primary descriptive information.
+                    </p>
                   </div>
-                ) : null}
-              </div>
-            </FormRow>
-
-            <FormRow label="Product SKU">
-              <input
-                type="text"
-                value={form.sku}
-                onChange={(event) => setForm((prev) => ({ ...prev, sku: event.target.value }))}
-                placeholder="Product SKU"
-                className={fieldInputClass}
-              />
-            </FormRow>
-
-            <FormRow label="Product Barcode">
-              <input
-                type="text"
-                value={form.barcode}
-                onChange={(event) => setForm((prev) => ({ ...prev, barcode: event.target.value }))}
-                placeholder="Product Barcode"
-                className={fieldInputClass}
-              />
-            </FormRow>
-
-            <FormRow label="Category">
-              <div className="space-y-2">
-                <input
-                  type="text"
-                  readOnly
-                  value={
-                    categories.find((cat) => String(cat.id) === String(form.categoryId))?.name || ""
-                  }
-                  placeholder="Select Category"
-                  className={fieldInputClass}
-                />
-                <div className="max-h-60 overflow-auto rounded-lg border border-slate-200 bg-white p-2">
-                  <CategoryTree
-                    tree={categoryTree}
-                    selectedId={form.categoryId}
-                    onSelect={onSelectCategory}
-                  />
-                </div>
-              </div>
-            </FormRow>
-
-            <FormRow label="Default Category">
-              <select
-                value={form.defaultCategoryId}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, defaultCategoryId: event.target.value }))
-                }
-                className={fieldInputClass}
-              >
-                <option value="">Default Category</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={String(category.id)}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </FormRow>
-
-            <FormRow label="Product Price">
-              <div className="flex items-center overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
-                <span className="inline-flex h-10 w-14 items-center justify-center border-r border-slate-200 bg-slate-100 text-xs font-semibold text-slate-500">
-                  Rp
-                </span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  required
-                  value={form.price}
-                  onChange={(event) => setForm((prev) => ({ ...prev, price: event.target.value }))}
-                  className="h-11 w-full bg-transparent px-3 text-sm focus:bg-white focus:outline-none"
-                />
-              </div>
-            </FormRow>
-
-            <FormRow label="Sale Price">
-              <div className="flex items-center overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
-                <span className="inline-flex h-10 w-14 items-center justify-center border-r border-slate-200 bg-slate-100 text-xs font-semibold text-slate-500">
-                  Rp
-                </span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.salePrice}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, salePrice: event.target.value }))
-                  }
-                  className="h-11 w-full bg-transparent px-3 text-sm focus:bg-white focus:outline-none"
-                />
-              </div>
-            </FormRow>
-
-            <FormRow label="Product Quantity">
-              <input
-                type="number"
-                min="0"
-                step="1"
-                required
-                value={form.stock}
-                onChange={(event) => setForm((prev) => ({ ...prev, stock: event.target.value }))}
-                className={fieldInputClass}
-              />
-            </FormRow>
-
-            <FormRow label="Product Slug">
-              <input
-                type="text"
-                value={form.slug}
-                onChange={(event) => {
-                  setSlugTouched(true);
-                  setForm((prev) => ({ ...prev, slug: slugify(event.target.value) }));
-                }}
-                placeholder="Product Slug"
-                className={fieldInputClass}
-              />
-            </FormRow>
-
-            <FormRow label="Product Tags">
-              <div className="space-y-2">
-                <input
-                  type="text"
-                  value={tagInput}
-                  onChange={(event) => setTagInput(event.target.value)}
-                  onKeyDown={handleTagKeyDown}
-                  className={fieldInputClass}
-                  placeholder="Product Tag (Write then press enter to add new tag)"
-                />
-                {form.tags.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {form.tags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700"
-                      >
-                        {tag}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setForm((prev) => ({
-                              ...prev,
-                              tags: prev.tags.filter((item) => item !== tag),
-                            }))
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="lg:col-span-2">
+                      <FormRow label="Product Title/Name">
+                        <input
+                          type="text"
+                          required
+                          value={form.name}
+                          onChange={(event) => handleNameChange(event.target.value)}
+                          placeholder="Product Title/Name"
+                          className={fieldInputClass}
+                        />
+                      </FormRow>
+                    </div>
+                    <div className="lg:col-span-2">
+                      <FormRow label="Product Description">
+                        <textarea
+                          value={form.description}
+                          onChange={(event) =>
+                            setForm((prev) => ({ ...prev, description: event.target.value }))
                           }
-                          className="text-emerald-700 hover:text-emerald-900"
-                          aria-label={`Remove ${tag}`}
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </span>
-                    ))}
+                          placeholder="Product Description"
+                          rows={4}
+                          className={fieldTextareaClass}
+                        />
+                      </FormRow>
+                    </div>
+                    <FormRow label="Product SKU">
+                      <input
+                        type="text"
+                        value={form.sku}
+                        onChange={(event) =>
+                          setForm((prev) => ({ ...prev, sku: event.target.value }))
+                        }
+                        placeholder="Product SKU"
+                        className={fieldInputClass}
+                      />
+                    </FormRow>
+                    <FormRow label="Product Barcode">
+                      <input
+                        type="text"
+                        value={form.barcode}
+                        onChange={(event) =>
+                          setForm((prev) => ({ ...prev, barcode: event.target.value }))
+                        }
+                        placeholder="Product Barcode"
+                        className={fieldInputClass}
+                      />
+                    </FormRow>
                   </div>
-                ) : null}
+                </section>
+
+                <section className={sectionCardClass}>
+                  <div className="mb-4">
+                    <h2 className={sectionTitleClass}>Category</h2>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Assign category placement for storefront navigation.
+                    </p>
+                  </div>
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="lg:col-span-2">
+                      <FormRow label="Category">
+                        <div className="space-y-2">
+                          <input
+                            type="text"
+                            readOnly
+                            value={
+                              categories.find((cat) => String(cat.id) === String(form.categoryId))
+                                ?.name || ""
+                            }
+                            placeholder="Select Category"
+                            className={fieldInputClass}
+                          />
+                          <div className="max-h-60 overflow-auto rounded-lg border border-slate-200 bg-white p-2">
+                            <CategoryTree
+                              tree={categoryTree}
+                              selectedId={form.categoryId}
+                              onSelect={onSelectCategory}
+                            />
+                          </div>
+                        </div>
+                      </FormRow>
+                    </div>
+                    <FormRow label="Default Category">
+                      <select
+                        value={form.defaultCategoryId}
+                        onChange={(event) =>
+                          setForm((prev) => ({ ...prev, defaultCategoryId: event.target.value }))
+                        }
+                        className={fieldInputClass}
+                      >
+                        <option value="">Default Category</option>
+                        {categories.map((category) => (
+                          <option key={category.id} value={String(category.id)}>
+                            {category.name}
+                          </option>
+                        ))}
+                      </select>
+                    </FormRow>
+                  </div>
+                </section>
+
+                <section className={sectionCardClass}>
+                  <div className="mb-4">
+                    <h2 className={sectionTitleClass}>Pricing</h2>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Configure base and sale price presentation.
+                    </p>
+                  </div>
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <FormRow label="Product Price">
+                      <div className="flex items-center overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                        <span className="inline-flex h-10 w-14 items-center justify-center border-r border-slate-200 bg-slate-100 text-xs font-semibold text-slate-500">
+                          Rp
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          required
+                          value={form.price}
+                          onChange={(event) =>
+                            setForm((prev) => ({ ...prev, price: event.target.value }))
+                          }
+                          className="h-11 w-full bg-transparent px-3 text-sm focus:bg-white focus:outline-none"
+                        />
+                      </div>
+                    </FormRow>
+
+                    <FormRow label="Sale Price">
+                      <div className="flex items-center overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                        <span className="inline-flex h-10 w-14 items-center justify-center border-r border-slate-200 bg-slate-100 text-xs font-semibold text-slate-500">
+                          Rp
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={form.salePrice}
+                          onChange={(event) =>
+                            setForm((prev) => ({ ...prev, salePrice: event.target.value }))
+                          }
+                          className="h-11 w-full bg-transparent px-3 text-sm focus:bg-white focus:outline-none"
+                        />
+                      </div>
+                    </FormRow>
+                  </div>
+                </section>
+
+                <section className={sectionCardClass}>
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className={sectionTitleClass}>Inventory</h2>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Manage stock and variant-related display settings.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-orange-500">
+                        Does this product have variants?
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setHasVariants((prev) => !prev)}
+                        className={`relative inline-flex h-8 w-[66px] items-center rounded-full px-1 transition ${
+                          hasVariants ? "bg-emerald-500" : "bg-rose-500"
+                        }`}
+                        aria-label="Toggle variants"
+                      >
+                        <span
+                          className={`inline-block h-6 w-6 rounded-full bg-white shadow transition ${
+                            hasVariants ? "translate-x-[34px]" : "translate-x-0"
+                          }`}
+                        />
+                        <span className="absolute right-2 text-sm font-semibold text-white">
+                          {hasVariants ? "Yes" : "No"}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <FormRow label="Product Quantity">
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        required
+                        value={form.stock}
+                        onChange={(event) =>
+                          setForm((prev) => ({ ...prev, stock: event.target.value }))
+                        }
+                        className={fieldInputClass}
+                      />
+                    </FormRow>
+
+                    <FormRow label="Product Slug">
+                      <input
+                        type="text"
+                        value={form.slug}
+                        onChange={(event) => {
+                          setSlugTouched(true);
+                          setForm((prev) => ({ ...prev, slug: slugify(event.target.value) }));
+                        }}
+                        placeholder="Product Slug"
+                        className={fieldInputClass}
+                      />
+                    </FormRow>
+                  </div>
+                </section>
+
+                <section className={sectionCardClass}>
+                  <div className="mb-4">
+                    <h2 className={sectionTitleClass}>Images</h2>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Upload product visuals and review selected previews.
+                    </p>
+                  </div>
+                  <FormRow label="Product Images">
+                    <div className="space-y-3">
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => fileInputRef.current?.click()}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          setDragActive(false);
+                          addFiles(event.dataTransfer.files);
+                        }}
+                        onDragOver={(event) => {
+                          event.preventDefault();
+                          setDragActive(true);
+                        }}
+                        onDragLeave={() => setDragActive(false)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            fileInputRef.current?.click();
+                          }
+                        }}
+                        className={`flex h-[170px] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-6 text-center transition ${
+                          dragActive
+                            ? "border-emerald-400 bg-emerald-50"
+                            : "border-slate-300 bg-slate-50 hover:border-slate-400"
+                        }`}
+                      >
+                        <UploadCloud className="mb-2 h-8 w-8 text-emerald-500" />
+                        <p className="text-base font-medium leading-tight text-slate-700">
+                          Drag your images here
+                        </p>
+                        <p className="mt-2 text-xs italic text-slate-500">
+                          (Only *.jpeg, *.webp and *.png images will be accepted)
+                        </p>
+                      </div>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        accept="image/jpeg,image/png,image/webp"
+                        onChange={(event) => addFiles(event.target.files)}
+                        className="hidden"
+                      />
+                      {localImages.length > 0 ? (
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          {localImages.map((image) => (
+                            <div
+                              key={image.id}
+                              className="relative overflow-hidden rounded-lg border border-slate-200 bg-white"
+                            >
+                              <img
+                                src={image.url}
+                                alt={image.name}
+                                className="h-20 w-full object-cover"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeImage(image.id)}
+                                className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/90 text-slate-600 hover:bg-white"
+                                aria-label="Remove image"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </FormRow>
+                </section>
+
+                <section className={sectionCardClass}>
+                  <div className="mb-4">
+                    <h2 className={sectionTitleClass}>Metadata</h2>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Keep slug and tags organized for search and display.
+                    </p>
+                  </div>
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="lg:col-span-2">
+                      <FormRow label="Product Tags">
+                        <div className="space-y-2">
+                          <input
+                            type="text"
+                            value={tagInput}
+                            onChange={(event) => setTagInput(event.target.value)}
+                            onKeyDown={handleTagKeyDown}
+                            className={fieldInputClass}
+                            placeholder="Product Tag (Write then press enter to add new tag)"
+                          />
+                          {form.tags.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {form.tags.map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700"
+                                >
+                                  {tag}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setForm((prev) => ({
+                                        ...prev,
+                                        tags: prev.tags.filter((item) => item !== tag),
+                                      }))
+                                    }
+                                    className="text-emerald-700 hover:text-emerald-900"
+                                    aria-label={`Remove ${tag}`}
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      </FormRow>
+                    </div>
+                  </div>
+                </section>
               </div>
-            </FormRow>
-              </>
             )}
           </div>
 
           <div
-            className={`-mx-5 mt-0 grid shrink-0 grid-cols-1 gap-4 border-t border-slate-200 bg-white px-5 py-5 md:-mx-6 md:grid-cols-2 md:px-6 ${
-              isDrawerMode ? "sticky bottom-0" : ""
+            className={`-mx-5 mt-0 grid shrink-0 grid-cols-1 gap-3 border-t border-slate-200 bg-white/95 px-5 py-4 backdrop-blur md:-mx-6 md:grid-cols-2 md:px-6 ${
+              isDrawerMode ? "sticky bottom-0 shadow-[0_-8px_24px_-20px_rgba(15,23,42,0.45)]" : ""
             }`}
           >
             {isDrawerMode ? (
@@ -786,7 +859,7 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
             <button
               type="submit"
               disabled={isSubmitting}
-              className="inline-flex h-12 items-center justify-center rounded-xl bg-emerald-500 px-6 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-12 items-center justify-center rounded-xl bg-emerald-600 px-6 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isSubmitting
                 ? isEdit

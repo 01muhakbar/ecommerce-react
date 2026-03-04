@@ -26,6 +26,11 @@ export function StoreCartDrawer({
   const showInlineError = Boolean(error) && hasItems;
   const [shouldRender, setShouldRender] = useState(isOpen);
   const lastRefreshAtRef = useRef(0);
+  const subtotalValue = Number(subtotal || 0);
+  const discountValue = 0;
+  const shippingLabel = "Calculated at checkout";
+  const taxLabel = "Calculated at checkout";
+  const totalValue = subtotalValue;
   const errorMessage =
     error?.response?.data?.message ?? error?.message ?? GENERIC_ERROR;
 
@@ -291,55 +296,75 @@ export function StoreCartDrawer({
           </div>
 
           <footer className="sticky bottom-0 z-10 shrink-0 border-t border-slate-200 bg-white/95 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3.5 shadow-[0_-6px_18px_rgba(15,23,42,0.08)] backdrop-blur sm:px-6">
-            <div className="flex items-center justify-between text-sm font-medium text-slate-600">
-              <span>Subtotal</span>
-              <span className="font-semibold text-slate-900">
-                {formatCurrency(Number(subtotal || 0))}
-              </span>
-            </div>
-            <div className="mt-2 border-t border-dashed border-slate-200 pt-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-slate-900">Total</span>
-                <span className="text-lg font-bold text-slate-900">
-                  {formatCurrency(Number(subtotal || 0))}
+            <div className="rounded-2xl border border-slate-200 bg-white p-3.5 sm:p-4">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-slate-900">Order Summary</h2>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  {items.length} Items
                 </span>
               </div>
-              <p className="mt-1 text-xs text-slate-500">
-                Shipping and taxes calculated at checkout.
-              </p>
+              <div className="mt-3 space-y-2.5 text-sm">
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Subtotal</span>
+                  <span className="font-semibold text-slate-900">
+                    {formatCurrency(subtotalValue)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Discount</span>
+                  <span className="font-semibold text-slate-900">
+                    {formatCurrency(discountValue)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Shipping</span>
+                  <span className="font-medium text-slate-500">{shippingLabel}</span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Tax</span>
+                  <span className="font-medium text-slate-500">{taxLabel}</span>
+                </div>
+              </div>
+              <div className="mt-3 border-t border-dashed border-slate-200 pt-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-slate-800">Total</span>
+                  <span className="text-lg font-bold text-slate-900">
+                    {formatCurrency(totalValue)}
+                  </span>
+                </div>
+              </div>
             </div>
-
-            <div className="mt-3.5 grid grid-cols-2 gap-3">
+            <div className="mt-3.5 space-y-2.5">
               {hasItems ? (
                 <Link
-                  to="/cart"
-                  className="inline-flex h-11 items-center justify-center rounded-full border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:border-slate-400"
+                  to="/checkout"
+                  className="inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
                 >
-                  View Cart
+                  Proceed to Checkout
                 </Link>
               ) : (
                 <button
                   type="button"
                   disabled
-                  className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-400"
+                  className="inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-300 px-4 text-sm font-semibold text-white"
                 >
-                  View Cart
+                  Proceed to Checkout
                 </button>
               )}
               {hasItems ? (
                 <Link
-                  to="/checkout"
-                  className="inline-flex h-11 items-center justify-center rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+                  to="/cart"
+                  className="inline-flex h-10 w-full items-center justify-center rounded-full border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:border-slate-400"
                 >
-                  Checkout
+                  View Cart
                 </Link>
               ) : (
                 <button
                   type="button"
                   disabled
-                  className="inline-flex h-11 items-center justify-center rounded-full bg-emerald-300 px-4 text-sm font-semibold text-white"
+                  className="inline-flex h-10 w-full items-center justify-center rounded-full border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-400"
                 >
-                  Checkout
+                  View Cart
                 </button>
               )}
             </div>
@@ -362,6 +387,10 @@ export default function StoreCartPage() {
   const errorMessage =
     error?.response?.data?.message ?? error?.message ?? GENERIC_ERROR;
   const subtotalValue = Number(subtotal || 0);
+  const discountValue = 0;
+  const shippingLabel = "Calculated at checkout";
+  const taxLabel = "Calculated at checkout";
+  const totalValue = subtotalValue;
 
   useEffect(() => {
     const now = Date.now();
@@ -563,14 +592,24 @@ export default function StoreCartPage() {
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-slate-600">
+                  <span>Discount</span>
+                  <span className="font-semibold text-slate-900">
+                    {formatCurrency(discountValue)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
                   <span>Shipping</span>
-                  <span className="font-semibold text-slate-900">Calculated at checkout</span>
+                  <span className="font-medium text-slate-500">{shippingLabel}</span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Tax</span>
+                  <span className="font-medium text-slate-500">{taxLabel}</span>
                 </div>
               </div>
               <div className="mt-4 flex items-center justify-between border-b border-dashed border-slate-200 pb-4">
                 <span className="text-sm font-semibold text-slate-700">Total</span>
                 <span className="text-xl font-bold text-slate-900">
-                  {formatCurrency(subtotalValue)}
+                  {formatCurrency(totalValue)}
                 </span>
               </div>
               <Link

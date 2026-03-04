@@ -50,6 +50,39 @@ const isEmojiLike = (value) => {
   return v.length <= 3 && !isImagePath(v);
 };
 
+const btnBase =
+  "inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 text-sm font-semibold transition";
+const btnOutline = `${btnBase} border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50`;
+const btnGreen = `${btnBase} bg-emerald-600 text-white hover:bg-emerald-700`;
+const btnDanger = `${btnBase} bg-rose-600 text-white hover:bg-rose-700`;
+const btnAmber = `${btnBase} bg-amber-500 text-white hover:bg-amber-600`;
+const fieldClass =
+  "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none";
+const statCardClass =
+  "rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-right shadow-sm";
+const tableHeadCell =
+  "whitespace-nowrap px-4 py-3.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500";
+const tableCell = "px-4 py-3.5 align-middle text-sm text-slate-700";
+
+function CategoryPublishedBadge({ published }) {
+  return (
+    <span
+      className={`inline-flex min-h-7 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+        published
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-slate-200 bg-slate-100 text-slate-600"
+      }`}
+    >
+      <span
+        className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+          published ? "bg-emerald-500" : "bg-slate-400"
+        }`}
+      />
+      {published ? "Active" : "Inactive"}
+    </span>
+  );
+}
+
 export default function AdminSubCategoriesPage({ resolveMode = "code" }) {
   const qc = useQueryClient();
   const params = useParams();
@@ -176,6 +209,7 @@ export default function AdminSubCategoriesPage({ resolveMode = "code" }) {
       return haystack.includes(keyword);
     });
   }, [categories, debouncedSearch, parentCategory, parentId]);
+  const activeFilterCount = debouncedSearch ? 1 : 0;
 
   useEffect(() => {
     if (!Array.isArray(subCategories) || subCategories.length === 0) {
@@ -305,45 +339,34 @@ export default function AdminSubCategoriesPage({ resolveMode = "code" }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Category</h1>
-          <div className="mt-1 flex items-center gap-1.5 text-sm text-slate-500">
-            <Link to="/admin/categories" className="font-medium text-slate-600 hover:text-emerald-600">
-              Categories
-            </Link>
-            <ChevronRight className="h-4 w-4 text-slate-400" />
-            <span className="font-medium text-slate-700">{parentLabel}</span>
+      <div className="rounded-[26px] border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
+              Admin / Categories
+            </p>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+              Sub Categories
+            </h1>
+            <div className="flex items-center gap-1.5 text-sm text-slate-500">
+              <Link to="/admin/categories" className="font-medium text-slate-600 hover:text-emerald-600">
+                Categories
+              </Link>
+              <ChevronRight className="h-4 w-4 text-slate-400" />
+              <span className="font-medium text-slate-700">{parentLabel}</span>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:w-auto">
+            <div className={statCardClass}>
+              <p className="text-[11px] uppercase tracking-wide text-slate-500">Total records</p>
+              <p className="mt-1 text-lg font-semibold text-slate-900">{subCategories.length}</p>
+            </div>
+            <div className={statCardClass}>
+              <p className="text-[11px] uppercase tracking-wide text-slate-500">Active filters</p>
+              <p className="mt-1 text-lg font-semibold text-slate-900">{activeFilterCount}</p>
+            </div>
           </div>
         </div>
-        {parentCategory ? (
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => handleDemoAction("Bulk Action")}
-              className="inline-flex h-10 items-center gap-2 rounded-xl bg-amber-500 px-3 text-sm font-medium text-white hover:bg-amber-600"
-            >
-              <Layers3 className="h-4 w-4" />
-              Bulk Action
-            </button>
-            <button
-              type="button"
-              onClick={() => handleDemoAction("Delete")}
-              className="inline-flex h-10 items-center gap-2 rounded-xl bg-rose-600 px-3 text-sm font-medium text-white hover:bg-rose-700"
-            >
-              <Trash2 className="h-4 w-4" />
-              Delete
-            </button>
-            <button
-              type="button"
-              onClick={openCreate}
-              className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
-            >
-              <Plus className="h-4 w-4" />
-              Add Category
-            </button>
-          </div>
-        ) : null}
       </div>
 
       {notice ? (
@@ -375,30 +398,54 @@ export default function AdminSubCategoriesPage({ resolveMode = "code" }) {
           />
         ) : (
           <>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="relative min-w-[260px] flex-1">
+            <div className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+              <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                <div className="relative w-full xl:max-w-xl">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <input
                     type="search"
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search by Category name"
-                    className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-3 pr-9 text-sm focus:border-emerald-500 focus:outline-none"
+                    placeholder="Search sub category name"
+                    className={`${fieldClass} pl-9`}
                   />
-                  <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleDemoAction("Bulk Action")}
+                    className={btnAmber}
+                  >
+                    <Layers3 className="h-4 w-4" />
+                    Bulk Action
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDemoAction("Delete")}
+                    className={btnDanger}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                  </button>
+                  <button type="button" onClick={openCreate} className={btnGreen}>
+                    <Plus className="h-4 w-4" />
+                    Add Category
+                  </button>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <button
                   type="button"
                   onClick={handleApplyFilters}
-                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-700"
+                  className={`${btnGreen} w-full`}
                 >
                   <Filter className="h-4 w-4" />
-                  Filter
+                  Apply
                 </button>
                 <button
                   type="button"
                   onClick={handleResetFilters}
-                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:border-slate-300"
+                  className={`${btnOutline} w-full`}
                 >
                   <RotateCcw className="h-4 w-4" />
                   Reset
@@ -407,11 +454,15 @@ export default function AdminSubCategoriesPage({ resolveMode = "code" }) {
             </div>
 
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <div className="overflow-x-auto">
+              <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-2 text-xs text-slate-500">
+                Showing <span className="font-semibold text-slate-700">{subCategories.length}</span>{" "}
+                records under <span className="font-semibold text-slate-700">{parentLabel}</span>
+              </div>
+              <div className="-mx-4 w-auto overflow-x-auto px-4 pb-1 md:mx-0 md:w-full md:px-0">
                 <table className="w-full min-w-[980px] text-left text-sm">
-                  <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                  <thead className="bg-slate-50">
                     <tr>
-                      <th className="w-12 px-4 py-3">
+                      <th className={`${tableHeadCell} w-12`}>
                         <input
                           type="checkbox"
                           checked={allSelected}
@@ -422,12 +473,12 @@ export default function AdminSubCategoriesPage({ resolveMode = "code" }) {
                           className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                         />
                       </th>
-                      <th className="px-4 py-3">ID</th>
-                      <th className="px-4 py-3">Icon</th>
-                      <th className="px-4 py-3">Name</th>
-                      <th className="px-4 py-3">Description</th>
-                      <th className="px-4 py-3">Published</th>
-                      <th className="px-4 py-3 text-right">Actions</th>
+                      <th className={tableHeadCell}>ID</th>
+                      <th className={tableHeadCell}>Icon</th>
+                      <th className={tableHeadCell}>Name</th>
+                      <th className={tableHeadCell}>Description</th>
+                      <th className={tableHeadCell}>Status</th>
+                      <th className={`${tableHeadCell} text-right`}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -438,9 +489,9 @@ export default function AdminSubCategoriesPage({ resolveMode = "code" }) {
                       return (
                         <tr
                           key={category.id}
-                          className="border-t border-slate-100 text-slate-700 transition hover:bg-slate-50"
+                          className="border-t border-slate-100 text-slate-700 transition hover:bg-slate-50/80"
                         >
-                          <td className="px-4 py-3">
+                          <td className={tableCell}>
                             <input
                               type="checkbox"
                               checked={selectedIds.includes(category.id)}
@@ -453,45 +504,52 @@ export default function AdminSubCategoriesPage({ resolveMode = "code" }) {
                               className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                             />
                           </td>
-                          <td className="px-4 py-3 font-medium text-slate-700">{category.code || category.id}</td>
-                          <td className="px-4 py-3">
+                          <td className={`${tableCell} font-medium tabular-nums text-slate-700`}>
+                            {category.code || category.id}
+                          </td>
+                          <td className={tableCell}>
                             {hasImage ? (
                               <img
                                 src={iconValue}
                                 alt={category.name}
-                                className="h-9 w-9 rounded-lg border border-slate-200 object-cover"
+                                className="h-10 w-10 rounded-lg border border-slate-200 object-cover"
                               />
                             ) : hasEmojiIcon ? (
-                              <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-base">
+                              <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-base">
                                 {iconValue}
                               </span>
                             ) : (
-                              <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-400">
+                              <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-400">
                                 <ImageIcon className="h-4 w-4" />
                               </span>
                             )}
                           </td>
-                          <td className="px-4 py-3 font-medium text-slate-900">{category.name}</td>
-                          <td className="max-w-[300px] px-4 py-3 text-slate-500">
+                          <td className={`${tableCell} max-w-[260px] font-medium text-slate-900`}>
+                            <span className="truncate">{category.name}</span>
+                          </td>
+                          <td className={`${tableCell} max-w-[300px] text-slate-500`}>
                             <span className="line-clamp-1">{category.description || "-"}</span>
                           </td>
-                          <td className="px-4 py-3">
-                            <button
-                              type="button"
-                              onClick={() => handleTogglePublished(category)}
-                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
-                                category.published ? "bg-emerald-500" : "bg-slate-300"
-                              }`}
-                              aria-label={`Toggle publish for ${category.name}`}
-                            >
-                              <span
-                                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
-                                  category.published ? "translate-x-5" : "translate-x-0.5"
+                          <td className={tableCell}>
+                            <div className="flex items-center gap-2">
+                              <CategoryPublishedBadge published={Boolean(category.published)} />
+                              <button
+                                type="button"
+                                onClick={() => handleTogglePublished(category)}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                                  category.published ? "bg-emerald-500" : "bg-slate-300"
                                 }`}
-                              />
-                            </button>
+                                aria-label={`Toggle publish for ${category.name}`}
+                              >
+                                <span
+                                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
+                                    category.published ? "translate-x-5" : "translate-x-0.5"
+                                  }`}
+                                />
+                              </button>
+                            </div>
                           </td>
-                          <td className="px-4 py-3">
+                          <td className={`${tableCell} text-right`}>
                             <div className="flex items-center justify-end gap-2">
                               <button
                                 type="button"

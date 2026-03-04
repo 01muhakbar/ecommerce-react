@@ -155,3 +155,6 @@ Proyek ini menggunakan lisensi MIT (atau sesuaikan).
 Jika ada pertanyaan atau saran, silakan buka issue di repository ini.
 
 Selamat belajar dan ngoding 🚀
+
+Line Ending Guidance (Windows)
+Untuk menjaga `pnpm-lock.yaml` tetap stabil lintas OS, gunakan Git dengan `core.autocrlf=input` (atau `core.autocrlf=false` jika editor sudah konsisten LF), lalu pastikan editor menyimpan file text dengan line ending `LF` agar `git status` tidak menandai perubahan palsu setelah `pnpm install`.

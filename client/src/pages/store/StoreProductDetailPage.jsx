@@ -8,7 +8,6 @@ import {
   Instagram,
   MapPin,
   Minus,
-  Phone,
   Plus,
   RotateCcw,
   ShieldX,
@@ -227,58 +226,96 @@ function ProductSummaryPanel({
     toPositiveNumber(product?.discountPercent, computedDiscount)
   );
   const stockLabel = hasFiniteStock ? stockValue : "N/A";
+  const normalizedBrand = String(product?.brand?.name ?? product?.brandName ?? "").trim();
+  const normalizedSku = String(product?.sku ?? product?.skuCode ?? product?.code ?? "").trim();
   const categoryHref = categorySlug
     ? `/category/${encodeURIComponent(String(categorySlug))}`
     : null;
+  const metaItems = [
+    {
+      label: "Category",
+      value: categoryName,
+      href: categoryHref,
+    },
+    ...(normalizedBrand
+      ? [
+          {
+            label: "Brand",
+            value: normalizedBrand,
+          },
+        ]
+      : []),
+    ...(normalizedSku
+      ? [
+          {
+            label: "SKU",
+            value: normalizedSku,
+          },
+        ]
+      : []),
+  ];
 
   return (
     <div
       className={`space-y-5 ${
         compact
           ? ""
-          : "rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6"
+          : "rounded-[28px] border border-slate-200 bg-white p-4 shadow-[0_14px_30px_rgba(15,23,42,0.06)] sm:p-6 lg:p-7"
       }`}
     >
-      <div className="space-y-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500 sm:text-sm sm:normal-case sm:tracking-normal">
-          In stock:{" "}
-          <span className={`font-semibold ${hasStock ? "text-emerald-600" : "text-rose-600"}`}>
-            {hasStock ? stockLabel : "Out of stock"}
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span
+            className={`inline-flex h-8 items-center rounded-full border px-3 text-xs font-semibold uppercase tracking-wide ${
+              hasStock
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : "border-rose-200 bg-rose-50 text-rose-700"
+            }`}
+          >
+            {hasStock ? `In stock (${stockLabel})` : "Out of stock"}
           </span>
-        </p>
+          {hasDiscount ? (
+            <span className="inline-flex h-8 items-center rounded-full border border-rose-200 bg-rose-50 px-3 text-xs font-semibold uppercase tracking-wide text-rose-600">
+              Save {discountPercent.toFixed(1)}%
+            </span>
+          ) : null}
+        </div>
         <h1
           className={`${
-            compact ? "text-[30px]" : "text-[30px] sm:text-[34px] lg:text-[38px]"
+            compact ? "text-[30px]" : "text-[30px] sm:text-[34px] lg:text-[40px]"
           } break-words font-bold leading-tight tracking-tight text-slate-900`}
         >
           {product?.name || "Product"}
         </h1>
-        <div className="flex flex-wrap items-center gap-1.5 text-sm text-slate-500">
+        <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
           <RatingStars rating={ratingAvg} showValue />
-          <span className="font-medium">
+          <span className="text-slate-300">|</span>
+          <span className="font-medium text-slate-600">
             ({reviewCount} {reviewCount === 1 ? "review" : "reviews"})
           </span>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-3xl font-bold leading-none text-slate-900 sm:text-[38px]">
-          {formatCurrency(currentPrice)}
-        </span>
-        {hasDiscount ? (
-          <span className="text-base font-medium text-slate-400 line-through sm:text-lg">
-            {formatCurrency(originalPrice)}
+      <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+          Price
+        </p>
+        <div className="mt-2 flex flex-wrap items-end gap-2.5">
+          <span className="text-3xl font-bold leading-none text-slate-900 sm:text-[38px]">
+            {formatCurrency(currentPrice)}
           </span>
-        ) : null}
-        {hasDiscount ? (
-          <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-rose-600">
-            {discountPercent.toFixed(1)}% Off
-          </span>
-        ) : null}
+          {hasDiscount ? (
+            <span className="text-base font-medium text-slate-400 line-through sm:text-lg">
+              {formatCurrency(originalPrice)}
+            </span>
+          ) : null}
+        </div>
       </div>
 
-      <div className="space-y-2">
-        <p className="text-xl font-semibold text-slate-800">Color:</p>
+      <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+          Select color
+        </p>
         <div className="flex flex-wrap items-center gap-2.5">
           {COLOR_OPTIONS.map((option) => {
             const active = selectedColor === option.value;
@@ -298,49 +335,67 @@ function ProductSummaryPanel({
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="grid h-11 w-full grid-cols-3 overflow-hidden rounded-full border border-slate-300 bg-white sm:w-[220px]">
+      <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+          Quantity
+        </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="grid h-12 w-full grid-cols-3 overflow-hidden rounded-full border border-slate-300 bg-white sm:w-[188px]">
+            <button
+              type="button"
+              disabled={qty <= 1}
+              onClick={onDecreaseQty}
+              className="inline-flex items-center justify-center border-r border-slate-300 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Minus className="h-4 w-4" />
+            </button>
+            <span className="inline-flex items-center justify-center text-lg font-semibold text-slate-900">
+              {qty}
+            </span>
+            <button
+              type="button"
+              disabled={!hasStock || isAtStockLimit}
+              onClick={onIncreaseQty}
+              className="inline-flex items-center justify-center border-l border-slate-300 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
           <button
             type="button"
-            disabled={qty <= 1}
-            onClick={onDecreaseQty}
-            className="inline-flex items-center justify-center border-r border-slate-300 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={!hasStock || cartLoading || isProductLoading}
+            onClick={onAddToCart}
+            className="inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-8 text-base font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:flex-1"
           >
-            <Minus className="h-4 w-4" />
-          </button>
-          <span className="inline-flex items-center justify-center text-lg font-semibold text-slate-900">
-            {qty}
-          </span>
-          <button
-            type="button"
-            disabled={!hasStock || isAtStockLimit}
-            onClick={onIncreaseQty}
-            className="inline-flex items-center justify-center border-l border-slate-300 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <Plus className="h-4 w-4" />
+            Add to Cart
           </button>
         </div>
-        <button
-          type="button"
-          disabled={!hasStock || cartLoading || isProductLoading}
-          onClick={onAddToCart}
-          className="inline-flex h-11 w-full items-center justify-center rounded-full bg-emerald-600 px-8 text-base font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:flex-1 lg:min-w-[240px]"
-        >
-          Add to Cart
-        </button>
+        <p className="text-xs text-slate-500">
+          {hasFiniteStock
+            ? `Available stock: ${stockLabel}`
+            : "Stock availability is updated at checkout."}
+        </p>
       </div>
 
       <div className="space-y-3 border-t border-slate-200 pt-4">
-        <div className="text-lg text-slate-600">
-          Category:{" "}
-          {categoryHref ? (
-            <Link to={categoryHref} className="font-semibold text-slate-700 hover:text-slate-900">
-              {categoryName}
-            </Link>
-          ) : (
-            <span className="font-semibold text-slate-700">{categoryName}</span>
-          )}
-        </div>
+        <dl className="grid gap-2.5 text-sm sm:grid-cols-2">
+          {metaItems.map((meta) => (
+            <div key={meta.label} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+              <dt className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                {meta.label}
+              </dt>
+              <dd className="mt-1 font-semibold text-slate-800">
+                {meta.href ? (
+                  <Link to={meta.href} className="hover:text-slate-900">
+                    {meta.value}
+                  </Link>
+                ) : (
+                  meta.value
+                )}
+              </dd>
+            </div>
+          ))}
+        </dl>
         {tags.length > 0 ? (
           <div className="flex flex-wrap items-center gap-2">
             {tags.map((tag) => (
@@ -353,16 +408,6 @@ function ProductSummaryPanel({
             ))}
           </div>
         ) : null}
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-lg text-slate-500 sm:text-xl">
-          <Phone className="h-4 w-4" />
-          Call Us for Order{" "}
-          <a
-            href="tel:+6281234567890"
-            className="break-all font-semibold text-emerald-600 hover:text-emerald-700 sm:break-normal"
-          >
-            +62 812 3456 7890
-          </a>
-        </p>
       </div>
     </div>
   );
@@ -579,7 +624,7 @@ export default function StoreProductDetailPage() {
   return (
     <div className="space-y-10">
       <section className="space-y-6">
-        <nav className="flex flex-wrap items-center gap-2 text-[15px] text-slate-500">
+        <nav className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
           <Link to="/" className="font-semibold text-slate-800 hover:text-slate-900">
             Home
           </Link>
@@ -598,21 +643,21 @@ export default function StoreProductDetailPage() {
           <span className="font-semibold text-slate-900">{product.name}</span>
         </nav>
 
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start lg:gap-8">
-          <div className="order-1 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 lg:p-6">
-            <div className="aspect-square w-full overflow-hidden rounded-xl bg-slate-100">
-              <ImageWithFallback
-                src={imageSrc}
-                alt={product.name}
-                wrapperClassName="h-full w-full"
-                imageClassName="h-full w-full object-contain p-4 sm:p-5 lg:p-6"
-                iconClassName="h-9 w-9"
-              />
+        <div className="rounded-[30px] border border-slate-200 bg-white p-4 shadow-[0_18px_40px_rgba(15,23,42,0.06)] sm:p-6 lg:p-7">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start lg:gap-10">
+            <div className="order-1 overflow-hidden rounded-[24px] border border-slate-200 bg-slate-50 p-3 shadow-sm sm:p-4">
+              <div className="aspect-square w-full overflow-hidden rounded-[18px] bg-white">
+                <ImageWithFallback
+                  src={imageSrc}
+                  alt={product.name}
+                  wrapperClassName="h-full w-full"
+                  imageClassName="h-full w-full object-contain p-4 sm:p-6 lg:p-7"
+                  iconClassName="h-9 w-9"
+                />
+              </div>
             </div>
-          </div>
 
-          <aside className="order-2 lg:self-start">
-            <div>
+            <aside className="order-2 lg:self-start">
               <ProductSummaryPanel
                 product={product}
                 qty={qty}
@@ -636,8 +681,8 @@ export default function StoreProductDetailPage() {
                 categorySlug={categorySlug}
                 tags={tags}
               />
-            </div>
-          </aside>
+            </aside>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start lg:gap-10">

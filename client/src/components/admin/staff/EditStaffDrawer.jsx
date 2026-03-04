@@ -16,6 +16,10 @@ const accessOptions = [
   { value: "our-staff", label: "Our Staff" },
 ];
 
+const sectionCardClass = "rounded-2xl border border-slate-200 bg-white p-4 shadow-sm";
+const fieldClass =
+  "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none";
+
 const toText = (value) => String(value ?? "").trim();
 const toRoleValue = (value) => toText(value).toLowerCase().replace(/\s+/g, "_");
 
@@ -173,49 +177,47 @@ export default function EditStaffDrawer({
         aria-label="Close update staff drawer"
       />
 
-      <aside className="absolute right-0 top-0 flex h-full w-full max-w-[620px] flex-col border-l border-slate-200 bg-white shadow-2xl">
-        <header className="border-b border-slate-200 px-6 py-5">
+      <aside className="absolute right-0 top-0 flex h-full w-full max-w-[680px] flex-col border-l border-slate-200 bg-white shadow-2xl">
+        <header className="sticky top-0 z-10 border-b border-slate-200 bg-white px-6 py-5">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-xl font-semibold text-slate-900">Update Staff</h2>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
+                Admin / Staff / Edit
+              </p>
+              <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">Update Staff</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Update your staff necessary information from here
+                Update staff profile, role, and active status settings.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => !isSubmitting && onClose()}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700"
-              aria-label="Close drawer"
-              disabled={isSubmitting}
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          <div className="mt-4 max-w-[220px]">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Language
-            </label>
-            <select
-              value={form.language}
-              onChange={(event) => setField({ language: event.target.value })}
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none"
-              disabled={isSubmitting}
-            >
-              <option value="en">English</option>
-              <option value="id">Bahasa Indonesia</option>
-            </select>
+            <div className="flex items-center gap-2">
+              <select
+                value={form.language}
+                onChange={(event) => setField({ language: event.target.value })}
+                className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-600"
+                disabled={isSubmitting}
+              >
+                <option value="en">English</option>
+                <option value="id">Bahasa Indonesia</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => !isSubmitting && onClose()}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+                aria-label="Close drawer"
+                disabled={isSubmitting}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </header>
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-          <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Staff Image
-              </label>
-              <label className="block cursor-pointer rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 transition hover:border-emerald-400 hover:bg-emerald-50/40">
+          <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
+            <section className={sectionCardClass}>
+              <h3 className="text-base font-semibold text-slate-900">Profile Image</h3>
+              <p className="mt-1 text-xs text-slate-500">Upload staff image preview (UI only).</p>
+              <label className="mt-4 block cursor-pointer rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 transition hover:border-emerald-400 hover:bg-emerald-50/40">
                 <input
                   type="file"
                   accept="image/*"
@@ -238,134 +240,147 @@ export default function EditStaffDrawer({
                       <ImagePlus className="h-5 w-5" />
                     </span>
                     <div>
-                      <p className="font-medium">Upload staff image (UI only)</p>
+                      <p className="font-medium">Upload staff image</p>
                       <p className="text-xs text-slate-500">PNG/JPG, local preview only</p>
                     </div>
                     <UploadCloud className="ml-auto h-5 w-5 text-slate-400" />
                   </div>
                 )}
               </label>
-            </div>
+            </section>
 
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Name
-              </label>
-              <input
-                value={form.name}
-                onChange={(event) => setField({ name: event.target.value })}
-                placeholder="Staff name"
-                className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none"
-                disabled={isSubmitting}
-                required
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Email
-              </label>
-              <input
-                type="email"
-                value={form.email}
-                onChange={(event) => setField({ email: event.target.value })}
-                placeholder="staff@example.com"
-                className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none"
-                disabled={isSubmitting}
-                required
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Password (optional)
-              </label>
-              <input
-                type="password"
-                value={form.password}
-                onChange={(event) => setField({ password: event.target.value })}
-                placeholder="Leave blank to keep current password"
-                className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none"
-                disabled={isSubmitting}
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Contact Number
-              </label>
-              <input
-                value={form.contactNumber}
-                onChange={(event) => setField({ contactNumber: event.target.value })}
-                placeholder="+62..."
-                className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none"
-                disabled={isSubmitting}
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Joining Date
-              </label>
-              <input
-                type="date"
-                value={form.joiningDate}
-                onChange={(event) => setField({ joiningDate: event.target.value })}
-                className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none"
-                disabled={isSubmitting}
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Staff Role
-              </label>
-              <select
-                value={form.role}
-                onChange={(event) => setField({ role: event.target.value })}
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none"
-                disabled={isSubmitting}
-                required
-              >
-                {mergedRoleOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <label className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-              <span>Status Active</span>
-              <input
-                type="checkbox"
-                checked={form.isActive}
-                onChange={(event) => setField({ isActive: event.target.checked })}
-                disabled={isSubmitting}
-              />
-            </label>
-
-            <div>
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Select Routes to given Access
-              </label>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {accessOptions.map((option) => (
-                  <label
-                    key={option.value}
-                    className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={form.routesAccess.includes(option.value)}
-                      onChange={() => toggleRouteAccess(option.value)}
-                      disabled={isSubmitting}
-                    />
-                    <span>{option.label}</span>
+            <section className={sectionCardClass}>
+              <h3 className="text-base font-semibold text-slate-900">Basic Info</h3>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Name
                   </label>
-                ))}
+                  <input
+                    value={form.name}
+                    onChange={(event) => setField({ name: event.target.value })}
+                    placeholder="Staff name"
+                    className={fieldClass}
+                    disabled={isSubmitting}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={form.email}
+                    onChange={(event) => setField({ email: event.target.value })}
+                    placeholder="staff@example.com"
+                    className={fieldClass}
+                    disabled={isSubmitting}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Contact Number
+                  </label>
+                  <input
+                    value={form.contactNumber}
+                    onChange={(event) => setField({ contactNumber: event.target.value })}
+                    placeholder="+62..."
+                    className={fieldClass}
+                    disabled={isSubmitting}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Joining Date
+                  </label>
+                  <input
+                    type="date"
+                    value={form.joiningDate}
+                    onChange={(event) => setField({ joiningDate: event.target.value })}
+                    className={fieldClass}
+                    disabled={isSubmitting}
+                  />
+                </div>
               </div>
-            </div>
+            </section>
+
+            <section className={sectionCardClass}>
+              <h3 className="text-base font-semibold text-slate-900">Role & Permissions</h3>
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Staff Role
+                  </label>
+                  <select
+                    value={form.role}
+                    onChange={(event) => setField({ role: event.target.value })}
+                    className={fieldClass}
+                    disabled={isSubmitting}
+                    required
+                  >
+                    {mergedRoleOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <label className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                  <span>Status Active</span>
+                  <input
+                    type="checkbox"
+                    checked={form.isActive}
+                    onChange={(event) => setField({ isActive: event.target.checked })}
+                    disabled={isSubmitting}
+                  />
+                </label>
+
+                <div>
+                  <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Select Routes to given Access
+                  </label>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {accessOptions.map((option) => (
+                      <label
+                        key={option.value}
+                        className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={form.routesAccess.includes(option.value)}
+                          onChange={() => toggleRouteAccess(option.value)}
+                          disabled={isSubmitting}
+                        />
+                        <span>{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className={sectionCardClass}>
+              <h3 className="text-base font-semibold text-slate-900">Security</h3>
+              <div className="mt-4">
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Password (optional)
+                </label>
+                <input
+                  type="password"
+                  value={form.password}
+                  onChange={(event) => setField({ password: event.target.value })}
+                  placeholder="Leave blank to keep current password"
+                  className={fieldClass}
+                  disabled={isSubmitting}
+                />
+              </div>
+            </section>
 
             {submitError ? (
               <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600">
@@ -374,19 +389,19 @@ export default function EditStaffDrawer({
             ) : null}
           </div>
 
-          <footer className="sticky bottom-0 border-t border-slate-200 bg-white px-6 py-4">
-            <div className="flex items-center justify-end gap-3">
+          <footer className="sticky bottom-0 border-t border-slate-200 bg-white/95 px-6 py-4 backdrop-blur">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <button
                 type="button"
                 onClick={() => !isSubmitting && onClose()}
-                className="inline-flex h-10 items-center justify-center rounded-full border border-slate-200 px-4 text-sm font-medium text-slate-700 hover:border-slate-300"
+                className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:border-slate-300"
                 disabled={isSubmitting}
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="inline-flex h-10 items-center justify-center rounded-full bg-emerald-600 px-5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-70"
+                className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-70"
                 disabled={isSubmitting}
               >
                 {isSubmitting ? "Updating..." : "Update Staff"}

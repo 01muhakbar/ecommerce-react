@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Filter, Search, SlidersHorizontal, X } from "lucide-react";
+import { Filter, Search, SearchX, SlidersHorizontal, X } from "lucide-react";
 import { Pagination, useCategories, useProducts } from "../../storefront.jsx";
 import SearchProductCard from "../../components/store/SearchProductCard.jsx";
 import {
@@ -11,7 +11,6 @@ import {
 } from "../../components/ui-states/index.js";
 import {
   GENERIC_ERROR,
-  NO_PRODUCTS_FOUND,
   UPDATING,
 } from "../../constants/uiMessages.js";
 
@@ -126,7 +125,6 @@ export default function StoreSearchPage() {
     const selectedValue = event.target.value;
     const value = selectedValue === "__placeholder" ? "default" : selectedValue;
     setSort(value);
-    updateParams({ sort: value, page: 1 });
   };
 
   const clearFilters = () => {
@@ -137,27 +135,7 @@ export default function StoreSearchPage() {
     setIsFilterOpen(false);
   };
 
-  const sortedProducts = useMemo(() => {
-    const items = [...normalizedProducts];
-    if (sort === "price_asc") {
-      return items.sort(
-        (a, b) =>
-          Number(a?.price ?? a?.salePrice ?? 0) - Number(b?.price ?? b?.salePrice ?? 0)
-      );
-    }
-    if (sort === "price_desc") {
-      return items.sort(
-        (a, b) =>
-          Number(b?.price ?? b?.salePrice ?? 0) - Number(a?.price ?? a?.salePrice ?? 0)
-      );
-    }
-    if (sort === "name_asc") {
-      return items.sort((a, b) =>
-        String(a?.name ?? a?.title ?? "").localeCompare(String(b?.name ?? b?.title ?? ""))
-      );
-    }
-    return items;
-  }, [normalizedProducts, sort]);
+  const sortedProducts = useMemo(() => normalizedProducts, [normalizedProducts]);
 
   const hasProducts = sortedProducts.length > 0;
   const isInitialLoading = shouldFetchProducts && productsLoading && !productsData;
@@ -186,10 +164,27 @@ export default function StoreSearchPage() {
           meta?.totalCount ??
           meta?.count ??
           productsData?.data?.total ??
-          sortedProducts.length
+          normalizedProducts.length
       : 0
   );
-  const safeTotalCount = Number.isFinite(totalCount) ? totalCount : sortedProducts.length;
+  const safeTotalCount = Number.isFinite(totalCount) ? totalCount : normalizedProducts.length;
+  const metaPage = Number(meta?.page);
+  const metaLimit = Number(meta?.limit);
+  const hasPagedMeta =
+    Number.isFinite(metaPage) && metaPage > 0 && Number.isFinite(metaLimit) && metaLimit > 0;
+  const currentItemsCount = sortedProducts.length;
+  const displayStart =
+    safeTotalCount > 0
+      ? hasPagedMeta
+        ? (metaPage - 1) * metaLimit + 1
+        : 1
+      : 0;
+  const displayEnd =
+    safeTotalCount > 0
+      ? hasPagedMeta
+        ? Math.min(safeTotalCount, Math.max(displayStart, displayStart + currentItemsCount - 1))
+        : currentItemsCount
+      : 0;
 
   const hasActiveFilter = Boolean(query.trim() || category);
   const activeCategoryLabel = categories.find((item) => {
@@ -294,21 +289,7 @@ export default function StoreSearchPage() {
               <Filter className="h-4 w-4" />
               Filter
             </button>
-            <div className="flex items-center gap-2">
-              {isRefetching ? <UiUpdatingBadge label={UPDATING} /> : null}
-              <select
-                id="search-sort"
-                value={sort === "default" ? "__placeholder" : sort}
-                onChange={handleSortChange}
-                disabled={isInitialLoading}
-                className="h-10 min-w-[165px] rounded-full border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 focus:border-slate-400 focus:outline-none"
-              >
-                <option value="__placeholder">Sort By</option>
-                <option value="default">Default</option>
-                <option value="price_asc">Price: Low to High</option>
-                <option value="price_desc">Price: High to Low</option>
-              </select>
-            </div>
+            {isRefetching ? <UiUpdatingBadge label={UPDATING} /> : null}
           </div>
         </div>
 
@@ -364,16 +345,46 @@ export default function StoreSearchPage() {
             />
           ) : null}
 
+          {shouldFetchProducts && !isInitialLoading && !isErrorState ? (
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:px-5 sm:py-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">Search results</h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Showing {displayStart}-{displayEnd} of {safeTotalCount} results
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {isRefetching ? <UiUpdatingBadge label={UPDATING} /> : null}
+                  <select
+                    id="search-sort"
+                    value={sort}
+                    onChange={handleSortChange}
+                    className="h-10 min-w-[208px] rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none"
+                  >
+                    <option value="default">Default sorting</option>
+                    <option value="latest">Sort by latest</option>
+                    <option value="price_asc">Sort by price: low to high</option>
+                    <option value="price_desc">Sort by price: high to low</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           {isEmpty ? (
-            <UiEmptyState
-              title={NO_PRODUCTS_FOUND}
-              description={
-                activeQuery
-                  ? `No results for "${activeQuery}".`
-                  : "Try adjusting your search or filters."
-              }
-              actions={
-                <>
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center shadow-sm sm:px-6">
+              <div className="mx-auto max-w-md space-y-4">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                  <SearchX className="h-6 w-6" />
+                </div>
+                <h3 className="text-xl font-semibold text-slate-900">No products found</h3>
+                <p className="text-sm leading-6 text-slate-500 sm:text-base">
+                  {activeQuery
+                    ? `No results for "${activeQuery}". Try a different keyword or remove filters.`
+                    : "Try a different keyword or remove filters to discover products."}
+                </p>
+                <div className="flex flex-col items-center justify-center gap-2 pt-1 sm:flex-row">
                   <button
                     type="button"
                     onClick={() => clearFilters()}
@@ -387,9 +398,9 @@ export default function StoreSearchPage() {
                   >
                     Back to Home
                   </Link>
-                </>
-              }
-            />
+                </div>
+              </div>
+            </div>
           ) : null}
 
           {!isPromptState && !isInitialLoading && !isErrorState && !isEmpty ? (

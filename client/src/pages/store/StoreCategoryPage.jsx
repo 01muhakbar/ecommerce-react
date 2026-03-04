@@ -79,7 +79,7 @@ export default function StoreCategoryPage() {
   if (isCategoryListMode) {
     return (
       <section className="mx-auto w-full max-w-7xl space-y-5 px-3 py-6 sm:px-4 sm:py-8 lg:px-6">
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           <h1 className="text-2xl font-semibold text-slate-900">Categories</h1>
           <p className="text-sm text-slate-500">
             Browse categories and jump to filtered products.
@@ -87,7 +87,7 @@ export default function StoreCategoryPage() {
         </div>
 
         {categoriesLoading ? (
-          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="w-full max-w-md rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
             <div className="h-[70vh] space-y-2 overflow-y-auto pr-1">
               {Array.from({ length: 8 }).map((_, idx) => (
                 <div
@@ -119,12 +119,21 @@ export default function StoreCategoryPage() {
             emptyHint="Please add categories from admin dashboard."
           />
         ) : (
-          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-            <div className="h-[70vh] overflow-y-auto">
+          <div className="w-full max-w-md rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+            <div className="border-b border-slate-200 px-1 pb-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                Shop by category
+              </p>
+              <p className="mt-1 text-sm text-slate-600">
+                Expand a parent category to view subcategories.
+              </p>
+            </div>
+            <div className="mt-2 h-[68vh] overflow-y-auto">
               <CategoryAccordion
                 nodes={categoryTree}
                 onSelect={handleCategoryClick}
                 defaultExpandedIds={categoryTree.slice(0, 1).map((item) => item.id)}
+                className="px-0.5"
               />
             </div>
           </div>

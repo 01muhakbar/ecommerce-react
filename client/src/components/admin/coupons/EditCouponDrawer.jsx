@@ -20,6 +20,8 @@ const deriveActive = (coupon) => {
   return true;
 };
 
+const sectionCardClass = "rounded-2xl border border-slate-200 bg-white p-4 shadow-sm";
+
 export default function EditCouponDrawer({
   open,
   onClose,
@@ -119,9 +121,14 @@ export default function EditCouponDrawer({
         <header className="border-b border-slate-200 px-6 py-5">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-xl font-semibold text-slate-900">Update Coupon</h2>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
+                Admin / Coupons / Edit
+              </p>
+              <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
+                Update Coupon
+              </h2>
               <p className="mt-1 text-sm text-slate-500">
-                Update coupon validity and discount settings.
+                Update coupon validity window and discount settings.
               </p>
             </div>
             <button
@@ -134,186 +141,206 @@ export default function EditCouponDrawer({
               <X className="h-4 w-4" />
             </button>
           </div>
-
-          <div className="mt-4 max-w-[220px]">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Language
-            </label>
-            <select
-              value={language}
-              onChange={(event) => setLanguage(event.target.value)}
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none"
-              disabled={isSubmitting}
-            >
-              <option value="en">English</option>
-              <option value="id">Bahasa Indonesia</option>
-            </select>
-          </div>
         </header>
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-          <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Campaign Code
-              </label>
-              <input
-                value={coupon.code || ""}
-                readOnly
-                className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700"
-              />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Start Date
-                </label>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(event) => setStartDate(event.target.value)}
-                  className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none"
-                  disabled={isSubmitting}
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Coupon Validity Time
-                </label>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(event) => setEndDate(event.target.value)}
-                  className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none"
-                  disabled={isSubmitting}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Discount Type
-              </label>
-              <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setValidationError("");
-                    setDiscountType("percent");
-                  }}
-                  className={`h-10 rounded-lg text-sm font-semibold transition ${
-                    discountType === "percent"
-                      ? "bg-white text-emerald-700 shadow-sm"
-                      : "text-slate-600 hover:text-slate-800"
-                  }`}
-                  disabled={isSubmitting}
-                >
-                  Percent
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setValidationError("");
-                    setDiscountType("fixed");
-                  }}
-                  className={`h-10 rounded-lg text-sm font-semibold transition ${
-                    discountType === "fixed"
-                      ? "bg-white text-emerald-700 shadow-sm"
-                      : "text-slate-600 hover:text-slate-800"
-                  }`}
-                  disabled={isSubmitting}
-                >
-                  Fixed
-                </button>
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Discount
-                </label>
-                <div className="relative">
-                  {discountInputAffix.prefix ? (
-                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">
-                      {discountInputAffix.prefix}
-                    </span>
-                  ) : null}
-                  <input
-                    type="number"
-                    min={discountType === "percent" ? 0 : 0}
-                    max={discountType === "percent" ? 100 : undefined}
-                    step="1"
-                    value={amount}
-                    onChange={(event) => {
-                      setValidationError("");
-                      setAmount(event.target.value);
-                    }}
-                    className={`h-11 w-full rounded-xl border border-slate-200 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none ${
-                      discountInputAffix.prefix ? "pl-10 pr-3" : "pl-3 pr-10"
-                    }`}
-                    disabled={isSubmitting}
-                    required
-                  />
-                  {discountInputAffix.suffix ? (
-                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">
-                      {discountInputAffix.suffix}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Minimum Amount
-                </label>
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">
-                    Rp
-                  </span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={minSpend}
-                    onChange={(event) => {
-                      setValidationError("");
-                      setMinSpend(event.target.value);
-                    }}
-                    className="h-11 w-full rounded-xl border border-slate-200 pl-10 pr-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none"
-                    disabled={isSubmitting}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-              <div className="flex items-center justify-between gap-3">
+          <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
+            <section className={sectionCardClass}>
+              <h3 className="text-base font-semibold text-slate-900">Basic Info</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                Review language and coupon identity details.
+              </p>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <div>
-                  <p className="text-sm font-semibold text-slate-800">Published</p>
-                  <p className="text-xs text-slate-500">Enable coupon for checkout immediately</p>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Language
+                  </label>
+                  <select
+                    value={language}
+                    onChange={(event) => setLanguage(event.target.value)}
+                    className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none"
+                    disabled={isSubmitting}
+                  >
+                    <option value="en">English</option>
+                    <option value="id">Bahasa Indonesia</option>
+                  </select>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setValidationError("");
-                    setActive((prev) => !prev);
-                  }}
-                  disabled={isSubmitting}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
-                    active ? "bg-emerald-500" : "bg-slate-300"
-                  } disabled:cursor-not-allowed disabled:opacity-60`}
-                  aria-label="Toggle published"
-                >
-                  <span
-                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
-                      active ? "translate-x-5" : "translate-x-0.5"
-                    }`}
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Campaign Code
+                  </label>
+                  <input
+                    value={coupon.code || ""}
+                    readOnly
+                    className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700"
                   />
-                </button>
+                </div>
               </div>
-            </div>
+            </section>
+
+            <section className={sectionCardClass}>
+              <h3 className="text-base font-semibold text-slate-900">Validity</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                Configure campaign active period and coupon availability.
+              </p>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Start Date
+                  </label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(event) => setStartDate(event.target.value)}
+                    className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none"
+                    disabled={isSubmitting}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Coupon Validity Time
+                  </label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(event) => setEndDate(event.target.value)}
+                    className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none"
+                    disabled={isSubmitting}
+                  />
+                </div>
+              </div>
+              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">Published</p>
+                    <p className="text-xs text-slate-500">Enable coupon for checkout immediately</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setValidationError("");
+                      setActive((prev) => !prev);
+                    }}
+                    disabled={isSubmitting}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                      active ? "bg-emerald-500" : "bg-slate-300"
+                    } disabled:cursor-not-allowed disabled:opacity-60`}
+                    aria-label="Toggle published"
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
+                        active ? "translate-x-5" : "translate-x-0.5"
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section className={sectionCardClass}>
+              <h3 className="text-base font-semibold text-slate-900">Discount</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                Adjust discount type and minimum spend requirements.
+              </p>
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Discount Type
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setValidationError("");
+                        setDiscountType("percent");
+                      }}
+                      className={`h-10 rounded-lg text-sm font-semibold transition ${
+                        discountType === "percent"
+                          ? "bg-white text-emerald-700 shadow-sm"
+                          : "text-slate-600 hover:text-slate-800"
+                      }`}
+                      disabled={isSubmitting}
+                    >
+                      Percent
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setValidationError("");
+                        setDiscountType("fixed");
+                      }}
+                      className={`h-10 rounded-lg text-sm font-semibold transition ${
+                        discountType === "fixed"
+                          ? "bg-white text-emerald-700 shadow-sm"
+                          : "text-slate-600 hover:text-slate-800"
+                      }`}
+                      disabled={isSubmitting}
+                    >
+                      Fixed
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Discount
+                    </label>
+                    <div className="relative">
+                      {discountInputAffix.prefix ? (
+                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">
+                          {discountInputAffix.prefix}
+                        </span>
+                      ) : null}
+                      <input
+                        type="number"
+                        min={discountType === "percent" ? 0 : 0}
+                        max={discountType === "percent" ? 100 : undefined}
+                        step="1"
+                        value={amount}
+                        onChange={(event) => {
+                          setValidationError("");
+                          setAmount(event.target.value);
+                        }}
+                        className={`h-11 w-full rounded-xl border border-slate-200 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none ${
+                          discountInputAffix.prefix ? "pl-10 pr-3" : "pl-3 pr-10"
+                        }`}
+                        disabled={isSubmitting}
+                        required
+                      />
+                      {discountInputAffix.suffix ? (
+                        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">
+                          {discountInputAffix.suffix}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Minimum Amount
+                    </label>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500">
+                        Rp
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={minSpend}
+                        onChange={(event) => {
+                          setValidationError("");
+                          setMinSpend(event.target.value);
+                        }}
+                        className="h-11 w-full rounded-xl border border-slate-200 pl-10 pr-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none"
+                        disabled={isSubmitting}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
 
             {submitError ? (
               <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
@@ -322,20 +349,20 @@ export default function EditCouponDrawer({
             ) : null}
           </div>
 
-          <footer className="sticky bottom-0 border-t border-slate-200 bg-white px-6 py-4">
-            <div className="flex items-center justify-end gap-2">
+          <footer className="sticky bottom-0 border-t border-slate-200 bg-white/95 px-6 py-4 backdrop-blur">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={isSubmitting}
-                className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-700 hover:border-slate-300"
+                className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:border-slate-300"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSubmitting ? UPDATING : "Update Coupon"}
               </button>

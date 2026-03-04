@@ -15,13 +15,17 @@ import {
 import { GENERIC_ERROR, UPDATING } from "../../constants/uiMessages.js";
 
 const headerBtnBase =
-  "inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 text-sm font-medium transition";
-const headerBtnOutline = `${headerBtnBase} border border-slate-200 bg-white text-slate-700 hover:border-slate-300`;
+  "inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 text-sm font-semibold transition";
+const headerBtnOutline = `${headerBtnBase} border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50`;
 const headerBtnGreen = `${headerBtnBase} bg-emerald-600 text-white hover:bg-emerald-700`;
 const fieldClass =
-  "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none";
+  "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none";
+const statCardClass =
+  "rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-right shadow-sm";
 
 const toText = (value) => String(value ?? "").trim();
+const countAppliedFilters = (filters) =>
+  Object.values(filters || {}).filter((value) => toText(value).length > 0).length;
 
 const getOrderDateValue = (order) => order?.createdAt || order?.created_at || null;
 
@@ -164,6 +168,7 @@ export default function Orders() {
   const isRefetching = ordersQuery.isFetching && !isInitialLoading;
   const isErrorState = ordersQuery.isError && !ordersQuery.data;
   const showInlineError = ordersQuery.isError && Boolean(ordersQuery.data);
+  const activeFilterCount = countAppliedFilters(appliedFilters);
   const errorMessage =
     ordersQuery.error?.response?.data?.message ||
     ordersQuery.error?.message ||
@@ -286,19 +291,35 @@ export default function Orders() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Orders</h1>
-          <p className="text-sm text-slate-500">Track and manage order flow.</p>
-        </div>
-        <div className="text-xs text-slate-500">
-          Total records: <span className="font-semibold text-slate-700">{meta.total || 0}</span>
+      <div className="rounded-[26px] border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
+              Admin / Orders
+            </p>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+              Orders
+            </h1>
+            <p className="text-sm text-slate-500">
+              Manage customer orders, status updates, and invoice actions.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:w-auto">
+            <div className={statCardClass}>
+              <p className="text-[11px] uppercase tracking-wide text-slate-500">Total records</p>
+              <p className="mt-1 text-lg font-semibold text-slate-900">{meta.total || 0}</p>
+            </div>
+            <div className={statCardClass}>
+              <p className="text-[11px] uppercase tracking-wide text-slate-500">Active filters</p>
+              <p className="mt-1 text-lg font-semibold text-slate-900">{activeFilterCount}</p>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="relative w-full xl:max-w-md">
+      <div className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="relative w-full lg:max-w-xl">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="search"
@@ -312,61 +333,6 @@ export default function Orders() {
               }}
               placeholder="Search by customer, email, or invoice"
               className={`${fieldClass} pl-9`}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 xl:w-auto xl:min-w-[560px]">
-            <select
-              value={statusInput}
-              onChange={(event) => setStatusInput(event.target.value)}
-              className={fieldClass}
-            >
-              <option value="">All Status</option>
-              {STATUS_FILTER_OPTIONS.filter((option) => option.value).map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={limitDaysInput}
-              onChange={(event) => setLimitDaysInput(event.target.value)}
-              className={fieldClass}
-            >
-              <option value="">Order Limit</option>
-              <option value="5">Last 5 days</option>
-              <option value="7">Last 7 days</option>
-              <option value="15">Last 15 days</option>
-              <option value="30">Last 30 days</option>
-            </select>
-
-            <select
-              value={methodInput}
-              onChange={(event) => setMethodInput(event.target.value)}
-              className={fieldClass}
-            >
-              <option value="">All Methods</option>
-              <option value="cash">Cash</option>
-              <option value="card">Card</option>
-              <option value="credit">Credit</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="mt-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:w-auto xl:min-w-[330px]">
-            <input
-              type="date"
-              value={startDateInput}
-              onChange={(event) => setStartDateInput(event.target.value)}
-              className={fieldClass}
-            />
-            <input
-              type="date"
-              value={endDateInput}
-              onChange={(event) => setEndDateInput(event.target.value)}
-              className={fieldClass}
             />
           </div>
 
@@ -397,6 +363,66 @@ export default function Orders() {
               {isDownloading ? "Downloading..." : "Export"}
             </button>
             {isRefetching ? <UiUpdatingBadge label={UPDATING} /> : null}
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="xl:col-span-2">
+            <select
+              value={statusInput}
+              onChange={(event) => setStatusInput(event.target.value)}
+              className={fieldClass}
+            >
+              <option value="">All Status</option>
+              {STATUS_FILTER_OPTIONS.filter((option) => option.value).map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <select
+              value={limitDaysInput}
+              onChange={(event) => setLimitDaysInput(event.target.value)}
+              className={fieldClass}
+            >
+              <option value="">Order Limit</option>
+              <option value="5">Last 5 days</option>
+              <option value="7">Last 7 days</option>
+              <option value="15">Last 15 days</option>
+              <option value="30">Last 30 days</option>
+            </select>
+          </div>
+
+          <div>
+            <select
+              value={methodInput}
+              onChange={(event) => setMethodInput(event.target.value)}
+              className={fieldClass}
+            >
+              <option value="">All Methods</option>
+              <option value="cash">Cash</option>
+              <option value="card">Card</option>
+              <option value="credit">Credit</option>
+            </select>
+          </div>
+          <div>
+            <input
+              type="date"
+              value={startDateInput}
+              onChange={(event) => setStartDateInput(event.target.value)}
+              className={fieldClass}
+            />
+          </div>
+          <div>
+            <input
+              type="date"
+              value={endDateInput}
+              onChange={(event) => setEndDateInput(event.target.value)}
+              className={fieldClass}
+            />
           </div>
         </div>
       </div>
@@ -431,18 +457,22 @@ export default function Orders() {
               </button>
             </div>
           ) : null}
+          <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-2 text-xs text-slate-500">
+            Showing <span className="font-semibold text-slate-700">{items.length}</span> of{" "}
+            <span className="font-semibold text-slate-700">{meta.total || 0}</span> orders
+          </div>
           <div className="-mx-4 w-auto overflow-x-auto px-4 pb-1 md:mx-0 md:w-full md:px-0">
             <table className="w-full min-w-[1100px] text-left text-sm">
-            <thead className="sticky top-0 z-10 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <thead className="sticky top-0 z-10 bg-slate-50 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
               <tr>
-                <th className="whitespace-nowrap px-4 py-3">Invoice No</th>
-                <th className="whitespace-nowrap px-4 py-3">Order Time</th>
-                <th className="whitespace-nowrap px-4 py-3">Customer Name</th>
-                <th className="whitespace-nowrap px-4 py-3">Method</th>
-                <th className="whitespace-nowrap px-4 py-3">Amount</th>
-                <th className="whitespace-nowrap px-4 py-3">Status</th>
-                <th className="w-[170px] whitespace-nowrap px-4 py-3">Action</th>
-                <th className="w-[120px] whitespace-nowrap px-4 py-3 text-right">Invoice</th>
+                <th className="whitespace-nowrap px-4 py-3.5">Invoice No</th>
+                <th className="whitespace-nowrap px-4 py-3.5">Order Time</th>
+                <th className="whitespace-nowrap px-4 py-3.5">Customer Name</th>
+                <th className="whitespace-nowrap px-4 py-3.5">Method</th>
+                <th className="whitespace-nowrap px-4 py-3.5 text-right">Amount</th>
+                <th className="whitespace-nowrap px-4 py-3.5">Status</th>
+                <th className="w-[170px] whitespace-nowrap px-4 py-3.5">Action</th>
+                <th className="w-[120px] whitespace-nowrap px-4 py-3.5 text-right">Invoice</th>
               </tr>
             </thead>
             <tbody>
@@ -464,32 +494,32 @@ export default function Orders() {
                     rowIndex % 2 === 0 ? "bg-white" : "bg-slate-50/35"
                   }`}
                 >
-                  <td className="px-4 py-3 font-medium text-slate-900">
+                  <td className="px-4 py-3.5 font-semibold text-slate-900">
                     {getInvoiceLabel(order)}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                  <td className="whitespace-nowrap px-4 py-3.5 text-slate-600">
                     {formatDateTime(orderDateValue)}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">
+                  <td className="px-4 py-3.5 text-slate-600">
                     <div className="font-medium text-slate-900">{getCustomerName(order)}</div>
                     {customerHint ? (
                       <div className="text-xs text-slate-400">{customerHint}</div>
                     ) : null}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{getMethodLabel(order)}</td>
-                  <td className="whitespace-nowrap px-4 py-3">
+                  <td className="px-4 py-3.5 text-slate-600">{getMethodLabel(order)}</td>
+                  <td className="whitespace-nowrap px-4 py-3.5 text-right font-semibold tabular-nums text-slate-800">
                     {formatMoney(order.totalAmount || order.amount || 0)}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3.5">
                     <OrderStatusBadge status={uiStatus || "-"} />
                   </td>
-                  <td className="w-[170px] px-4 py-3">
+                  <td className="w-[170px] px-4 py-3.5">
                     <div className="flex items-center gap-2">
                       <select
                         value={actionStatus}
                         onChange={(event) => onUpdateStatus(order, event.target.value)}
                         disabled={isUpdating}
-                        className="h-9 w-[140px] rounded-xl border border-slate-200 px-2 text-xs focus:border-emerald-500 focus:outline-none disabled:opacity-60"
+                        className="h-9 w-[140px] rounded-xl border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 focus:border-emerald-500 focus:outline-none disabled:opacity-60"
                       >
                         {STATUS_ACTION_OPTIONS.map((option) => (
                           <option key={option.value} value={option.value}>
@@ -502,7 +532,7 @@ export default function Orders() {
                       ) : null}
                     </div>
                   </td>
-                  <td className="w-[120px] px-4 py-3">
+                  <td className="w-[120px] px-4 py-3.5">
                     <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                       <button
                         type="button"

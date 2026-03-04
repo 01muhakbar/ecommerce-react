@@ -35,11 +35,37 @@ const fetchAdminAttributes = async () => {
 const toText = (value) => String(value ?? "").trim();
 
 const headerBtnBase =
-  "inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 text-sm font-medium transition";
-const headerBtnOutline = `${headerBtnBase} border border-slate-200 bg-white text-slate-700 hover:border-slate-300`;
+  "inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 text-sm font-semibold transition";
+const headerBtnOutline = `${headerBtnBase} border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50`;
 const headerBtnAmber = `${headerBtnBase} bg-amber-500 text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60`;
 const headerBtnDanger = `${headerBtnBase} bg-rose-600 text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60`;
 const headerBtnGreen = `${headerBtnBase} bg-emerald-600 text-white hover:bg-emerald-700`;
+const fieldClass =
+  "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none";
+const statCardClass =
+  "rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-right shadow-sm";
+const tableHeadCell =
+  "whitespace-nowrap px-4 py-3.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500";
+const tableCell = "px-4 py-3.5 align-middle text-sm text-slate-700";
+
+function AttributeStatusBadge({ isActive }) {
+  return (
+    <span
+      className={`inline-flex min-h-7 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+        isActive
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-slate-200 bg-slate-100 text-slate-600"
+      }`}
+    >
+      <span
+        className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+          isActive ? "bg-emerald-500" : "bg-slate-400"
+        }`}
+      />
+      {isActive ? "Active" : "Inactive"}
+    </span>
+  );
+}
 
 export default function AdminAttributesPage() {
   const qc = useQueryClient();
@@ -177,6 +203,36 @@ export default function AdminAttributesPage() {
       return `${name} ${displayName} ${option}`.includes(keyword);
     });
   }, [attributes, appliedSearch]);
+  const previewAttributeIds = useMemo(
+    () =>
+      filteredAttributes
+        .map((attr) => Number(attr?.id))
+        .filter((id) => Number.isFinite(id) && id > 0)
+        .slice(0, 20),
+    [filteredAttributes]
+  );
+  const activeFilterCount = appliedSearch ? 1 : 0;
+
+  const valuesPreviewQuery = useQuery({
+    queryKey: ["admin", "attribute-values-preview", previewAttributeIds],
+    queryFn: async () => {
+      const entries = await Promise.all(
+        previewAttributeIds.map(async (id) => {
+          const { data } = await api.get(`/admin/attributes/${id}/values`);
+          const list = Array.isArray(data?.data) ? data.data : [];
+          return [
+            id,
+            list
+              .map((item) => toText(item?.value))
+              .filter(Boolean),
+          ];
+        })
+      );
+      return Object.fromEntries(entries);
+    },
+    enabled: previewAttributeIds.length > 0,
+    staleTime: 60 * 1000,
+  });
 
   useEffect(() => {
     setSelectedIds((prev) => {
@@ -257,6 +313,24 @@ export default function AdminAttributesPage() {
 
   const getDisplayName = (attr) => toText(attr?.displayName ?? attr?.display_name ?? attr?.name) || "-";
   const getOption = (attr) => toText(attr?.option ?? attr?.type ?? attr?.inputType) || "-";
+  const getAttributeValues = (attr) => {
+    const id = Number(attr?.id);
+    const fromPreview = Array.isArray(valuesPreviewQuery.data?.[id])
+      ? valuesPreviewQuery.data[id]
+      : null;
+    if (fromPreview && fromPreview.length > 0) return fromPreview;
+
+    const fromAttr = Array.isArray(attr?.values)
+      ? attr.values.map((item) => toText(item?.value ?? item)).filter(Boolean)
+      : [];
+    if (fromAttr.length > 0) return fromAttr;
+
+    const cachedValues = qc.getQueryData(["admin", "attribute-values", id]);
+    const fromCache = Array.isArray(cachedValues?.data)
+      ? cachedValues.data.map((item) => toText(item?.value)).filter(Boolean)
+      : [];
+    return fromCache;
+  };
   const getPublished = (attr) => {
     const id = Number(attr?.id);
     if (!id) return true;
@@ -317,87 +391,36 @@ export default function AdminAttributesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Attributes</h1>
-          <p className="text-sm text-slate-500">Manage attribute sets for your products.</p>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <button
-            type="button"
-            className={headerBtnOutline}
-            onClick={() => setBulkNotice("Export is UI-only.")}
-          >
-            <Download className="h-4 w-4" />
-            Export
-          </button>
-          <button
-            type="button"
-            className={headerBtnOutline}
-            onClick={() => setBulkNotice("Import is UI-only.")}
-          >
-            <Upload className="h-4 w-4" />
-            Import
-          </button>
-
-          <div ref={bulkMenuRef} className="relative">
-            <button
-              type="button"
-              className={headerBtnAmber}
-              disabled={selectedIds.size === 0 || bulkDeleteMutation.isPending}
-              onClick={() => setBulkMenuOpen((prev) => !prev)}
-            >
-              Bulk Action
-              <ChevronDown className="h-3.5 w-3.5" />
-            </button>
-            {bulkMenuOpen ? (
-              <div className="absolute right-0 z-20 mt-1.5 w-44 overflow-hidden rounded-lg border border-amber-200 bg-white shadow-lg">
-                <button
-                  type="button"
-                  onClick={() => handleBulkAction("delete")}
-                  className="block w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-amber-50"
-                >
-                  Delete Selected
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleBulkAction("publish")}
-                  className="block w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-amber-50"
-                >
-                  Toggle Published (UI)
-                </button>
-              </div>
-            ) : null}
+      <div className="rounded-[26px] border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
+              Admin / Attributes
+            </p>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+              Attributes
+            </h1>
+            <p className="text-sm text-slate-500">
+              Manage product attributes and their selectable values.
+            </p>
           </div>
-
-          <button
-            type="button"
-            className={headerBtnDanger}
-            disabled={selectedIds.size === 0 || bulkDeleteMutation.isPending}
-            onClick={handleDeleteSelected}
-          >
-            <Trash2 className="h-4 w-4" />
-            Delete
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setSubmitError("");
-              setIsOpen(true);
-            }}
-            className={headerBtnGreen}
-          >
-            <Plus className="h-4 w-4" />
-            Add Attribute
-          </button>
+          <div className="grid grid-cols-2 gap-2 sm:w-auto">
+            <div className={statCardClass}>
+              <p className="text-[11px] uppercase tracking-wide text-slate-500">Total records</p>
+              <p className="mt-1 text-lg font-semibold text-slate-900">{filteredAttributes.length}</p>
+            </div>
+            <div className={statCardClass}>
+              <p className="text-[11px] uppercase tracking-wide text-slate-500">Active filters</p>
+              <p className="mt-1 text-lg font-semibold text-slate-900">{activeFilterCount}</p>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative min-w-[260px] flex-1">
+      <div className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="relative w-full xl:max-w-xl">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="search"
               value={searchInput}
@@ -406,26 +429,99 @@ export default function AdminAttributesPage() {
                 if (event.key === "Enter") applyFilters();
               }}
               placeholder="Search by attribute name"
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-3 pr-9 text-sm focus:border-emerald-500 focus:outline-none"
+              className={`${fieldClass} pl-9`}
             />
-            <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           </div>
 
-          <button type="button" onClick={applyFilters} className={headerBtnGreen}>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className={headerBtnOutline}
+              onClick={() => setBulkNotice("Export is UI-only.")}
+            >
+              <Download className="h-4 w-4" />
+              Export
+            </button>
+            <button
+              type="button"
+              className={headerBtnOutline}
+              onClick={() => setBulkNotice("Import is UI-only.")}
+            >
+              <Upload className="h-4 w-4" />
+              Import
+            </button>
+
+            <div ref={bulkMenuRef} className="relative">
+              <button
+                type="button"
+                className={headerBtnAmber}
+                disabled={selectedIds.size === 0 || bulkDeleteMutation.isPending}
+                onClick={() => setBulkMenuOpen((prev) => !prev)}
+              >
+                Bulk Action
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+              {bulkMenuOpen ? (
+                <div className="absolute right-0 z-20 mt-1.5 w-44 overflow-hidden rounded-lg border border-amber-200 bg-white shadow-lg">
+                  <button
+                    type="button"
+                    onClick={() => handleBulkAction("delete")}
+                    className="block w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-amber-50"
+                  >
+                    Delete Selected
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleBulkAction("publish")}
+                    className="block w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-amber-50"
+                  >
+                    Toggle Published (UI)
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            <button
+              type="button"
+              className={headerBtnDanger}
+              disabled={selectedIds.size === 0 || bulkDeleteMutation.isPending}
+              onClick={handleDeleteSelected}
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSubmitError("");
+                setIsOpen(true);
+              }}
+              className={headerBtnGreen}
+            >
+              <Plus className="h-4 w-4" />
+              Add Attribute
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <button type="button" onClick={applyFilters} className={`${headerBtnGreen} w-full`}>
             <Filter className="h-4 w-4" />
-            Filter
+            Apply
           </button>
 
-          <button type="button" onClick={resetFilters} className={headerBtnOutline}>
+          <button type="button" onClick={resetFilters} className={`${headerBtnOutline} w-full`}>
             <RotateCcw className="h-4 w-4" />
             Reset
           </button>
 
-          {attributesQuery.isFetching ? <UiUpdatingBadge label={UPDATING} /> : null}
-
-          {selectedIds.size > 0 ? (
-            <span className="ml-auto text-sm text-slate-500">{selectedIds.size} selected</span>
-          ) : null}
+          <div className="flex h-11 items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-500 sm:justify-center sm:gap-3">
+            {selectedIds.size > 0 ? <span>{selectedIds.size} selected</span> : <span>No selection</span>}
+            {attributesQuery.isFetching || valuesPreviewQuery.isFetching ? (
+              <UiUpdatingBadge label={UPDATING} />
+            ) : null}
+          </div>
         </div>
       </div>
 
@@ -476,11 +572,15 @@ export default function AdminAttributesPage() {
 
       {!attributesQuery.isLoading && !attributesQuery.isError && filteredAttributes.length > 0 ? (
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="overflow-x-auto">
+          <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-2 text-xs text-slate-500">
+            Showing <span className="font-semibold text-slate-700">{filteredAttributes.length}</span> of{" "}
+            <span className="font-semibold text-slate-700">{attributes.length}</span> records
+          </div>
+          <div className="-mx-4 w-auto overflow-x-auto px-4 pb-1 md:mx-0 md:w-full md:px-0">
             <table className="w-full min-w-[980px] text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <thead className="bg-slate-50">
                 <tr>
-                  <th className="w-12 px-4 py-3">
+                  <th className={`${tableHeadCell} w-12`}>
                     <input
                       type="checkbox"
                       checked={allSelected}
@@ -488,13 +588,13 @@ export default function AdminAttributesPage() {
                       className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                     />
                   </th>
-                  <th className="px-4 py-3">ID</th>
-                  <th className="px-4 py-3">Name</th>
-                  <th className="px-4 py-3">Display Name</th>
-                  <th className="px-4 py-3">Option</th>
-                  <th className="px-4 py-3">Published</th>
-                  <th className="px-4 py-3 text-center">Values</th>
-                  <th className="px-4 py-3 text-right">Action</th>
+                  <th className={tableHeadCell}>ID</th>
+                  <th className={tableHeadCell}>Name</th>
+                  <th className={tableHeadCell}>Display Name</th>
+                  <th className={tableHeadCell}>Option</th>
+                  <th className={tableHeadCell}>Status</th>
+                  <th className={`${tableHeadCell} min-w-[260px]`}>Values</th>
+                  <th className={`${tableHeadCell} text-right`}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -502,11 +602,21 @@ export default function AdminAttributesPage() {
                   const id = Number(attr?.id);
                   const idLabel = toText(attr?.id);
                   const isDeleting = deleteMutation.isPending && deletingId === id;
+                  const valueList = getAttributeValues(attr);
+                  const visibleValues = valueList.slice(0, 6);
+                  const remainingCount = Math.max(0, valueList.length - visibleValues.length);
                   const cachedValues = qc.getQueryData(["admin", "attribute-values", id]);
-                  const valuesCount = Array.isArray(cachedValues?.data) ? cachedValues.data.length : null;
+                  const valuesCount = valueList.length
+                    ? valueList.length
+                    : Array.isArray(cachedValues?.data)
+                      ? cachedValues.data.length
+                      : null;
                   return (
-                    <tr key={id || idLabel} className="border-t border-slate-100 text-slate-700 transition hover:bg-slate-50">
-                      <td className="px-4 py-3">
+                    <tr
+                      key={id || idLabel}
+                      className="border-t border-slate-100 text-slate-700 transition hover:bg-slate-50/80"
+                    >
+                      <td className={tableCell}>
                         <input
                           type="checkbox"
                           checked={selectedIds.has(id)}
@@ -514,38 +624,66 @@ export default function AdminAttributesPage() {
                           className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                         />
                       </td>
-                      <td className="px-4 py-3 font-medium text-slate-700">{idLabel || "-"}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-900">{toText(attr?.name) || "-"}</td>
-                      <td className="px-4 py-3">{getDisplayName(attr)}</td>
-                      <td className="px-4 py-3">{getOption(attr)}</td>
-                      <td className="px-4 py-3">
-                        <button
-                          type="button"
-                          onClick={() => handleTogglePublished(attr)}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
-                            getPublished(attr) ? "bg-emerald-500" : "bg-slate-300"
-                          }`}
-                          aria-label={`Toggle publish for ${toText(attr?.name) || "attribute"}`}
-                        >
-                          <span
-                            className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
-                              getPublished(attr) ? "translate-x-5" : "translate-x-0.5"
+                      <td className={`${tableCell} font-medium tabular-nums text-slate-700`}>{idLabel || "-"}</td>
+                      <td className={`${tableCell} font-semibold text-slate-900`}>{toText(attr?.name) || "-"}</td>
+                      <td className={tableCell}>{getDisplayName(attr)}</td>
+                      <td className={tableCell}>{getOption(attr)}</td>
+                      <td className={tableCell}>
+                        <div className="flex items-center gap-2">
+                          <AttributeStatusBadge isActive={getPublished(attr)} />
+                          <button
+                            type="button"
+                            onClick={() => handleTogglePublished(attr)}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                              getPublished(attr) ? "bg-emerald-500" : "bg-slate-300"
                             }`}
-                          />
-                        </button>
+                            aria-label={`Toggle publish for ${toText(attr?.name) || "attribute"}`}
+                          >
+                            <span
+                              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
+                                getPublished(attr) ? "translate-x-5" : "translate-x-0.5"
+                              }`}
+                            />
+                          </button>
+                        </div>
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenValues(attr)}
-                          className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 px-2.5 text-slate-600 hover:border-slate-300 hover:bg-slate-100"
-                          title="Manage values"
-                        >
-                          <Settings2 className="h-4 w-4" />
-                          <span className="text-xs font-medium">{typeof valuesCount === "number" ? valuesCount : "..."}</span>
-                        </button>
+                      <td className={tableCell}>
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap gap-1.5">
+                            {visibleValues.length > 0 ? (
+                              visibleValues.map((value, chipIndex) => (
+                                <span
+                                  key={`${id}-value-${chipIndex}-${value}`}
+                                  className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-600"
+                                >
+                                  {value}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-500">
+                                No values
+                              </span>
+                            )}
+                            {remainingCount > 0 ? (
+                              <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                                +{remainingCount} more
+                              </span>
+                            ) : null}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenValues(attr)}
+                            className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 px-2.5 text-slate-600 hover:border-slate-300 hover:bg-slate-100"
+                            title="Manage values"
+                          >
+                            <Settings2 className="h-4 w-4" />
+                            <span className="text-xs font-medium">
+                              {typeof valuesCount === "number" ? valuesCount : "..."}
+                            </span>
+                          </button>
+                        </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className={`${tableCell} text-right`}>
                         <div className="flex items-center justify-end gap-2">
                           <button
                             type="button"
@@ -577,33 +715,60 @@ export default function AdminAttributesPage() {
 
       {isOpen ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 px-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-lg">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">New Attribute</h2>
-              <button type="button" onClick={() => setIsOpen(false)} aria-label="Close modal">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="mt-4 space-y-4">
-              <div>
-                <label className="text-xs font-semibold text-slate-500">Name</label>
-                <input
-                  value={nameInput}
-                  onChange={(event) => setNameInput(event.target.value)}
-                  className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                  placeholder="e.g. Size"
-                />
+          <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+            <div className="border-b border-slate-200 px-6 py-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
+                    Admin / Attributes / Add
+                  </p>
+                  <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
+                    Add Attribute
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Create a new attribute title used for product options.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsOpen(false)}
+                  aria-label="Close modal"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
+            </div>
+            <div className="space-y-4 px-6 py-5">
+              <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h3 className="text-base font-semibold text-slate-900">Basic Info</h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  Enter the primary attribute name.
+                </p>
+                <div className="mt-4">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Name
+                  </label>
+                  <input
+                    value={nameInput}
+                    onChange={(event) => setNameInput(event.target.value)}
+                    className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm"
+                    placeholder="e.g. Size"
+                  />
+                </div>
+              </section>
               {submitError ? (
                 <div className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-600">
                   {submitError}
                 </div>
               ) : null}
-              <div className="flex justify-end gap-2">
+            </div>
+            <div className="border-t border-slate-200 bg-white/95 px-6 py-4">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <button
                   type="button"
                   onClick={() => setIsOpen(false)}
-                  className="rounded-full border border-slate-200 px-4 py-2 text-sm"
+                  className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700"
                   disabled={createMutation.isPending}
                 >
                   Cancel
@@ -611,10 +776,10 @@ export default function AdminAttributesPage() {
                 <button
                   type="button"
                   onClick={() => createMutation.mutate({ name: nameInput })}
-                  className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white disabled:opacity-60"
                   disabled={createMutation.isPending || !nameInput.trim()}
                 >
-                  {createMutation.isPending ? "Saving..." : "Save"}
+                  {createMutation.isPending ? "Saving..." : "Save Attribute"}
                 </button>
               </div>
             </div>
@@ -624,58 +789,82 @@ export default function AdminAttributesPage() {
 
       {valuesOpen ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 px-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold">Manage Values</h2>
-                <p className="text-xs text-slate-500">{activeAttribute?.name || "-"}</p>
+          <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+            <div className="border-b border-slate-200 px-6 py-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
+                    Admin / Attributes / Values
+                  </p>
+                  <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
+                    Manage Values
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">{activeAttribute?.name || "-"}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setValuesOpen(false)}
+                  aria-label="Close values"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
-              <button type="button" onClick={() => setValuesOpen(false)} aria-label="Close values">
-                <X className="h-4 w-4" />
-              </button>
             </div>
 
             {valuesWarning ? (
-              <div className="mt-4 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              <div className="mx-6 mt-4 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-700">
                 Warning: {valuesWarning}
               </div>
             ) : null}
 
             {valueError ? (
-              <div className="mt-4 rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-600">
+              <div className="mx-6 mt-4 rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-600">
                 {valueError}
               </div>
             ) : null}
 
             {valueDeleteError ? (
-              <div className="mt-4 rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-600">
+              <div className="mx-6 mt-4 rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-600">
                 {valueDeleteError}
               </div>
             ) : null}
 
-            <div className="mt-4 flex flex-wrap gap-2">
-              <input
-                value={valueInput}
-                onChange={(event) => setValueInput(event.target.value)}
-                className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                placeholder="New value"
-              />
-              <button
-                type="button"
-                onClick={() =>
-                  createValueMutation.mutate({
-                    attributeId: activeAttribute.id,
-                    value: valueInput,
-                  })
-                }
-                disabled={createValueMutation.isPending || !valueInput.trim()}
-                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-              >
-                {createValueMutation.isPending ? "Saving..." : "Save"}
-              </button>
-            </div>
+            <div className="space-y-4 px-6 py-5">
+              <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h3 className="text-base font-semibold text-slate-900">Add Value</h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  Add a selectable value for this attribute.
+                </p>
+                <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+                  <input
+                    value={valueInput}
+                    onChange={(event) => setValueInput(event.target.value)}
+                    className="h-11 rounded-xl border border-slate-200 px-3 text-sm"
+                    placeholder="New value"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      createValueMutation.mutate({
+                        attributeId: activeAttribute.id,
+                        value: valueInput,
+                      })
+                    }
+                    disabled={createValueMutation.isPending || !valueInput.trim()}
+                    className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white disabled:opacity-60"
+                  >
+                    {createValueMutation.isPending ? "Saving..." : "Save"}
+                  </button>
+                </div>
+              </section>
 
-            <div className="mt-4">
+              <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h3 className="text-base font-semibold text-slate-900">Current Values</h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  Delete values only if they are no longer needed.
+                </p>
+                <div className="mt-4">
               {valuesQuery.isLoading ? (
                 <div className="text-sm text-slate-500">Loading...</div>
               ) : valuesQuery.isError ? (
@@ -683,11 +872,11 @@ export default function AdminAttributesPage() {
               ) : values.length === 0 ? (
                 <div className="text-sm text-slate-500">No values yet.</div>
               ) : (
-                <ul className="space-y-2">
+                <ul className="flex flex-wrap gap-2">
                   {values.map((val) => (
                     <li
                       key={val.id}
-                      className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2 text-sm"
+                      className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm"
                     >
                       <span>{val.value}</span>
                       <button
@@ -701,7 +890,7 @@ export default function AdminAttributesPage() {
                           deleteValueMutation.mutate(val.id);
                         }}
                         disabled={deleteValueMutation.isPending && deletingValueId === val.id}
-                        className="text-xs text-rose-600 disabled:text-rose-300"
+                        className="text-xs font-semibold text-rose-600 disabled:text-rose-300"
                       >
                         {deleteValueMutation.isPending && deletingValueId === val.id
                           ? "Deleting..."
@@ -711,6 +900,8 @@ export default function AdminAttributesPage() {
                   ))}
                 </ul>
               )}
+                </div>
+              </section>
             </div>
           </div>
         </div>

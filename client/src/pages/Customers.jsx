@@ -26,9 +26,16 @@ import {
 } from "../constants/uiMessages.js";
 
 const headerBtnBase =
-  "inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 text-sm font-medium transition";
-const headerBtnOutline = `${headerBtnBase} border border-slate-200 bg-white text-slate-700 hover:border-slate-300`;
+  "inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 text-sm font-semibold transition";
+const headerBtnOutline = `${headerBtnBase} border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50`;
 const headerBtnGreen = `${headerBtnBase} bg-emerald-600 text-white hover:bg-emerald-700`;
+const fieldClass =
+  "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none";
+const statCardClass =
+  "rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-right shadow-sm";
+const tableHeadCell =
+  "whitespace-nowrap px-4 py-3.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500";
+const tableCell = "px-4 py-3.5 align-middle text-sm text-slate-700";
 
 const toText = (value) => String(value ?? "").trim();
 
@@ -58,6 +65,64 @@ const getShortId = (customer) => {
   if (!raw) return "-";
   return raw.length <= 6 ? raw : raw.slice(0, 6);
 };
+
+const getOrderCount = (customer) => {
+  const candidates = [
+    customer?.ordersCount,
+    customer?.orderCount,
+    customer?.totalOrders,
+    customer?.orders_count,
+    customer?.orders,
+  ];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) return candidate.length;
+    if (Number.isFinite(Number(candidate))) return Number(candidate);
+  }
+  return null;
+};
+
+const getCustomerStatus = (customer) => {
+  const statusRaw = toText(customer?.status || customer?.state || customer?.accountStatus).toLowerCase();
+  if (statusRaw === "blocked" || statusRaw === "suspended") return "blocked";
+  if (statusRaw === "inactive" || statusRaw === "disabled") return "inactive";
+  if (statusRaw === "active") return "active";
+
+  if (typeof customer?.isBlocked === "boolean") return customer.isBlocked ? "blocked" : "active";
+  if (typeof customer?.blocked === "boolean") return customer.blocked ? "blocked" : "active";
+  if (typeof customer?.isActive === "boolean") return customer.isActive ? "active" : "inactive";
+  if (typeof customer?.active === "boolean") return customer.active ? "active" : "inactive";
+  return "active";
+};
+
+function CustomerStatusBadge({ customer }) {
+  const status = getCustomerStatus(customer);
+  const styleMap = {
+    active: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    inactive: "border-amber-200 bg-amber-50 text-amber-700",
+    blocked: "border-rose-200 bg-rose-50 text-rose-700",
+  };
+  const dotMap = {
+    active: "bg-emerald-500",
+    inactive: "bg-amber-500",
+    blocked: "bg-rose-500",
+  };
+  const labelMap = {
+    active: "Active",
+    inactive: "Inactive",
+    blocked: "Blocked",
+  };
+
+  return (
+    <span
+      className={`inline-flex min-h-7 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+        styleMap[status] || styleMap.active
+      }`}
+    >
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotMap[status] || dotMap.active}`} />
+      {labelMap[status] || labelMap.active}
+    </span>
+  );
+}
 
 export default function Customers() {
   const qc = useQueryClient();
@@ -109,6 +174,7 @@ export default function Customers() {
 
   const meta = customersQuery.data?.meta || { page, limit, total: 0, totalPages: 1 };
   const totalPages = Math.max(1, Number(meta.totalPages || 1));
+  const activeFilterCount = appliedSearch ? 1 : 0;
 
   const applyFilters = () => {
     setAppliedSearch(searchInput.trim());
@@ -152,35 +218,34 @@ export default function Customers() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Customers</h1>
-          <p className="text-sm text-slate-500">Review customer accounts and activity.</p>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <button
-            type="button"
-            className={headerBtnOutline}
-            onClick={() => setNotice("Export is UI-only.")}
-          >
-            <Download className="h-4 w-4" />
-            Export
-          </button>
-          <button
-            type="button"
-            className={headerBtnOutline}
-            onClick={() => setNotice("Import is UI-only.")}
-          >
-            <Upload className="h-4 w-4" />
-            Import
-          </button>
+      <div className="rounded-[26px] border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
+              Admin / Customers
+            </p>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+              Customers
+            </h1>
+            <p className="text-sm text-slate-500">Review customer accounts and profile information.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:w-auto">
+            <div className={statCardClass}>
+              <p className="text-[11px] uppercase tracking-wide text-slate-500">Total records</p>
+              <p className="mt-1 text-lg font-semibold text-slate-900">{Number(meta.total || 0)}</p>
+            </div>
+            <div className={statCardClass}>
+              <p className="text-[11px] uppercase tracking-wide text-slate-500">Active filters</p>
+              <p className="mt-1 text-lg font-semibold text-slate-900">{activeFilterCount}</p>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative min-w-[260px] flex-1">
+      <div className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="relative w-full xl:max-w-xl">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="search"
               value={searchInput}
@@ -189,22 +254,45 @@ export default function Customers() {
                 if (event.key === "Enter") applyFilters();
               }}
               placeholder="Search by name/email/phone"
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-3 pr-9 text-sm focus:border-emerald-500 focus:outline-none"
+              className={`${fieldClass} pl-9`}
             />
-            <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           </div>
 
-          <button type="button" onClick={applyFilters} className={headerBtnGreen}>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className={headerBtnOutline}
+              onClick={() => setNotice("Export is UI-only.")}
+            >
+              <Download className="h-4 w-4" />
+              Export
+            </button>
+            <button
+              type="button"
+              className={headerBtnOutline}
+              onClick={() => setNotice("Import is UI-only.")}
+            >
+              <Upload className="h-4 w-4" />
+              Import
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <button type="button" onClick={applyFilters} className={`${headerBtnGreen} w-full`}>
             <Filter className="h-4 w-4" />
-            Filter
+            Apply
           </button>
 
-          <button type="button" onClick={resetFilters} className={headerBtnOutline}>
+          <button type="button" onClick={resetFilters} className={`${headerBtnOutline} w-full`}>
             <RotateCcw className="h-4 w-4" />
             Reset
           </button>
 
-          {customersQuery.isFetching ? <UiUpdatingBadge label={UPDATING} /> : null}
+          <div className="flex h-11 items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-500 sm:justify-center sm:gap-3">
+            <span>{filteredItems.length} shown</span>
+            {customersQuery.isFetching ? <UiUpdatingBadge label={UPDATING} /> : null}
+          </div>
         </div>
       </div>
 
@@ -235,16 +323,21 @@ export default function Customers() {
 
       {!customersQuery.isLoading && !customersQuery.isError && filteredItems.length > 0 ? (
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="w-full overflow-x-auto">
-            <table className="w-full min-w-[920px] text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+          <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-2 text-xs text-slate-500">
+            Showing <span className="font-semibold text-slate-700">{filteredItems.length}</span> of{" "}
+            <span className="font-semibold text-slate-700">{Number(meta.total || 0)}</span> records
+          </div>
+          <div className="-mx-4 w-auto overflow-x-auto px-4 pb-1 md:mx-0 md:w-full md:px-0">
+            <table className="w-full min-w-[980px] text-left text-sm">
+              <thead className="bg-slate-50">
                 <tr>
-                  <th className="min-w-[90px] px-4 py-3">ID</th>
-                  <th className="min-w-[130px] px-4 py-3">Joining Date</th>
-                  <th className="min-w-[170px] px-4 py-3">Name</th>
-                  <th className="min-w-[220px] px-4 py-3">Email</th>
-                  <th className="min-w-[140px] px-4 py-3">Phone</th>
-                  <th className="min-w-[130px] px-4 py-3 text-right">Actions</th>
+                  <th className={tableHeadCell}>ID</th>
+                  <th className={tableHeadCell}>Joining Date</th>
+                  <th className={tableHeadCell}>Customer</th>
+                  <th className={tableHeadCell}>Phone</th>
+                  <th className={`${tableHeadCell} text-right`}>Orders</th>
+                  <th className={tableHeadCell}>Status</th>
+                  <th className={`${tableHeadCell} text-right`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -254,24 +347,28 @@ export default function Customers() {
                   return (
                     <tr
                       key={customerId || `${getCustomerName(customer)}-${getCustomerEmail(customer)}`}
-                      className="border-t border-slate-100 text-slate-700 transition hover:bg-slate-50"
+                      className="border-t border-slate-100 text-slate-700 transition hover:bg-slate-50/80"
                     >
-                      <td className="px-4 py-3 font-medium text-slate-700">
+                      <td className={`${tableCell} font-medium tabular-nums text-slate-700`}>
                         {getShortId(customer)}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      <td className={`${tableCell} whitespace-nowrap text-slate-600`}>
                         {formatJoinDate(getJoiningDate(customer))}
                       </td>
-                      <td className="px-4 py-3 font-semibold text-slate-900">
-                        {getCustomerName(customer)}
+                      <td className={`${tableCell} max-w-[280px]`}>
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-slate-900">{getCustomerName(customer)}</p>
+                          <p className="truncate text-xs text-slate-500">{getCustomerEmail(customer)}</p>
+                        </div>
                       </td>
-                      <td className="max-w-[280px] truncate px-4 py-3 text-slate-600">
-                        {getCustomerEmail(customer)}
+                      <td className={`${tableCell} text-slate-600`}>{getCustomerPhone(customer)}</td>
+                      <td className={`${tableCell} text-right font-medium tabular-nums text-slate-700`}>
+                        {getOrderCount(customer) ?? "-"}
                       </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {getCustomerPhone(customer)}
+                      <td className={tableCell}>
+                        <CustomerStatusBadge customer={customer} />
                       </td>
-                      <td className="px-4 py-3">
+                      <td className={`${tableCell} text-right`}>
                         <div className="flex items-center justify-end gap-2">
                           {hasDetailRoute ? (
                             <Link

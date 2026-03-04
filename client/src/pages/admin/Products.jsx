@@ -36,10 +36,31 @@ const btnAmber = `${btnBase} bg-amber-500 text-white hover:bg-amber-600 focus-vi
 const inputBase =
   "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 transition focus:border-emerald-500 focus:outline-none";
 const selectBase = `${inputBase} pr-8`;
+const statCardClass =
+  "rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-right shadow-sm";
 
 const tableHeadCell =
-  "px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500";
-const tableCell = "px-4 py-3 align-middle text-sm text-slate-700";
+  "whitespace-nowrap px-4 py-3.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500";
+const tableCell = "px-4 py-3.5 align-middle text-sm text-slate-700";
+
+function ProductPublishedBadge({ isPublished }) {
+  return (
+    <span
+      className={`inline-flex min-h-7 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+        isPublished
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-slate-200 bg-slate-100 text-slate-600"
+      }`}
+    >
+      <span
+        className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+          isPublished ? "bg-emerald-500" : "bg-slate-400"
+        }`}
+      />
+      {isPublished ? "Published" : "Draft"}
+    </span>
+  );
+}
 
 export default function AdminProductsPage() {
   const queryClient = useQueryClient();
@@ -108,6 +129,10 @@ export default function AdminProductsPage() {
   const categories = categoriesQuery.data?.data || [];
   const meta = productsQuery.data?.meta || { page: 1, limit, total: 0, totalPages: 1 };
   const totalPages = Math.max(1, Number(meta.totalPages || 1));
+  const activeFilterCount =
+    (appliedFilters.q ? 1 : 0) +
+    (appliedFilters.categoryId ? 1 : 0) +
+    (appliedFilters.priceSort && appliedFilters.priceSort !== "default" ? 1 : 0);
 
   const displayItems = useMemo(() => {
     const sorted = [...items];
@@ -363,94 +388,36 @@ export default function AdminProductsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Product</h1>
-          <p className="mt-1 text-sm text-slate-500">Manage products in your catalog.</p>
-        </div>
-
-        <div className="flex w-full min-w-0 flex-wrap items-center justify-start gap-2 gap-y-2 xl:w-auto xl:max-w-[70%] xl:justify-end">
-          <button
-            type="button"
-            className={`${btnOutline} shrink-0`}
-            onClick={() => console.log("[admin/products] export clicked")}
-          >
-            <Download className="h-4 w-4" />
-            Export
-          </button>
-          <button
-            type="button"
-            className={`${btnOutline} shrink-0`}
-            onClick={() => console.log("[admin/products] import clicked")}
-          >
-            <Upload className="h-4 w-4" />
-            Import
-          </button>
-
-          <div ref={bulkMenuRef} className="relative shrink-0">
-            <button
-              type="button"
-              disabled={bulkMutation.isPending}
-              onClick={() => setBulkMenuOpen((prev) => !prev)}
-              className={`${btnAmber} min-w-[132px] disabled:cursor-not-allowed disabled:opacity-60`}
-            >
-              Bulk Action
-              <ChevronDown className="h-3.5 w-3.5" />
-            </button>
-            {bulkMenuOpen ? (
-              <div className="absolute right-0 z-20 mt-1.5 w-48 overflow-hidden rounded-lg border border-amber-200 bg-white shadow-lg">
-                <button
-                  type="button"
-                  onClick={() => handleBulkAction("delete_selected")}
-                  disabled={selectedIds.size === 0 || bulkMutation.isPending}
-                  className="block w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Delete Selected
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleBulkAction("publish_selected")}
-                  disabled={selectedIds.size === 0 || bulkMutation.isPending}
-                  className="block w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Publish Selected
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleBulkAction("unpublish_selected")}
-                  disabled={selectedIds.size === 0 || bulkMutation.isPending}
-                  className="block w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Unpublish Selected
-                </button>
-              </div>
-            ) : null}
+      <div className="rounded-[26px] border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
+              Admin / Products
+            </p>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+              Products
+            </h1>
+            <p className="text-sm text-slate-500">
+              Manage product catalog, publish states, and stock visibility.
+            </p>
           </div>
-
-          <button
-            type="button"
-            onClick={handleDeleteSelected}
-            disabled={selectedIds.size === 0 || deleteMutation.isPending || bulkMutation.isPending}
-            className={`${btnDanger} shrink-0 disabled:cursor-not-allowed disabled:opacity-50`}
-          >
-            <Trash2 className="h-4 w-4" />
-            Delete
-          </button>
-
-          <button
-            type="button"
-            onClick={openCreateDrawer}
-            className={`${btnGreen} shrink-0`}
-          >
-            <Plus className="h-4 w-4" />
-            Add Product
-          </button>
+          <div className="grid grid-cols-2 gap-2 sm:w-auto">
+            <div className={statCardClass}>
+              <p className="text-[11px] uppercase tracking-wide text-slate-500">Total products</p>
+              <p className="mt-1 text-lg font-semibold text-slate-900">{meta.total || 0}</p>
+            </div>
+            <div className={statCardClass}>
+              <p className="text-[11px] uppercase tracking-wide text-slate-500">Active filters</p>
+              <p className="mt-1 text-lg font-semibold text-slate-900">{activeFilterCount}</p>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative min-w-[260px] flex-1">
+      <div className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="relative w-full xl:max-w-xl">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="search"
               value={draftFilters.q}
@@ -460,20 +427,101 @@ export default function AdminProductsPage() {
               onKeyDown={(event) => {
                 if (event.key === "Enter") applyFilters();
               }}
-              placeholder="Search by Product name"
-              className={`${inputBase} pr-9`}
+              placeholder="Search by product name"
+              className={`${inputBase} h-11 pl-9`}
             />
-            <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           </div>
 
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={openCreateDrawer}
+              className={btnGreen}
+            >
+              <Plus className="h-4 w-4" />
+              Add Product
+            </button>
+
+            <button
+              type="button"
+              className={btnOutline}
+              onClick={() => console.log("[admin/products] export clicked")}
+            >
+              <Download className="h-4 w-4" />
+              Export
+            </button>
+            <button
+              type="button"
+              className={btnOutline}
+              onClick={() => console.log("[admin/products] import clicked")}
+            >
+              <Upload className="h-4 w-4" />
+              Import
+            </button>
+
+            <div ref={bulkMenuRef} className="relative">
+              <button
+                type="button"
+                disabled={bulkMutation.isPending}
+                onClick={() => setBulkMenuOpen((prev) => !prev)}
+                className={`${btnAmber} min-w-[132px] disabled:cursor-not-allowed disabled:opacity-60`}
+              >
+                Bulk Action
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+              {bulkMenuOpen ? (
+                <div className="absolute right-0 z-20 mt-1.5 w-48 overflow-hidden rounded-lg border border-amber-200 bg-white shadow-lg">
+                  <button
+                    type="button"
+                    onClick={() => handleBulkAction("delete_selected")}
+                    disabled={selectedIds.size === 0 || bulkMutation.isPending}
+                    className="block w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Delete Selected
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleBulkAction("publish_selected")}
+                    disabled={selectedIds.size === 0 || bulkMutation.isPending}
+                    className="block w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Publish Selected
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleBulkAction("unpublish_selected")}
+                    disabled={selectedIds.size === 0 || bulkMutation.isPending}
+                    className="block w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Unpublish Selected
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleDeleteSelected}
+              disabled={
+                selectedIds.size === 0 || deleteMutation.isPending || bulkMutation.isPending
+              }
+              className={`${btnDanger} disabled:cursor-not-allowed disabled:opacity-50`}
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <select
             value={draftFilters.categoryId}
             onChange={(event) =>
               setDraftFilters((prev) => ({ ...prev, categoryId: event.target.value }))
             }
-            className={`${selectBase} w-full md:w-48`}
+            className={`${selectBase} h-11 w-full`}
           >
-            <option value="">Category</option>
+            <option value="">All Categories</option>
             {categories.map((category) => (
               <option key={category.id} value={category.id}>
                 {category.name}
@@ -486,19 +534,19 @@ export default function AdminProductsPage() {
             onChange={(event) =>
               setDraftFilters((prev) => ({ ...prev, priceSort: event.target.value }))
             }
-            className={`${selectBase} w-full md:w-44`}
+            className={`${selectBase} h-11 w-full`}
           >
-            <option value="default">Price</option>
-            <option value="price_asc">Low to High</option>
-            <option value="price_desc">High to Low</option>
+            <option value="default">Default Price</option>
+            <option value="price_asc">Price: Low to High</option>
+            <option value="price_desc">Price: High to Low</option>
           </select>
 
-          <button type="button" onClick={applyFilters} className={btnGreen}>
+          <button type="button" onClick={applyFilters} className={`${btnGreen} w-full`}>
             <Filter className="h-4 w-4" />
-            Filter
+            Apply
           </button>
 
-          <button type="button" onClick={resetFilters} className={btnOutline}>
+          <button type="button" onClick={resetFilters} className={`${btnOutline} w-full`}>
             <RotateCcw className="h-4 w-4" />
             Reset
           </button>
@@ -535,7 +583,11 @@ export default function AdminProductsPage() {
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="overflow-x-auto">
+          <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-2 text-xs text-slate-500">
+            Showing <span className="font-semibold text-slate-700">{displayItems.length}</span> of{" "}
+            <span className="font-semibold text-slate-700">{meta.total || 0}</span> products
+          </div>
+          <div className="-mx-4 w-auto overflow-x-auto px-4 pb-1 md:mx-0 md:w-full md:px-0">
             <table className="w-full min-w-[980px] text-left text-sm">
               <thead className="bg-slate-50">
                 <tr>
@@ -550,12 +602,12 @@ export default function AdminProductsPage() {
                   </th>
                   <th className={`${tableHeadCell} w-[24%]`}>Product Name</th>
                   <th className={`${tableHeadCell} w-[15%]`}>Category</th>
-                  <th className={`${tableHeadCell} w-[9%]`}>Price</th>
-                  <th className={`${tableHeadCell} w-[9%]`}>Sale Price</th>
-                  <th className={`${tableHeadCell} w-[7%]`}>Stock</th>
+                  <th className={`${tableHeadCell} w-[9%] text-right`}>Price</th>
+                  <th className={`${tableHeadCell} w-[9%] text-right`}>Sale Price</th>
+                  <th className={`${tableHeadCell} w-[7%] text-right`}>Stock</th>
                   <th className={`${tableHeadCell} w-[10%]`}>Status</th>
                   <th className={`${tableHeadCell} w-[6%] text-center`}>View</th>
-                  <th className={`${tableHeadCell} w-[8%] text-center`}>Published</th>
+                  <th className={`${tableHeadCell} w-[8%] text-center`}>Publish</th>
                   <th className={`${tableHeadCell} w-[8%] text-center`}>Actions</th>
                 </tr>
               </thead>
@@ -572,7 +624,7 @@ export default function AdminProductsPage() {
                   return (
                     <tr
                       key={product.id}
-                      className="border-t border-slate-100 text-slate-700 transition hover:bg-slate-50"
+                      className="border-t border-slate-100 text-slate-700 transition hover:bg-slate-50/80"
                     >
                       <td className={`${tableCell} w-[4%]`}>
                         <input
@@ -586,7 +638,7 @@ export default function AdminProductsPage() {
 
                       <td className={`${tableCell} w-[24%]`}>
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                          <div className="h-12 w-12 overflow-hidden rounded-lg border border-slate-200 bg-white">
                             <img
                               src={resolveThumbnail(product)}
                               alt={product.name || `#${product.id}`}
@@ -610,11 +662,13 @@ export default function AdminProductsPage() {
                         <span className="block truncate">{product.category?.name || "-"}</span>
                       </td>
 
-                      <td className={`${tableCell} w-[9%] font-semibold text-slate-900`}>
+                      <td
+                        className={`${tableCell} w-[9%] text-right font-semibold tabular-nums text-slate-900`}
+                      >
                         {asCurrency(product.price)}
                       </td>
 
-                      <td className={`${tableCell} w-[9%]`}>
+                      <td className={`${tableCell} w-[9%] text-right tabular-nums`}>
                         {hasSalePrice ? (
                           <div className="font-semibold text-emerald-700">
                             {asCurrency(product.salePrice)}
@@ -624,14 +678,12 @@ export default function AdminProductsPage() {
                         )}
                       </td>
 
-                      <td className={`${tableCell} w-[7%]`}>{product.stock ?? 0}</td>
+                      <td className={`${tableCell} w-[7%] text-right tabular-nums`}>
+                        {product.stock ?? 0}
+                      </td>
 
                       <td className={`${tableCell} w-[10%]`}>
-                        <span className="inline-flex rounded-full bg-emerald-500 px-3 py-1 text-xs font-semibold text-white">
-                          {String(product.status || "").toLowerCase() === "active"
-                            ? "Selling"
-                            : "Inactive"}
-                        </span>
+                        <ProductPublishedBadge isPublished={isPublished} />
                       </td>
 
                       <td className={`${tableCell} w-[6%] text-center`}>

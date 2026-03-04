@@ -110,7 +110,19 @@ export default function OrderDetail() {
   const subtotal = Number(order?.subtotal || 0);
   const discount = Number(order?.discount || 0);
   const shipping = Number(order?.shipping || 0);
+  const tax = Number(order?.tax || 0);
   const totalAmount = Number(order?.totalAmount || order?.total || 0);
+  const customerName = order?.customerName || order?.customer?.name || "Guest";
+  const customerPhone = order?.customerPhone || order?.customer?.phone || "—";
+  const customerAddress =
+    order?.customerAddress ||
+    order?.shippingAddress ||
+    order?.shipping?.address ||
+    order?.customer?.address ||
+    "—";
+  const orderNote = String(
+    order?.customerNote || order?.note || order?.notes || ""
+  ).trim();
 
   const handleCopy = async (value, label) => {
     if (!value || value === "—") return;
@@ -132,13 +144,18 @@ export default function OrderDetail() {
   };
   const isEmpty = !orderQuery.isLoading && !orderQuery.isError && !order;
   return (
-    <div className="order-print-root mx-auto w-full max-w-6xl px-4 py-8 lg:px-6">
-      <Link
-        to="/admin/orders"
-        className="admin-no-print text-sm text-slate-500 hover:text-slate-900"
-      >
-        ← Back to Orders
-      </Link>
+    <div className="order-print-root mx-auto w-full max-w-7xl space-y-5 px-4 py-6 lg:px-6 lg:py-8">
+      <div className="admin-no-print flex flex-wrap items-center gap-2 text-sm text-slate-500">
+        <Link to="/admin" className="hover:text-slate-800">
+          Admin
+        </Link>
+        <span>/</span>
+        <Link to="/admin/orders" className="hover:text-slate-800">
+          Orders
+        </Link>
+        <span>/</span>
+        <span className="text-slate-700">Details</span>
+      </div>
 
       <QueryState
         isLoading={orderQuery.isLoading}
@@ -149,93 +166,161 @@ export default function OrderDetail() {
         emptyHint="Cek kembali link / ref order."
         onRetry={() => orderQuery.refetch()}
       >
-        {successMessage ? (
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
-            {successMessage}
-          </div>
-        ) : null}
-        {errorMessage ? (
-          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">
-            {errorMessage}
-          </div>
-        ) : null}
+        <div className="space-y-3">
+          {successMessage ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
+              {successMessage}
+            </div>
+          ) : null}
+          {errorMessage ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">
+              {errorMessage}
+            </div>
+          ) : null}
+        </div>
 
-        <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-12">
-          <div className="lg:col-span-8">
-            <div className="admin-print-area rounded-2xl border border-slate-200 bg-white overflow-hidden">
-              <div className="bg-slate-100/60 px-6 py-5">
+        <div className="mt-2 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="admin-print-area space-y-6">
+            <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-200 bg-slate-50/80 px-5 py-5 sm:px-6">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                      Invoice / Order
-                    </div>
-                    <h1 className="mt-1 text-2xl font-extrabold tracking-wide text-slate-900">
-                      {invoiceRef}
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                      Order Detail
+                    </p>
+                    <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+                      Order #{invoiceRef}
                     </h1>
                     <p className="mt-1 text-sm text-slate-500">
                       Created {createdAtLabel}
                     </p>
+                    <div className="mt-3 flex flex-wrap items-center gap-2.5 text-xs text-slate-600">
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium">
+                        {createdAtFull}
+                      </span>
+                      <OrderStatusBadge status={order?.status || "-"} />
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium">
+                        Total {formatMoney(totalAmount)}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <OrderStatusBadge status={order?.status || "-"} />
+                  <div className="admin-no-print flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={() => handleCopy(invoiceRef, "Order ref")}
-                      className="admin-no-print rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:border-slate-300"
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:border-slate-300"
                     >
                       Copy Ref
                     </button>
                     <button
                       type="button"
                       onClick={handlePrint}
-                      className="admin-no-print rounded-full border border-slate-200 bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+                      className="rounded-xl border border-slate-200 bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
                     >
                       Print
                     </button>
                   </div>
                 </div>
-
-                <div className="mt-6 grid grid-cols-1 gap-4 text-sm text-slate-600 md:grid-cols-3">
-                  <div>
-                    <div className="text-xs font-semibold uppercase text-slate-500">Date</div>
-                    <div className="mt-1 font-medium text-slate-900">{createdAtLabel}</div>
-                    <div className="text-xs text-slate-400">{createdAtFull}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold uppercase text-slate-500">
-                      Invoice No.
-                    </div>
-                    <div className="mt-1 font-medium text-slate-900">{invoiceRef}</div>
-                  </div>
-                  <div className="md:text-right">
-                    <div className="text-xs font-semibold uppercase text-slate-500">
-                      Invoice To
-                    </div>
-                    <div className="mt-1 font-medium text-slate-900">
-                      {order?.customerName || "Guest"}
-                    </div>
-                    {customerEmail ? <div>{customerEmail}</div> : null}
-                    {order?.customerPhone ? <div>{order.customerPhone}</div> : null}
-                    {order?.customerAddress ? <div>{order.customerAddress}</div> : null}
-                  </div>
-                </div>
               </div>
 
-              <div className="px-6 py-6">
+              <div className="grid grid-cols-1 gap-4 px-5 py-5 sm:px-6 md:grid-cols-2">
+                <article className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Customer
+                  </p>
+                  <p className="mt-2 text-base font-semibold text-slate-900">{customerName}</p>
+                  {customerEmail ? <p className="mt-1 text-sm text-slate-600">{customerEmail}</p> : null}
+                  <p className="mt-1 text-sm text-slate-600">{customerPhone}</p>
+                </article>
+
+                <article className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Shipping Address
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-slate-700">{customerAddress}</p>
+                </article>
+
+                <article className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Payment
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-800">{paymentMethod}</p>
+                  <p className="mt-1 text-sm text-slate-500">Invoice: {invoiceRef}</p>
+                </article>
+
+                <article className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Order Summary
+                  </p>
+                  <div className="mt-3 space-y-2.5 text-sm text-slate-600">
+                    <div className="flex items-center justify-between">
+                      <span>Subtotal</span>
+                      <span className="font-medium tabular-nums text-slate-900">
+                        {formatMoney(subtotal)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Discount</span>
+                      <span className="font-medium tabular-nums text-slate-900">
+                        {formatMoney(discount)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Shipping</span>
+                      <span className="font-medium tabular-nums text-slate-900">
+                        {formatMoney(shipping)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Tax</span>
+                      <span className="font-medium tabular-nums text-slate-900">
+                        {formatMoney(tax)}
+                      </span>
+                    </div>
+                    <div className="border-t border-dashed border-slate-200 pt-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-slate-900">Total</span>
+                        <span className="text-lg font-bold tabular-nums text-slate-900">
+                          {formatMoney(totalAmount)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              </div>
+            </section>
+
+            {orderNote ? (
+              <section className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  Notes
+                </p>
+                <p className="mt-2 text-sm leading-6 text-slate-700">{orderNote}</p>
+              </section>
+            ) : null}
+
+            <section className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-slate-900">Items</h2>
+                <p className="text-xs font-medium text-slate-500">
+                  {items.length} {items.length === 1 ? "item" : "items"}
+                </p>
+              </div>
+
+              <div className="overflow-hidden rounded-xl border border-slate-200">
                 {items.length === 0 ? (
-                  <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
+                  <div className="bg-white p-6 text-sm text-slate-500">
                     No items found.
                   </div>
                 ) : (
-                  <div className="overflow-hidden rounded-xl border border-slate-200">
-                    <table className="w-full text-left text-sm">
-                      <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[640px] text-left text-sm">
+                      <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                         <tr>
-                          <th className="px-4 py-3">SR.</th>
-                          <th className="px-4 py-3">Product Name</th>
-                          <th className="px-4 py-3 text-right">Quantity</th>
-                          <th className="px-4 py-3 text-right">Item Price</th>
-                          <th className="px-4 py-3 text-right">Amount</th>
+                          <th className="px-4 py-3.5">Item</th>
+                          <th className="px-4 py-3.5 text-right">Price</th>
+                          <th className="px-4 py-3.5 text-right">Qty</th>
+                          <th className="px-4 py-3.5 text-right">Total</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -248,17 +333,18 @@ export default function OrderDetail() {
                           return (
                             <tr
                               key={item.id || `${item.productId}-${index}`}
-                              className="border-t border-slate-100 hover:bg-slate-50"
+                              className="border-t border-slate-100 transition hover:bg-slate-50"
                             >
-                              <td className="px-4 py-3">{index + 1}</td>
-                              <td className="px-4 py-3 font-medium text-slate-900">
+                              <td className="px-4 py-3.5 font-medium text-slate-900">
                                 {name}
                               </td>
-                              <td className="px-4 py-3 text-right">{qty}</td>
-                              <td className="px-4 py-3 text-right">
+                              <td className="px-4 py-3.5 text-right tabular-nums text-slate-700">
                                 {formatMoney(price)}
                               </td>
-                              <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                              <td className="px-4 py-3.5 text-right tabular-nums text-slate-700">
+                                {qty}
+                              </td>
+                              <td className="px-4 py-3.5 text-right font-semibold tabular-nums text-slate-900">
                                 {formatMoney(amount)}
                               </td>
                             </tr>
@@ -269,55 +355,30 @@ export default function OrderDetail() {
                   </div>
                 )}
               </div>
-
-              <div className="px-6 pb-6">
-                <div className="rounded-xl bg-emerald-50 px-6 py-5">
-                  <div className="grid grid-cols-1 gap-4 text-sm text-slate-700 md:grid-cols-4">
-                    <div>
-                      <div className="text-xs font-semibold uppercase text-slate-500">
-                        Payment Method
-                      </div>
-                      <div className="mt-2 font-medium text-slate-900">{paymentMethod}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs font-semibold uppercase text-slate-500">
-                        Shipping Cost
-                      </div>
-                      <div className="mt-2 font-medium text-slate-900">
-                        {formatMoney(shipping)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs font-semibold uppercase text-slate-500">
-                        Discount
-                      </div>
-                      <div className="mt-2 font-medium text-slate-900">
-                        {formatMoney(discount)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs font-semibold uppercase text-slate-500">
-                        Total Amount
-                      </div>
-                      <div className="mt-2 text-3xl font-extrabold text-red-500">
-                        {formatMoney(totalAmount)}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            </section>
           </div>
 
-          <div className="lg:col-span-4">
-            <div className="admin-no-print space-y-4">
+          <aside className="admin-no-print space-y-4 lg:sticky lg:top-24 lg:self-start">
+            <section className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                Current Status
+              </p>
+              <div className="mt-2">
+                <OrderStatusBadge status={order?.status || "-"} />
+              </div>
+              <p className="mt-2 text-sm text-slate-500">
+                Last update: {formatDateTime(updatedAtValue || order?.createdAt)}
+              </p>
+            </section>
+
+            <div className="space-y-4">
               <div className="rounded-2xl border border-slate-200 bg-white p-5">
                 <div className="text-sm font-semibold text-slate-900">Update Status</div>
                 <div className="mt-3 space-y-3">
                   <select
                     value={selectedStatus}
                     onChange={(event) => setStatus(event.target.value)}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm"
                   >
                     <option value="">Select status</option>
                     {ORDER_STATUS_OPTIONS.map((value) => (
@@ -335,20 +396,20 @@ export default function OrderDetail() {
                       })
                     }
                     disabled={updateMutation.isPending || !selectedStatus || isSameStatus}
-                    className="w-full rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="h-11 w-full rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {updateMutation.isPending ? "Updating..." : "Update Status"}
                   </button>
                   <button
                     type="button"
                     onClick={() => handleCopy(invoiceRef, "Invoice")}
-                    className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:border-slate-300"
+                    className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:border-slate-300"
                   >
                     Copy Invoice No.
                   </button>
                   <Link
                     to={`/order/${encodeURIComponent(invoiceRef)}`}
-                    className="w-full rounded-xl border border-slate-200 px-4 py-2 text-center text-sm font-semibold text-slate-700 hover:border-slate-300"
+                    className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:border-slate-300"
                   >
                     Open Customer Invoice
                   </Link>
@@ -361,7 +422,7 @@ export default function OrderDetail() {
                 updatedAt={updatedAtValue}
               />
             </div>
-          </div>
+          </aside>
         </div>
       </QueryState>
     </div>

@@ -528,6 +528,7 @@ export default function CheckoutPage() {
 
   const subtotalValue = Number(subtotal || 0);
   const discountValue = Number(discount || 0);
+  const taxValue = 0;
   const quotedTotalValue = Number(appliedCouponMeta?.total);
   const total = Number.isFinite(quotedTotalValue)
     ? Math.max(0, quotedTotalValue)
@@ -1339,7 +1340,7 @@ export default function CheckoutPage() {
         <aside className="space-y-4 lg:sticky lg:top-24">
           <div className="rounded-[30px] border border-slate-200 bg-white p-4 shadow-[0_16px_34px_rgba(15,23,42,0.06)] sm:p-6">
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-              {checkoutCopy.cartItemSection.sectionTitle}
+              Checkout Summary
             </p>
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-slate-900 sm:text-xl">
@@ -1476,35 +1477,48 @@ export default function CheckoutPage() {
               ) : null}
             </div>
 
-            <div className="mt-6 space-y-2.5 border-t border-slate-200 pt-5 text-sm">
-              <div className="flex items-center justify-between text-slate-600">
-                <span>{checkoutCopy.cartItemSection.subTotalLabel}</span>
-                <span className="font-medium tabular-nums text-slate-900">
-                  {formatCurrency(subtotalValue)}
-                </span>
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5">
+              <div className="space-y-2.5 text-sm">
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>{checkoutCopy.cartItemSection.subTotalLabel}</span>
+                  <span className="font-semibold tabular-nums text-slate-900">
+                    {formatCurrency(subtotalValue)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>{checkoutCopy.cartItemSection.discountLabel}</span>
+                  <span
+                    className={`font-semibold tabular-nums ${
+                      discountValue > 0 ? "text-emerald-600" : "text-slate-900"
+                    }`}
+                  >
+                    {discountValue > 0
+                      ? `- ${formatCurrency(discountValue)}`
+                      : formatCurrency(0)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>{checkoutCopy.shippingDetails.shippingCostLabel}</span>
+                  <span className="font-semibold tabular-nums text-slate-900">
+                    {formatCurrency(shippingCost)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Tax</span>
+                  <span className="font-semibold tabular-nums text-slate-900">
+                    {formatCurrency(taxValue)}
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center justify-between text-slate-600">
-                <span>{checkoutCopy.shippingDetails.shippingCostLabel}</span>
-                <span className="font-medium tabular-nums text-slate-900">
-                  {formatCurrency(shippingCost)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-slate-600">
-                <span>{checkoutCopy.cartItemSection.discountLabel}</span>
-                <span className="font-semibold tabular-nums text-orange-500">
-                  {discountValue > 0
-                    ? `- ${formatCurrency(discountValue)}`
-                    : formatCurrency(0)}
-                </span>
-              </div>
-              <div className="border-t border-dashed border-slate-200 pt-3" />
-              <div className="flex items-center justify-between">
-                <span className="text-base font-semibold text-slate-900">
-                  {checkoutCopy.cartItemSection.totalCostLabel}
-                </span>
-                <span className="text-2xl font-extrabold tabular-nums text-slate-900">
-                  {formatCurrency(total)}
-                </span>
+              <div className="mt-4 border-t border-dashed border-slate-200 pt-3.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-base font-semibold text-slate-900">
+                    {checkoutCopy.cartItemSection.totalCostLabel}
+                  </span>
+                  <span className="text-2xl font-extrabold tabular-nums text-slate-900">
+                    {formatCurrency(total)}
+                  </span>
+                </div>
               </div>
             </div>
 

@@ -27,9 +27,16 @@ import {
 } from "../../constants/uiMessages.js";
 
 const headerBtnBase =
-  "inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 text-sm font-medium transition";
-const headerBtnOutline = `${headerBtnBase} border border-slate-200 bg-white text-slate-700 hover:border-slate-300`;
+  "inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 text-sm font-semibold transition";
+const headerBtnOutline = `${headerBtnBase} border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50`;
 const headerBtnGreen = `${headerBtnBase} bg-emerald-600 text-white hover:bg-emerald-700`;
+const fieldClass =
+  "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none";
+const statCardClass =
+  "rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-right shadow-sm";
+const tableHeadCell =
+  "whitespace-nowrap px-4 py-3.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500";
+const tableCell = "px-4 py-3.5 align-middle text-sm text-slate-700";
 
 const toText = (value) => String(value ?? "").trim();
 const normalizeRole = (value) => toText(value).toLowerCase();
@@ -67,6 +74,43 @@ const isPrivilegedRole = (role) => {
   const normalized = normalizeRole(role);
   return normalized === "admin" || normalized === "super_admin" || normalized === "superadmin";
 };
+
+function RoleBadge({ role }) {
+  const normalized = normalizeRole(role);
+  const styleMap = {
+    super_admin: "border-violet-200 bg-violet-50 text-violet-700",
+    admin: "border-indigo-200 bg-indigo-50 text-indigo-700",
+    staff: "border-sky-200 bg-sky-50 text-sky-700",
+  };
+  return (
+    <span
+      className={`inline-flex min-h-7 items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+        styleMap[normalized] || "border-slate-200 bg-slate-100 text-slate-700"
+      }`}
+    >
+      {formatRoleLabel(role)}
+    </span>
+  );
+}
+
+function ActiveStatusBadge({ isActive }) {
+  return (
+    <span
+      className={`inline-flex min-h-7 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+        isActive
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-rose-200 bg-rose-50 text-rose-700"
+      }`}
+    >
+      <span
+        className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+          isActive ? "bg-emerald-500" : "bg-rose-500"
+        }`}
+      />
+      {isActive ? "Active" : "Inactive"}
+    </span>
+  );
+}
 
 export default function AdminStaffPage() {
   const queryClient = useQueryClient();
@@ -228,6 +272,7 @@ export default function AdminStaffPage() {
       return true;
     });
   }, [items, appliedFilters]);
+  const activeFilterCount = (appliedFilters.q ? 1 : 0) + (appliedFilters.role ? 1 : 0);
 
   const isInitialLoading = staffQuery.isLoading && !staffQuery.data;
   const isRefetching = staffQuery.isFetching && !isInitialLoading;
@@ -344,20 +389,34 @@ export default function AdminStaffPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">All Staff</h1>
-          <p className="text-sm text-slate-500">Manage staff accounts and permissions.</p>
+      <div className="rounded-[26px] border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
+              Admin / Staff
+            </p>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+              All Staff
+            </h1>
+            <p className="text-sm text-slate-500">Manage staff accounts and permissions.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:w-auto">
+            <div className={statCardClass}>
+              <p className="text-[11px] uppercase tracking-wide text-slate-500">Total records</p>
+              <p className="mt-1 text-lg font-semibold text-slate-900">{Number(meta.count || 0)}</p>
+            </div>
+            <div className={statCardClass}>
+              <p className="text-[11px] uppercase tracking-wide text-slate-500">Active filters</p>
+              <p className="mt-1 text-lg font-semibold text-slate-900">{activeFilterCount}</p>
+            </div>
+          </div>
         </div>
-        <button type="button" className={headerBtnGreen} onClick={openCreateModal}>
-          <Plus className="h-4 w-4" />
-          Add Staff
-        </button>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative min-w-[260px] flex-1">
+      <div className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="relative w-full xl:max-w-xl">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="search"
               value={searchInput}
@@ -366,35 +425,45 @@ export default function AdminStaffPage() {
                 if (event.key === "Enter") applyFilters();
               }}
               placeholder="Search by name/email/phone"
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-3 pr-9 text-sm focus:border-emerald-500 focus:outline-none"
+              className={`${fieldClass} pl-9`}
             />
-            <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           </div>
 
-          <select
-            value={roleInput}
-            onChange={(event) => setRoleInput(event.target.value)}
-            className="h-10 min-w-[170px] rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none"
-          >
-            <option value="">All Roles</option>
-            {roleOptions.map((role) => (
-              <option key={role} value={role}>
-                {formatRoleLabel(role)}
-              </option>
-            ))}
-          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={roleInput}
+              onChange={(event) => setRoleInput(event.target.value)}
+              className={`${fieldClass} min-w-[180px]`}
+            >
+              <option value="">All Roles</option>
+              {roleOptions.map((role) => (
+                <option key={role} value={role}>
+                  {formatRoleLabel(role)}
+                </option>
+              ))}
+            </select>
+            <button type="button" className={headerBtnGreen} onClick={openCreateModal}>
+              <Plus className="h-4 w-4" />
+              Add Staff
+            </button>
+          </div>
+        </div>
 
-          <button type="button" onClick={applyFilters} className={headerBtnGreen}>
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <button type="button" onClick={applyFilters} className={`${headerBtnGreen} w-full`}>
             <Filter className="h-4 w-4" />
-            Filter
+            Apply
           </button>
 
-          <button type="button" onClick={resetFilters} className={headerBtnOutline}>
+          <button type="button" onClick={resetFilters} className={`${headerBtnOutline} w-full`}>
             <RotateCcw className="h-4 w-4" />
             Reset
           </button>
 
-          {isRefetching || publishMutation.isPending ? <UiUpdatingBadge label={UPDATING} /> : null}
+          <div className="flex h-11 items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-500 sm:justify-center sm:gap-3">
+            <span>{filteredItems.length} shown</span>
+            {isRefetching || publishMutation.isPending ? <UiUpdatingBadge label={UPDATING} /> : null}
+          </div>
         </div>
       </div>
 
@@ -434,18 +503,22 @@ export default function AdminStaffPage() {
 
       {!isInitialLoading && !isErrorState && !isEmpty ? (
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="w-full overflow-x-auto">
+          <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-2 text-xs text-slate-500">
+            Showing <span className="font-semibold text-slate-700">{filteredItems.length}</span> of{" "}
+            <span className="font-semibold text-slate-700">{Number(meta.count || 0)}</span> records
+          </div>
+          <div className="-mx-4 w-auto overflow-x-auto px-4 pb-1 md:mx-0 md:w-full md:px-0">
             <table className="w-full min-w-[1100px] text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <thead className="bg-slate-50">
                 <tr>
-                  <th className="min-w-[220px] px-4 py-3">Name</th>
-                  <th className="min-w-[230px] px-4 py-3">Email</th>
-                  <th className="min-w-[150px] px-4 py-3">Contact</th>
-                  <th className="min-w-[140px] px-4 py-3">Joining Date</th>
-                  <th className="min-w-[130px] px-4 py-3">Role</th>
-                  <th className="min-w-[100px] px-4 py-3">Status</th>
-                  <th className="min-w-[120px] px-4 py-3">Published</th>
-                  <th className="min-w-[140px] px-4 py-3 text-right">Actions</th>
+                  <th className={tableHeadCell}>Name</th>
+                  <th className={tableHeadCell}>Email</th>
+                  <th className={tableHeadCell}>Contact</th>
+                  <th className={tableHeadCell}>Joining Date</th>
+                  <th className={tableHeadCell}>Role</th>
+                  <th className={tableHeadCell}>Status</th>
+                  <th className={tableHeadCell}>Published</th>
+                  <th className={`${tableHeadCell} text-right`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -457,9 +530,9 @@ export default function AdminStaffPage() {
                   return (
                     <tr
                       key={staff?.id || `${getStaffEmail(staff)}-${getStaffName(staff)}`}
-                      className="border-t border-slate-100 text-slate-700 transition hover:bg-slate-50"
+                      className="border-t border-slate-100 text-slate-700 transition hover:bg-slate-50/80"
                     >
-                      <td className="px-4 py-3">
+                      <td className={tableCell}>
                         <div className="flex items-center gap-3">
                           <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-sm font-semibold text-emerald-700">
                             {getAvatarInitial(staff)}
@@ -467,22 +540,18 @@ export default function AdminStaffPage() {
                           <span className="font-semibold text-slate-900">{getStaffName(staff)}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{getStaffEmail(staff)}</td>
-                      <td className="px-4 py-3 text-slate-600">{getStaffPhone(staff)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      <td className={`${tableCell} text-slate-600`}>{getStaffEmail(staff)}</td>
+                      <td className={`${tableCell} text-slate-600`}>{getStaffPhone(staff)}</td>
+                      <td className={`${tableCell} whitespace-nowrap text-slate-600`}>
                         {formatJoiningDate(staff?.createdAt)}
                       </td>
-                      <td className="px-4 py-3 text-slate-700">{formatRoleLabel(staff?.role)}</td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                            isActive ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
-                          }`}
-                        >
-                          {isActive ? "Active" : "Inactive"}
-                        </span>
+                      <td className={tableCell}>
+                        <RoleBadge role={staff?.role} />
                       </td>
-                      <td className="px-4 py-3">
+                      <td className={tableCell}>
+                        <ActiveStatusBadge isActive={isActive} />
+                      </td>
+                      <td className={tableCell}>
                         <button
                           type="button"
                           onClick={() => onTogglePublished(staff)}
@@ -499,7 +568,7 @@ export default function AdminStaffPage() {
                           />
                         </button>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className={`${tableCell} text-right`}>
                         <div className="flex items-center justify-end gap-2">
                           <button
                             type="button"

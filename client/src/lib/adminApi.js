@@ -143,6 +143,11 @@ export const deleteAdminCategory = async (id) => {
   return data;
 };
 
+export const bulkAdminCategories = async (action, ids) => {
+  const { data } = await adminApi.post("/admin/categories/bulk", { action, ids });
+  return data;
+};
+
 export const createAdminProduct = async (payload) => {
   const { data } = await adminApi.post("/admin/products", payload);
   return data;
