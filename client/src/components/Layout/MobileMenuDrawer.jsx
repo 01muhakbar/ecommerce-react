@@ -13,7 +13,7 @@ const PAGE_LINKS = [
   { label: "Offers", to: "/offers" },
   { label: "About Us", to: "/about-us" },
   { label: "Contact Us", to: "/contact-us" },
-  { label: "My Account", to: "/account" },
+  { label: "My Account", to: "/user/my-account" },
 ];
 
 export default function MobileMenuDrawer({ isOpen, onClose }) {

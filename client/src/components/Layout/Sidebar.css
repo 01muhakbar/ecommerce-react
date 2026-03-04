@@ -233,3 +233,76 @@
 .sidebar__logout:active {
   transform: translateY(1px);
 }
+
+.admin-theme-dark .sidebar {
+  background: #0f172a;
+  border-right-color: #334155;
+}
+
+.admin-theme-dark .sidebar__brand {
+  color: #f8fafc;
+}
+
+.admin-theme-dark .sidebar__brand-icon {
+  background: #052e25;
+  color: #34d399;
+}
+
+.admin-theme-dark .sidebar__link {
+  color: #cbd5e1;
+}
+
+.admin-theme-dark .sidebar__icon {
+  background: #1e293b;
+  color: #94a3b8;
+}
+
+.admin-theme-dark .sidebar__link:hover {
+  background: #1e293b;
+  color: #f8fafc;
+}
+
+.admin-theme-dark .sidebar__link.is-active,
+.admin-theme-dark .sidebar__link.active {
+  background: #052e25;
+  color: #34d399;
+}
+
+.admin-theme-dark .sidebar__link.is-active .sidebar__icon,
+.admin-theme-dark .sidebar__link.active .sidebar__icon {
+  background: #064e3b;
+  color: #6ee7b7;
+}
+
+.admin-theme-dark .sidebar__caret {
+  color: #94a3b8;
+}
+
+.admin-theme-dark .sidebar__sublink {
+  color: #94a3b8;
+}
+
+.admin-theme-dark .sidebar__sublink:hover {
+  background: #1e293b;
+  color: #cbd5e1;
+}
+
+.admin-theme-dark .sidebar__subdot {
+  background: #475569;
+}
+
+.admin-theme-dark .sidebar__sublink.is-active,
+.admin-theme-dark .sidebar__sublink.active {
+  background: #052e25;
+  color: #34d399;
+}
+
+.admin-theme-dark .sidebar__sublink.is-active .sidebar__subdot,
+.admin-theme-dark .sidebar__sublink.active .sidebar__subdot {
+  background: #34d399;
+}
+
+.admin-theme-dark .sidebar__footer {
+  background: #0f172a;
+  border-top: 1px solid #334155;
+}

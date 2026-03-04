@@ -7,9 +7,12 @@ pnpm install
 ```
 
 2) Setup env
-- Copy `.env.example` to `.env` at the repo root.
-- Server reads `.env` (root).
-- Client uses `VITE_API_BASE=/api` from `.env` (root) when built.
+- Copy `server/.env.example` to `server/.env`.
+- Ensure DB values are valid for local MySQL/MariaDB:
+  - `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASS`, `DB_NAME`
+- Default local ports:
+  - Server `PORT=3001`
+  - Client `http://localhost:5173`
 
 3) Run dev
 ```
@@ -19,7 +22,7 @@ pnpm dev
 ## Database notes
 - If you see: `Skipping database sync (set DB_SYNC=true to enable).`
   - This means model sync is disabled by default.
-  - Enable sync by setting `DB_SYNC=true` in `.env`.
+  - Enable sync by setting `DB_SYNC=true` in `server/.env`.
   - Risk: `syncDb()` can alter tables; only use on a dev database.
 
 ### Reset / seed (server scripts)
@@ -60,6 +63,6 @@ pnpm qa:mvf
   - non-zero when any check fails
 
 ## Troubleshooting
-- **DB connect fail**: verify DB_HOST/DB_USER/DB_PASS/DB_NAME in `.env`, and MySQL is running.
+- **DB connect fail**: verify DB_HOST/DB_PORT/DB_USER/DB_PASS/DB_NAME in `server/.env`, and MySQL is running.
 - **Port conflict**: server uses `PORT` (default 3001). Client uses 5173. Stop the other process or change `PORT`.
 - **Auth/Cookie issues**: ensure `/api/auth/login` sets a cookie and requests include cookies (`withCredentials` or `credentials: "include"`).

@@ -49,6 +49,9 @@ export default function StoreSearchPage() {
     setSort(nextSort);
   }, [searchParams]);
 
+  const activeQuery = query.trim();
+  const shouldFetchProducts = Boolean(activeQuery || category);
+
   const {
     data: productsData,
     isLoading: productsLoading,
@@ -56,7 +59,14 @@ export default function StoreSearchPage() {
     isError: productsError,
     error: productsErrorObj,
     refetch: refetchProducts,
-  } = useProducts({ q: query || undefined, category: category || undefined, page, limit });
+  } = useProducts({
+    q: activeQuery || undefined,
+    category: category || undefined,
+    page,
+    limit,
+    enabled: shouldFetchProducts,
+    keepPreviousData: false,
+  });
 
   const rawCandidate =
     productsData?.data?.items ??
@@ -73,13 +83,11 @@ export default function StoreSearchPage() {
     if (next.search !== undefined) {
       if (next.search) {
         params.set("q", next.search);
-        params.set("query", next.search);
-        params.delete("search");
       } else {
         params.delete("q");
-        params.delete("query");
-        params.delete("search");
       }
+      params.delete("query");
+      params.delete("search");
     }
     if (next.category !== undefined) {
       if (next.category) {
@@ -152,12 +160,13 @@ export default function StoreSearchPage() {
   }, [normalizedProducts, sort]);
 
   const hasProducts = sortedProducts.length > 0;
-  const isInitialLoading = productsLoading && !productsData;
-  const isRefetching = productsFetching && !isInitialLoading;
-  const isErrorState = productsError && !hasProducts;
-  const showInlineError = productsError && hasProducts;
-  const isEmpty = !isInitialLoading && !isRefetching && !productsError && !hasProducts;
-  const activeQuery = query.trim();
+  const isInitialLoading = shouldFetchProducts && productsLoading && !productsData;
+  const isRefetching = shouldFetchProducts && productsFetching && !isInitialLoading;
+  const isErrorState = shouldFetchProducts && productsError && !hasProducts;
+  const showInlineError = shouldFetchProducts && productsError && hasProducts;
+  const isEmpty =
+    shouldFetchProducts && !isInitialLoading && !isRefetching && !productsError && !hasProducts;
+  const isPromptState = !shouldFetchProducts;
 
   const errorMessage = useMemo(() => {
     const fromResponse = productsErrorObj?.response?.data?.message;
@@ -172,11 +181,13 @@ export default function StoreSearchPage() {
   }, [productsErrorObj]);
 
   const totalCount = Number(
-    meta?.total ??
-      meta?.totalCount ??
-      meta?.count ??
-      productsData?.data?.total ??
-      sortedProducts.length
+    shouldFetchProducts
+      ? meta?.total ??
+          meta?.totalCount ??
+          meta?.count ??
+          productsData?.data?.total ??
+          sortedProducts.length
+      : 0
   );
   const safeTotalCount = Number.isFinite(totalCount) ? totalCount : sortedProducts.length;
 
@@ -260,11 +271,18 @@ export default function StoreSearchPage() {
               Store Search
             </p>
             <h1 className="text-xl font-semibold leading-tight text-slate-900 sm:text-2xl">
-              {activeQuery ? `Search results for "${activeQuery}"` : "Browse all products"}
+              {activeQuery ? `Search results for "${activeQuery}"` : "Find products quickly"}
             </h1>
             <p className="text-sm text-slate-500">
-              Found <span className="font-semibold text-slate-800">{safeTotalCount}</span> items
-              {activeCategoryLabel ? ` in ${activeCategoryLabel}` : ""}
+              {isPromptState ? (
+                "Type a keyword or choose a category to start searching."
+              ) : (
+                <>
+                  Found <span className="font-semibold text-slate-800">{safeTotalCount}</span>{" "}
+                  items
+                  {activeCategoryLabel ? ` in ${activeCategoryLabel}` : ""}
+                </>
+              )}
             </p>
           </div>
           <div className="flex w-full items-center gap-2 sm:w-auto">
@@ -329,6 +347,13 @@ export default function StoreSearchPage() {
         </aside>
 
         <div className="space-y-5">
+          {isPromptState ? (
+            <UiEmptyState
+              title="Start your search"
+              description="Type product keywords and click Apply to see matching results."
+            />
+          ) : null}
+
           {isInitialLoading ? <UiSkeleton variant="grid" /> : null}
 
           {isErrorState ? (
@@ -367,7 +392,7 @@ export default function StoreSearchPage() {
             />
           ) : null}
 
-          {!isInitialLoading && !isErrorState && !isEmpty ? (
+          {!isPromptState && !isInitialLoading && !isErrorState && !isEmpty ? (
             <div className="space-y-6">
               {showInlineError ? (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 sm:text-sm">

@@ -34,6 +34,7 @@ import adminLanguagesRouter from "./routes/admin.languages.js";
 import adminCurrenciesRouter from "./routes/admin.currencies.js";
 import adminStoreCustomizationRouter from "./routes/admin.storeCustomization.js";
 import adminStoreSettingsRouter from "./routes/admin.storeSettings.js";
+import adminNotificationsRouter from "./routes/admin.notifications.js";
 import storeRouter from "./routes/store.js";
 import storeCouponsRouter from "./routes/store.coupons.js";
 import storeCustomizationRouter from "./routes/store.customization.js";
@@ -93,6 +94,7 @@ app.use("/api/admin/analytics", requireStaffOrAdmin, analyticsRouter);
 app.use("/api/admin/products", requireStaffOrAdmin, adminProductsRouter);
 app.use("/api/admin/orders", requireStaffOrAdmin, adminOrdersRouter);
 app.use("/api/admin/customers", requireStaffOrAdmin, adminCustomersRouter);
+app.use("/api/admin/notifications", requireStaffOrAdmin, adminNotificationsRouter);
 
 app.use("/api/admin/categories", requireAdmin, adminCategoriesRouter);
 app.use("/api/admin/coupons", requireAdmin, adminCouponsRouter);

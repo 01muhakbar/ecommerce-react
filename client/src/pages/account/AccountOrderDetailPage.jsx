@@ -39,7 +39,7 @@ export default function AccountOrderDetailPage() {
     return (
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
         Invalid order id.{" "}
-        <Link to="/account/orders" className="font-medium text-slate-700 hover:text-slate-900">
+        <Link to="/user/my-orders" className="font-medium text-slate-700 hover:text-slate-900">
           Back to orders
         </Link>
       </div>
@@ -63,7 +63,7 @@ export default function AccountOrderDetailPage() {
     return (
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
         Order not found.{" "}
-        <Link to="/account/orders" className="font-medium text-slate-700 hover:text-slate-900">
+        <Link to="/user/my-orders" className="font-medium text-slate-700 hover:text-slate-900">
           Back to orders
         </Link>
       </div>
@@ -128,7 +128,7 @@ export default function AccountOrderDetailPage() {
         </div>
       </div>
 
-      <Link to="/account/orders" className="text-sm font-medium text-slate-700 hover:text-slate-900">
+      <Link to="/user/my-orders" className="text-sm font-medium text-slate-700 hover:text-slate-900">
         ← Back to orders
       </Link>
     </div>

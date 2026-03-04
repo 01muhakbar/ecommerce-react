@@ -9,6 +9,7 @@ import {
   getStoreCustomization,
   quoteStoreCoupon,
 } from "../../api/store.service.ts";
+import { getDefaultAddress, listAddresses } from "../../api/userAddresses.ts";
 import { formatCurrency } from "../../utils/format.js";
 import { GENERIC_ERROR, ORDER_FAILED } from "../../constants/uiMessages.js";
 
@@ -294,6 +295,26 @@ const resolveOrderPayload = (response) => {
   );
 };
 
+const splitFullName = (fullName) => {
+  const normalized = String(fullName || "").trim().replace(/\s+/g, " ");
+  if (!normalized) return { firstName: "", lastName: "" };
+  const [first, ...rest] = normalized.split(" ");
+  return {
+    firstName: first || "",
+    lastName: rest.join(" "),
+  };
+};
+
+const getStreetAddressFromUserAddress = (address) =>
+  [
+    `${address?.streetName || ""} ${address?.houseNumber || ""}`.trim(),
+    address?.building || "",
+    address?.otherDetails || "",
+  ]
+    .map((part) => String(part || "").trim())
+    .filter(Boolean)
+    .join(", ");
+
 function SectionTitle({ number, title, hint }) {
   return (
     <div className="space-y-1">
@@ -348,6 +369,10 @@ export default function CheckoutPage() {
   const [country, setCountry] = useState("");
   const [zipCode, setZipCode] = useState("");
   const [useDefaultShipping, setUseDefaultShipping] = useState(false);
+  const [savedAddresses, setSavedAddresses] = useState([]);
+  const [selectedAddressId, setSelectedAddressId] = useState("");
+  const [isAddressLoading, setIsAddressLoading] = useState(false);
+  const [addressStatus, setAddressStatus] = useState("");
   const [shippingOptionId, setShippingOptionId] = useState(SHIPPING_OPTIONS_BASE[0].id);
   const [paymentOptionId, setPaymentOptionId] = useState(PAYMENT_OPTIONS[0].id);
   const [couponCode, setCouponCode] = useState("");
@@ -371,6 +396,16 @@ export default function CheckoutPage() {
   const firstNameRef = useRef(null);
   const phoneRef = useRef(null);
   const streetRef = useRef(null);
+  const resolveHasAuthHint = () => {
+    try {
+      return (
+        Boolean(localStorage.getItem("authToken")) ||
+        localStorage.getItem("authSessionHint") === "true"
+      );
+    } catch {
+      return false;
+    }
+  };
   const checkoutCustomizationQuery = useQuery({
     queryKey: ["store-customization", "checkout", "en"],
     queryFn: () => getStoreCustomization({ lang: "en", include: "checkout" }),
@@ -427,16 +462,7 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     let mounted = true;
-    const hasAuthHint = (() => {
-      try {
-        return (
-          Boolean(localStorage.getItem("authToken")) ||
-          localStorage.getItem("authSessionHint") === "true"
-        );
-      } catch {
-        return false;
-      }
-    })();
+    const hasAuthHint = resolveHasAuthHint();
     if (!hasAuthHint) {
       return () => {
         mounted = false;
@@ -461,7 +487,27 @@ export default function CheckoutPage() {
     };
   }, [navigate]);
 
+  useEffect(() => {
+    if (!resolveHasAuthHint()) return;
+    let active = true;
+    (async () => {
+      try {
+        const items = await listAddresses();
+        if (!active) return;
+        setSavedAddresses(Array.isArray(items) ? items : []);
+      } catch {
+        if (!active) return;
+        setSavedAddresses([]);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const hasItems = items.length > 0;
+  const isAuthenticated = resolveHasAuthHint();
+  const lockAddressFields = isSubmitting || useDefaultShipping || isAddressLoading;
   const shippingOption =
     shippingOptions.find((option) => option.id === shippingOptionId) ||
     shippingOptions[0];
@@ -498,6 +544,22 @@ export default function CheckoutPage() {
     .join(", ");
   const phoneValue = phone.trim();
   const paymentMethod = "COD";
+  const shippingDetailsPayload = useMemo(
+    () => ({
+      fullName,
+      phoneNumber: phoneValue,
+      province: country.trim(),
+      city: city.trim(),
+      district: city.trim(),
+      postalCode: zipCode.trim(),
+      streetName: streetAddress.trim(),
+      building: "",
+      houseNumber: "N/A",
+      otherDetails: "",
+      markAs: "HOME",
+    }),
+    [fullName, phoneValue, country, city, zipCode, streetAddress]
+  );
 
   const payloadDraft = useMemo(
     () => ({
@@ -512,9 +574,56 @@ export default function CheckoutPage() {
         qty: item.qty,
       })),
       couponCode: appliedCouponMeta?.code || undefined,
+      useDefaultShipping,
+      shippingDetails: useDefaultShipping ? undefined : shippingDetailsPayload,
     }),
-    [fullName, phoneValue, shippingAddress, paymentMethod, summaryItems, appliedCouponMeta]
+    [
+      fullName,
+      phoneValue,
+      shippingAddress,
+      paymentMethod,
+      summaryItems,
+      appliedCouponMeta,
+      useDefaultShipping,
+      shippingDetailsPayload,
+    ]
   );
+  const applyAddressToCheckoutForm = (address) => {
+    const normalized = address && typeof address === "object" ? address : {};
+    const fullNameParts = splitFullName(normalized.fullName);
+    setFirstName(fullNameParts.firstName);
+    setLastName(fullNameParts.lastName);
+    setPhone(String(normalized.phoneNumber || ""));
+    setStreetAddress(getStreetAddressFromUserAddress(normalized));
+    setCity(String(normalized.city || ""));
+    setCountry(String(normalized.province || ""));
+    setZipCode(String(normalized.postalCode || ""));
+  };
+
+  const loadDefaultAddress = async () => {
+    setAddressStatus("");
+    setIsAddressLoading(true);
+    try {
+      const defaultAddress = await getDefaultAddress();
+      if (!defaultAddress) {
+        setUseDefaultShipping(false);
+        setAddressStatus("Default shipping address not found.");
+        return null;
+      }
+      applyAddressToCheckoutForm(defaultAddress);
+      setSelectedAddressId(String(defaultAddress.id || ""));
+      return defaultAddress;
+    } catch (requestError) {
+      setUseDefaultShipping(false);
+      setAddressStatus(
+        requestError?.response?.data?.message ||
+          "Failed to load default shipping address."
+      );
+      return null;
+    } finally {
+      setIsAddressLoading(false);
+    }
+  };
 
   const focusField = (ref) => {
     if (!ref?.current) return;
@@ -617,22 +726,39 @@ export default function CheckoutPage() {
     updateQty(item.productId, nextQty);
   };
 
+  const handleToggleDefaultShipping = async () => {
+    if (!resolveHasAuthHint()) {
+      navigate("/auth/login", { replace: true, state: { from: "/checkout" } });
+      return;
+    }
+    if (isAddressLoading) return;
+    if (useDefaultShipping) {
+      setUseDefaultShipping(false);
+      setAddressStatus("");
+      return;
+    }
+    setUseDefaultShipping(true);
+    await loadDefaultAddress();
+  };
+
+  const handleSelectSavedAddress = (event) => {
+    const nextId = String(event.target.value || "");
+    setSelectedAddressId(nextId);
+    if (!nextId) return;
+    const selected = savedAddresses.find((item) => String(item?.id || "") === nextId);
+    if (!selected) return;
+    setUseDefaultShipping(false);
+    setAddressStatus("");
+    applyAddressToCheckoutForm(selected);
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (submitLockRef.current || isSubmitting) {
       return;
     }
 
-    const hasAuthHint = (() => {
-      try {
-        return (
-          Boolean(localStorage.getItem("authToken")) ||
-          localStorage.getItem("authSessionHint") === "true"
-        );
-      } catch {
-        return false;
-      }
-    })();
+    const hasAuthHint = resolveHasAuthHint();
     if (!hasAuthHint) {
       navigate("/auth/login", { replace: true, state: { from: "/checkout" } });
       return;
@@ -668,6 +794,16 @@ export default function CheckoutPage() {
       } else if (nextErrors.streetAddress) {
         focusField(streetRef);
       }
+      return;
+    }
+
+    if (!/^\d{5}$/.test(zipCode.trim())) {
+      setError("ZIP code must be 5 digits.");
+      setFieldErrors((prev) => ({
+        ...prev,
+        zipCode: "ZIP code must be 5 digits.",
+      }));
+      focusField(streetRef);
       return;
     }
 
@@ -714,7 +850,12 @@ export default function CheckoutPage() {
     submitLockRef.current = true;
     setIsSubmitting(true);
     try {
-      const response = await createStoreOrder(parsed.data);
+      const submitPayload = {
+        ...parsed.data,
+        useDefaultShipping,
+        shippingDetails: useDefaultShipping ? undefined : shippingDetailsPayload,
+      };
+      const response = await createStoreOrder(submitPayload);
       const result = resolveOrderPayload(response);
       const resolvedOrderRef = [
         result?.invoiceNo,
@@ -841,7 +982,8 @@ export default function CheckoutPage() {
                   role="switch"
                   aria-checked={useDefaultShipping}
                   aria-label="Use Default Shipping Address"
-                  onClick={() => setUseDefaultShipping((prev) => !prev)}
+                  onClick={handleToggleDefaultShipping}
+                  disabled={isAddressLoading}
                   className={`relative inline-flex h-6 w-12 items-center rounded-full transition ${
                     useDefaultShipping ? "bg-emerald-500" : "bg-rose-500"
                   }`}
@@ -862,10 +1004,38 @@ export default function CheckoutPage() {
               </div>
             </div>
 
+            {isAuthenticated ? (
+              <div className="mb-4">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Select Saved Address
+                </label>
+                <select
+                  value={selectedAddressId}
+                  onChange={handleSelectSavedAddress}
+                  disabled={isSubmitting || isAddressLoading || savedAddresses.length === 0}
+                  className="mt-2 h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-400 focus:outline-none"
+                >
+                  <option value="">Choose saved address</option>
+                  {savedAddresses.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.fullName} - {item.city}, {item.province}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+
             {useDefaultShipping ? (
               <p className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
-                Use Default Shipping Address is enabled. Fill fields below if your profile
-                address is not available.
+                {isAddressLoading
+                  ? "Loading your default shipping address..."
+                  : "Use Default Shipping Address is enabled."}
+              </p>
+            ) : null}
+
+            {!useDefaultShipping && addressStatus ? (
+              <p className="mt-3 rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                {addressStatus}
               </p>
             ) : null}
 
@@ -891,7 +1061,7 @@ export default function CheckoutPage() {
                           setFieldErrors((prev) => ({ ...prev, firstName: "" }));
                         }
                       }}
-                      disabled={isSubmitting}
+                      disabled={lockAddressFields}
                       placeholder={checkoutCopy.personalDetails.firstNamePlaceholder}
                       className={fieldClass(Boolean(fieldErrors.firstName))}
                     />
@@ -912,7 +1082,7 @@ export default function CheckoutPage() {
                           setFieldErrors((prev) => ({ ...prev, lastName: "" }));
                         }
                       }}
-                      disabled={isSubmitting}
+                      disabled={lockAddressFields}
                       placeholder={checkoutCopy.personalDetails.lastNamePlaceholder}
                       className={fieldClass(Boolean(fieldErrors.lastName))}
                     />
@@ -928,7 +1098,7 @@ export default function CheckoutPage() {
                       type="email"
                       value={email}
                       onChange={(event) => setEmail(event.target.value)}
-                      disabled={isSubmitting}
+                      disabled={lockAddressFields}
                       placeholder={checkoutCopy.personalDetails.emailPlaceholder}
                       className={INPUT_CLASS}
                     />
@@ -947,7 +1117,7 @@ export default function CheckoutPage() {
                           setFieldErrors((prev) => ({ ...prev, phone: "" }));
                         }
                       }}
-                      disabled={isSubmitting}
+                      disabled={lockAddressFields}
                       placeholder={checkoutCopy.personalDetails.phonePlaceholder}
                       className={fieldClass(Boolean(fieldErrors.phone))}
                     />
@@ -979,7 +1149,7 @@ export default function CheckoutPage() {
                           setFieldErrors((prev) => ({ ...prev, streetAddress: "" }));
                         }
                       }}
-                      disabled={isSubmitting}
+                      disabled={lockAddressFields}
                       placeholder={checkoutCopy.shippingDetails.streetAddressPlaceholder}
                       className={fieldClass(Boolean(fieldErrors.streetAddress))}
                     />
@@ -1001,7 +1171,7 @@ export default function CheckoutPage() {
                             setFieldErrors((prev) => ({ ...prev, city: "" }));
                           }
                         }}
-                        disabled={isSubmitting}
+                        disabled={lockAddressFields}
                         placeholder={checkoutCopy.shippingDetails.cityPlaceholder}
                         className={fieldClass(Boolean(fieldErrors.city))}
                       />
@@ -1022,7 +1192,7 @@ export default function CheckoutPage() {
                             setFieldErrors((prev) => ({ ...prev, country: "" }));
                           }
                         }}
-                        disabled={isSubmitting}
+                        disabled={lockAddressFields}
                         placeholder={checkoutCopy.shippingDetails.countryPlaceholder}
                         className={fieldClass(Boolean(fieldErrors.country))}
                       />
@@ -1043,7 +1213,7 @@ export default function CheckoutPage() {
                             setFieldErrors((prev) => ({ ...prev, zipCode: "" }));
                           }
                         }}
-                        disabled={isSubmitting}
+                        disabled={lockAddressFields}
                         placeholder={checkoutCopy.shippingDetails.zipPlaceholder}
                         className={fieldClass(Boolean(fieldErrors.zipCode))}
                       />

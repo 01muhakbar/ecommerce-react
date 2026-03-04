@@ -5,6 +5,7 @@ import { Order } from "../models/Order.js";
 import { User } from "../models/User.js";
 import { OrderItem } from "../models/OrderItem.js";
 import { Product } from "../models/Product.js";
+import { createUserOrderStatusUpdatedNotification } from "../services/notification.service.js";
 
 const router = Router();
 type UiOrderStatus = "pending" | "processing" | "shipping" | "complete" | "cancelled";
@@ -564,8 +565,30 @@ router.patch("/:id/status", requireStaffOrAdmin, async (req, res) => {
 
   const updatedOrder = await Order.findOne({
     where: resolveOrderWhere(idStr),
-    attributes: ["id", "invoiceNo", "status", "totalAmount", "createdAt", "updatedAt"],
+    attributes: [
+      "id",
+      "invoiceNo",
+      "status",
+      "totalAmount",
+      "createdAt",
+      "updatedAt",
+      "userId",
+    ],
   });
+
+  try {
+    const userId = Number(getAttr(updatedOrder, "userId"));
+    if (Number.isFinite(userId) && userId > 0) {
+      await createUserOrderStatusUpdatedNotification({
+        userId,
+        orderId: Number(getAttr(updatedOrder, "id") || 0),
+        invoiceNo: String(getAttr(updatedOrder, "invoiceNo") || ""),
+        status: toUiStatus(getAttr(updatedOrder, "status")),
+      });
+    }
+  } catch (notifyError) {
+    console.warn("[admin.orders] failed to create user status notification", notifyError);
+  }
 
   return res.json({
     success: true,

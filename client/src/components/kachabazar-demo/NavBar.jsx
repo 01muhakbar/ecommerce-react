@@ -87,7 +87,10 @@ export default function NavBar({
                   <Link to="/offers" className="block rounded-lg px-3 py-2 hover:bg-slate-50">
                     Offers
                   </Link>
-                  <Link to="/account" className="block rounded-lg px-3 py-2 hover:bg-slate-50">
+                  <Link
+                    to="/user/my-account"
+                    className="block rounded-lg px-3 py-2 hover:bg-slate-50"
+                  >
                     My Account
                   </Link>
                 </div>

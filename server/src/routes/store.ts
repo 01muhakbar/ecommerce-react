@@ -5,6 +5,7 @@ import {
   reviewCreateSchema,
   reviewUpdateSchema,
 } from "@ecommerce/schemas";
+import { z } from "zod";
 import {
   Category,
   Order,
@@ -15,6 +16,11 @@ import {
   sequelize,
 } from "../models/index.js";
 import { validateCoupon } from "../services/coupon.service.js";
+import {
+  createNewOrderNotification,
+  createUserOrderPlacedNotification,
+} from "../services/notification.service.js";
+import { getDefaultAddressByUser } from "../services/userAddress.service.js";
 import { protect } from "../middleware/authMiddleware.js";
 
 const router = Router();
@@ -53,6 +59,97 @@ const toCanonicalOrderStatus = (raw: any) => {
   }
   return "pending";
 };
+
+const createOrderRequestSchema = createOrderSchema.partial({
+  customer: true,
+});
+
+const SHIPPING_REQUIRED_FIELDS = [
+  "fullName",
+  "phoneNumber",
+  "province",
+  "city",
+  "district",
+  "postalCode",
+  "streetName",
+  "houseNumber",
+] as const;
+
+const shippingDetailsSchema = z.object({
+  fullName: z.string(),
+  phoneNumber: z.string(),
+  province: z.string(),
+  city: z.string(),
+  district: z.string(),
+  postalCode: z.string(),
+  streetName: z.string(),
+  building: z.string().nullable().optional(),
+  houseNumber: z.string(),
+  otherDetails: z.string().nullable().optional(),
+  markAs: z.enum(["HOME", "OFFICE"]).optional(),
+});
+
+type ShippingDetailsSnapshot = z.infer<typeof shippingDetailsSchema>;
+
+const normalizeShippingDetails = (raw: any): ShippingDetailsSnapshot | null => {
+  if (!raw || typeof raw !== "object") return null;
+  const source = raw as Record<string, any>;
+  const normalized = {
+    fullName: String(source.fullName || "").trim(),
+    phoneNumber: String(source.phoneNumber || "").trim(),
+    province: String(source.province || "").trim(),
+    city: String(source.city || "").trim(),
+    district: String(source.district || "").trim(),
+    postalCode: String(source.postalCode || "").trim(),
+    streetName: String(source.streetName || "").trim(),
+    building: String(source.building || "").trim() || null,
+    houseNumber: String(source.houseNumber || "").trim(),
+    otherDetails: String(source.otherDetails || "").trim() || null,
+    markAs: source.markAs === "OFFICE" ? "OFFICE" : "HOME",
+  };
+  const parsed = shippingDetailsSchema.safeParse(normalized);
+  return parsed.success ? parsed.data : null;
+};
+
+const normalizeShippingDetailsOutput = (raw: any): Record<string, any> | null => {
+  if (raw == null) return null;
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    try {
+      const parsed = JSON.parse(trimmed);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  if (typeof raw === "object") return raw;
+  return null;
+};
+
+const getMissingShippingField = (
+  details: ShippingDetailsSnapshot | null
+): string | null => {
+  if (!details) return "shippingDetails";
+  for (const key of SHIPPING_REQUIRED_FIELDS) {
+    if (!String(details[key] || "").trim()) return key;
+  }
+  if (!/^\d{5}$/.test(String(details.postalCode || "").trim())) return "postalCode";
+  return null;
+};
+
+const toShippingAddressLine = (details: ShippingDetailsSnapshot) =>
+  [
+    `${details.streetName} ${details.houseNumber}`.trim(),
+    details.building || "",
+    details.district,
+    details.city,
+    details.province,
+    details.postalCode,
+  ]
+    .map((part) => String(part || "").trim())
+    .filter(Boolean)
+    .join(", ");
 
 const REVIEWABLE_ORDER_STATUSES = ["delivered", "completed", "complete"] as const;
 const REVIEWABLE_STATUS_SQL = REVIEWABLE_ORDER_STATUSES.map((status) => `'${status}'`).join(", ");
@@ -646,6 +743,7 @@ router.get(
           "discountAmount",
           "paymentMethod",
           "createdAt",
+          "shippingDetails",
           "customerName",
           "customerPhone",
           "customerAddress",
@@ -700,6 +798,13 @@ router.get(
           couponCode: (order as any).couponCode ?? null,
           paymentMethod: order.paymentMethod ?? "COD",
           createdAt: order.createdAt,
+          shippingDetails: normalizeShippingDetailsOutput(
+            (order as any).shippingDetails ??
+              order.get?.("shippingDetails") ??
+              (order as any).shipping_details ??
+              order.get?.("shipping_details") ??
+              null
+          ),
           customerName: order.customerName ?? null,
           customerPhone: order.customerPhone ?? null,
           customerAddress: order.customerAddress ?? null,
@@ -781,6 +886,7 @@ router.get(
           "discountAmount",
           "paymentMethod",
           "createdAt",
+          "shippingDetails",
           "customerName",
           "customerPhone",
           "customerAddress",
@@ -856,6 +962,14 @@ router.get(
         (order as any).customer_address ??
         order.get?.("customer_address") ??
         null;
+      const shippingDetails =
+        normalizeShippingDetailsOutput(
+          (order as any).shippingDetails ??
+            order.get?.("shippingDetails") ??
+            (order as any).shipping_details ??
+            order.get?.("shipping_details") ??
+            null
+        );
       const createdAt =
         (order as any).createdAt ??
         order.get?.("createdAt") ??
@@ -901,6 +1015,7 @@ router.get(
           couponCode: (order as any).couponCode ?? null,
           paymentMethod,
           createdAt,
+          shippingDetails,
           customerName,
           customerPhone,
           customerAddress,
@@ -1254,23 +1369,75 @@ router.post(
   protect,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const parsed = createOrderSchema.safeParse(req.body);
+        const parsed = createOrderRequestSchema.safeParse(req.body);
         if (!parsed.success) {
           return res.status(400).json({
             message: "Invalid payload",
             errors: parsed.error.flatten(),
           });
         }
+        const userId = getAuthUserId(req, res);
+        if (!userId) return;
         const { customer, items, paymentMethod, couponCode } = parsed.data;
+        const useDefaultShipping = req.body?.useDefaultShipping === true;
+        let shippingDetails = normalizeShippingDetails(req.body?.shippingDetails);
+
+        if (useDefaultShipping) {
+          const defaultAddress = await getDefaultAddressByUser(userId);
+          if (!defaultAddress) {
+            return res.status(400).json({
+              message: "Default shipping address not set",
+            });
+          }
+          shippingDetails = normalizeShippingDetails(defaultAddress);
+          const missingField = getMissingShippingField(shippingDetails);
+          if (missingField) {
+            return res.status(400).json({
+              message: `Invalid default shipping address: ${missingField}`,
+            });
+          }
+        } else if (shippingDetails) {
+          const missingField = getMissingShippingField(shippingDetails);
+          if (missingField) {
+            return res.status(400).json({
+              message: `Invalid shipping details: ${missingField}`,
+            });
+          }
+        }
+
+        if (!customer && !shippingDetails) {
+          return res.status(400).json({
+            message: "Customer or shipping details are required",
+          });
+        }
+
+        const resolvedCustomer = {
+          name: shippingDetails?.fullName || customer?.name || "",
+          phone: shippingDetails?.phoneNumber || customer?.phone || "",
+          address: shippingDetails
+            ? toShippingAddressLine(shippingDetails)
+            : String(customer?.address || "").trim(),
+          notes: customer?.notes ?? null,
+        };
+        if (
+          !resolvedCustomer.name.trim() ||
+          !resolvedCustomer.phone.trim() ||
+          !resolvedCustomer.address.trim()
+        ) {
+          return res.status(400).json({
+            message: "Customer shipping information is incomplete",
+          });
+        }
+
         console.log("[store] POST /orders hit", new Date().toISOString());
         console.log("[store/orders] payload", {
-          customer,
+          customer: resolvedCustomer,
           paymentMethod,
           itemsCount: items.length,
           firstItem: items[0] ?? null,
+          useDefaultShipping,
+          hasShippingDetails: Boolean(shippingDetails),
         });
-        const userId = getAuthUserId(req, res);
-        if (!userId) return;
         const normalizedCouponCode = normalizeCouponCode(couponCode);
 
         const normalizedItems = new Map<number, number>();
@@ -1481,10 +1648,11 @@ router.post(
             {
               invoiceNo: `STORE-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
               userId,
-              customerName: customer.name,
-              customerPhone: customer.phone,
-              customerAddress: customer.address,
-              customerNotes: customer.notes ?? null,
+              shippingDetails: shippingDetails ?? null,
+              customerName: resolvedCustomer.name,
+              customerPhone: resolvedCustomer.phone,
+              customerAddress: resolvedCustomer.address,
+              customerNotes: resolvedCustomer.notes ?? null,
               paymentMethod,
               totalAmount,
               couponCode: appliedCouponCode,
@@ -1521,6 +1689,23 @@ router.post(
             order?.get?.("createdAt") ??
             (order as any)?.createdAt ??
             new Date().toISOString();
+          try {
+            await Promise.allSettled([
+              createNewOrderNotification({
+                customerName: resolvedCustomer.name ?? null,
+                amount: totalAmount,
+                orderId: Number(order?.id || 0),
+                invoiceNo: invoiceNo ? String(invoiceNo) : null,
+              }),
+              createUserOrderPlacedNotification({
+                userId,
+                orderId: Number(order?.id || 0),
+                invoiceNo: invoiceNo ? String(invoiceNo) : null,
+              }),
+            ]);
+          } catch (notifyError) {
+            console.warn("[store/orders] failed to create notification", notifyError);
+          }
           return res.status(201).json({
             success: true,
             data: {
@@ -1535,6 +1720,8 @@ router.post(
               tax,
               shipping,
               total: totalAmount,
+              shippingDetails: shippingDetails ?? null,
+              useDefaultShipping,
               paymentMethod,
               items: responseItems,
             },

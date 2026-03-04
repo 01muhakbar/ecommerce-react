@@ -4,7 +4,21 @@ import { z } from "zod";
 import path from "path";
 import fs from "fs";
 import multer from "multer";
-import { Category, Product } from "../models/index.js";
+import bcrypt from "bcrypt";
+import { Category, Product, User } from "../models/index.js";
+import { protect } from "../middleware/authMiddleware.js";
+import {
+  getUserNotifications,
+  readUserNotification,
+} from "../controllers/user/userNotificationsController.js";
+import { getUserMe, updateUserMe } from "../controllers/user/userMeController.js";
+import {
+  createUserAddress,
+  deleteUserAddress,
+  getUserAddresses,
+  getUserDefaultAddress,
+  updateUserAddress,
+} from "../controllers/user/userAddressController.js";
 
 const router = Router();
 
@@ -39,6 +53,84 @@ const listQuerySchema = z.object({
   limit: z.coerce.number().int().positive().optional(),
   pageSize: z.coerce.number().int().positive().optional(),
 });
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z
+    .string()
+    .min(8)
+    .regex(/^(?=.*[A-Za-z])(?=.*\d).+$/, "Password must include letters and numbers"),
+});
+
+// POST /api/user/change-password
+router.post("/user/change-password", protect, async (req: Request, res: Response) => {
+  const parsed = changePasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid password input",
+    });
+  }
+
+  const userId = Number((req as any)?.user?.id);
+  if (!Number.isFinite(userId) || userId <= 0) {
+    return res.status(401).json({ success: false, message: "Unauthorized" });
+  }
+
+  try {
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const { currentPassword, newPassword } = parsed.data;
+    const isCurrentPasswordValid = await bcrypt.compare(
+      currentPassword,
+      String(user.password || "")
+    );
+
+    if (!isCurrentPasswordValid) {
+      return res
+        .status(422)
+        .json({ success: false, message: "Current password is incorrect" });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await user.update({ password: hashedPassword });
+
+    return res.json({ success: true, message: "Password updated" });
+  } catch (error) {
+    console.error("[user/change-password] failed", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+// GET /api/user/notifications?limit=20
+router.get("/user/notifications", protect, getUserNotifications);
+
+// PATCH /api/user/notifications/:id/read
+router.patch("/user/notifications/:id/read", protect, readUserNotification);
+
+// GET /api/user/me
+router.get("/user/me", protect, getUserMe);
+
+// PUT /api/user/me
+router.put("/user/me", protect, updateUserMe);
+
+// GET /api/user/addresses
+router.get("/user/addresses", protect, getUserAddresses);
+
+// GET /api/user/addresses/default
+router.get("/user/addresses/default", protect, getUserDefaultAddress);
+
+// POST /api/user/addresses
+router.post("/user/addresses", protect, createUserAddress);
+
+// PUT /api/user/addresses/:id
+router.put("/user/addresses/:id", protect, updateUserAddress);
+
+// DELETE /api/user/addresses/:id
+router.delete("/user/addresses/:id", protect, deleteUserAddress);
 
 // GET /api/categories
 router.get("/categories", async (_req: Request, res: Response) => {

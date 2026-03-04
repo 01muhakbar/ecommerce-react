@@ -13,6 +13,8 @@ import { ProductReview } from "./ProductReview.js";
 import { Attribute } from "./Attribute.js";
 import { Language } from "./Language.js";
 import { Currency } from "./Currency.js";
+import { Notification } from "./Notification.js";
+import { UserAddress } from "./UserAddress.js";
 
 type ProductUserIdFkRow = {
   tableName: string;
@@ -93,6 +95,8 @@ function initModels() {
   Attribute.initModel(sequelize);
   Language.initModel(sequelize);
   Currency.initModel(sequelize);
+  Notification.initModel(sequelize);
+  UserAddress.initModel(sequelize);
 
   const models: any = {
     User,
@@ -107,6 +111,8 @@ function initModels() {
     Attribute,
     Language,
     Currency,
+    Notification,
+    UserAddress,
   };
 
   Object.values(models).forEach((model: any) => {
@@ -186,4 +192,6 @@ export {
   Attribute,
   Language,
   Currency,
+  Notification,
+  UserAddress,
 };

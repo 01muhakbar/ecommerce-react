@@ -1,5 +1,5 @@
 import { Suspense, lazy } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useParams } from "react-router-dom";
 import StoreLayout from "./components/Layout/StoreLayout.jsx";
 import { AuthProvider } from "./auth/AuthContext.jsx";
 import StoreCategoryPage from "./pages/store/StoreCategoryPage.jsx";
@@ -38,6 +38,7 @@ const AdminCustomerDetailPage = lazy(() =>
   import("./pages/admin/AdminCustomerDetailPage.jsx")
 );
 const AdminCouponsPage = lazy(() => import("./pages/admin/AdminCouponsPage.jsx"));
+const AdminProfilePage = lazy(() => import("./pages/admin/Profile.jsx"));
 const ComingSoon = lazy(() => import("./pages/admin/ComingSoon.jsx"));
 const LanguagesPage = lazy(() => import("./pages/Languages.jsx"));
 const CurrenciesPage = lazy(() => import("./pages/Currencies.jsx"));
@@ -54,6 +55,16 @@ import AccountOrdersPage from "./pages/account/AccountOrdersPage.jsx";
 import AccountOrderDetailPage from "./pages/account/AccountOrderDetailPage.jsx";
 import AccountProfilePage from "./pages/account/AccountProfilePage.jsx";
 import AccountMyReviewPage from "./pages/account/AccountMyReviewPage.jsx";
+import AccountNotificationsPage from "./pages/account/AccountNotificationsPage.jsx";
+import AccountMyAccountPage from "./pages/account/AccountMyAccountPage.jsx";
+import AccountChangePasswordPage from "./pages/account/AccountChangePasswordPage.jsx";
+import AccountShippingAddressPage from "./pages/account/AccountShippingAddressPage.jsx";
+
+function LegacyAccountOrderDetailRedirect() {
+  const { id } = useParams();
+  const target = id ? `/user/my-orders/${id}` : "/user/my-orders";
+  return <Navigate to={target} replace />;
+}
 
 export default function App() {
   return (
@@ -90,17 +101,35 @@ export default function App() {
             <Route path="contact" element={<Navigate to="/contact-us" replace />} />
             <Route path="auth/login" element={<StoreLoginPage />} />
             <Route path="auth/register" element={<StoreRegisterPage />} />
-            <Route path="my-orders" element={<Navigate to="/account/orders" replace />} />
-            <Route path="account" element={<AccountGuard />}>
+            <Route path="my-orders" element={<Navigate to="/user/my-orders" replace />} />
+
+            <Route path="user" element={<AccountGuard />}>
               <Route element={<AccountLayout />}>
-                <Route index element={<AccountDashboardPage />} />
+                <Route index element={<Navigate to="/user/dashboard" replace />} />
                 <Route path="dashboard" element={<AccountDashboardPage />} />
-                <Route path="orders" element={<AccountOrdersPage />} />
-                <Route path="orders/:id" element={<AccountOrderDetailPage />} />
-                <Route path="my-review" element={<AccountMyReviewPage />} />
-                <Route path="profile" element={<AccountProfilePage />} />
+                <Route path="my-orders" element={<AccountOrdersPage />} />
+                <Route path="my-orders/:id" element={<AccountOrderDetailPage />} />
+                <Route path="notifications" element={<AccountNotificationsPage />} />
+                <Route path="my-reviews" element={<AccountMyReviewPage />} />
+                <Route path="my-account" element={<AccountMyAccountPage />} />
+                <Route path="shipping-address" element={<AccountShippingAddressPage />} />
+                <Route path="update-profile" element={<AccountProfilePage />} />
+                <Route path="change-password" element={<AccountChangePasswordPage />} />
               </Route>
             </Route>
+
+            <Route path="account" element={<Navigate to="/user/dashboard" replace />} />
+            <Route path="account/dashboard" element={<Navigate to="/user/dashboard" replace />} />
+            <Route path="account/orders" element={<Navigate to="/user/my-orders" replace />} />
+            <Route path="account/orders/:id" element={<LegacyAccountOrderDetailRedirect />} />
+            <Route
+              path="account/my-review"
+              element={<Navigate to="/user/my-reviews" replace />}
+            />
+            <Route
+              path="account/profile"
+              element={<Navigate to="/user/update-profile" replace />}
+            />
           </Route>
 
           <Route path="/admin/login" element={<AdminLoginPage />} />
@@ -283,6 +312,7 @@ export default function App() {
                   </RequirePerm>
                 }
               />
+              <Route path="profile" element={<AdminProfilePage />} />
             </Route>
           </Route>
         </Routes>

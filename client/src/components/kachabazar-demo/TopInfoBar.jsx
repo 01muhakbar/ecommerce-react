@@ -20,7 +20,7 @@ export default function TopInfoBar() {
             Contact Us
           </Link>
           <span className="mx-2 text-slate-300">|</span>
-          <Link to="/account" className="transition hover:text-slate-700 hover:underline">
+          <Link to="/user/my-account" className="transition hover:text-slate-700 hover:underline">
             My Account
           </Link>
           <span className="mx-2 text-slate-300">|</span>

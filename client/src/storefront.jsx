@@ -41,18 +41,18 @@ const fetchCategories = async () => {
 const fetchProducts = async ({ q, search, category, page, limit }) => {
   const params = {};
   const keyword = search ?? q;
-  if (keyword) params.search = keyword;
+  if (keyword) params.q = keyword;
   if (category) params.category = category;
   if (page) params.page = page;
   if (limit) {
     params.limit = limit;
     params.pageSize = limit;
   }
-  const { data } = await api.get("/store/products", { params });
+  const { data } = await api.get("/products", { params });
   const items = Array.isArray(data?.data)
     ? data.data
     : data?.data?.items || [];
-  const meta = data?.meta || {};
+  const meta = data?.meta || data?.data?.meta || {};
   const resolvedLimit = meta.pageSize ?? meta.limit ?? limit;
   const normalized = {
     ...data,
@@ -86,7 +86,15 @@ export const useCategories = () =>
     staleTime: 1000 * 60 * 5,
   });
 
-export const useProducts = ({ q, search, category, page, limit }) =>
+export const useProducts = ({
+  q,
+  search,
+  category,
+  page,
+  limit,
+  enabled = true,
+  keepPreviousData = true,
+}) =>
   useQuery({
     queryKey: [
       "storefront",
@@ -97,7 +105,8 @@ export const useProducts = ({ q, search, category, page, limit }) =>
       limit || 12,
     ],
     queryFn: () => fetchProducts({ q, search, category, page, limit }),
-    placeholderData: prevData,
+    placeholderData: keepPreviousData ? prevData : undefined,
+    enabled,
     staleTime: 1000 * 30,
   });
 

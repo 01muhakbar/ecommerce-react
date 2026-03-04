@@ -13,6 +13,19 @@ export interface OrderAttributes {
   id: number;
   invoiceNo: string;
   userId: number;
+  shippingDetails?: {
+    fullName: string;
+    phoneNumber: string;
+    province: string;
+    city: string;
+    district: string;
+    postalCode: string;
+    streetName: string;
+    building?: string | null;
+    houseNumber: string;
+    otherDetails?: string | null;
+    markAs?: "HOME" | "OFFICE";
+  } | null;
   customerName?: string | null;
   customerPhone?: string | null;
   customerAddress?: string | null;
@@ -42,6 +55,19 @@ export class Order
   declare id: number;
   declare invoiceNo: string;
   declare userId: number;
+  declare shippingDetails?: {
+    fullName: string;
+    phoneNumber: string;
+    province: string;
+    city: string;
+    district: string;
+    postalCode: string;
+    streetName: string;
+    building?: string | null;
+    houseNumber: string;
+    otherDetails?: string | null;
+    markAs?: "HOME" | "OFFICE";
+  } | null;
   declare customerName?: string | null;
   declare customerPhone?: string | null;
   declare customerAddress?: string | null;
@@ -95,6 +121,11 @@ export class Order
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
           references: { model: "Users", key: "id" },
+        },
+        shippingDetails: {
+          type: DataTypes.JSON,
+          allowNull: true,
+          field: "shipping_details",
         },
         customerName: {
           type: DataTypes.STRING(120),

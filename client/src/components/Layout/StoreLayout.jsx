@@ -123,6 +123,7 @@ export default function StoreLayout() {
   const isCartRoute = location.pathname.startsWith("/cart");
   const isCartActive = isCartRoute;
   const isProfileActive =
+    location.pathname.startsWith("/user") ||
     location.pathname.startsWith("/account") ||
     location.pathname.startsWith("/my-account");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -304,7 +305,7 @@ gtag('config', '${key}');`;
             ) : null}
           </button>
           <Link
-            to="/account"
+            to="/user/my-account"
             className={`flex h-full flex-col items-center justify-center rounded-lg text-xs tracking-[0.01em] hover:bg-emerald-500 ${
               isProfileActive
                 ? "bg-emerald-500 font-semibold text-white"

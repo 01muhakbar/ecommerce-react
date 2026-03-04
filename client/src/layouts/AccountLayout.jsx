@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate, useOutletContext } from "react-router-dom
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Bell,
   ClipboardList,
   KeyRound,
   LayoutDashboard,
@@ -54,25 +55,30 @@ function AccountSidebar({ user, onLogout, isLoggingOut, dashboardSettingCopy }) 
   const initials = getInitials(user?.name || user?.email || "User");
   const navItems = [
     {
-      to: "/account",
-      label: dashboardSettingCopy.dashboard.dashboardLabel,
+      to: "/user/dashboard",
+      label: "Dashboard",
       Icon: LayoutDashboard,
     },
     {
-      to: "/account/orders",
-      label: dashboardSettingCopy.dashboard.myOrderValue,
+      to: "/user/my-orders",
+      label: "My Orders",
       Icon: ClipboardList,
     },
-    { to: "/account/my-review", label: "My Review", Icon: Star },
+    { to: "/user/notifications", label: "Notifications", Icon: Bell },
+    { to: "/user/my-reviews", label: "My Review", Icon: Star },
     {
-      to: "/account/profile",
-      label: dashboardSettingCopy.updateProfile.sectionTitleValue,
+      to: "/user/my-account",
+      label: "My Account",
       Icon: User,
     },
-  ];
-  const disabledItems = [
     {
-      label: dashboardSettingCopy.updateProfile.changePasswordLabel,
+      to: "/user/update-profile",
+      label: "Update Profile",
+      Icon: User,
+    },
+    {
+      to: "/user/change-password",
+      label: "Change Password",
       Icon: KeyRound,
     },
   ];
@@ -97,7 +103,7 @@ function AccountSidebar({ user, onLogout, isLoggingOut, dashboardSettingCopy }) 
             <NavLink
               key={item.to}
               to={item.to}
-              end={item.to === "/account"}
+              end={item.to === "/user/dashboard"}
               className={({ isActive }) =>
                 [
                   "flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition",
@@ -110,17 +116,6 @@ function AccountSidebar({ user, onLogout, isLoggingOut, dashboardSettingCopy }) 
               <item.Icon className="h-4 w-4" />
               <span>{item.label}</span>
             </NavLink>
-          ))}
-          {disabledItems.map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              disabled
-              className="flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium text-slate-500 opacity-60"
-            >
-              <item.Icon className="h-4 w-4" />
-              <span>{item.label}</span>
-            </button>
           ))}
         </nav>
 

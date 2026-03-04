@@ -59,6 +59,20 @@ export type StoreCouponQuoteResponse = {
   total: number;
 };
 
+export type StoreShippingDetails = {
+  fullName: string;
+  phoneNumber: string;
+  province: string;
+  city: string;
+  district: string;
+  postalCode: string;
+  streetName: string;
+  building?: string;
+  houseNumber: string;
+  otherDetails?: string;
+  markAs?: "HOME" | "OFFICE";
+};
+
 export type StoreCustomizationResponse = {
   success: boolean;
   lang: string;
@@ -154,6 +168,7 @@ export const fetchStoreOrder = async (ref: string) => {
       customerName?: string | null;
       customerPhone?: string | null;
       customerAddress?: string | null;
+      shippingDetails?: StoreShippingDetails | null;
       items: Array<{
         id: number;
         productId: number;
@@ -177,6 +192,8 @@ export const createStoreOrder = async (payload: {
   paymentMethod: "COD";
   items: { productId: number; qty: number }[];
   couponCode?: string;
+  useDefaultShipping?: boolean;
+  shippingDetails?: StoreShippingDetails;
 }) => {
   const url = "/store/orders";
   if (isDev) {
@@ -202,6 +219,8 @@ export const createStoreOrder = async (payload: {
       tax?: number;
       shipping?: number;
       total: number;
+      useDefaultShipping?: boolean;
+      shippingDetails?: StoreShippingDetails | null;
       paymentMethod: "COD";
     };
   }>(url, payload, { withCredentials: true });

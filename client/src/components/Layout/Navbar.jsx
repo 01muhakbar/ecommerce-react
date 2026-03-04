@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "react-router-dom";
 import { fetchAdminLanguages } from "../../lib/adminApi.js";
+import ThemeToggle from "../admin/ThemeToggle.jsx";
+import AdminProfileMenu from "../admin/AdminProfileMenu.jsx";
+import AdminNotifications from "../admin/AdminNotifications.jsx";
 import "./Navbar.css";
 
 const ADMIN_LANGUAGE_KEY = "adminLanguage";
@@ -54,11 +57,14 @@ const pageTitleFromPath = (pathname) => {
   return "Admin";
 };
 
-export default function Navbar() {
+export default function Navbar({ theme = "light", onToggleTheme }) {
   const { pathname } = useLocation();
   const pageTitle = pageTitleFromPath(pathname);
   const langDropdownRef = useRef(null);
+  const notifyDropdownRef = useRef(null);
+  const profileDropdownRef = useRef(null);
   const [langOpen, setLangOpen] = useState(false);
+  const [activeMenu, setActiveMenu] = useState(null);
   const [selectedLanguage, setSelectedLanguage] = useState(readStoredLanguage);
 
   const languagesQuery = useQuery({
@@ -92,6 +98,30 @@ export default function Navbar() {
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [langOpen]);
+
+  useEffect(() => {
+    if (!activeMenu) return undefined;
+    const onMouseDown = (event) => {
+      const targetRef =
+        activeMenu === "notify"
+          ? notifyDropdownRef
+          : activeMenu === "profile"
+            ? profileDropdownRef
+            : null;
+      if (targetRef?.current && !targetRef.current.contains(event.target)) {
+        setActiveMenu(null);
+      }
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") setActiveMenu(null);
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [activeMenu]);
 
   useEffect(() => {
     if (publishedLanguages.length === 0) return;
@@ -139,6 +169,11 @@ export default function Navbar() {
     setLangOpen(false);
   };
 
+  const toggleMenu = (menuName) => {
+    setLangOpen(false);
+    setActiveMenu((prev) => (prev === menuName ? null : menuName));
+  };
+
   return (
     <header className="navbar">
       <div className="navbar__left">
@@ -159,7 +194,10 @@ export default function Navbar() {
           <button
             className={`navbar__lang ${langOpen ? "is-open" : ""}`}
             type="button"
-            onClick={() => setLangOpen((prev) => !prev)}
+            onClick={() => {
+              setActiveMenu(null);
+              setLangOpen((prev) => !prev);
+            }}
             aria-haspopup="menu"
             aria-expanded={langOpen}
           >
@@ -199,21 +237,18 @@ export default function Navbar() {
             </div>
           ) : null}
         </div>
-        <button className="navbar__icon" aria-label="Toggle theme">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M21 14.5A8.5 8.5 0 1 1 9.5 3a6.8 6.8 0 0 0 11.5 11.5Z" />
-          </svg>
-        </button>
-        <button className="navbar__icon navbar__icon--notify" aria-label="Notifications">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 7h18s-3 0-3-7Z" />
-            <path d="M13.7 20a2 2 0 0 1-3.4 0" />
-          </svg>
-          <span className="navbar__badge">26</span>
-        </button>
-        <div className="navbar__avatar" aria-label="User avatar">
-          A
-        </div>
+        <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+        <AdminNotifications
+          open={activeMenu === "notify"}
+          onToggle={() => toggleMenu("notify")}
+          containerRef={notifyDropdownRef}
+        />
+        <AdminProfileMenu
+          open={activeMenu === "profile"}
+          onToggle={() => toggleMenu("profile")}
+          onClose={() => setActiveMenu(null)}
+          containerRef={profileDropdownRef}
+        />
       </div>
     </header>
   );

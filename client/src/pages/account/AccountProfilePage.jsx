@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { api } from "../../api/axios.ts";
 import { getStoreCustomization } from "../../api/store.service.ts";
 
@@ -110,6 +111,20 @@ export default function AccountProfilePage() {
           className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
           placeholder="you@email.com"
         />
+      </div>
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+          Shipping Address
+        </p>
+        <p className="mt-1 text-sm text-slate-600">
+          Manage default shipping, store, and return addresses.
+        </p>
+        <Link
+          to="/user/shipping-address"
+          className="mt-2 inline-flex rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+        >
+          Manage Shipping Address
+        </Link>
       </div>
 
       {status && (

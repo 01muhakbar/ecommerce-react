@@ -1,31 +1,66 @@
-import { Bell, UserRound } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import CartIconButton from "./CartIconButton.jsx";
+import UserNotificationsPopup from "../user/UserNotificationsPopup.jsx";
+import UserAccountMenuDropdown from "../user/UserAccountMenuDropdown.jsx";
 
 export default function HeaderActions({ totalQty, isAuthenticated, onCartClick }) {
-  const accountHref = isAuthenticated ? "/account" : "/auth/login";
-  const accountLabel = isAuthenticated ? "My account" : "Login";
+  const navigate = useNavigate();
+  const rootRef = useRef(null);
+  const [openMenu, setOpenMenu] = useState(null);
+
+  useEffect(() => {
+    if (!openMenu) return;
+    const handlePointerDown = (event) => {
+      if (!(event.target instanceof Node)) return;
+      if (!rootRef.current?.contains(event.target)) {
+        setOpenMenu(null);
+      }
+    };
+    const handleEsc = (event) => {
+      if (event.key === "Escape") {
+        setOpenMenu(null);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEsc);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEsc);
+    };
+  }, [openMenu]);
+
+  const handleToggleNotif = () => {
+    if (!isAuthenticated) {
+      navigate("/auth/login");
+      return;
+    }
+    setOpenMenu((prev) => (prev === "notif" ? null : "notif"));
+  };
+
+  const handleToggleAccount = () => {
+    if (!isAuthenticated) {
+      navigate("/auth/login");
+      return;
+    }
+    setOpenMenu((prev) => (prev === "account" ? null : "account"));
+  };
 
   return (
-    <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-2.5">
+    <div ref={rootRef} className="ml-auto flex shrink-0 items-center gap-2 sm:gap-2.5">
       <CartIconButton totalQty={totalQty} tone="on-green" onClick={onCartClick} />
-      <button
-        type="button"
-        className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/35 bg-white/10 text-white transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 sm:h-11 sm:w-11"
-        aria-label="Notifications"
-        title="Notifications"
-      >
-        <Bell className="h-[18px] w-[18px]" />
-      </button>
+      <UserNotificationsPopup
+        isAuthenticated={Boolean(isAuthenticated)}
+        open={openMenu === "notif"}
+        onToggle={handleToggleNotif}
+        onClose={() => setOpenMenu(null)}
+      />
       <span className="hidden h-6 w-px bg-white/35 sm:block" aria-hidden />
-      <Link
-        to={accountHref}
-        className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/45 bg-transparent text-white transition hover:bg-white/18 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/45 sm:h-11 sm:w-11"
-        aria-label={accountLabel}
-        title={accountLabel}
-      >
-        <UserRound className="h-[18px] w-[18px]" />
-      </Link>
+      <UserAccountMenuDropdown
+        open={openMenu === "account"}
+        onToggle={handleToggleAccount}
+        onClose={() => setOpenMenu(null)}
+      />
     </div>
   );
 }

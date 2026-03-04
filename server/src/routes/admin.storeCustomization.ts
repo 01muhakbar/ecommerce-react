@@ -1213,7 +1213,8 @@ const normalizeAboutUs = (root: Record<string, any>) => {
       enabled: toBool(ourTeamSource.enabled, defaults.ourTeam.enabled),
       title: toText(ourTeamSource.title, defaults.ourTeam.title),
       description: toText(ourTeamSource.description, defaults.ourTeam.description),
-      members: defaults.ourTeam.members.map((fallbackMember, index) => {
+      members: defaults.ourTeam.members.map(
+        (fallbackMember: Record<string, any>, index: number) => {
         const sourceMember =
           index < teamMembersSource.length && isPlainObject(teamMembersSource[index])
             ? teamMembersSource[index]
@@ -1231,7 +1232,8 @@ const normalizeAboutUs = (root: Record<string, any>) => {
             fallbackMember.subTitle
           ),
         };
-      }),
+      }
+      ),
     },
   };
 };

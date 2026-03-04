@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import multer from "multer";
 import { requireStaffOrAdmin } from "../middleware/requireRole.js";
+import { getAdminMe, updateAdminMe } from "../controllers/admin/adminProfileController.js";
 
 const router = Router();
 
@@ -19,6 +20,9 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
+
+router.get("/me", getAdminMe);
+router.put("/me", updateAdminMe);
 
 router.post("/uploads", requireStaffOrAdmin, upload.single("file"), (req, res) => {
   if (!req.file) {
