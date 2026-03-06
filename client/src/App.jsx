@@ -289,6 +289,14 @@ export default function App() {
                 }
               />
               <Route
+                path="customization"
+                element={
+                  <RequirePerm perm="SETTINGS_MANAGE">
+                    <StoreCustomizationPage />
+                  </RequirePerm>
+                }
+              />
+              <Route
                 path="store-customization"
                 element={<Navigate to="/admin/store/customization" replace />}
               />

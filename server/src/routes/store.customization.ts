@@ -66,7 +66,54 @@ const parseCustomization = (raw: string | null) => {
   }
 };
 
+const toText = (value: unknown, fallback = "") => {
+  const normalized = String(value ?? "").trim();
+  return normalized || fallback;
+};
+
+const extractHeaderSettings = (
+  lang: string,
+  customization: Record<string, any>,
+  updatedAt?: string | null
+) => {
+  const headerSource =
+    customization?.home && typeof customization.home === "object"
+      ? customization.home.header || {}
+      : {};
+
+  return {
+    language: lang,
+    headerText: toText(headerSource.headerText, "Need help?"),
+    phoneNumber: toText(headerSource.phoneNumber, ""),
+    whatsAppLink: toText(headerSource.whatsAppLink, ""),
+    headerLogoUrl: toText(headerSource.headerLogoUrl ?? headerSource.logoDataUrl, ""),
+    updatedAt: updatedAt ? new Date(updatedAt).toISOString() : new Date().toISOString(),
+  };
+};
+
+// GET /api/store/customization/header?lang=en
+// Response contract: { success: true, data: { language, headerText, phoneNumber, whatsAppLink, headerLogoUrl, updatedAt } }
+router.get("/header", async (req, res, next) => {
+  try {
+    await ensureStoreCustomizationsTable();
+    const lang = normalizeLang(req.query?.lang);
+    const row = await getCustomizationRow(lang);
+    const fallbackRow = !row && lang !== "en" ? await getCustomizationRow("en") : null;
+    const sourceRow = row || fallbackRow;
+    const sourcePayload = sourceRow ? parseCustomization(sourceRow.data) : sanitizeCustomization({});
+    const sanitized = sanitizeCustomization(sourcePayload);
+
+    return res.json({
+      success: true,
+      data: extractHeaderSettings(lang, sanitized, sourceRow?.updatedAt),
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 // GET /api/store/customization?lang=en (public read-only, whitelist response)
+// Response contract: { success: true, data: { lang, customization } }
 router.get("/", async (req, res, next) => {
   try {
     await ensureStoreCustomizationsTable();
@@ -126,6 +173,11 @@ router.get("/", async (req, res, next) => {
 
     return res.json({
       success: true,
+      data: {
+        lang,
+        customization,
+      },
+      // Backward compatibility for existing consumers that still read top-level fields.
       lang,
       customization,
     });

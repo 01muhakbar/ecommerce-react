@@ -4,7 +4,12 @@ import CartIconButton from "./CartIconButton.jsx";
 import UserNotificationsPopup from "../user/UserNotificationsPopup.jsx";
 import UserAccountMenuDropdown from "../user/UserAccountMenuDropdown.jsx";
 
-export default function HeaderActions({ totalQty, isAuthenticated, onCartClick }) {
+export default function HeaderActions({
+  totalQty,
+  isAuthenticated,
+  onCartClick,
+  className = "",
+}) {
   const navigate = useNavigate();
   const rootRef = useRef(null);
   const [openMenu, setOpenMenu] = useState(null);
@@ -47,20 +52,29 @@ export default function HeaderActions({ totalQty, isAuthenticated, onCartClick }
   };
 
   return (
-    <div ref={rootRef} className="ml-auto flex shrink-0 items-center gap-2 sm:gap-2.5">
-      <CartIconButton totalQty={totalQty} tone="on-green" onClick={onCartClick} />
-      <UserNotificationsPopup
-        isAuthenticated={Boolean(isAuthenticated)}
-        open={openMenu === "notif"}
-        onToggle={handleToggleNotif}
-        onClose={() => setOpenMenu(null)}
-      />
-      <span className="hidden h-6 w-px bg-white/35 sm:block" aria-hidden />
-      <UserAccountMenuDropdown
-        open={openMenu === "account"}
-        onToggle={handleToggleAccount}
-        onClose={() => setOpenMenu(null)}
-      />
+    <div
+      ref={rootRef}
+      className={`flex shrink-0 items-center justify-end gap-1.5 sm:gap-2 ${className}`}
+    >
+      <div className="scale-[0.94] sm:scale-100">
+        <CartIconButton totalQty={totalQty} tone="on-green" onClick={onCartClick} />
+      </div>
+      <div className="scale-[0.94] sm:scale-100">
+        <UserNotificationsPopup
+          isAuthenticated={Boolean(isAuthenticated)}
+          open={openMenu === "notif"}
+          onToggle={handleToggleNotif}
+          onClose={() => setOpenMenu(null)}
+        />
+      </div>
+      <span className="hidden h-6 w-px bg-white/35 md:block" aria-hidden />
+      <div className="scale-[0.94] sm:scale-100">
+        <UserAccountMenuDropdown
+          open={openMenu === "account"}
+          onToggle={handleToggleAccount}
+          onClose={() => setOpenMenu(null)}
+        />
+      </div>
     </div>
   );
 }

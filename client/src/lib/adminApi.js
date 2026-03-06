@@ -363,6 +363,20 @@ export const deleteAdminCoupon = async (id) => {
   return data;
 };
 
+export const uploadAdminStoreHeaderLogo = async (file, language = "en") => {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("language", String(language || "en").trim().toLowerCase());
+  const { data } = await adminApi.post(
+    "/admin/store/customization/header/logo",
+    formData,
+    {
+      headers: { "Content-Type": "multipart/form-data" },
+    }
+  );
+  return data?.data ?? data;
+};
+
 export const fetchAdminSettings = async () => {
   const { data } = await adminApi.get("/admin/settings");
   return data;

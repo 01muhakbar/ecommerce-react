@@ -2,6 +2,19 @@ import { Lock } from "lucide-react";
 import { Link } from "react-router-dom";
 import HeaderSearch from "./HeaderSearch.jsx";
 import HeaderActions from "./HeaderActions.jsx";
+import { resolveAssetUrl } from "../../lib/assetUrl.js";
+
+const toText = (value, fallback = "") => {
+  const normalized = String(value ?? "").trim();
+  return normalized || fallback;
+};
+
+const withVersion = (url, version) => {
+  const resolved = String(url || "").trim();
+  if (!resolved || !version) return resolved;
+  const separator = resolved.includes("?") ? "&" : "?";
+  return `${resolved}${separator}v=${encodeURIComponent(version)}`;
+};
 
 export default function GreenHeaderBar({
   search,
@@ -10,21 +23,42 @@ export default function GreenHeaderBar({
   totalQty,
   isAuthenticated,
   onCartClick,
+  headerLogoUrl = "",
+  logoUpdatedAt = "",
+  isHeaderLoading = false,
 }) {
+  const logoSrc = withVersion(resolveAssetUrl(headerLogoUrl), toText(logoUpdatedAt));
+  const logoFrameClass =
+    "inline-flex h-10 w-[144px] items-center sm:h-11 sm:w-[156px] md:h-12 md:w-[172px]";
+
   return (
-    <div className="bg-emerald-600 text-white shadow-[0_2px_10px_rgba(5,150,105,0.22)]">
-      <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-3 px-4 py-2.5 sm:gap-4 sm:px-5 lg:flex-nowrap lg:gap-5 lg:px-6 lg:py-3">
+    <div className="border-b border-emerald-700/45 bg-emerald-600 text-white shadow-[0_6px_20px_rgba(5,150,105,0.24)]">
+      <div className="mx-auto grid w-full max-w-7xl grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-3 py-2.5 sm:px-4 sm:py-3 md:grid-cols-[auto_minmax(0,1fr)_auto] md:gap-x-4 md:gap-y-0 lg:px-6">
         <Link
           to="/"
-          className="inline-flex h-10 shrink-0 items-center gap-2.5 text-sm font-extrabold tracking-[0.11em] text-white sm:h-11 sm:text-[15px]"
+          className="inline-flex h-10 min-w-0 items-center gap-2 text-[13px] font-extrabold tracking-[0.08em] text-white sm:h-11 sm:gap-2.5 sm:text-[15px]"
           aria-label="Go to homepage"
         >
-          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/35 bg-white/10 sm:h-8 sm:w-8">
-            <Lock className="h-[15px] w-[15px] sm:h-4 sm:w-4" />
-          </span>
-          <span className="leading-none">KACHA BAZAR</span>
+          {logoSrc ? (
+            <span className={logoFrameClass}>
+              <img
+                src={logoSrc}
+                alt="Store logo"
+                className="max-h-full w-auto max-w-full object-contain"
+              />
+            </span>
+          ) : isHeaderLoading ? (
+            <span className={`${logoFrameClass} rounded bg-white/20`} />
+          ) : (
+            <span className={`${logoFrameClass} gap-2 sm:gap-2.5`}>
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/35 bg-white/10 sm:h-8 sm:w-8">
+                <Lock className="h-[15px] w-[15px] sm:h-4 sm:w-4" />
+              </span>
+              <span className="truncate leading-none">KACHA BAZAR</span>
+            </span>
+          )}
         </Link>
-        <div className="order-3 basis-full pt-0.5 sm:pt-1 lg:order-none lg:flex-1 lg:pt-0">
+        <div className="col-span-2 md:col-span-1 md:min-w-0 md:px-1 lg:px-3">
           <HeaderSearch
             search={search}
             setSearch={setSearch}
@@ -34,6 +68,7 @@ export default function GreenHeaderBar({
           />
         </div>
         <HeaderActions
+          className="justify-self-end"
           totalQty={totalQty}
           isAuthenticated={isAuthenticated}
           onCartClick={onCartClick}

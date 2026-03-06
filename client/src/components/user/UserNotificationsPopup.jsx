@@ -1,8 +1,12 @@
-import { useEffect, useState } from "react";
-import { Bell } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Bell, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
+  clearAllUserNotifications,
+  deleteUserNotification,
+  fetchUserUnreadNotificationCount,
   fetchUserNotifications,
+  markAllUserNotificationsRead,
   markUserNotificationRead,
 } from "../../api/userNotifications.ts";
 
@@ -31,6 +35,37 @@ const getInvoiceNo = (item) => {
   return invoiceNo;
 };
 
+const normalizeMetaString = (value) => {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "";
+  const lowered = normalized.toLowerCase();
+  if (lowered === "undefined" || lowered === "null") return "";
+  return normalized;
+};
+
+const buildNotificationTargetUrl = (item) => {
+  const type = String(item?.type || "").trim().toUpperCase();
+  const invoiceNo = normalizeMetaString(item?.meta?.invoiceNo);
+  const orderFallback = "/account/orders";
+
+  if (type === "ORDER_STATUS_UPDATED" || type === "ORDER_CREATED" || type === "ORDER_PLACED") {
+    if (invoiceNo) {
+      return `/order/${encodeURIComponent(invoiceNo)}`;
+    }
+    return orderFallback;
+  }
+
+  return null;
+};
+
+const isNewTabIntent = (event) =>
+  Boolean(
+    event?.ctrlKey ||
+      event?.metaKey ||
+      event?.button === 1 ||
+      event?.which === 2
+  );
+
 const toNotificationsData = (payload) => {
   const items = Array.isArray(payload?.items) ? payload.items : [];
   const unreadCount = Number(payload?.unreadCount || 0);
@@ -49,12 +84,52 @@ export default function UserNotificationsPopup({
   const [unreadCount, setUnreadCount] = useState(0);
   const [error, setError] = useState("");
   const [isMarkingRead, setIsMarkingRead] = useState(false);
+  const [activeDeleteId, setActiveDeleteId] = useState(0);
+  const [isClearingAll, setIsClearingAll] = useState(false);
+  const [realtimeStatus, setRealtimeStatus] = useState("connected");
+  const openRef = useRef(Boolean(open));
+  const eventSourceRef = useRef(null);
+  const pollingTimerRef = useRef(null);
+
+  useEffect(() => {
+    openRef.current = Boolean(open);
+  }, [open]);
+
+  const loadUnreadCount = useCallback(async () => {
+    try {
+      const count = await fetchUserUnreadNotificationCount();
+      setUnreadCount(Number(count || 0));
+    } catch {
+      // keep existing unread count on transient failures
+    }
+  }, []);
+
+  const stopPolling = useCallback(() => {
+    if (typeof window === "undefined") return;
+    if (pollingTimerRef.current) {
+      window.clearInterval(pollingTimerRef.current);
+      pollingTimerRef.current = null;
+    }
+  }, []);
+
+  const startPollingUnreadCount = useCallback(() => {
+    if (typeof window === "undefined" || pollingTimerRef.current) return;
+    pollingTimerRef.current = window.setInterval(() => {
+      fetchUserUnreadNotificationCount()
+        .then((count) => {
+          setUnreadCount(Number(count || 0));
+        })
+        .catch(() => {
+          // keep last unread count during transient polling failures
+        });
+    }, 60_000);
+  }, []);
 
   const loadNotifications = async (withLoading = true) => {
     if (withLoading) setIsLoading(true);
     setError("");
     try {
-      const payload = await fetchUserNotifications(20);
+      const payload = await fetchUserNotifications({ limit: 20, offset: 0 });
       const normalized = toNotificationsData(payload);
       setItems(normalized.items);
       setUnreadCount(normalized.unreadCount);
@@ -72,14 +147,17 @@ export default function UserNotificationsPopup({
     if (unread.length === 0) return;
     setIsMarkingRead(true);
     try {
-      await Promise.allSettled(
-        unread.map((item) => markUserNotificationRead(Number(item.id)))
-      );
+      await markAllUserNotificationsRead();
       await loadNotifications(false);
     } finally {
       setIsMarkingRead(false);
     }
   };
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    loadUnreadCount();
+  }, [isAuthenticated, loadUnreadCount]);
 
   useEffect(() => {
     if (!open || !isAuthenticated) return;
@@ -99,7 +177,97 @@ export default function UserNotificationsPopup({
     setItems([]);
     setUnreadCount(0);
     setError("");
-  }, [isAuthenticated]);
+    setRealtimeStatus("connected");
+    stopPolling();
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+  }, [isAuthenticated, stopPolling]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+    if (typeof window === "undefined" || typeof EventSource === "undefined") {
+      return undefined;
+    }
+
+    const eventSource = new EventSource("/api/user/notifications/stream", {
+      withCredentials: true,
+    });
+    eventSourceRef.current = eventSource;
+
+    const onHello = (event) => {
+      try {
+        const payload = JSON.parse(String(event?.data || "{}"));
+        if (Number.isFinite(Number(payload?.unreadCount))) {
+          setUnreadCount(Number(payload.unreadCount || 0));
+        }
+        setRealtimeStatus("connected");
+        stopPolling();
+      } catch {
+        // ignore malformed payload
+      }
+    };
+
+    const onNotificationNew = (event) => {
+      try {
+        const payload = JSON.parse(String(event?.data || "{}"));
+        const nextUnreadCount = Number(payload?.unreadCount);
+        const notification = payload?.notification;
+        if (Number.isFinite(nextUnreadCount)) {
+          setUnreadCount(nextUnreadCount);
+        }
+        if (!openRef.current || !notification?.id) return;
+        setItems((previous) => {
+          const deduped = previous.filter(
+            (item) => Number(item?.id) !== Number(notification.id)
+          );
+          return [notification, ...deduped].slice(0, 20);
+        });
+      } catch {
+        // ignore malformed payload
+      }
+    };
+
+    const onPing = () => {};
+    const onOpen = () => {
+      setRealtimeStatus("connected");
+      stopPolling();
+    };
+    const onError = () => {
+      setRealtimeStatus("disconnected");
+      startPollingUnreadCount();
+    };
+
+    eventSource.onopen = onOpen;
+    eventSource.addEventListener("hello", onHello);
+    eventSource.addEventListener("notification:new", onNotificationNew);
+    eventSource.addEventListener("ping", onPing);
+    eventSource.onerror = onError;
+
+    return () => {
+      stopPolling();
+      if (eventSourceRef.current === eventSource) {
+        eventSourceRef.current = null;
+      }
+      eventSource.onopen = null;
+      eventSource.removeEventListener("hello", onHello);
+      eventSource.removeEventListener("notification:new", onNotificationNew);
+      eventSource.removeEventListener("ping", onPing);
+      eventSource.onerror = null;
+      eventSource.close();
+    };
+  }, [isAuthenticated, startPollingUnreadCount, stopPolling]);
+
+  useEffect(() => {
+    return () => {
+      stopPolling();
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+    };
+  }, [stopPolling]);
 
   const handleToggle = () => {
     if (typeof onToggle === "function") {
@@ -112,21 +280,81 @@ export default function UserNotificationsPopup({
     }
   };
 
-  const handleClickItem = async (item) => {
+  const handleClickItem = async (item, options = {}) => {
     if (!item) return;
+    const targetUrl = buildNotificationTargetUrl(item);
+    const shouldOpenNewTab = Boolean(options?.newTab);
+
+    if (shouldOpenNewTab && targetUrl && typeof window !== "undefined") {
+      window.open(targetUrl, "_blank", "noreferrer");
+      if (typeof onClose === "function") onClose();
+    }
+
     if (!item.isRead) {
       try {
         await markUserNotificationRead(Number(item.id));
-        await loadNotifications(false);
       } catch (requestError) {
         setError(requestError?.response?.data?.message || "Failed to update notification.");
+        return;
       }
     }
 
-    const invoiceNo = getInvoiceNo(item);
-    if (invoiceNo) {
-      if (typeof onClose === "function") onClose();
-      navigate(`/order/${encodeURIComponent(invoiceNo)}`);
+    await loadNotifications(false);
+
+    if (typeof onClose === "function") onClose();
+    if (!targetUrl || shouldOpenNewTab) {
+      return;
+    }
+
+    navigate(targetUrl);
+  };
+
+  const handleNotificationClick = (event, item) => {
+    if (event) {
+      event.preventDefault();
+    }
+    handleClickItem(item, { newTab: isNewTabIntent(event) });
+  };
+
+  const handleNotificationAuxClick = (event, item) => {
+    if (!isNewTabIntent(event)) return;
+    event.preventDefault();
+    handleClickItem(item, { newTab: true });
+  };
+
+  const handleDeleteItem = async (event, item) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const id = Number(item?.id);
+    if (!Number.isFinite(id) || id <= 0 || activeDeleteId === id || isClearingAll) return;
+    setActiveDeleteId(id);
+    setError("");
+    try {
+      await deleteUserNotification(id);
+      await loadNotifications(false);
+    } catch (requestError) {
+      setError(requestError?.response?.data?.message || "Failed to delete notification.");
+    } finally {
+      setActiveDeleteId(0);
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (isClearingAll || items.length === 0) return;
+    if (typeof window !== "undefined") {
+      const confirmed = window.confirm("Clear all notifications?");
+      if (!confirmed) return;
+    }
+    setIsClearingAll(true);
+    setError("");
+    try {
+      await clearAllUserNotifications();
+      setItems([]);
+      setUnreadCount(0);
+    } catch (requestError) {
+      setError(requestError?.response?.data?.message || "Failed to clear notifications.");
+    } finally {
+      setIsClearingAll(false);
     }
   };
 
@@ -151,10 +379,26 @@ export default function UserNotificationsPopup({
       {open ? (
         <div className="absolute right-0 top-[calc(100%+10px)] z-[70] w-[360px] max-w-[92vw] overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl">
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-            <p className="text-sm font-semibold">Notifications</p>
+            <div>
+              <p className="text-sm font-semibold">Notifications</p>
+              <p className="mt-0.5 text-[11px] text-slate-400">
+                Realtime: {realtimeStatus === "connected" ? "Connected" : "Disconnected"}
+              </p>
+            </div>
             <span className="text-xs text-slate-500">
               {isMarkingRead ? "Syncing..." : `${unreadCount} unread`}
             </span>
+          </div>
+
+          <div className="flex items-center justify-end border-b border-slate-100 px-4 py-2">
+            <button
+              type="button"
+              onClick={handleClearAll}
+              disabled={isClearingAll || items.length === 0}
+              className="inline-flex h-8 items-center justify-center rounded-lg border border-slate-200 px-3 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isClearingAll ? "Clearing..." : "Clear all"}
+            </button>
           </div>
 
           <div className="max-h-[420px] overflow-y-auto px-2 py-2">
@@ -174,11 +418,9 @@ export default function UserNotificationsPopup({
 
             {!isLoading && !error && items.length > 0
               ? items.map((item) => (
-                  <button
+                  <div
                     key={item.id}
-                    type="button"
-                    onClick={() => handleClickItem(item)}
-                    className={`mb-1.5 flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-slate-50 ${
+                    className={`mb-1.5 flex items-start gap-2 rounded-xl px-3 py-2 transition hover:bg-slate-50 ${
                       item.isRead ? "bg-white" : "bg-emerald-50/40"
                     }`}
                   >
@@ -187,7 +429,17 @@ export default function UserNotificationsPopup({
                     ) : (
                       <span className="mt-1.5 h-2 w-2 flex-none rounded-full bg-transparent" />
                     )}
-                    <span className="min-w-0 flex-1">
+                    <button
+                      type="button"
+                      onClick={(event) => handleNotificationClick(event, item)}
+                      onAuxClick={(event) => handleNotificationAuxClick(event, item)}
+                      onMouseDown={(event) => {
+                        if (event.button === 1) {
+                          event.preventDefault();
+                        }
+                      }}
+                      className="min-w-0 flex-1 text-left"
+                    >
                       <span
                         className={`block truncate text-xs ${
                           item.isRead ? "font-medium text-slate-700" : "font-semibold text-slate-900"
@@ -202,8 +454,18 @@ export default function UserNotificationsPopup({
                         </span>
                         <span>{formatTime(item.createdAt)}</span>
                       </span>
-                    </span>
-                  </button>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => handleDeleteItem(event, item)}
+                      disabled={activeDeleteId === Number(item.id) || isClearingAll}
+                      className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
+                      aria-label="Delete notification"
+                      title="Delete notification"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 ))
               : null}
           </div>

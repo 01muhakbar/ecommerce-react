@@ -11,6 +11,7 @@ Dev ports:
 
 Server: http://localhost:3001
 Client: http://localhost:5173
+Catatan dev: jika 5173 sedang dipakai, Vite akan otomatis pindah ke port lain (mis. 5176). Selalu gunakan port yang tercetak di terminal.
 Routing Overview
 Storefront (public):
 

@@ -554,6 +554,16 @@ router.patch("/:id/status", requireStaffOrAdmin, async (req, res) => {
       )}`,
     });
   }
+  const existingOrder = await Order.findOne({
+    where: resolveOrderWhere(idStr),
+    attributes: ["id", "status", "invoiceNo", "userId"],
+  });
+
+  if (!existingOrder) {
+    return res.status(404).json({ message: "Pesanan tidak ditemukan." });
+  }
+
+  const previousStatus = toUiStatus(getAttr(existingOrder, "status"));
   const [updatedRows] = await Order.update(
     { status: normalizedStatus, updatedAt: new Date() },
     { where: resolveOrderWhere(idStr) }
@@ -583,7 +593,8 @@ router.patch("/:id/status", requireStaffOrAdmin, async (req, res) => {
         userId,
         orderId: Number(getAttr(updatedOrder, "id") || 0),
         invoiceNo: String(getAttr(updatedOrder, "invoiceNo") || ""),
-        status: toUiStatus(getAttr(updatedOrder, "status")),
+        statusFrom: previousStatus,
+        statusTo: toUiStatus(getAttr(updatedOrder, "status")),
       });
     }
   } catch (notifyError) {

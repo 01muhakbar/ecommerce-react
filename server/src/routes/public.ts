@@ -8,7 +8,12 @@ import bcrypt from "bcrypt";
 import { Category, Product, User } from "../models/index.js";
 import { protect } from "../middleware/authMiddleware.js";
 import {
+  clearUserNotifications,
   getUserNotifications,
+  streamUserNotifications,
+  getUserUnreadNotificationCount,
+  readAllUserNotifications,
+  removeUserNotification,
   readUserNotification,
 } from "../controllers/user/userNotificationsController.js";
 import { getUserMe, updateUserMe } from "../controllers/user/userMeController.js";
@@ -107,9 +112,23 @@ router.post("/user/change-password", protect, async (req: Request, res: Response
 
 // GET /api/user/notifications?limit=20
 router.get("/user/notifications", protect, getUserNotifications);
+router.get("/user/notifications/stream", protect, streamUserNotifications);
+router.get("/user/notifications/unread-count", protect, getUserUnreadNotificationCount);
+router.delete("/user/notifications", protect, clearUserNotifications);
+router.patch("/user/notifications/read-all", protect, readAllUserNotifications);
 
 // PATCH /api/user/notifications/:id/read
 router.patch("/user/notifications/:id/read", protect, readUserNotification);
+router.delete("/user/notifications/:id", protect, removeUserNotification);
+
+// Backward-compatible customer notification aliases.
+router.get("/notifications", protect, getUserNotifications);
+router.get("/notifications/stream", protect, streamUserNotifications);
+router.get("/notifications/unread-count", protect, getUserUnreadNotificationCount);
+router.delete("/notifications", protect, clearUserNotifications);
+router.patch("/notifications/read-all", protect, readAllUserNotifications);
+router.patch("/notifications/:id/read", protect, readUserNotification);
+router.delete("/notifications/:id", protect, removeUserNotification);
 
 // GET /api/user/me
 router.get("/user/me", protect, getUserMe);

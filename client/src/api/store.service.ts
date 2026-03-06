@@ -88,6 +88,20 @@ export type StoreCustomizationResponse = {
   };
 };
 
+export type StoreHeaderCustomization = {
+  language: string;
+  headerText: string;
+  phoneNumber: string;
+  whatsAppLink: string;
+  headerLogoUrl: string;
+  updatedAt: string;
+};
+
+export type StoreHeaderCustomizationResponse = {
+  success: boolean;
+  data?: StoreHeaderCustomization;
+};
+
 export type PublicStoreSettings = {
   payments: {
     cashOnDeliveryEnabled: boolean;
@@ -252,6 +266,17 @@ export const getStoreCustomization = async (params?: {
 export const fetchStoreCustomization = async (lang = "en") => {
   const normalizedLang = String(lang || "en").trim().toLowerCase() || "en";
   return getStoreCustomization({ lang: normalizedLang });
+};
+
+export const getStoreHeaderCustomization = async (params?: { lang?: string }) => {
+  const normalizedLang = String(params?.lang || "en").trim().toLowerCase() || "en";
+  const { data } = await api.get<StoreHeaderCustomizationResponse>(
+    "/store/customization/header",
+    {
+      params: { lang: normalizedLang },
+    }
+  );
+  return data;
 };
 
 export const getStoreSettings = async () => {

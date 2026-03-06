@@ -1,11 +1,26 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useCartStore } from "../../store/cart.store.ts";
 import { useStoreCategories } from "../../hooks/useStoreCategories.ts";
 import { useAuth } from "../../auth/useAuth.js";
+import { getStoreHeaderCustomization } from "../../api/store.service.ts";
 import TopInfoBar from "./TopInfoBar.jsx";
 import GreenHeaderBar from "./GreenHeaderBar.jsx";
 import NavBar from "./NavBar.jsx";
+
+const DEFAULT_HEADER_CONTENT = {
+  headerText: "Need help?",
+  phoneNumber: "+62 812 3456 7890",
+  whatsAppLink: "",
+  headerLogoUrl: "",
+  updatedAt: "",
+};
+
+const toText = (value, fallback = "") => {
+  const normalized = String(value ?? "").trim();
+  return normalized || fallback;
+};
 
 export default function StoreHeaderKacha({ onCartClick }) {
   const navigate = useNavigate();
@@ -13,10 +28,50 @@ export default function StoreHeaderKacha({ onCartClick }) {
   const totalQty = useCartStore((state) => state.totalQty);
   const { data: categories, isLoading: categoriesLoading } = useStoreCategories();
   const { isAuthenticated } = useAuth() || {};
+  const headerQuery = useQuery({
+    queryKey: ["store-customization-header", "en"],
+    queryFn: () => getStoreHeaderCustomization({ lang: "en" }),
+    staleTime: 60_000,
+    retry: 1,
+    placeholderData: (previousData) => previousData,
+    refetchOnWindowFocus: false,
+  });
 
   const [search, setSearch] = useState("");
   const [showCategories, setShowCategories] = useState(false);
   const [showPages, setShowPages] = useState(false);
+  const hasHeaderPayload = Boolean(headerQuery.data?.data);
+  const headerContent = useMemo(() => {
+    const headerContentRaw = headerQuery.data?.data || {};
+    if (!hasHeaderPayload) {
+      return {
+        headerText: "",
+        phoneNumber: "",
+        whatsAppLink: "",
+        headerLogoUrl: "",
+        updatedAt: "",
+      };
+    }
+    return {
+      headerText: toText(headerContentRaw.headerText, DEFAULT_HEADER_CONTENT.headerText),
+      phoneNumber: toText(headerContentRaw.phoneNumber, DEFAULT_HEADER_CONTENT.phoneNumber),
+      whatsAppLink: toText(
+        headerContentRaw.whatsAppLink,
+        DEFAULT_HEADER_CONTENT.whatsAppLink
+      ),
+      headerLogoUrl: toText(
+        headerContentRaw.headerLogoUrl,
+        DEFAULT_HEADER_CONTENT.headerLogoUrl
+      ),
+      updatedAt: toText(headerContentRaw.updatedAt, DEFAULT_HEADER_CONTENT.updatedAt),
+    };
+  }, [headerQuery.data, hasHeaderPayload]);
+  const headerVersion = useMemo(() => {
+    const parsed = Date.parse(headerContent.updatedAt);
+    return Number.isFinite(parsed)
+      ? String(parsed)
+      : toText(headerContent.updatedAt);
+  }, [headerContent.updatedAt]);
 
   useEffect(() => {
     const q = searchParams.get("q") ?? "";
@@ -46,9 +101,14 @@ export default function StoreHeaderKacha({ onCartClick }) {
   };
 
   return (
-    <div>
+    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
       <div className="hidden sm:block">
-        <TopInfoBar />
+        <TopInfoBar
+          headerText={headerContent.headerText}
+          phoneNumber={headerContent.phoneNumber}
+          whatsAppLink={headerContent.whatsAppLink}
+          isHeaderLoading={!hasHeaderPayload && headerQuery.isFetching}
+        />
       </div>
       <GreenHeaderBar
         search={search}
@@ -57,6 +117,9 @@ export default function StoreHeaderKacha({ onCartClick }) {
         totalQty={totalQty}
         isAuthenticated={Boolean(isAuthenticated)}
         onCartClick={onCartClick}
+        headerLogoUrl={headerContent.headerLogoUrl}
+        logoUpdatedAt={headerVersion}
+        isHeaderLoading={!hasHeaderPayload && headerQuery.isFetching}
       />
       <div className="hidden sm:block">
         <NavBar
@@ -68,6 +131,6 @@ export default function StoreHeaderKacha({ onCartClick }) {
           categoriesLoading={categoriesLoading}
         />
       </div>
-    </div>
+    </header>
   );
 }

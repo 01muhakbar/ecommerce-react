@@ -113,14 +113,19 @@ export function StoreCartDrawer({
           role="dialog"
           aria-modal="true"
           aria-label="Shopping Cart"
-          className={`ml-auto flex h-[100dvh] max-h-[100dvh] w-full flex-col overflow-hidden rounded-none border border-slate-200 bg-white shadow-sm transition-transform duration-150 ease-out sm:h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-1.5rem)] sm:max-w-[500px] sm:rounded-[24px] sm:shadow-[0_24px_48px_rgba(15,23,42,0.16)] lg:max-w-[430px] lg:rounded-none lg:border-y-0 lg:border-r-0 lg:border-l lg:shadow-none ${
+          className={`ml-auto flex h-[100dvh] max-h-[100dvh] w-full flex-col overflow-hidden rounded-none border border-slate-200 bg-white shadow-[0_20px_45px_rgba(15,23,42,0.2)] transition-transform duration-200 ease-out sm:h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-1.5rem)] sm:max-w-[408px] sm:rounded-[22px] sm:border-slate-100 sm:shadow-[0_28px_56px_rgba(15,23,42,0.22)] lg:max-w-[408px] lg:rounded-none lg:border-y-0 lg:border-r-0 lg:border-l lg:shadow-[0_0_0_rgba(0,0,0,0)] ${
             isOpen ? "translate-x-0" : "translate-x-full"
           }`}
         >
-          <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-3.5 backdrop-blur sm:px-6">
+          <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 py-4 sm:px-5">
             <div className="flex items-center gap-2 text-slate-900">
-              <ShoppingCart className="h-4 w-4 text-emerald-600" />
-              <h1 className="text-base font-semibold sm:text-lg">Shopping Cart</h1>
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                <ShoppingCart className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <h1 className="text-[15px] font-semibold sm:text-base">Shopping Cart</h1>
+                <p className="text-xs text-slate-500">{items.length} item(s)</p>
+              </div>
               {isLoading && hasHydrated ? <UiUpdatingBadge label={UPDATING} /> : null}
             </div>
             <button
@@ -128,14 +133,14 @@ export function StoreCartDrawer({
               type="button"
               onClick={handleClose}
               aria-label="Close"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-sm font-medium text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 sm:h-auto sm:w-auto sm:gap-2 sm:px-3 sm:py-1.5"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-sm font-medium text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 sm:h-auto sm:w-auto sm:gap-2 sm:px-3 sm:py-1.5"
             >
               <X className="h-4 w-4" />
               <span className="hidden sm:inline">Close</span>
             </button>
           </header>
 
-          <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 px-4 py-3 sm:px-6 sm:py-4">
+          <div className="min-h-0 flex-1 overflow-y-auto bg-white px-4 py-3 sm:px-5 sm:py-4">
             {showSkeleton ? (
               <div className="space-y-4">
                 <div className="h-16 animate-pulse rounded-2xl bg-slate-100" />
@@ -208,10 +213,10 @@ export function StoreCartDrawer({
                   return (
                     <article
                       key={rowProductId ?? item.name}
-                      className="rounded-3xl border border-slate-200 bg-white p-3.5 shadow-[0_10px_24px_rgba(15,23,42,0.06)]"
+                      className="rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_8px_20px_rgba(15,23,42,0.06)]"
                     >
                       <div className="flex items-start gap-3 sm:gap-4">
-                        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-slate-100 sm:h-20 sm:w-20">
+                        <div className="flex h-[68px] w-[68px] shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 sm:h-[74px] sm:w-[74px]">
                           {item.image ? (
                             <img
                               src={item.image}
@@ -224,21 +229,18 @@ export function StoreCartDrawer({
                         </div>
 
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold leading-tight text-slate-900 line-clamp-2">
+                          <p className="line-clamp-2 text-[13px] font-semibold leading-tight text-slate-900 sm:text-sm">
                             {item.name}
                           </p>
-                          <p className="mt-1 text-xs text-slate-400">
-                            Item Price {formatCurrency(price)}
+                          <p className="mt-1 text-[11px] text-slate-500">
+                            Unit {formatCurrency(price)}
                           </p>
-                          <p className="mt-1 text-sm font-semibold text-slate-900">
-                            {formatCurrency(price)}
-                          </p>
-                          <p className="mt-1 text-xs font-medium text-slate-500">
+                          <p className="mt-1 text-[13px] font-semibold text-slate-900">
                             Total {formatCurrency(price * quantity)}
                           </p>
                         </div>
 
-                        <div className="ml-1 flex shrink-0 flex-col items-end gap-3">
+                        <div className="ml-1 flex shrink-0 flex-col items-end gap-2.5">
                           <button
                             type="button"
                             disabled={isLoading || !rowProductId}
@@ -247,11 +249,11 @@ export function StoreCartDrawer({
                               remove(rowProductId);
                             }}
                             aria-label={`Remove ${item.name}`}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-rose-500 transition hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-45"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-rose-500 transition hover:bg-rose-50 hover:text-rose-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200 disabled:cursor-not-allowed disabled:opacity-45"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
-                          <div className="inline-flex h-9 items-center rounded-full border border-slate-300 bg-white px-1.5 shadow-sm">
+                          <div className="inline-flex h-9 items-center rounded-full border border-emerald-200 bg-emerald-50/30 px-1.5 shadow-sm">
                             <button
                               type="button"
                               disabled={isDecrementDisabled}
@@ -263,7 +265,7 @@ export function StoreCartDrawer({
                                 }
                                 update(rowProductId, quantity - 1);
                               }}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold text-slate-700 transition hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 disabled:cursor-not-allowed disabled:opacity-40"
                             >
                               -
                             </button>
@@ -281,7 +283,7 @@ export function StoreCartDrawer({
                                   update(rowProductId, nextQty);
                                 }
                               }}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold text-slate-700 transition hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 disabled:cursor-not-allowed disabled:opacity-40"
                             >
                               +
                             </button>
@@ -295,8 +297,8 @@ export function StoreCartDrawer({
             ) : null}
           </div>
 
-          <footer className="sticky bottom-0 z-10 shrink-0 border-t border-slate-200 bg-white/95 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3.5 shadow-[0_-6px_18px_rgba(15,23,42,0.08)] backdrop-blur sm:px-6">
-            <div className="rounded-2xl border border-slate-200 bg-white p-3.5 sm:p-4">
+          <footer className="sticky bottom-0 z-10 shrink-0 border-t border-slate-200 bg-white px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3.5 shadow-[0_-10px_24px_rgba(15,23,42,0.08)] sm:px-5">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-3.5 sm:p-4">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold text-slate-900">Order Summary</h2>
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
@@ -338,7 +340,7 @@ export function StoreCartDrawer({
               {hasItems ? (
                 <Link
                   to="/checkout"
-                  className="inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+                  className="inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white shadow-[0_10px_18px_rgba(5,150,105,0.3)] transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
                 >
                   Proceed to Checkout
                 </Link>
@@ -354,7 +356,7 @@ export function StoreCartDrawer({
               {hasItems ? (
                 <Link
                   to="/cart"
-                  className="inline-flex h-10 w-full items-center justify-center rounded-full border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:border-slate-400"
+                  className="inline-flex h-10 w-full items-center justify-center rounded-full border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200"
                 >
                   View Cart
                 </Link>

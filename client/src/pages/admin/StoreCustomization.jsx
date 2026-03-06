@@ -1,17 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation, useNavigate } from "react-router-dom";
 import { ChevronDown, Plus, Settings, Upload, X } from "lucide-react";
 import {
   fetchAdminLanguages,
   fetchAdminCoupons,
   createAdminLanguage,
   fetchAdminStoreCustomization,
+  uploadAdminStoreHeaderLogo,
   updateAdminStoreCustomization,
 } from "../../lib/adminApi.js";
 import {
   fileToDataUrl,
   validateCustomizationLogoFile,
 } from "../../utils/fileToDataUrl.js";
+import { resolveAssetUrl } from "../../lib/assetUrl.js";
 
 const ADMIN_LANGUAGE_KEY = "adminLanguage";
 
@@ -27,6 +30,48 @@ const TABS = [
   { key: "dashboardSetting", label: "Dashboard Setting" },
   { key: "seoSettings", label: "Seo Settings" },
 ];
+
+const STORE_CUSTOMIZATION_PATH = "/admin/store/customization";
+const ABOUT_US_CUSTOMIZATION_PATH = "/admin/customization";
+const DEFAULT_TAB_KEY = "home";
+const STORE_TAB_BY_KEY = {
+  home: "home-settings",
+  productSlugPage: "single-setting",
+  aboutUs: "about-us-setting",
+  privacyPolicyTerms: "privacy-setting",
+  faqs: "FAQ-setting",
+  offers: "offers-setting",
+  contactUs: "contact-us-setting",
+  checkout: "checkout-setting",
+  dashboardSetting: "dashboard-setting",
+  seoSettings: "seo-settings",
+};
+const KEY_BY_STORE_TAB = Object.fromEntries(
+  Object.entries(STORE_TAB_BY_KEY).map(([tabKey, storeTab]) => [storeTab, tabKey])
+);
+const normalizeRoutePath = (pathname) => {
+  if (!pathname) return STORE_CUSTOMIZATION_PATH;
+  if (pathname.length > 1 && pathname.endsWith("/")) return pathname.slice(0, -1);
+  return pathname;
+};
+const getDefaultTabKeyByPath = (pathname) =>
+  normalizeRoutePath(pathname) === ABOUT_US_CUSTOMIZATION_PATH
+    ? "aboutUs"
+    : DEFAULT_TAB_KEY;
+const getCanonicalStoreTab = (storeTabFromUrl, pathname) => {
+  const normalizedStoreTab = String(storeTabFromUrl || "").trim();
+  if (KEY_BY_STORE_TAB[normalizedStoreTab]) return normalizedStoreTab;
+  const fallbackTabKey = getDefaultTabKeyByPath(pathname);
+  return STORE_TAB_BY_KEY[fallbackTabKey];
+};
+const getPathByTabKey = (tabKey) =>
+  tabKey === "aboutUs" ? ABOUT_US_CUSTOMIZATION_PATH : STORE_CUSTOMIZATION_PATH;
+const getUrlByTabKey = (tabKey) => {
+  const safeTabKey = STORE_TAB_BY_KEY[tabKey] ? tabKey : DEFAULT_TAB_KEY;
+  const storeTab = STORE_TAB_BY_KEY[safeTabKey];
+  const path = getPathByTabKey(safeTabKey);
+  return `${path}?storeTab=${encodeURIComponent(storeTab)}`;
+};
 
 const LANGUAGE_PRESETS = [
   { name: "English", displayName: "English", isoCode: "en", flag: "US" },
@@ -251,6 +296,8 @@ const getDefaultCustomization = () => ({
     header: {
       headerText: "We are available 24/7, Need help??",
       phoneNumber: "565555",
+      whatsAppLink: "",
+      headerLogoUrl: "",
       logoDataUrl: "",
     },
     mainSlider: {
@@ -684,6 +731,165 @@ const mergeDeep = (base, source) => {
 const toText = (value, fallback = "") => {
   const normalized = String(value ?? "").trim();
   return normalized || fallback;
+};
+
+const withVersion = (url, version) => {
+  const normalizedUrl = toText(url);
+  const normalizedVersion = toText(version);
+  if (!normalizedUrl || !normalizedVersion) return normalizedUrl;
+  const separator = normalizedUrl.includes("?") ? "&" : "?";
+  return `${normalizedUrl}${separator}v=${encodeURIComponent(normalizedVersion)}`;
+};
+
+const isHttpUrl = (value) => /^https?:\/\//i.test(toText(value));
+
+const buildPublicUrl = (pathOrUrl) => {
+  const normalized = toText(pathOrUrl);
+  if (!normalized) return "";
+  if (isHttpUrl(normalized)) return normalized;
+  if (/^[a-z]+:/i.test(normalized)) return "";
+  const relativePath = normalized.startsWith("/") ? normalized : `/${normalized}`;
+  if (typeof window === "undefined") return relativePath;
+  return `${window.location.origin}${relativePath}`;
+};
+
+const getUrlPathname = (value) => {
+  const normalized = toText(value);
+  if (!normalized) return "";
+  try {
+    return new URL(normalized).pathname || "";
+  } catch {
+    return normalized.split("#")[0].split("?")[0];
+  }
+};
+
+const getSafeImageExt = (value) => {
+  const pathname = getUrlPathname(value).toLowerCase();
+  const rawExt = pathname.split(".").pop() || "";
+  const normalizedExt = rawExt === "jpg" ? "jpg" : rawExt;
+  const allowed = new Set(["png", "webp", "jpg", "jpeg"]);
+  return allowed.has(normalizedExt) ? normalizedExt : "png";
+};
+
+const readImageDimensions = (file) =>
+  new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+    const cleanup = () => URL.revokeObjectURL(objectUrl);
+
+    image.onload = () => {
+      const width = Number(image.naturalWidth || image.width || 0);
+      const height = Number(image.naturalHeight || image.height || 0);
+      cleanup();
+      if (!width || !height) {
+        reject(new Error("Cannot read image dimensions."));
+        return;
+      }
+      resolve({
+        width,
+        height,
+        ratio: width / height,
+      });
+    };
+
+    image.onerror = () => {
+      cleanup();
+      reject(new Error("Cannot read image dimensions."));
+    };
+
+    image.src = objectUrl;
+  });
+
+const getLogoDimensionFeedback = (meta) => {
+  if (!meta) return { message: "", level: "info" };
+  const { width, height, ratio } = meta;
+  const nearRecommendedHeight =
+    Math.abs(height - 64) <= 8 || Math.abs(height - 80) <= 10;
+
+  if (width < 200 || height < 40) {
+    return {
+      message:
+        "Warning: Resolusi terlalu kecil, logo bisa blur. Recommended ~240x64 atau 300x80.",
+      level: "warn",
+    };
+  }
+
+  if (ratio < 2.5) {
+    return {
+      message:
+        "Warning: Logo terlalu kotak/tinggi. Gunakan logo horizontal (~3.5-4:1).",
+      level: "warn",
+    };
+  }
+
+  if (ratio > 6) {
+    return {
+      message:
+        "Warning: Logo terlalu panjang, pastikan teks/logo tetap terbaca di header.",
+      level: "warn",
+    };
+  }
+
+  if (ratio < 3 || ratio > 5) {
+    return {
+      message:
+        "Info: Rasio di luar range aman (3-5:1). Periksa lagi agar tidak terlalu tinggi/panjang.",
+      level: "warn",
+    };
+  }
+
+  if (ratio < 3.5 || ratio > 4.5 || !nearRecommendedHeight) {
+    return {
+      message:
+        "Info: Masih aman, tetapi belum ideal. Rekomendasi ratio ~3.5-4.5:1 (240x64 atau 300x80).",
+      level: "info",
+    };
+  }
+
+  return { message: "", level: "info" };
+};
+
+const isSafeWhatsAppLink = (value) => {
+  const normalized = toText(value);
+  if (!normalized) return true;
+  const lowered = normalized.toLowerCase();
+  return (
+    lowered.startsWith("https://wa.me/") ||
+    lowered.startsWith("https://api.whatsapp.com/")
+  );
+};
+
+const buildWhatsAppLinkFromPhone = (value) => {
+  const raw = toText(value);
+  if (!raw) {
+    return { link: "", error: "Phone number is invalid" };
+  }
+
+  const keepsPlus = raw.replace(/[^\d+]/g, "");
+  const hasLeadingPlus = keepsPlus.startsWith("+");
+  let digits = keepsPlus.replace(/\D/g, "");
+
+  if (!digits) {
+    return { link: "", error: "Phone number is invalid" };
+  }
+
+  if (digits.startsWith("0")) {
+    digits = `62${digits.slice(1)}`;
+  } else if (digits.startsWith("62")) {
+    // already normalized
+  } else if (digits.startsWith("8")) {
+    digits = `62${digits}`;
+  } else if (hasLeadingPlus && digits.startsWith("62")) {
+    // handles +62...
+  } else {
+    return { link: "", error: "Phone number is invalid" };
+  }
+
+  if (!/^\d+$/.test(digits) || digits.length < 8) {
+    return { link: "", error: "Phone number is invalid" };
+  }
+
+  return { link: `https://wa.me/${digits}`, error: "" };
 };
 
 const toBool = (value, fallback = false) => {
@@ -1531,7 +1737,18 @@ const normalizeCustomizationPayload = (raw) => {
           headerSource.phoneNumber,
           defaultsHome.header.phoneNumber
         ),
-        logoDataUrl: toText(headerSource.logoDataUrl, ""),
+        whatsAppLink: toText(
+          headerSource.whatsAppLink,
+          defaultsHome.header.whatsAppLink
+        ),
+        headerLogoUrl: toText(
+          headerSource.headerLogoUrl ?? headerSource.logoDataUrl,
+          defaultsHome.header.headerLogoUrl
+        ),
+        logoDataUrl: toText(
+          headerSource.logoDataUrl ?? headerSource.headerLogoUrl,
+          defaultsHome.header.logoDataUrl
+        ),
       },
       menuEditor: {
         ...defaultsHome.menuEditor,
@@ -2294,8 +2511,11 @@ function ImageUploadField({
 }
 
 export default function StoreCustomizationPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const presetRef = useRef(null);
+  const tabContentRef = useRef(null);
   const fileInputRef = useRef(null);
   const quickDeliveryFileInputRef = useRef(null);
 
@@ -2303,6 +2523,7 @@ export default function StoreCustomizationPage() {
   const [activeMainSliderTab, setActiveMainSliderTab] = useState("slider-0");
   const [activeAboutUsMemberTab, setActiveAboutUsMemberTab] = useState("member-0");
   const [lang, setLang] = useState(getStoredAdminLanguageIso);
+  const activeLangRef = useRef(lang);
   const [homeState, setHomeState] = useState(() => getDefaultCustomization().home);
   const [productSlugPageState, setProductSlugPageState] = useState(
     () => getDefaultCustomization().productSlugPage
@@ -2329,8 +2550,17 @@ export default function StoreCustomizationPage() {
     () => getDefaultCustomization().seoSettings
   );
   const [notice, setNotice] = useState(null);
+  const [whatsAppLinkServerError, setWhatsAppLinkServerError] = useState("");
+  const [whatsAppLinkHelperError, setWhatsAppLinkHelperError] = useState("");
+  const [headerLogoPreviewVersion, setHeaderLogoPreviewVersion] = useState("");
+  const [logoMeta, setLogoMeta] = useState(null);
+  const [logoWarning, setLogoWarning] = useState("");
+  const [logoWarningLevel, setLogoWarningLevel] = useState("info");
+  const [logoActionFeedback, setLogoActionFeedback] = useState("");
+  const [logoActionFeedbackType, setLogoActionFeedbackType] = useState("info");
   const [logoError, setLogoError] = useState("");
   const [isDropActive, setIsDropActive] = useState(false);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isMainSliderDropActive, setIsMainSliderDropActive] = useState(false);
   const [mainSliderImageErrors, setMainSliderImageErrors] = useState({});
   const [couponCodeInput, setCouponCodeInput] = useState("");
@@ -2386,6 +2616,43 @@ export default function StoreCustomizationPage() {
     published: true,
   });
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const storeTabFromUrl = params.get("storeTab");
+    const canonicalStoreTab = getCanonicalStoreTab(storeTabFromUrl, location.pathname);
+
+    if (storeTabFromUrl !== canonicalStoreTab) {
+      const canonicalTabKey = KEY_BY_STORE_TAB[canonicalStoreTab] || DEFAULT_TAB_KEY;
+      navigate(getUrlByTabKey(canonicalTabKey), { replace: true });
+      return;
+    }
+
+    const nextTabKey =
+      KEY_BY_STORE_TAB[canonicalStoreTab] || getDefaultTabKeyByPath(location.pathname);
+    setActiveTab((previousTab) => (previousTab === nextTabKey ? previousTab : nextTabKey));
+  }, [location.pathname, location.search, navigate]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const frameId = window.requestAnimationFrame(() => {
+      const contentElement = tabContentRef.current;
+      if (!contentElement) return;
+
+      try {
+        contentElement.focus({ preventScroll: true });
+      } catch {
+        contentElement.focus();
+      }
+
+      if (window.innerWidth < 768) {
+        contentElement.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [activeTab]);
+
   const languagesQuery = useQuery({
     queryKey: ["admin-customization-languages"],
     queryFn: () => fetchAdminLanguages(),
@@ -2410,10 +2677,15 @@ export default function StoreCustomizationPage() {
     setLang(fallback.isoCode);
   }, [publishedLanguages, lang]);
 
+  useEffect(() => {
+    activeLangRef.current = lang;
+  }, [lang]);
+
   const customizationQuery = useQuery({
     queryKey: ["admin-store-customization", lang],
     enabled: Boolean(lang),
     queryFn: () => fetchAdminStoreCustomization(lang),
+    placeholderData: (previousData) => previousData,
   });
 
   const offersCouponsQuery = useQuery({
@@ -2439,6 +2711,7 @@ export default function StoreCustomizationPage() {
     setDashboardSettingState(normalized.dashboardSetting);
     setSeoSettingsState(normalized.seoSettings);
     setLogoError("");
+    setIsUploadingLogo(false);
     setMainSliderImageErrors({});
     setIsMainSliderDropActive(false);
     setCouponCodeInput("");
@@ -2482,12 +2755,21 @@ export default function StoreCustomizationPage() {
     setOffersDropActive({});
     setContactUsImageErrors({});
     setContactUsDropActive({});
+    setHeaderLogoPreviewVersion(toText(customizationQuery.data?.updatedAt));
+    setWhatsAppLinkServerError("");
+    setWhatsAppLinkHelperError("");
     setActiveAboutUsMemberTab("member-0");
   }, [customizationQuery.data]);
 
   const updateMutation = useMutation({
     mutationFn: ({ language, payload }) =>
       updateAdminStoreCustomization(language, payload),
+    onMutate: () => {
+      setNotice({
+        type: "success",
+        message: `Updating customization for ${String(lang || "en").toUpperCase()}...`,
+      });
+    },
     onSuccess: async (data) => {
       const payload = data?.customization || data;
       const normalized = normalizeCustomizationPayload(payload);
@@ -2502,18 +2784,31 @@ export default function StoreCustomizationPage() {
       setCheckoutState(normalized.checkout);
       setDashboardSettingState(normalized.dashboardSetting);
       setSeoSettingsState(normalized.seoSettings);
-      setNotice({ type: "success", message: "Store customization updated." });
+      setWhatsAppLinkServerError("");
+      setWhatsAppLinkHelperError("");
+      setNotice({
+        type: "success",
+        message: `Store customization updated for ${String(lang || "en").toUpperCase()}.`,
+      });
       await queryClient.invalidateQueries({
         queryKey: ["admin-store-customization", lang],
       });
     },
     onError: (error) => {
+      const serverMessage =
+        error?.response?.data?.message || error?.message || "";
+      const isWhatsAppError = String(serverMessage)
+        .toLowerCase()
+        .includes("invalid whatsapp link");
+      if (isWhatsAppError) {
+        setWhatsAppLinkServerError("WhatsApp link must be wa.me or api.whatsapp.com");
+      }
       setNotice({
         type: "error",
         message:
           error?.response?.data?.message ||
           error?.message ||
-          "Failed to update customization.",
+          `Failed to update customization for ${String(lang || "en").toUpperCase()}.`,
       });
     },
   });
@@ -2549,6 +2844,15 @@ export default function StoreCustomizationPage() {
   }, [notice]);
 
   useEffect(() => {
+    if (!logoActionFeedback) return undefined;
+    const timer = setTimeout(() => {
+      setLogoActionFeedback("");
+      setLogoActionFeedbackType("info");
+    }, 1800);
+    return () => clearTimeout(timer);
+  }, [logoActionFeedback]);
+
+  useEffect(() => {
     if (!isAddLanguageOpen) return undefined;
 
     const prevOverflow = document.body.style.overflow;
@@ -2581,8 +2885,35 @@ export default function StoreCustomizationPage() {
   const selectedPresetLabel = selectedPreset
     ? `${selectedPreset.flag} ${selectedPreset.displayName} (${selectedPreset.isoCode})`
     : "Select a language";
+  const headerLogoSourceUrl = toText(
+    homeState?.header?.headerLogoUrl ?? homeState?.header?.logoDataUrl
+  );
+  const headerLogoPreviewUrl = resolveAssetUrl(headerLogoSourceUrl);
+  const headerLogoFrameSrc = withVersion(
+    headerLogoPreviewUrl,
+    headerLogoPreviewVersion
+  );
+  const publicLogoUrlCandidate = withVersion(
+    buildPublicUrl(headerLogoSourceUrl),
+    headerLogoPreviewVersion
+  );
+  const publicLogoUrl = isHttpUrl(publicLogoUrlCandidate) ? publicLogoUrlCandidate : "";
+  const logoMetaText = logoMeta
+    ? `Detected: ${logoMeta.width}x${logoMeta.height} (ratio ${logoMeta.ratio.toFixed(2)}:1)`
+    : "";
+  const isLoadingHeader = customizationQuery.isFetching;
+  const isSaving = updateMutation.isPending;
+  const showFullCustomizationLoader =
+    customizationQuery.isLoading && !customizationQuery.data;
+  const showCustomizationError =
+    customizationQuery.isError && !customizationQuery.data;
+  const headerWhatsAppLink = toText(homeState?.header?.whatsAppLink);
+  const whatsAppLinkError = headerWhatsAppLink && !isSafeWhatsAppLink(headerWhatsAppLink)
+    ? "WhatsApp link must be wa.me or api.whatsapp.com"
+    : whatsAppLinkHelperError || whatsAppLinkServerError;
 
   const onSave = () => {
+    if (!lang || isLoadingHeader || isSaving || isUploadingLogo) return;
     setNotice(null);
     const current = queryClient.getQueryData(["admin-store-customization", lang]);
     const currentCustomization = normalizeCustomizationPayload(
@@ -3144,6 +3475,13 @@ export default function StoreCustomizationPage() {
   };
 
   const onChangeHeaderField = (field, value) => {
+    if (field === "whatsAppLink") {
+      setWhatsAppLinkServerError("");
+      setWhatsAppLinkHelperError("");
+    }
+    if (field === "phoneNumber") {
+      setWhatsAppLinkHelperError("");
+    }
     setHomeState((prev) => ({
       ...prev,
       header: {
@@ -3151,6 +3489,31 @@ export default function StoreCustomizationPage() {
         [field]: value,
       },
     }));
+  };
+
+  const onSelectTab = (tabKey) => {
+    const safeTabKey = STORE_TAB_BY_KEY[tabKey] ? tabKey : DEFAULT_TAB_KEY;
+    if (safeTabKey === activeTab) return;
+    const canonicalUrl = getUrlByTabKey(safeTabKey);
+    const currentUrl = `${location.pathname}${location.search}`;
+    if (currentUrl === canonicalUrl) return;
+    navigate(canonicalUrl, { replace: false });
+  };
+
+  const onGenerateWhatsAppLink = () => {
+    const result = buildWhatsAppLinkFromPhone(homeState?.header?.phoneNumber);
+    if (result.error) {
+      setWhatsAppLinkHelperError(result.error);
+      return;
+    }
+    setWhatsAppLinkHelperError("");
+    onChangeHeaderField("whatsAppLink", result.link);
+  };
+
+  const onTestWhatsAppLink = () => {
+    const link = toText(homeState?.header?.whatsAppLink);
+    if (!link || !isSafeWhatsAppLink(link)) return;
+    window.open(link, "_blank", "noopener,noreferrer");
   };
 
   const onChangeMenuLabel = (key, value) => {
@@ -3181,21 +3544,69 @@ export default function StoreCustomizationPage() {
 
   const onHandleLogoFile = async (file) => {
     if (!file) return;
+    if (isLoadingHeader || isSaving || isUploadingLogo) return;
     const validation = validateCustomizationLogoFile(file);
     if (!validation.valid) {
       setLogoError(validation.error);
       return;
     }
+
     try {
-      const dataUrl = await fileToDataUrl(file);
+      const nextLogoMeta = await readImageDimensions(file);
+      const feedback = getLogoDimensionFeedback(nextLogoMeta);
+      setLogoMeta(nextLogoMeta);
+      setLogoWarning(feedback.message);
+      setLogoWarningLevel(feedback.level);
+    } catch {
+      setLogoMeta(null);
+      setLogoWarning("Warning: Cannot read image dimensions.");
+      setLogoWarningLevel("warn");
+    }
+
+    try {
+      const activeLang = String(lang || "en").trim().toLowerCase() || "en";
+      setIsUploadingLogo(true);
+      const uploadResult = await uploadAdminStoreHeaderLogo(file, activeLang);
+      const uploadedLogoUrl = toText(
+        uploadResult?.headerLogoUrl ?? uploadResult?.url
+      );
+      if (!uploadedLogoUrl) {
+        throw new Error("Upload succeeded but no logo URL was returned.");
+      }
+      if (
+        (String(activeLangRef.current || "en").trim().toLowerCase() || "en") !==
+        activeLang
+      ) {
+        return;
+      }
       setLogoError("");
-      onChangeHeaderField("logoDataUrl", dataUrl);
+      onChangeHeaderField("headerLogoUrl", uploadedLogoUrl);
+      onChangeHeaderField("logoDataUrl", uploadedLogoUrl);
+      setHeaderLogoPreviewVersion(toText(uploadResult?.updatedAt));
+      setNotice({
+        type: "success",
+        message: `Logo uploaded for ${activeLang.toUpperCase()}. Click Update to save other changes.`,
+      });
     } catch (error) {
-      setLogoError(error?.message || "Failed to process image.");
+      const errorMessage =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Failed to process image.";
+      setLogoError(errorMessage);
+      setNotice({
+        type: "error",
+        message: errorMessage,
+      });
+    } finally {
+      setIsUploadingLogo(false);
     }
   };
 
   const onLogoInputChange = async (event) => {
+    if (isUploadingLogo || isLoadingHeader || isSaving) {
+      event.target.value = "";
+      return;
+    }
     const file = event.target.files?.[0];
     await onHandleLogoFile(file);
     event.target.value = "";
@@ -3203,12 +3614,80 @@ export default function StoreCustomizationPage() {
 
   const onRemoveLogo = () => {
     setLogoError("");
+    setHeaderLogoPreviewVersion("");
+    setLogoMeta(null);
+    setLogoWarning("");
+    setLogoWarningLevel("info");
+    setLogoActionFeedback("");
+    setLogoActionFeedbackType("info");
+    onChangeHeaderField("headerLogoUrl", "");
     onChangeHeaderField("logoDataUrl", "");
+  };
+
+  const onCopyPublicLogoUrl = async () => {
+    if (!publicLogoUrl) return;
+    let copied = false;
+
+    if (
+      typeof navigator !== "undefined" &&
+      navigator.clipboard &&
+      typeof navigator.clipboard.writeText === "function"
+    ) {
+      try {
+        await navigator.clipboard.writeText(publicLogoUrl);
+        copied = true;
+      } catch {
+        copied = false;
+      }
+    }
+
+    if (!copied && typeof document !== "undefined") {
+      try {
+        const textArea = document.createElement("textarea");
+        textArea.value = publicLogoUrl;
+        textArea.setAttribute("readonly", "");
+        textArea.style.position = "absolute";
+        textArea.style.left = "-9999px";
+        document.body.appendChild(textArea);
+        textArea.select();
+        copied = document.execCommand("copy");
+        textArea.remove();
+      } catch {
+        copied = false;
+      }
+    }
+
+    setLogoActionFeedback(copied ? "Copied!" : "Copy failed.");
+    setLogoActionFeedbackType(copied ? "info" : "warn");
+  };
+
+  const onOpenPublicLogoUrl = () => {
+    if (!publicLogoUrl || typeof window === "undefined") return;
+    window.open(publicLogoUrl, "_blank", "noreferrer");
+  };
+
+  const onDownloadPublicLogoUrl = () => {
+    if (!publicLogoUrl || typeof document === "undefined") return;
+    const extension = getSafeImageExt(publicLogoUrl);
+    const normalizedLang = toText(lang, "en")
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "") || "en";
+    const fileName = `store-header-logo_${normalizedLang}.${extension}`;
+    const anchor = document.createElement("a");
+    anchor.href = publicLogoUrl;
+    anchor.download = fileName;
+    anchor.rel = "noreferrer";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setLogoActionFeedback("Download started.");
+    setLogoActionFeedbackType("info");
   };
 
   const onDropLogo = async (event) => {
     event.preventDefault();
     setIsDropActive(false);
+    if (isUploadingLogo || isLoadingHeader || isSaving) return;
     const file = event.dataTransfer?.files?.[0];
     await onHandleLogoFile(file);
   };
@@ -4992,6 +5471,7 @@ export default function StoreCustomizationPage() {
             <select
               value={lang}
               onChange={(event) => setLang(String(event.target.value).toLowerCase())}
+              disabled={isSaving || isUploadingLogo}
               className={`${inputBase} min-w-[178px] appearance-none pr-9`}
             >
               {publishedLanguages.length === 0 ? (
@@ -5017,13 +5497,19 @@ export default function StoreCustomizationPage() {
           <button
             type="button"
             onClick={onSave}
-            disabled={updateMutation.isPending || !lang}
+            disabled={isSaving || isLoadingHeader || isUploadingLogo || !lang}
             className="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {updateMutation.isPending ? "Updating..." : "Update"}
+            {isSaving ? "Updating..." : "Update"}
           </button>
         </div>
       </div>
+
+      {isLoadingHeader && customizationQuery.data ? (
+        <p className="text-xs text-slate-500">
+          Loading {String(lang || "en").toUpperCase()} customization...
+        </p>
+      ) : null}
 
       {notice ? (
         <div
@@ -5043,7 +5529,7 @@ export default function StoreCustomizationPage() {
             <button
               key={tab.key}
               type="button"
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => onSelectTab(tab.key)}
               className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
                 activeTab === tab.key
                   ? "bg-emerald-600 text-white"
@@ -5056,16 +5542,22 @@ export default function StoreCustomizationPage() {
         </div>
       </div>
 
-      {customizationQuery.isLoading ? (
-        <div className={sectionCard}>Loading customization data...</div>
-      ) : customizationQuery.isError ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
-          {customizationQuery.error?.response?.data?.message ||
-            customizationQuery.error?.message ||
-            "Failed to load customization data."}
-        </div>
-      ) : activeTab === "productSlugPage" ? (
-        <div className="flex flex-col gap-5">
+      <div
+        ref={tabContentRef}
+        tabIndex={-1}
+        aria-label="Store customization tab content"
+        className="focus:outline-none"
+      >
+        {showFullCustomizationLoader ? (
+          <div className={sectionCard}>Loading customization data...</div>
+        ) : showCustomizationError ? (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
+            {customizationQuery.error?.response?.data?.message ||
+              customizationQuery.error?.message ||
+              "Failed to load customization data."}
+          </div>
+        ) : activeTab === "productSlugPage" ? (
+          <div className="flex flex-col gap-5">
           <section className={sectionCard}>
             <div className="flex items-center gap-2">
               <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
@@ -7421,7 +7913,7 @@ export default function StoreCustomizationPage() {
               Header Contacts
             </p>
 
-            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-4">
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Header Text
@@ -7429,6 +7921,7 @@ export default function StoreCustomizationPage() {
                 <input
                   type="text"
                   value={homeState.header.headerText}
+                  disabled={isLoadingHeader || isSaving}
                   onChange={(event) =>
                     onChangeHeaderField("headerText", event.target.value)
                   }
@@ -7443,11 +7936,51 @@ export default function StoreCustomizationPage() {
                 <input
                   type="text"
                   value={homeState.header.phoneNumber}
+                  disabled={isLoadingHeader || isSaving}
                   onChange={(event) =>
                     onChangeHeaderField("phoneNumber", event.target.value)
                   }
                   className={`${inputBase} mt-2`}
                 />
+              </label>
+
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  WhatsApp Link
+                </span>
+                <input
+                  type="url"
+                  value={homeState.header.whatsAppLink}
+                  placeholder="https://wa.me/628xxxxxxxxxx"
+                  disabled={isLoadingHeader || isSaving}
+                  onChange={(event) =>
+                    onChangeHeaderField("whatsAppLink", event.target.value)
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+                <p className="mt-1 text-xs text-slate-500">Leave empty if not used.</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={onGenerateWhatsAppLink}
+                    disabled={isLoadingHeader || isSaving}
+                    className="inline-flex h-8 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Generate WA Link
+                  </button>
+                  {headerWhatsAppLink && isSafeWhatsAppLink(headerWhatsAppLink) ? (
+                    <button
+                      type="button"
+                      onClick={onTestWhatsAppLink}
+                      className="inline-flex h-8 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                    >
+                      Test Link
+                    </button>
+                  ) : null}
+                </div>
+                {whatsAppLinkError ? (
+                  <p className="mt-1 text-xs text-rose-600">{whatsAppLinkError}</p>
+                ) : null}
               </label>
 
               <div className="space-y-2">
@@ -7463,9 +7996,11 @@ export default function StoreCustomizationPage() {
                 />
                 <button
                   type="button"
+                  disabled={isUploadingLogo || isLoadingHeader || isSaving}
                   onClick={() => fileInputRef.current?.click()}
                   onDragOver={(event) => {
                     event.preventDefault();
+                    if (isUploadingLogo || isLoadingHeader || isSaving) return;
                     setIsDropActive(true);
                   }}
                   onDragLeave={() => setIsDropActive(false)}
@@ -7474,38 +8009,119 @@ export default function StoreCustomizationPage() {
                     isDropActive
                       ? "border-emerald-400 bg-emerald-50"
                       : "border-slate-300 bg-slate-50 hover:border-slate-400"
-                  }`}
+                  } ${isUploadingLogo || isLoadingHeader || isSaving ? "cursor-not-allowed opacity-70" : ""}`}
                 >
                   <Upload className="h-5 w-5 text-slate-500" />
                   <p className="mt-2 text-sm font-medium text-slate-700">
-                    Drag your images here
+                    {isUploadingLogo ? "Uploading image..." : "Drag your images here"}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
                     (Only *.jpeg, *.webp and *.png images will be accepted)
                   </p>
                 </button>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                  <p>Recommended size: 240x64px (or 300x80px for sharper display)</p>
+                  <p>Aspect ratio: horizontal (~3.5-4:1)</p>
+                  <p>Format: transparent PNG / WEBP</p>
+                  <p>Safe padding: 8-12px left/right</p>
+                  <p>
+                    Logo is rendered inside a ~40-48px height container on the storefront
+                    header.
+                  </p>
+                </div>
 
                 {logoError ? (
                   <p className="text-xs text-rose-600">{logoError}</p>
                 ) : null}
 
-                {homeState.header.logoDataUrl ? (
-                  <div className="relative inline-flex rounded-xl border border-slate-200 bg-white p-2">
-                    <img
-                      src={homeState.header.logoDataUrl}
-                      alt="Header logo preview"
-                      className="h-14 w-14 rounded-md object-cover"
-                    />
-                    <button
-                      type="button"
-                      onClick={onRemoveLogo}
-                      className="absolute -right-2 -top-2 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 hover:bg-slate-100"
-                      aria-label="Remove logo"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
+                {logoMetaText ? (
+                  <p className="text-xs text-slate-600">{logoMetaText}</p>
+                ) : null}
+
+                {logoWarning ? (
+                  <div
+                    className={`rounded-lg border px-3 py-2 text-xs ${
+                      logoWarningLevel === "warn"
+                        ? "border-amber-200 bg-amber-50 text-amber-700"
+                        : "border-sky-200 bg-sky-50 text-sky-700"
+                    }`}
+                  >
+                    {logoWarning}
                   </div>
                 ) : null}
+
+                <div className="w-full rounded-xl border border-slate-200 bg-white p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Logo Preview (Client Frame)
+                    </p>
+                    {headerLogoPreviewUrl ? (
+                      <button
+                        type="button"
+                        onClick={onRemoveLogo}
+                        disabled={isUploadingLogo || isLoadingHeader || isSaving}
+                        className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        aria-label="Remove logo"
+                      >
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <div className="relative flex h-10 items-center overflow-hidden rounded-md border border-slate-200 bg-slate-50 px-2 sm:h-11 sm:px-3 md:h-12">
+                    {headerLogoFrameSrc ? (
+                      <img
+                        src={headerLogoFrameSrc}
+                        alt="Header logo preview"
+                        className="max-h-full w-auto max-w-full object-contain"
+                      />
+                    ) : (
+                      <p className="text-xs text-slate-500">No logo uploaded yet</p>
+                    )}
+                    <div className="pointer-events-none absolute inset-0 p-2 sm:p-3">
+                      <div className="h-full w-full rounded-sm border border-dashed border-slate-300" />
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={onCopyPublicLogoUrl}
+                      disabled={!publicLogoUrl}
+                      className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Copy URL
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onOpenPublicLogoUrl}
+                      disabled={!publicLogoUrl}
+                      className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Open
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onDownloadPublicLogoUrl}
+                      disabled={!publicLogoUrl}
+                      className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Download
+                    </button>
+                  </div>
+
+                  {logoActionFeedback ? (
+                    <p
+                      className={`mt-2 text-xs ${
+                        logoActionFeedbackType === "warn"
+                          ? "text-amber-700"
+                          : "text-slate-600"
+                      }`}
+                    >
+                      {logoActionFeedback}
+                    </p>
+                  ) : null}
+                </div>
               </div>
             </div>
           </section>
@@ -9189,8 +9805,9 @@ export default function StoreCustomizationPage() {
               </div>
             </div>
           </section>
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
       {isAddLanguageOpen ? (
         <>

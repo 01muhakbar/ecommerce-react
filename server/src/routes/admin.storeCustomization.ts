@@ -1,5 +1,8 @@
 import { Router } from "express";
 import { QueryTypes } from "sequelize";
+import fs from "fs";
+import path from "path";
+import multer from "multer";
 import { sequelize } from "../models/index.js";
 
 const router = Router();
@@ -104,6 +107,8 @@ const DEFAULT_CUSTOMIZATION = {
     header: {
       headerText: "We are available 24/7, Need help??",
       phoneNumber: "565555",
+      whatsAppLink: "",
+      headerLogoUrl: "",
       logoDataUrl: "",
     },
     mainSlider: {
@@ -542,6 +547,19 @@ const toText = (value: unknown, fallback = "") => {
   return normalized || fallback;
 };
 
+const WHATSAPP_LINK_ERROR_MESSAGE =
+  "Invalid WhatsApp link. Use https://wa.me/... or https://api.whatsapp.com/...";
+
+const isSafeWhatsAppLink = (value: unknown) => {
+  const normalized = toText(value);
+  if (!normalized) return true;
+  const lowered = normalized.toLowerCase();
+  return (
+    lowered.startsWith("https://wa.me/") ||
+    lowered.startsWith("https://api.whatsapp.com/send")
+  );
+};
+
 const toBool = (value: unknown, fallback = false) => {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value !== 0;
@@ -802,7 +820,15 @@ const normalizeHome = (root: Record<string, any>) => {
       ...defaults.header,
       headerText: toText(headerSource.headerText, defaults.header.headerText),
       phoneNumber: toText(headerSource.phoneNumber, defaults.header.phoneNumber),
-      logoDataUrl: toText(headerSource.logoDataUrl, ""),
+      whatsAppLink: toText(headerSource.whatsAppLink, defaults.header.whatsAppLink),
+      headerLogoUrl: toText(
+        headerSource.headerLogoUrl ?? headerSource.logoDataUrl,
+        defaults.header.headerLogoUrl
+      ),
+      logoDataUrl: toText(
+        headerSource.logoDataUrl ?? headerSource.headerLogoUrl,
+        defaults.header.logoDataUrl
+      ),
     },
     menuEditor: {
       ...defaults.menuEditor,
@@ -1874,6 +1900,200 @@ const upsertCustomization = async (lang: string, payload: Record<string, any>) =
   );
 };
 
+const extractHeaderSettings = (
+  lang: string,
+  customization: Record<string, any>,
+  updatedAt?: string | null
+) => {
+  const defaults = cloneDefaults().home.header;
+  const headerSource = isPlainObject(customization?.home?.header)
+    ? customization.home.header
+    : {};
+  const headerLogoUrl = toText(
+    headerSource.headerLogoUrl ?? headerSource.logoDataUrl,
+    defaults.headerLogoUrl
+  );
+
+  return {
+    language: lang,
+    headerText: toText(headerSource.headerText, defaults.headerText),
+    phoneNumber: toText(headerSource.phoneNumber, defaults.phoneNumber),
+    whatsAppLink: toText(headerSource.whatsAppLink, defaults.whatsAppLink),
+    headerLogoUrl,
+    updatedAt: updatedAt ? new Date(updatedAt).toISOString() : new Date().toISOString(),
+  };
+};
+
+const headerLogoUploadDir = path.resolve(process.cwd(), "uploads", "store");
+fs.mkdirSync(headerLogoUploadDir, { recursive: true });
+
+const headerLogoMulter = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, headerLogoUploadDir),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname || "").toLowerCase() || ".png";
+      const safeExt = [".png", ".jpg", ".jpeg", ".webp"].includes(ext) ? ext : ".png";
+      const fileName = `header-logo-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 9)}${safeExt}`;
+      cb(null, fileName);
+    },
+  }),
+  fileFilter: (_req, file, cb) => {
+    const acceptedMimeTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
+    if (!acceptedMimeTypes.has(String(file.mimetype || "").toLowerCase())) {
+      cb(new Error("Only PNG, JPEG, and WEBP images are allowed."));
+      return;
+    }
+    cb(null, true);
+  },
+  limits: {
+    fileSize: 1024 * 1024, // 1MB
+  },
+});
+
+// GET /api/admin/store/customization/header?lang=en
+// Response contract: { success: true, data: { language, headerText, phoneNumber, whatsAppLink, headerLogoUrl, updatedAt } }
+router.get("/header", async (req, res, next) => {
+  try {
+    await ensureStoreCustomizationsTable();
+    const lang = normalizeLang(req.query?.lang);
+
+    let row = await getCustomizationRow(lang);
+    let payload = row ? parseRowData(row.data) : sanitizeCustomization({});
+
+    if (!row) {
+      await upsertCustomization(lang, payload);
+      row = await getCustomizationRow(lang);
+      payload = row ? parseRowData(row.data) : payload;
+    }
+
+    return res.json({
+      success: true,
+      data: extractHeaderSettings(lang, payload, row?.updatedAt),
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// PUT /api/admin/store/customization/header
+// Accepts language from body.language or query.lang (defaults to "en" when empty)
+router.put("/header", async (req, res, next) => {
+  try {
+    await ensureStoreCustomizationsTable();
+    const lang = normalizeLang(req.body?.language ?? req.query?.lang);
+    const rawPayload = isPlainObject(req.body?.header) ? req.body.header : req.body;
+
+    if (!isPlainObject(rawPayload)) {
+      return res.status(400).json({
+        success: false,
+        message: "Body must be an object",
+      });
+    }
+
+    const existing = await getCustomizationRow(lang);
+    const existingPayload = existing ? parseRowData(existing.data) : sanitizeCustomization({});
+    const defaults = cloneDefaults().home.header;
+    const hasWhatsAppLinkField = Object.prototype.hasOwnProperty.call(
+      rawPayload,
+      "whatsAppLink"
+    );
+    const nextWhatsAppLink = hasWhatsAppLinkField
+      ? toText(rawPayload.whatsAppLink)
+      : toText(
+          existingPayload?.home?.header?.whatsAppLink,
+          defaults.whatsAppLink
+        );
+    if (!isSafeWhatsAppLink(nextWhatsAppLink)) {
+      return res.status(400).json({
+        success: false,
+        message: WHATSAPP_LINK_ERROR_MESSAGE,
+      });
+    }
+    const headerLogoUrl = toText(
+      rawPayload.headerLogoUrl ?? rawPayload.logoDataUrl,
+      toText(existingPayload?.home?.header?.headerLogoUrl ?? existingPayload?.home?.header?.logoDataUrl, defaults.headerLogoUrl)
+    );
+    const nextPayload = sanitizeCustomization({
+      ...existingPayload,
+      home: {
+        ...existingPayload.home,
+        header: {
+          ...existingPayload.home?.header,
+          headerText: toText(
+            rawPayload.headerText,
+            toText(existingPayload?.home?.header?.headerText, defaults.headerText)
+          ),
+          phoneNumber: toText(
+            rawPayload.phoneNumber,
+            toText(existingPayload?.home?.header?.phoneNumber, defaults.phoneNumber)
+          ),
+          whatsAppLink: nextWhatsAppLink,
+          headerLogoUrl,
+          logoDataUrl: headerLogoUrl,
+        },
+      },
+    });
+    await upsertCustomization(lang, nextPayload);
+    const updatedRow = await getCustomizationRow(lang);
+
+    return res.json({
+      success: true,
+      data: extractHeaderSettings(lang, nextPayload, updatedRow?.updatedAt),
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// POST /api/admin/store/customization/header/logo
+router.post("/header/logo", (req, res, next) => {
+  headerLogoMulter.single("file")(req, res, async (error: any) => {
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: error?.message || "Failed to upload logo.",
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "No file uploaded.",
+      });
+    }
+
+    const lang = normalizeLang(req.body?.language ?? req.query?.lang);
+    const headerLogoUrl = `/uploads/store/${req.file.filename}`;
+    try {
+      await ensureStoreCustomizationsTable();
+      const existing = await getCustomizationRow(lang);
+      const existingPayload = existing ? parseRowData(existing.data) : sanitizeCustomization({});
+      const nextPayload = sanitizeCustomization({
+        ...existingPayload,
+        home: {
+          ...existingPayload.home,
+          header: {
+            ...existingPayload.home?.header,
+            headerLogoUrl,
+            logoDataUrl: headerLogoUrl,
+          },
+        },
+      });
+      await upsertCustomization(lang, nextPayload);
+      const updatedRow = await getCustomizationRow(lang);
+
+      return res.json({
+        success: true,
+        data: extractHeaderSettings(lang, nextPayload, updatedRow?.updatedAt),
+      });
+    } catch (uploadPersistError) {
+      return next(uploadPersistError);
+    }
+  });
+});
+
 // GET /api/admin/store/customization?lang=en
 router.get("/", async (req, res, next) => {
   try {
@@ -1905,7 +2125,7 @@ router.get("/", async (req, res, next) => {
 router.put("/", async (req, res, next) => {
   try {
     await ensureStoreCustomizationsTable();
-    const lang = normalizeLang(req.query?.lang);
+    const lang = normalizeLang(req.body?.language ?? req.query?.lang);
     const rawPayload = isPlainObject(req.body?.customization)
       ? req.body.customization
       : req.body;
@@ -1915,6 +2135,20 @@ router.put("/", async (req, res, next) => {
         success: false,
         message: "Body must be an object",
       });
+    }
+    if (
+      isPlainObject(rawPayload.home) &&
+      isPlainObject(rawPayload.home.header) &&
+      Object.prototype.hasOwnProperty.call(rawPayload.home.header, "whatsAppLink")
+    ) {
+      const nextWhatsAppLink = toText(rawPayload.home.header.whatsAppLink);
+      if (!isSafeWhatsAppLink(nextWhatsAppLink)) {
+        return res.status(400).json({
+          success: false,
+          message: WHATSAPP_LINK_ERROR_MESSAGE,
+        });
+      }
+      rawPayload.home.header.whatsAppLink = nextWhatsAppLink;
     }
 
     const existing = await getCustomizationRow(lang);
