@@ -1,100 +1,98 @@
-# TASK-6 Report — Privacy Policy and T&C
+# TASK-6 - Product Detail Parity Polish Prioritas Tinggi pada Storefront
 
-## Discovery
-- Backend file used: `server/src/routes/admin.storeCustomization.ts`
-- Frontend file used: `client/src/pages/admin/StoreCustomization.jsx`
-- Existing tab `privacyPolicyTerms` was still placeholder (`Coming soon`).
-- Rich text editor discovery:
-  - No existing editor library/component found in repo (`react-quill`, `tiptap`, `draft-js`, `slate`, `tinymce`, `ckeditor` not present).
-  - No rich text editor dependency available in `client/package.json`.
-  - Implemented minimal in-file rich text editor using native `contentEditable` + toolbar (no new dependency install).
+## Task ID
 
-## File Changed List
-1. `server/src/routes/admin.storeCustomization.ts`
-- Added default HTML constants for policy pages.
-- Added `privacyPolicy` + `termsAndConditions` in `DEFAULT_CUSTOMIZATION`.
-- Added `normalizePolicyPage()` helper.
-- Wired both new sections into `sanitizeCustomization()`.
+`TASK-6`
 
-2. `client/src/pages/admin/StoreCustomization.jsx`
-- Added default schema + HTML for `privacyPolicy` and `termsAndConditions`.
-- Added normalization for both sections in `normalizeCustomizationPayload()`.
-- Added state slices, image upload/drop/remove handlers, enable toggles, and field handlers.
-- Added save payload merge for both sections.
-- Added `RichTextEditor` component (`contentEditable` + toolbar: bold, italic, underline, lists, H2/H3, font size, link, image, undo/redo).
-- Replaced placeholder for `privacyPolicyTerms` tab with 2 full sections:
-  - Privacy Policy
-  - Terms & Conditions
+## Objective
 
-3. `CODEx_REPORTS/TASK-6.md`
-- This report.
+Memoles halaman product detail aktif agar lebih dekat ke arah KachaBazar pada area yang paling memengaruhi keputusan beli, tanpa mengubah add-to-cart flow, backend, atau contract API.
 
-## Final Schema (Backend)
-```json
-{
-  "privacyPolicy": {
-    "enabled": true,
-    "pageHeaderBackgroundDataUrl": "",
-    "pageTitle": "Privacy Policy",
-    "pageTextHtml": "<h3>..."
-  },
-  "termsAndConditions": {
-    "enabled": true,
-    "pageHeaderBackgroundDataUrl": "",
-    "pageTitle": "Terms & Conditions",
-    "pageTextHtml": "<h2>..."
-  }
-}
-```
+## Audited Page
 
-Normalization guarantees:
-- `enabled` always boolean.
-- `pageTitle` always string fallback to defaults.
-- `pageTextHtml` always HTML string fallback to defaults.
-- `pageHeaderBackgroundDataUrl` always string (`""` fallback).
-- Backward-compatible for old rows without these keys.
+- Halaman aktif: `client/src/pages/store/StoreProductDetailPage.jsx`
+- Route: `/product/:slug`
+- Referensi audit: `https://kachabazar-store-nine.vercel.app`
 
-## Default Page Text Confirmation
-- `privacyPolicy.pageTextHtml` default includes headings (`<h3>`) and ordered list (`<ol><li>...</li></ol>` with 7 items).
-- `termsAndConditions.pageTextHtml` default includes `<h2>Welcome to KachaBazar!</h2>`, multiple `<h3>` sections, and ordered list.
+## Key Parity Gaps
 
-## Persist Test (API-level)
-Using admin session (`superadmin@local.dev`), updated `lang=en` customization via `PUT /api/admin/store/customization` with:
-- `privacyPolicy.enabled=false`
-- `privacyPolicy.pageHeaderBackgroundDataUrl=<data:image/png;base64,...>`
-- `privacyPolicy.pageTitle` + `privacyPolicy.pageTextHtml`
-- `termsAndConditions.enabled=true`
-- `termsAndConditions.pageHeaderBackgroundDataUrl=<data:image/png;base64,...>`
-- `termsAndConditions.pageTitle` + `termsAndConditions.pageTextHtml`
+1. `Product summary hierarchy`
+   - Nama, rating, price, stock, dan category sudah lengkap tetapi belum cukup bertingkat secara visual.
+   - Pricing dan availability belum terasa sebagai area keputusan utama.
 
-Verification via `GET /api/admin/store/customization?lang=en`:
-- `privacyEnabled=False`
-- `privacyBgHasDataUrl=True`
-- `privacyHtmlHasOl=True`
-- `termsEnabled=True`
-- `termsBgHasDataUrl=True`
-- `termsHtmlHasH2=True`
+2. `Buy box clarity`
+   - Quantity dan `Add to Cart` sudah berfungsi, tetapi action block belum cukup memberi reassurance.
+   - User belum cepat menangkap benefit pembelian di area yang sama dengan CTA.
 
-## Commands Output
-1. `pnpm qa:mvf`
-- PASS
-- Artifact: `.codex-artifacts/qa-mvf/20260303-091453/result.json`
-- Summary: `.codex-artifacts/qa-mvf/20260303-091453/summary.txt`
+## Selected Polish Areas
 
-2. `pnpm --filter client exec vite build`
-- PASS
+1. `Product summary hierarchy: rating/price/stock emphasis`
+2. `Buy box clarity + reassurance strip`
 
-3. `pnpm --filter server exec tsx -e "import './src/routes/admin.storeCustomization.ts'; console.log('server-route-load=PASS')"`
-- PASS (`server-route-load=PASS`)
+## Files Changed
 
-4. `pnpm --filter server exec tsc --noEmit`
-- FAIL (pre-existing strict typing issue in existing code path: implicit `any` in `admin.storeCustomization.ts` around existing member map callback). Not part of requested QA gate.
+- `client/src/pages/store/StoreProductDetailPage.jsx`
+- `CODEx_REPORTS/TASK-6.md`
 
-## Known Gaps (max 5)
-1. Rich text editor is minimal native `contentEditable`; toolbar is functional but not as advanced/stable as dedicated editors.
-2. `document.execCommand` is deprecated API (still works in major browsers, but long-term migration may be needed).
-3. No dedicated sanitization/HTML allowlist at frontend (backend currently stores HTML string as provided).
-4. UI test was validated via API persistence and existing MVF smoke; no dedicated automated UI interaction test for the new tab yet.
+## What Changed
+
+### `client/src/pages/store/StoreProductDetailPage.jsx`
+
+- Menambahkan eyebrow `Product Details` pada summary panel.
+- Mengubah rating/review menjadi badge yang lebih tegas dan menambahkan category chip.
+- Memperkuat price card dengan hierarchy yang lebih jelas:
+  - price utama lebih dominan
+  - info tax/shipping helper
+  - availability card
+  - savings card jika ada diskon
+- Memperkuat buy box dengan:
+  - helper copy di atas quantity
+  - status chip `Ready to Buy` / `Unavailable`
+  - CTA `Add to Cart` yang lebih dominan
+  - 3 reassurance cards kecil: fast delivery, COD, easy returns
+
+## Before vs After
+
+### Before
+
+- Product detail sudah lengkap, tetapi area keputusan beli belum cukup fokus.
+- Price, stock, dan CTA terasa berdampingan tanpa hierarchy yang kuat.
+- Buy box belum cukup menjelaskan benefit pembelian.
+
+### After
+
+- Product summary sekarang lebih cepat dibaca: rating, category, price, stock, dan savings lebih jelas.
+- Buy box terasa lebih seperti action area utama, dengan CTA yang lebih kuat dan reassurance langsung di bawahnya.
+
+## Verification Run
+
+1. `pnpm --filter client exec vite build`
+   - PASS
+2. `pnpm qa:mvf`
+   - PASS
+3. QA artifact:
+   - `.codex-artifacts/qa-mvf/20260306-221806/result.json`
+   - `.codex-artifacts/qa-mvf/20260306-221806/summary.txt`
+
+## MVF Impact
+
+- Product detail: PASS
+- Add to cart: PASS
+- Cart: PASS
+- Checkout: PASS
+- Home/Search: PASS
+- Admin login/orders/update status persist: PASS
+
+## Risks / Follow-up
+
+- Product detail masih punya ruang polish lanjutan pada image gallery treatment dan tab/reviews hierarchy.
+- Highlights section di bawah masih terpisah dari buy box; itu sengaja tidak saya redesign agar scope tetap kecil.
+- Kandidat task berikutnya yang aman: polish search/filter header atau homepage section rhythm, tergantung prioritas parity berikutnya.
 
 ## Recommended Next Task
-- Task #7: Render storefront public pages (`/privacy-policy`, `/terms-and-conditions`) from customization with safe HTML rendering and block-level `enabled` toggles.
+
+`[TASK-7] Search Results Parity Polish - Header Filters + Result Hierarchy`
+
+## Final Status
+
+`PASS`

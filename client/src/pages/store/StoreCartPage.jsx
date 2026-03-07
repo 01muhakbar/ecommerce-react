@@ -410,13 +410,24 @@ export default function StoreCartPage() {
 
   return (
     <section className="mx-auto max-w-[1240px] space-y-6 px-2 py-2 sm:px-3 lg:px-0">
-      <header className="space-y-1.5">
-        <h1 className="text-2xl font-bold leading-tight tracking-tight text-slate-900 sm:text-3xl">
-          Shopping Cart
-        </h1>
-        <p className="text-sm text-slate-500">
-          Review your items and proceed to checkout when ready.
-        </p>
+      <header className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-white via-emerald-50/40 to-slate-50 px-4 py-5 shadow-[0_14px_34px_rgba(15,23,42,0.05)] sm:px-6 sm:py-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-600">
+              Cart Overview
+            </p>
+            <h1 className="text-2xl font-bold leading-tight tracking-tight text-slate-900 sm:text-3xl">
+              Shopping Cart
+            </h1>
+            <p className="max-w-2xl text-sm text-slate-500 sm:text-[15px]">
+              Review quantities, confirm pricing, and move to checkout when you are ready to
+              place the order.
+            </p>
+          </div>
+          <div className="inline-flex items-center rounded-full border border-emerald-200 bg-white px-3.5 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600 shadow-sm">
+            {items.length} Active Item{items.length === 1 ? "" : "s"}
+          </div>
+        </div>
       </header>
 
       {showSkeleton ? (
@@ -580,11 +591,39 @@ export default function StoreCartPage() {
 
           <aside className="lg:sticky lg:top-24">
             <div className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-[0_14px_34px_rgba(15,23,42,0.06)] sm:p-6">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold text-slate-900 sm:text-xl">Order Summary</h2>
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  {items.length} Items
-                </span>
+              <div className="space-y-3">
+                <div className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-600">
+                  Ready to Checkout
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-lg font-semibold text-slate-900 sm:text-xl">
+                    Order Summary
+                  </h2>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    {items.length} Items
+                  </span>
+                </div>
+                <p className="text-sm leading-6 text-slate-500">
+                  Shipping and tax stay flexible here and are confirmed on the checkout step.
+                </p>
+              </div>
+              <div className="mt-5 rounded-[24px] bg-slate-900 px-4 py-4 text-white shadow-[0_18px_34px_rgba(15,23,42,0.18)] sm:px-5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-300">
+                  Estimated Total
+                </p>
+                <div className="mt-2 flex items-end justify-between gap-4">
+                  <div>
+                    <p className="text-3xl font-extrabold leading-none sm:text-[34px]">
+                      {formatCurrency(totalValue)}
+                    </p>
+                    <p className="mt-2 text-xs text-slate-300">
+                      Final shipping and tax are shown on the next step.
+                    </p>
+                  </div>
+                  <div className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-200">
+                    Checkout Next
+                  </div>
+                </div>
               </div>
               <div className="mt-5 space-y-3 border-b border-slate-200 pb-5 text-sm">
                 <div className="flex items-center justify-between text-slate-600">
@@ -608,15 +647,13 @@ export default function StoreCartPage() {
                   <span className="font-medium text-slate-500">{taxLabel}</span>
                 </div>
               </div>
-              <div className="mt-4 flex items-center justify-between border-b border-dashed border-slate-200 pb-4">
-                <span className="text-sm font-semibold text-slate-700">Total</span>
-                <span className="text-xl font-bold text-slate-900">
-                  {formatCurrency(totalValue)}
-                </span>
+              <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                Proceed to checkout to confirm shipping, payment method, and the final order
+                total.
               </div>
               <Link
                 to="/checkout"
-                className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+                className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-5 text-sm font-semibold text-white shadow-[0_14px_26px_rgba(5,150,105,0.26)] transition hover:bg-emerald-700"
               >
                 Proceed to Checkout
               </Link>

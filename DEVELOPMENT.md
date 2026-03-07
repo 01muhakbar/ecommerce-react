@@ -1,5 +1,55 @@
 # Development Notes
 
+## Baseline Command Discipline
+
+Gunakan urutan ini sebagai baseline operasional sesi development dan sesi Codex:
+
+1. Install dependency:
+
+```bat
+pnpm install
+```
+
+2. Verifikasi DB lokal:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\db-health.ps1
+```
+
+3. Jika butuh baseline data bersih:
+
+```bat
+pnpm --filter server db:reset
+pnpm --filter server seed:demo
+```
+
+4. Jalankan seluruh stack:
+
+```bat
+pnpm dev
+```
+
+5. Jalankan stack parsial bila memang perlu:
+
+```bat
+pnpm dev:server
+pnpm dev:client
+```
+
+6. Verifikasi build/QA:
+
+```bat
+pnpm --filter client exec vite build
+pnpm qa:mvf
+```
+
+### Catatan Baseline
+
+- `pnpm dev` adalah command utama untuk sesi harian.
+- `seed:demo` adalah seed baseline yang paling aman karena menyiapkan super admin dan demo katalog.
+- Hasil `qa:mvf` disimpan di `.codex-artifacts/qa-mvf/<runId>/`.
+- Jika `mysql` tidak ada di PATH, `scripts/db-health.ps1` akan mencoba fallback ke `c:\xampp\mysql\bin\mysql.exe`.
+
 ## Port Hygiene (Windows)
 
 If `pnpm dev` reports `Port 5173 is already in use`, use this flow:

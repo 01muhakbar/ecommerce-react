@@ -3,8 +3,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   bulkAdminProducts,
   deleteAdminProduct,
+  exportAdminProducts,
   fetchAdminCategories,
   fetchAdminProducts,
+  importAdminProducts,
   updateAdminProductPublished,
 } from "../../lib/adminApi.js";
 import { moneyIDR } from "../../utils/money.js";
@@ -25,6 +27,7 @@ import ProductPreviewDrawer from "./ProductPreviewDrawer.jsx";
 
 const FALLBACK_THUMBNAIL = "/demo/placeholder-product.svg";
 const DEFAULT_FILTERS = { q: "", categoryId: "", priceSort: "default" };
+const MAX_IMPORT_FILE_SIZE = 2 * 1024 * 1024;
 
 const btnBase =
   "inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 text-sm font-medium leading-none transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1";
@@ -62,6 +65,68 @@ function ProductPublishedBadge({ isPublished }) {
   );
 }
 
+const resolveAdminProductPricing = (product) => {
+  const basePrice = Number(product?.price || 0);
+  const rawSalePrice = product?.salePrice;
+  const salePrice = Number.isFinite(Number(rawSalePrice)) ? Number(rawSalePrice) : null;
+  const hasSalePrice = salePrice !== null && salePrice > 0 && salePrice < basePrice;
+
+  return {
+    basePrice,
+    salePrice: hasSalePrice ? salePrice : null,
+    hasSalePrice,
+  };
+};
+
+function ProductCategoryBadge({ label }) {
+  return (
+    <span className="inline-flex min-h-7 items-center rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] font-semibold text-sky-700">
+      {label || "Uncategorized"}
+    </span>
+  );
+}
+
+const getStockMeta = (value) => {
+  const stock = Number(value || 0);
+  if (stock <= 0) {
+    return {
+      label: "Out of stock",
+      className: "text-rose-500",
+    };
+  }
+  if (stock <= 10) {
+    return {
+      label: "Low stock",
+      className: "text-amber-600",
+    };
+  }
+  return {
+    label: "In stock",
+    className: "text-emerald-600",
+  };
+};
+
+const getProductCategoryContext = (product) => {
+  const selectedCategories = Array.isArray(product?.categories)
+    ? product.categories.filter(Boolean)
+    : [];
+  const fallbackDefaultId = Number(product?.defaultCategoryId ?? product?.categoryId ?? 0);
+  const defaultCategory =
+    product?.defaultCategory ||
+    product?.category ||
+    selectedCategories.find((category) => Number(category?.id) === fallbackDefaultId) ||
+    null;
+  const relatedCategories = selectedCategories.filter(
+    (category) => Number(category?.id) !== Number(defaultCategory?.id ?? 0)
+  );
+
+  return {
+    defaultCategory,
+    relatedCategories,
+    selectedCount: selectedCategories.length,
+  };
+};
+
 export default function AdminProductsPage() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
@@ -79,12 +144,15 @@ export default function AdminProductsPage() {
   const [publishedOverrides, setPublishedOverrides] = useState({});
   const [publishingIds, setPublishingIds] = useState(() => new Set());
   const [publishError, setPublishError] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [drawerState, setDrawerState] = useState({
     open: false,
     mode: "create",
     productId: null,
   });
   const bulkMenuRef = useRef(null);
+  const importInputRef = useRef(null);
 
   const params = useMemo(
     () => ({
@@ -129,10 +197,13 @@ export default function AdminProductsPage() {
   const categories = categoriesQuery.data?.data || [];
   const meta = productsQuery.data?.meta || { page: 1, limit, total: 0, totalPages: 1 };
   const totalPages = Math.max(1, Number(meta.totalPages || 1));
+  const isOperationsBusy =
+    isExporting || isImporting || bulkMutation.isPending || deleteMutation.isPending;
   const activeFilterCount =
     (appliedFilters.q ? 1 : 0) +
     (appliedFilters.categoryId ? 1 : 0) +
     (appliedFilters.priceSort && appliedFilters.priceSort !== "default" ? 1 : 0);
+  const selectedCount = selectedIds.size;
 
   const displayItems = useMemo(() => {
     const sorted = [...items];
@@ -208,9 +279,145 @@ export default function AdminProductsPage() {
     setBulkMenuOpen(false);
   };
 
+  const showBulkNotice = (payload) => {
+    setBulkNotice(payload);
+  };
+
+  const handleExport = async () => {
+    if (isOperationsBusy) return;
+    showBulkNotice(null);
+    setIsExporting(true);
+
+    try {
+      const response = await exportAdminProducts({
+        q: appliedFilters.q,
+        categoryId: appliedFilters.categoryId,
+      });
+      const blob = await response.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
+      const disposition = response.headers.get("content-disposition") || "";
+      const filenameMatch = disposition.match(/filename="?([^"]+)"?/i);
+      const filename = filenameMatch?.[1] || "products-export.json";
+
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(objectUrl);
+
+      showBulkNotice({
+        type: "success",
+        title: "Export completed",
+        message: `Products JSON downloaded as ${filename}.`,
+      });
+    } catch (error) {
+      showBulkNotice({
+        type: "error",
+        title: "Export failed",
+        message: error?.message || "Export failed. Please try again.",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const triggerImport = () => {
+    if (isOperationsBusy) return;
+    importInputRef.current?.click();
+  };
+
+  const handleImportFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || isOperationsBusy) return;
+
+    const normalizedName = String(file.name || "").toLowerCase();
+    const normalizedType = String(file.type || "").toLowerCase();
+    const looksLikeJson =
+      normalizedName.endsWith(".json") ||
+      normalizedType === "application/json" ||
+      normalizedType.endsWith("+json");
+    if (!looksLikeJson) {
+      showBulkNotice({
+        type: "error",
+        title: "Invalid import file",
+        message: "Import only accepts JSON files exported from Admin Products.",
+      });
+      return;
+    }
+
+    if (file.size <= 0) {
+      showBulkNotice({
+        type: "error",
+        title: "Empty import file",
+        message: "Choose a JSON file that contains at least one product row.",
+      });
+      return;
+    }
+
+    if (file.size > MAX_IMPORT_FILE_SIZE) {
+      showBulkNotice({
+        type: "error",
+        title: "Import file too large",
+        message: "Import file exceeds the 2 MB limit for the current MVP flow.",
+      });
+      return;
+    }
+
+    showBulkNotice(null);
+    setIsImporting(true);
+
+    try {
+      const response = await importAdminProducts(file);
+      const summary = response?.data || {};
+      const totalRows = Number(summary.totalRows || 0);
+      const created = Number(summary.created || 0);
+      const updated = Number(summary.updated || 0);
+      const failed = Number(summary.failed || 0);
+      const importErrors = Array.isArray(summary.errors) ? summary.errors : [];
+      const errorPreview = importErrors.slice(0, 3).map((entry) => {
+        const rowLabel = entry?.row ? `Row ${entry.row}` : "Row";
+        const slugLabel = entry?.slug ? ` (${entry.slug})` : "";
+        return `${rowLabel}${slugLabel}: ${entry?.message || "Import row failed."}`;
+      });
+
+      showBulkNotice({
+        type: failed > 0 && created + updated === 0 ? "error" : "success",
+        title: failed > 0 ? "Import completed with warnings" : "Import completed",
+        message: `Processed ${totalRows} row(s): ${created} created, ${updated} updated, ${failed} failed.`,
+        details: errorPreview,
+        meta:
+          failed > errorPreview.length
+            ? `${failed - errorPreview.length} additional row error(s) not shown.`
+            : null,
+      });
+      setSelectedIds(new Set());
+      setBulkMenuOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+    } catch (error) {
+      showBulkNotice({
+        type: "error",
+        title: "Import failed",
+        message: error?.response?.data?.message || "Import failed. Please try again.",
+      });
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   const handleDeleteSelected = () => {
     const ids = Array.from(selectedIds);
-    if (ids.length === 0 || bulkMutation.isPending) return;
+    if (ids.length === 0) {
+      showBulkNotice({
+        type: "error",
+        title: "Selection required",
+        message: "Select at least one product before running a bulk delete.",
+      });
+      return;
+    }
+    if (isOperationsBusy) return;
     setBulkConfirm({ open: true, action: "delete", ids });
   };
 
@@ -222,7 +429,17 @@ export default function AdminProductsPage() {
 
   const handleBulkAction = (action) => {
     const ids = Array.from(selectedIds);
-    if (!action || ids.length === 0 || bulkMutation.isPending) return;
+    if (!action) return;
+    if (ids.length === 0) {
+      showBulkNotice({
+        type: "error",
+        title: "Selection required",
+        message: "Select at least one product before running a bulk action.",
+      });
+      setBulkMenuOpen(false);
+      return;
+    }
+    if (isOperationsBusy) return;
 
     if (action === "delete_selected") {
       setBulkConfirm({ open: true, action: "delete", ids });
@@ -231,7 +448,7 @@ export default function AdminProductsPage() {
     }
 
     const nextAction = action === "publish_selected" ? "publish" : "unpublish";
-    setBulkNotice(null);
+    showBulkNotice(null);
     bulkMutation.mutate(
       { action: nextAction, ids },
       {
@@ -239,8 +456,10 @@ export default function AdminProductsPage() {
           const affected = Number(response?.affected || 0);
           setSelectedIds(new Set());
           setBulkMenuOpen(false);
-          setBulkNotice({
+          showBulkNotice({
             type: "success",
+            title:
+              nextAction === "publish" ? "Bulk publish completed" : "Bulk unpublish completed",
             message:
               nextAction === "publish"
                 ? `${affected} product(s) published.`
@@ -249,8 +468,9 @@ export default function AdminProductsPage() {
           queryClient.invalidateQueries({ queryKey: ["admin-products"] });
         },
         onError: (error) => {
-          setBulkNotice({
+          showBulkNotice({
             type: "error",
+            title: "Bulk action failed",
             message:
               error?.response?.data?.message || "Bulk action failed. Please try again.",
           });
@@ -264,7 +484,7 @@ export default function AdminProductsPage() {
     const ids = Array.isArray(bulkConfirm.ids) ? bulkConfirm.ids : [];
     if (!bulkConfirm.open || ids.length === 0 || bulkMutation.isPending) return;
 
-    setBulkNotice(null);
+    showBulkNotice(null);
     bulkMutation.mutate(
       { action: "delete", ids },
       {
@@ -273,15 +493,17 @@ export default function AdminProductsPage() {
           setSelectedIds(new Set());
           setBulkConfirm({ open: false, action: "delete", ids: [] });
           setBulkMenuOpen(false);
-          setBulkNotice({
+          showBulkNotice({
             type: "success",
+            title: "Bulk delete completed",
             message: `${affected} product(s) deleted.`,
           });
           queryClient.invalidateQueries({ queryKey: ["admin-products"] });
         },
         onError: (error) => {
-          setBulkNotice({
+          showBulkNotice({
             type: "error",
+            title: "Bulk delete failed",
             message:
               error?.response?.data?.message || "Delete selected failed. Please try again.",
           });
@@ -400,6 +622,17 @@ export default function AdminProductsPage() {
             <p className="text-sm text-slate-500">
               Manage product catalog, publish states, and stock visibility.
             </p>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <span className="inline-flex items-center rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-emerald-700">
+                Catalog Workspace
+              </span>
+              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
+                {selectedCount} selected
+              </span>
+              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
+                Page {meta.page} / {totalPages}
+              </span>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:w-auto">
             <div className={statCardClass}>
@@ -415,28 +648,56 @@ export default function AdminProductsPage() {
       </div>
 
       <div className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="mb-4 flex flex-col gap-3 border-b border-slate-100 pb-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+              Product Controls
+            </p>
+            <h2 className="text-lg font-semibold text-slate-900">Search, filter, and act faster</h2>
+            <p className="text-sm text-slate-500">
+              Keep catalog updates organized before opening the product drawer.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500">
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+              Visible now: {displayItems.length}
+            </span>
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+              Active filters: {activeFilterCount}
+            </span>
+          </div>
+        </div>
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="relative w-full xl:max-w-xl">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="search"
-              value={draftFilters.q}
-              onChange={(event) =>
-                setDraftFilters((prev) => ({ ...prev, q: event.target.value }))
-              }
-              onKeyDown={(event) => {
-                if (event.key === "Enter") applyFilters();
-              }}
-              placeholder="Search by product name"
-              className={`${inputBase} h-11 pl-9`}
-            />
+          <div className="w-full xl:max-w-xl">
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Search catalog
+            </p>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="search"
+                value={draftFilters.q}
+                onChange={(event) =>
+                  setDraftFilters((prev) => ({ ...prev, q: event.target.value }))
+                }
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") applyFilters();
+                }}
+                placeholder="Search by product name"
+                className={`${inputBase} h-11 pl-9`}
+              />
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="mr-1 hidden text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 xl:block">
+              Quick actions
+            </div>
             <button
               type="button"
               onClick={openCreateDrawer}
-              className={btnGreen}
+              disabled={isOperationsBusy}
+              className={`${btnGreen} disabled:cursor-not-allowed disabled:opacity-60`}
             >
               <Plus className="h-4 w-4" />
               Add Product
@@ -445,31 +706,50 @@ export default function AdminProductsPage() {
             <button
               type="button"
               className={btnOutline}
-              onClick={() => console.log("[admin/products] export clicked")}
+              onClick={handleExport}
+              disabled={isOperationsBusy}
             >
               <Download className="h-4 w-4" />
-              Export
+              {isExporting ? "Exporting..." : "Export"}
             </button>
             <button
               type="button"
               className={btnOutline}
-              onClick={() => console.log("[admin/products] import clicked")}
+              onClick={triggerImport}
+              disabled={isOperationsBusy}
             >
               <Upload className="h-4 w-4" />
-              Import
+              {isImporting ? "Importing..." : "Import"}
             </button>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".json,application/json"
+              onChange={handleImportFile}
+              className="hidden"
+            />
 
             <div ref={bulkMenuRef} className="relative">
               <button
                 type="button"
                 disabled={bulkMutation.isPending}
-                onClick={() => setBulkMenuOpen((prev) => !prev)}
+                onClick={() => {
+                  if (selectedIds.size === 0) {
+                    showBulkNotice({
+                      type: "error",
+                      title: "Selection required",
+                      message: "Select at least one product to open bulk actions.",
+                    });
+                    return;
+                  }
+                  setBulkMenuOpen((prev) => !prev);
+                }}
                 className={`${btnAmber} min-w-[132px] disabled:cursor-not-allowed disabled:opacity-60`}
               >
                 Bulk Action
                 <ChevronDown className="h-3.5 w-3.5" />
               </button>
-              {bulkMenuOpen ? (
+            {bulkMenuOpen ? (
                 <div className="absolute right-0 z-20 mt-1.5 w-48 overflow-hidden rounded-lg border border-amber-200 bg-white shadow-lg">
                   <button
                     type="button"
@@ -514,42 +794,62 @@ export default function AdminProductsPage() {
         </div>
 
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          <select
-            value={draftFilters.categoryId}
-            onChange={(event) =>
-              setDraftFilters((prev) => ({ ...prev, categoryId: event.target.value }))
-            }
-            className={`${selectBase} h-11 w-full`}
-          >
-            <option value="">All Categories</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
+          <div>
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Category
+            </p>
+            <select
+              value={draftFilters.categoryId}
+              onChange={(event) =>
+                setDraftFilters((prev) => ({ ...prev, categoryId: event.target.value }))
+              }
+              className={`${selectBase} h-11 w-full`}
+            >
+              <option value="">All Categories</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
-          <select
-            value={draftFilters.priceSort}
-            onChange={(event) =>
-              setDraftFilters((prev) => ({ ...prev, priceSort: event.target.value }))
-            }
-            className={`${selectBase} h-11 w-full`}
-          >
-            <option value="default">Default Price</option>
-            <option value="price_asc">Price: Low to High</option>
-            <option value="price_desc">Price: High to Low</option>
-          </select>
+          <div>
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Price sort
+            </p>
+            <select
+              value={draftFilters.priceSort}
+              onChange={(event) =>
+                setDraftFilters((prev) => ({ ...prev, priceSort: event.target.value }))
+              }
+              className={`${selectBase} h-11 w-full`}
+            >
+              <option value="default">Default Price</option>
+              <option value="price_asc">Price: Low to High</option>
+              <option value="price_desc">Price: High to Low</option>
+            </select>
+          </div>
 
-          <button type="button" onClick={applyFilters} className={`${btnGreen} w-full`}>
-            <Filter className="h-4 w-4" />
-            Apply
-          </button>
+          <div>
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Apply changes
+            </p>
+            <button type="button" onClick={applyFilters} className={`${btnGreen} w-full`}>
+              <Filter className="h-4 w-4" />
+              Apply
+            </button>
+          </div>
 
-          <button type="button" onClick={resetFilters} className={`${btnOutline} w-full`}>
-            <RotateCcw className="h-4 w-4" />
-            Reset
-          </button>
+          <div>
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Clear filters
+            </p>
+            <button type="button" onClick={resetFilters} className={`${btnOutline} w-full`}>
+              <RotateCcw className="h-4 w-4" />
+              Reset
+            </button>
+          </div>
         </div>
 
         {categoriesQuery.isError ? (
@@ -559,13 +859,26 @@ export default function AdminProductsPage() {
           <p className="mt-2 text-xs text-rose-500">{publishError}</p>
         ) : null}
         {bulkNotice ? (
-          <p
-            className={`mt-2 text-xs ${
-              bulkNotice.type === "error" ? "text-rose-500" : "text-emerald-600"
+          <div
+            className={`mt-3 rounded-xl border px-3 py-2.5 text-xs ${
+              bulkNotice.type === "error"
+                ? "border-rose-200 bg-rose-50 text-rose-700"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700"
             }`}
           >
-            {bulkNotice.message}
-          </p>
+            {bulkNotice.title ? (
+              <p className="font-semibold uppercase tracking-[0.08em]">{bulkNotice.title}</p>
+            ) : null}
+            <p className={bulkNotice.title ? "mt-1" : ""}>{bulkNotice.message}</p>
+            {Array.isArray(bulkNotice.details) && bulkNotice.details.length > 0 ? (
+              <ul className="mt-2 list-disc space-y-1 pl-4 text-[11px]">
+                {bulkNotice.details.map((detail) => (
+                  <li key={detail}>{detail}</li>
+                ))}
+              </ul>
+            ) : null}
+            {bulkNotice.meta ? <p className="mt-2 text-[11px]">{bulkNotice.meta}</p> : null}
+          </div>
         ) : null}
       </div>
 
@@ -586,6 +899,9 @@ export default function AdminProductsPage() {
           <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-2 text-xs text-slate-500">
             Showing <span className="font-semibold text-slate-700">{displayItems.length}</span> of{" "}
             <span className="font-semibold text-slate-700">{meta.total || 0}</span> products
+            <span className="ml-2 inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+              {selectedCount} selected
+            </span>
           </div>
           <div className="-mx-4 w-auto overflow-x-auto px-4 pb-1 md:mx-0 md:w-full md:px-0">
             <table className="w-full min-w-[980px] text-left text-sm">
@@ -616,10 +932,9 @@ export default function AdminProductsPage() {
                 {displayItems.map((product) => {
                   const isSelected = selectedIds.has(Number(product.id));
                   const isPublished = getPublished(product);
-                  const hasSalePrice =
-                    Number(product.salePrice || 0) > 0 &&
-                    Number(product.salePrice || 0) <
-                      Number(product.originalPrice || product.price || 0);
+                  const stockMeta = getStockMeta(product.stock);
+                  const pricing = resolveAdminProductPricing(product);
+                  const categoryContext = getProductCategoryContext(product);
 
                   return (
                     <tr
@@ -653,25 +968,71 @@ export default function AdminProductsPage() {
                             <div className="truncate text-sm font-semibold text-slate-900">
                               {product.name || `#${product.id}`}
                             </div>
-                            <div className="truncate text-xs text-slate-500">{product.slug || "-"}</div>
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                              <span className="truncate">{product.slug || "-"}</span>
+                              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-medium text-slate-600">
+                                SKU #{product.id}
+                              </span>
+                              {pricing.hasSalePrice ? (
+                                <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">
+                                  On sale
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
                         </div>
                       </td>
 
                       <td className={`${tableCell} w-[15%]`}>
-                        <span className="block truncate">{product.category?.name || "-"}</span>
+                        <div className="space-y-1">
+                          <ProductCategoryBadge label={categoryContext.defaultCategory?.name} />
+                          <span className="block truncate text-xs text-slate-500">
+                            Default category
+                          </span>
+                          {categoryContext.relatedCategories.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5 pt-1">
+                              {categoryContext.relatedCategories.slice(0, 2).map((category) => (
+                                <span
+                                  key={`${product.id}-${category.id}`}
+                                  className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600"
+                                >
+                                  {category.name}
+                                </span>
+                              ))}
+                              {categoryContext.relatedCategories.length > 2 ? (
+                                <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                                  +{categoryContext.relatedCategories.length - 2} more
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <span className="block truncate text-[11px] text-slate-400">
+                              {categoryContext.selectedCount > 0
+                                ? "No secondary categories"
+                                : "No categories"}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       <td
                         className={`${tableCell} w-[9%] text-right font-semibold tabular-nums text-slate-900`}
                       >
-                        {asCurrency(product.price)}
+                        <div className="space-y-1">
+                          <div>{asCurrency(pricing.basePrice)}</div>
+                          <div className="text-xs font-medium text-slate-400">Base price</div>
+                        </div>
                       </td>
 
                       <td className={`${tableCell} w-[9%] text-right tabular-nums`}>
-                        {hasSalePrice ? (
-                          <div className="font-semibold text-emerald-700">
-                            {asCurrency(product.salePrice)}
+                        {pricing.hasSalePrice ? (
+                          <div className="space-y-1">
+                            <div className="font-semibold text-emerald-700">
+                              {asCurrency(pricing.salePrice)}
+                            </div>
+                            <div className="text-xs font-medium text-emerald-600">
+                              Promo live
+                            </div>
                           </div>
                         ) : (
                           <span className="text-slate-400">-</span>
@@ -679,7 +1040,12 @@ export default function AdminProductsPage() {
                       </td>
 
                       <td className={`${tableCell} w-[7%] text-right tabular-nums`}>
-                        {product.stock ?? 0}
+                        <div className="space-y-1">
+                          <div className="font-semibold text-slate-900">{product.stock ?? 0}</div>
+                          <div className={`text-xs font-medium ${stockMeta.className}`}>
+                            {stockMeta.label}
+                          </div>
+                        </div>
                       </td>
 
                       <td className={`${tableCell} w-[10%]`}>
@@ -735,6 +1101,9 @@ export default function AdminProductsPage() {
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
+                        </div>
+                        <div className="mt-1 text-[11px] font-medium text-slate-400">
+                          Quick edit
                         </div>
                       </td>
                     </tr>
@@ -813,7 +1182,10 @@ export default function AdminProductsPage() {
           <div className="fixed inset-0 z-[71] flex items-center justify-center p-4">
             <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl">
               <h3 className="text-lg font-semibold text-slate-900">Are you sure?</h3>
-              <p className="mt-2 text-sm text-slate-500">This action cannot be undone.</p>
+              <p className="mt-2 text-sm text-slate-500">
+                You are about to delete {bulkConfirm.ids.length} selected product(s). This action
+                cannot be undone.
+              </p>
               <div className="mt-5 flex items-center justify-end gap-3">
                 <button
                   type="button"

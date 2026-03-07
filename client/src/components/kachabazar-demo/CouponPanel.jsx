@@ -2,6 +2,7 @@ import heroBannerImage from "../../assets/admin-login-hero.jpg";
 
 export default function CouponPanel({
   couponList,
+  isLoading = false,
   couponError,
   copiedCode,
   onCopy,
@@ -14,9 +15,13 @@ export default function CouponPanel({
         Latest Super Discount Active Coupon Code
       </h2>
       <div className="mt-3.5 space-y-3.5">
-        {safeCoupons.length === 0 ? (
+        {isLoading ? (
           <div className="rounded-xl border border-orange-100 bg-orange-50/40 px-3 py-6 text-center text-xs text-slate-500">
-            No active coupons right now.
+            Loading active coupons...
+          </div>
+        ) : safeCoupons.length === 0 ? (
+          <div className="rounded-xl border border-orange-100 bg-orange-50/40 px-3 py-6 text-center text-xs text-slate-500">
+            {couponError || "No active coupons right now."}
           </div>
         ) : (
           safeCoupons.map((coupon, index) => (
@@ -64,7 +69,7 @@ export default function CouponPanel({
             </div>
           ))
         )}
-        {couponError ? (
+        {couponError && safeCoupons.length > 0 ? (
           <div className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-600">
             {couponError}
           </div>

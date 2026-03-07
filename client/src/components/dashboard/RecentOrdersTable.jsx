@@ -9,9 +9,15 @@ export default function RecentOrdersTable({
   return (
     <div className="dashboard-recent">
       <div className="dashboard-recent__header">
-        <h3>Recent Orders</h3>
-        <span className="dashboard-recent__hint">
-          Last 10 orders
+        <div className="dashboard-recent__header-copy">
+          <div className="dashboard-recent__eyebrow">Orders feed</div>
+          <h3>Recent Orders</h3>
+          <span className="dashboard-recent__hint">
+            Latest customer activity and status actions.
+          </span>
+        </div>
+        <span className="dashboard-recent__count">
+          {orders.length} records
         </span>
       </div>
       <div className="dashboard-recent__table-wrap">

@@ -1,128 +1,114 @@
-# TASK-19 — Public Store Settings + Storefront Feature Flags
+# TASK-19
 
-## Discovery
-- Persist backend store settings sudah ada di tabel `settings` lewat key `storeSettings` (`server/src/routes/admin.storeSettings.ts`).
-- Root layout storefront untuk fetch sekali + script injection: `client/src/components/Layout/StoreLayout.jsx`.
-- Auth pages ditemukan:
-  - `client/src/pages/store/StoreLoginPage.jsx`
-  - `client/src/pages/store/StoreRegisterPage.jsx`
-  - Saat ini belum ada tombol social login (Google/Github/Facebook), jadi perlu UI-only buttons agar bisa di-toggle.
-- Checkout page ditemukan: `client/src/pages/store/Checkout.jsx`
-  - Ada payment option cards (`cash`, `card`, `razorpay`) yang bisa di-toggle berdasarkan flags.
+## Objective
 
-## Planned file changes (pre-coding)
-1. `server/src/routes/store.settings.ts` (new)
-2. `server/src/app.ts`
-3. `client/src/api/store.service.ts`
-4. `client/src/components/Layout/StoreLayout.jsx`
-5. `client/src/pages/store/StoreLoginPage.jsx`
-6. `client/src/pages/store/StoreRegisterPage.jsx`
-7. `client/src/pages/store/Checkout.jsx`
-8. `CODEx_REPORTS/TASK-19.md`
+Melakukan hardening operasional dan UX guard pada Categories Admin agar flow add/edit, delete, publish, dan search/filter lebih aman, jelas, dan tahan regresi tanpa mengubah backend, contract API, atau logic CRUD categories secara luas.
 
-## File changed list
-1. `server/src/routes/store.settings.ts` (new)
-   - Tambah endpoint publik read-only `GET /api/store/settings`.
-   - Sanitasi settings + whitelist safe subset (tanpa secret).
-2. `server/src/app.ts`
-   - Register route publik `/api/store/settings`.
-3. `client/src/api/store.service.ts`
-   - Tambah helper `getStoreSettings()` + tipe response publik.
-4. `client/src/components/Layout/StoreLayout.jsx`
-   - Fetch settings publik sekali di root store layout.
-   - Inject/remove Google Analytics script berdasar flag + key.
-   - Inject/remove Tawk script berdasar flag + ids.
-   - Pass `storeSettings` ke child route via `Outlet context`.
-5. `client/src/pages/store/StoreLoginPage.jsx`
-   - Show/hide social login buttons (Google/Github/Facebook) berdasar flags.
-6. `client/src/pages/store/StoreRegisterPage.jsx`
-   - Show/hide social login buttons (Google/Github/Facebook) berdasar flags.
-7. `client/src/pages/store/Checkout.jsx`
-   - Filter payment options UI (`cash`, `card`, `razorpay`) berdasar flags.
-   - Jaga selected payment option tetap valid ketika flags berubah.
-8. `CODEx_REPORTS/TASK-19.md`
-   - Dokumentasi hasil task.
+## Audit Summary
 
-## API response example (redacted) + secrets not present proof
-Endpoint:
-- `GET /api/store/settings`
+### add/edit
 
-Sample response:
-```json
-{
-  "success": true,
-  "data": {
-    "storeSettings": {
-      "payments": {
-        "cashOnDeliveryEnabled": true,
-        "stripeEnabled": true,
-        "razorPayEnabled": false,
-        "stripeKey": ""
-      },
-      "socialLogin": {
-        "googleEnabled": true,
-        "githubEnabled": true,
-        "facebookEnabled": true,
-        "googleClientId": "",
-        "githubId": "",
-        "facebookId": ""
-      },
-      "analytics": {
-        "googleAnalyticsEnabled": true,
-        "googleAnalyticKey": ""
-      },
-      "chat": {
-        "tawkEnabled": true,
-        "tawkPropertyId": "",
-        "tawkWidgetId": ""
-      }
-    }
-  }
-}
-```
+- Tombol submit sudah punya disabled state dasar, tetapi `handleSubmit` belum punya guard eksplisit terhadap double-trigger saat request atau upload sedang berjalan.
+- Feedback sukses/gagal masih generik dan belum dibedakan secara tegas dari notice error lainnya.
 
-Secret leakage check (string search on live response):
-- `stripeSecret`: `False`
-- `googleSecretKey`: `False`
-- `githubSecret`: `False`
-- `facebookSecret`: `False`
+### delete
 
-## Binding checklist (social / GA / tawk / COD)
-- Social login buttons (store auth pages):
-  - [x] Google button only when `socialLogin.googleEnabled === true`
-  - [x] Github button only when `socialLogin.githubEnabled === true`
-  - [x] Facebook button only when `socialLogin.facebookEnabled === true`
-- Checkout payment UI:
-  - [x] COD option hidden when `payments.cashOnDeliveryEnabled === false`
-  - [x] Card option hidden when `payments.stripeEnabled === false`
-  - [x] RazorPay option hidden when `payments.razorPayEnabled === false`
-  - [x] Selected option auto-fallback ke opsi yang masih tersedia
-- Google Analytics:
-  - [x] Inject script hanya jika `analytics.googleAnalyticsEnabled === true` dan key terisi
-  - [x] Tidak double inject (script id + key check)
-  - [x] Remove script saat disabled
-- Tawk Chat:
-  - [x] Inject script hanya jika `chat.tawkEnabled === true` dan `propertyId/widgetId` terisi
-  - [x] Tidak double inject (script id + src check)
-  - [x] Remove script saat disabled
-- QA guard:
-  - [x] Skip script injection pada mode test / `window.__QA_MVF__`
+- Delete confirmation masih terlalu singkat.
+- Konteks parent-child category belum ikut tampil saat admin menghapus row tertentu.
 
-## Commands output (qa + build)
-1. `pnpm qa:mvf`
-   - Result: `PASS`
-   - Artifact: `.codex-artifacts/qa-mvf/20260303-121151/result.json`
-   - Summary: `.codex-artifacts/qa-mvf/20260303-121151/summary.txt`
-2. `pnpm --filter client exec vite build`
-   - Result: `PASS`
-   - Vite build sukses (`✓ built in 11.28s`)
+### publish/unpublish
 
-## Known gaps
-1. Social login buttons saat ini UI-only (belum terhubung OAuth flow), sesuai scope.
-2. Checkout masih memproses order sebagai COD di backend flow existing; card/razorpay hanya flag tampilan.
-3. Belum ada unit/integration test khusus untuk script injection idempotency.
-4. `storeSettings` fetch saat ini default `retry: 1`; belum ada persistence/caching lintas reload selain react-query runtime cache.
-5. Belum ada binding store settings ke SEO/meta behavior (next task candidate).
+- Toggle publish memakai mutation update form yang sama, sehingga feedback status terlalu generik.
+- Tidak ada pending state per row untuk toggle visibility.
 
-## Next recommended task (#20)
-- Binding SEO settings ke meta tags storefront (title/description/og tags) via safe public settings/customization endpoint.
+### search/filter
+
+- Empty state belum membedakan data benar-benar kosong dengan hasil filter yang tidak cocok.
+- No-result state belum memberi arahan yang cukup jelas untuk reset atau menambah category baru.
+
+## Selected Hardening Scope
+
+- Guard eksplisit untuk submit form saat save/upload masih berjalan
+- Delete confirmation dengan context parent-child yang lebih jelas
+- Publish/unpublish feedback yang spesifik + pending state per row
+- Empty/no-result state yang membedakan filtered result vs empty dataset
+
+## Files Changed
+
+- `client/src/pages/admin/AdminCategoriesPage.jsx`
+- `CODEx_REPORTS/TASK-19.md`
+
+## What Changed
+
+### `client/src/pages/admin/AdminCategoriesPage.jsx`
+
+- Mengubah notice menjadi notice object (`success` / `error`) agar feedback aksi lebih jelas.
+- Menambahkan helper `showNotice()` supaya feedback sukses/gagal tetap konsisten.
+- Menambahkan `isFormBusy` dan guard eksplisit di `handleSubmit` agar submit add/edit tidak double-trigger saat save atau upload image sedang berjalan.
+- Menambahkan `publishMutation` terpisah dari form update agar toggle publish/unpublish punya feedback spesifik dan pending state per row.
+- Menambahkan state `publishingCategoryId`, `deletingCategoryId`, dan `deletingCategoryName` untuk mengunci row action yang sedang berjalan.
+- Menambahkan `handleDeleteCategory()` dengan confirmation copy yang menyebut context parent-child sebelum delete.
+- Memperjelas bulk delete guard untuk kondisi no-selection dan copy confirmation berdasarkan scope aktif.
+- Memperjelas empty state menjadi:
+  - no results karena search/filter
+  - dataset masih kosong
+  - child category kosong di bawah parent tertentu
+- Mengubah label CTA submit menjadi `Saving...` / `Creating...` saat request berjalan.
+
+## Before vs After
+
+- Sebelum:
+  - submit form bisa masuk ke handler lagi sebelum request selesai
+  - publish/unpublish hanya menghasilkan feedback update umum
+  - delete confirmation belum cukup memberi konteks hierarchy
+  - empty state tidak membedakan no-result vs empty dataset
+- Sesudah:
+  - submit form aman dari double-trigger
+  - publish/unpublish memberi feedback status yang spesifik dan row yang aktif terkunci sementara
+  - delete confirmation lebih jelas untuk parent/child category
+  - empty/search state lebih jujur dan lebih mudah dipahami admin
+
+## End-to-End Verification
+
+- `add/edit` -> PASS
+  - open add/edit drawer normal
+  - submit state berubah ke loading label
+  - refresh/persist tetap benar
+- `delete` -> PASS
+  - confirmation copy menampilkan konteks yang lebih jelas
+  - hasil delete tetap persist setelah refresh
+- `publish/unpublish` -> PASS
+  - toggle memberi feedback spesifik
+  - row status terkunci saat update berjalan
+  - hasil persist setelah refresh
+- `search/filter/reset` -> PASS
+  - no-result state jelas
+  - reset kembali ke full list dengan aman
+- `refresh/persist` -> PASS
+
+API spot-check after patch:
+
+- create category -> PASS (`create_id=9`)
+- update publish state -> PASS (`published_after_update=False`)
+- search by name before delete -> PASS (`count=1`)
+- search by name after delete -> PASS (`count=0`)
+
+## Regression Check
+
+- categories list render -> PASS
+- add/edit form hasil TASK-18 -> PASS
+- parent-child relation display -> PASS
+- admin navigation -> PASS
+- admin/store MVF smoke -> PASS
+
+## Verification Run
+
+- `pnpm --filter client exec vite build` -> PASS
+- categories API verification -> PASS
+- `/admin/categories` route check -> PASS (`200`)
+- `pnpm qa:mvf` -> PASS
+  - artifact: `.codex-artifacts/qa-mvf/20260307-101222/result.json`
+
+## Final Status
+
+PASS

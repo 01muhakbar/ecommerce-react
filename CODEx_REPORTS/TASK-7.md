@@ -1,121 +1,97 @@
-# TASK-7 Report — Public Policy API + Storefront Policy Pages
+# TASK-7 - Admin MVF Parity Audit + Polish Prioritas Tinggi pada Orders Flow
 
-## File Changed List
-1. `server/src/routes/store.customization.ts`
-- Added `include` CSV parsing.
-- Kept default response backward-compatible (`aboutUs` only when `include` is absent).
-- Added strict whitelist support for `include=policy` -> only `privacyPolicy` + `termsAndConditions`.
-- Supports combined request `include=aboutUs,policy`.
+## Task ID
 
-2. `client/src/api/store.service.ts`
-- Added `getStoreCustomization({ lang, include })` helper.
-- Expanded response typing to include optional `privacyPolicy` and `termsAndConditions`.
-- Kept `fetchStoreCustomization(lang)` behavior by delegating to the new helper.
+`TASK-7`
 
-3. `client/src/utils/sanitizeRichTextHtml.js` (new)
-- Added minimal sanitizer:
-  - removes `<script>`, `<style>`, `<iframe>`, `<object>`, `<embed>`.
-  - removes inline event handlers (`on*`).
-  - neutralizes `javascript:` on `href`/`src`.
-  - enforces anchor `target="_blank" rel="noopener noreferrer"`.
+## Objective
 
-4. `client/src/pages/store/StorePrivacyPolicyPage.jsx` (new)
-- Fetches `include=policy`.
-- Handles loading/error/empty/disabled states.
-- Renders hero header (title + optional background image).
-- Renders sanitized HTML via `dangerouslySetInnerHTML`.
+Melakukan audit parity pada flow Orders Admin dan memoles area dengan ROI tertinggi agar lebih dekat ke arah Dashtar, tanpa mengubah backend, contract API, atau logic update status order.
 
-5. `client/src/pages/store/StoreTermsAndConditionsPage.jsx` (new)
-- Same behavior as privacy page for `termsAndConditions` block.
+## Audited Pages
 
-6. `client/src/App.jsx`
-- Added routes:
-  - `/privacy-policy`
-  - `/terms`
-  - `/terms-and-conditions` (alias)
+- `client/src/pages/admin/Orders.jsx`
+- `client/src/pages/admin/OrderDetail.jsx`
+- Fokus route:
+  - `/admin/orders`
+  - `/admin/orders/:invoiceNo`
 
-## API Changes (Final Spec)
-Endpoint: `GET /api/store/customization?lang=<code>[&include=<csv>]`
+## Key Parity Gaps
 
-Include rules:
-- No `include` param: return only `aboutUs` (backward compatible).
-- `include=policy`: return `privacyPolicy` and `termsAndConditions` only.
-- `include=aboutUs,policy`: return `aboutUs`, `privacyPolicy`, `termsAndConditions`.
-- No fields outside whitelist are returned.
+1. `Orders list readability`
+   - Tabel sudah lengkap, tetapi status/action area masih terasa seperti utilitas murni.
+   - Row belum cukup membantu admin membaca invoice, status, dan aksi secara cepat seperti gaya Dashtar.
 
-### Example Requests
-```bash
-curl "http://localhost:3001/api/store/customization?lang=en"
-curl "http://localhost:3001/api/store/customization?lang=en&include=policy"
-curl "http://localhost:3001/api/store/customization?lang=en&include=aboutUs,policy"
-```
+2. `Order detail action grouping`
+   - Header detail sudah informatif, tetapi belum cukup memberi guidance operasional.
+   - Panel update status belum terasa sebagai action area utama.
 
-### Example Response (include=policy)
-```json
-{
-  "success": true,
-  "lang": "en",
-  "customization": {
-    "privacyPolicy": {
-      "enabled": true,
-      "pageHeaderBackgroundDataUrl": "",
-      "pageTitle": "Privacy Policy",
-      "pageTextHtml": "<h3>...</h3>"
-    },
-    "termsAndConditions": {
-      "enabled": true,
-      "pageHeaderBackgroundDataUrl": "",
-      "pageTitle": "Terms & Conditions",
-      "pageTextHtml": "<h2>...</h2>"
-    }
-  }
-}
-```
+## Selected Polish Areas
 
-## Route List Baru (Storefront)
-- `/privacy-policy` -> `StorePrivacyPolicyPage`
-- `/terms` -> `StoreTermsAndConditionsPage`
-- `/terms-and-conditions` -> `StoreTermsAndConditionsPage`
+1. `Orders list row/action hierarchy + status clarity`
+2. `Order detail hero/summary grouping + update-status clarity`
 
-## Manual Sync Test (Admin -> Store)
-Performed via API (persist + public read):
-1. Update admin customization `privacyPolicy.pageTitle/pageTextHtml`.
-2. Read public endpoint `GET /api/store/customization?lang=en&include=policy`.
-3. Result:
-- `privacySyncTitle=Privacy Sync 20260303093842`
-- `privacySyncHasStamp=True`
+## Files Changed
 
-4. Update admin customization `termsAndConditions.pageTitle/pageTextHtml`.
-5. Read public endpoint again.
-6. Result:
-- `termsSyncTitle=Terms Sync 20260303093842`
-- `termsSyncHasStamp=True`
+- `client/src/pages/admin/Orders.jsx`
+- `client/src/pages/admin/OrderDetail.jsx`
+- `CODEx_REPORTS/TASK-7.md`
 
-Route availability checks:
-- `GET http://localhost:5173/privacy-policy` -> `200`
-- `GET http://localhost:5173/terms` -> `200`
-- `GET http://localhost:5173/terms-and-conditions` -> `200`
+## What Changed
 
-Whitelist checks:
-- default keys: `aboutUs`
-- `include=policy` keys: `privacyPolicy,termsAndConditions`
-- `include=aboutUs,policy` keys: `aboutUs,privacyPolicy,termsAndConditions`
+### `client/src/pages/admin/Orders.jsx`
 
-Sanitizer checks:
-- `sanitizedHasScript=false`
-- `sanitizedHasOnclick=false`
-- `sanitizedHasJavascriptHref=false`
+- Menambahkan helper note kecil di kolom invoice.
+- Menambahkan status helper text di bawah badge status.
+- Menambahkan label `Quick Update` pada area select status per row agar action lebih jelas secara operasional.
 
-## Command Outputs
-1. `pnpm --filter client exec vite build` -> PASS
-2. `pnpm qa:mvf` -> PASS
-- artifact: `.codex-artifacts/qa-mvf/20260303-093754/result.json`
-- summary: `.codex-artifacts/qa-mvf/20260303-093754/summary.txt`
+### `client/src/pages/admin/OrderDetail.jsx`
 
-## Known Gaps
-1. Sanitizer is regex-based minimal hardening, not a full HTML sanitizer/parser.
-2. Store policy pages currently use fixed `lang='en'` fallback; not yet wired to dynamic store locale source.
-3. No dedicated automated UI test for policy pages yet (only MVF + manual route/API checks).
+- Memperkuat hero/header detail dengan guidance card berbasis status saat ini.
+- Menambahkan helper text status pada card `Current Status`.
+- Memperjelas panel `Update Status` sebagai `Action Panel` dengan explanatory copy singkat.
 
-## Recommendation Task #8
-- Implement public FAQ/Contact pages bound to customization with the same include-whitelist pattern and shared sanitized rich-text renderer component.
+## Before vs After
+
+### Before
+
+- Orders list sudah fungsional tetapi masih terasa seperti tabel CRUD biasa.
+- Order detail punya data lengkap, tetapi guidance operasional dan next action belum cukup menonjol.
+
+### After
+
+- Orders list lebih cepat dipindai untuk invoice, status, dan action update.
+- Order detail lebih terasa seperti halaman operasional admin: status sekarang, guidance, lalu panel aksi yang jelas.
+
+## Verification Run
+
+1. `pnpm --filter client exec vite build`
+   - PASS
+2. `pnpm qa:mvf`
+   - PASS
+3. QA artifact:
+   - `.codex-artifacts/qa-mvf/20260306-222319/result.json`
+   - `.codex-artifacts/qa-mvf/20260306-222319/summary.txt`
+
+## MVF Impact
+
+- Admin login: PASS
+- Orders list: PASS
+- Order detail: PASS
+- Update status: PASS
+- Persist after refresh: PASS
+- Store MVF smoke tetap PASS
+
+## Risks / Follow-up
+
+- Orders table masih tetap dense karena data dan actions berada dalam satu grid tabel; itu sengaja dipertahankan agar scope tidak melebar ke redesign besar.
+- Order detail summary cards masih bisa dipoles lebih dekat ke Dashtar jika nanti ingin meningkatkan visual density dan card rhythm.
+- Kandidat task berikutnya yang aman: admin dashboard/topbar parity atau orders filter/header polish lanjutan.
+
+## Recommended Next Task
+
+`[TASK-8] Admin Dashboard Parity Polish - Top Summary + Table Rhythm`
+
+## Final Status
+
+`PASS`

@@ -41,8 +41,11 @@ export default function KPIOverviewCards({
 
         return (
           <div key={item.id} className={`kpi-card kpi-card--${item.variant}`}>
-            <div className="kpi-card__icon" aria-hidden="true">
-              <Icon size={22} strokeWidth={2} />
+            <div className="kpi-card__top">
+              <div className="kpi-card__icon" aria-hidden="true">
+                <Icon size={22} strokeWidth={2} />
+              </div>
+              <div className="kpi-card__tag">Top metric</div>
             </div>
             <div className="kpi-card__title">{title}</div>
             <div
@@ -50,6 +53,13 @@ export default function KPIOverviewCards({
               title={item.id === "all-time" ? String(value) : undefined}
             >
               {value}
+            </div>
+            <div className="kpi-card__caption">
+              {item.id === "all-time"
+                ? "Lifetime revenue"
+                : item.id === "this-month" || item.id === "last-month"
+                  ? "Sales performance"
+                  : "Daily order volume"}
             </div>
             {byMethod ? (
               <div className="kpi-card__breakdown">

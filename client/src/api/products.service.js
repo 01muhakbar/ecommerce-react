@@ -1,5 +1,4 @@
 import { api } from "./axios";
-import { products as dummyProducts } from "../data/products.js";
 
 export async function listProducts(params = {}) {
   const query = {
@@ -41,19 +40,7 @@ export async function listProducts(params = {}) {
     }
     return { data: [], meta: { page: query.page, pageSize: query.pageSize, total: 0 } };
   } catch (error) {
-    const allowDummyFallback =
-      import.meta.env.DEV && import.meta.env.VITE_ALLOW_DUMMY_PRODUCTS === "true";
-    if (!allowDummyFallback) {
-      throw error;
-    }
-    const filtered = filterDummyProducts(dummyProducts, {
-      search: query.q,
-      category: query.category,
-      price: query.price,
-      stockStatus: query.stockStatus,
-    });
-    const sorted = sortDummy(filtered, query.sort, query.order || "asc");
-    return paginateDummy(sorted, query.page, query.pageSize);
+    throw error;
   }
 }
 
@@ -76,146 +63,28 @@ export async function getProducts(filters = {}) {
 }
 
 export async function createProduct(payload) {
-  const allowDummyFallback =
-    import.meta.env.DEV && import.meta.env.VITE_ALLOW_DUMMY_PRODUCTS === "true";
   try {
     const response = await api.post("/admin/products", payload);
     return response?.data ?? response;
   } catch (error) {
-    if (!allowDummyFallback) {
-      throw error;
-    }
-    const price = Number(payload.price) || 0;
-    const nextProduct = {
-      id: `prd-${Date.now()}`,
-      name: payload.name,
-      image: "/img/tshirt.png",
-      category: payload.category || "Uncategorized",
-      price,
-      salePrice: price,
-      stock: 0,
-      status: "soldout",
-      published: false,
-    };
-    dummyProducts.unshift(nextProduct);
-    return nextProduct;
+    throw error;
   }
 }
 
 export async function deleteProduct(id) {
-  const allowDummyFallback =
-    import.meta.env.DEV && import.meta.env.VITE_ALLOW_DUMMY_PRODUCTS === "true";
   try {
     await api.delete(`/admin/products/${id}`);
     return true;
   } catch (error) {
-    if (!allowDummyFallback) {
-      throw error;
-    }
-    const index = dummyProducts.findIndex((item) => item.id === id);
-    if (index >= 0) {
-      dummyProducts.splice(index, 1);
-    }
-    return true;
+    throw error;
   }
 }
 
 export async function updateProduct(id, payload) {
-  const allowDummyFallback =
-    import.meta.env.DEV && import.meta.env.VITE_ALLOW_DUMMY_PRODUCTS === "true";
   try {
     const response = await api.put(`/admin/products/${id}`, payload);
     return response?.data ?? response ?? true;
   } catch (error) {
-    if (!allowDummyFallback) {
-      throw error;
-    }
-    const index = dummyProducts.findIndex((item) => item.id === id);
-    if (index >= 0) {
-      dummyProducts[index] = {
-        ...dummyProducts[index],
-        ...payload,
-      };
-    }
-    return true;
+    throw error;
   }
-}
-
-function filterDummyProducts(data, filters) {
-  return data.filter((item) => {
-    if (
-      filters.search &&
-      !item.name.toLowerCase().includes(filters.search.toLowerCase())
-    ) {
-      return false;
-    }
-
-    if (filters.category && item.category !== filters.category) {
-      return false;
-    }
-
-    if (filters.stockStatus) {
-      if (filters.stockStatus === "low") {
-        if (item.stock >= 10000) {
-          return false;
-        }
-      } else if (item.status !== filters.stockStatus) {
-        return false;
-      }
-    }
-
-    if (filters.price) {
-      if (filters.price === "below-200k" && item.price >= 200000) {
-        return false;
-      }
-      if (
-        filters.price === "200-500k" &&
-        (item.price < 200000 || item.price > 500000)
-      ) {
-        return false;
-      }
-      if (filters.price === "above-500k" && item.price <= 500000) {
-        return false;
-      }
-    }
-
-    return true;
-  });
-}
-
-function paginateDummy(data, page, limit) {
-  const start = (page - 1) * limit;
-  return {
-    data: data.slice(start, start + limit),
-    meta: {
-      page,
-      limit,
-      total: data.length,
-    },
-  };
-}
-
-function sortDummy(data, sortBy, sortOrder) {
-  if (!sortBy) {
-    return data;
-  }
-
-  return [...data].sort((a, b) => {
-    const aValue = a[sortBy];
-    const bValue = b[sortBy];
-
-    if (typeof aValue === "number" && typeof bValue === "number") {
-      return sortOrder === "asc" ? aValue - bValue : bValue - aValue;
-    }
-
-    const aText = String(aValue || "").toLowerCase();
-    const bText = String(bValue || "").toLowerCase();
-    if (aText < bText) {
-      return sortOrder === "asc" ? -1 : 1;
-    }
-    if (aText > bText) {
-      return sortOrder === "asc" ? 1 : -1;
-    }
-    return 0;
-  });
 }

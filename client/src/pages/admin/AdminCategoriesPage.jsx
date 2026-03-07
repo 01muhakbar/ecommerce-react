@@ -89,6 +89,39 @@ function CategoryPublishedBadge({ published }) {
   );
 }
 
+function CategoryTypeBadge({ isChildRow, isSubView }) {
+  const label = isSubView ? "Sub Category" : isChildRow ? "Child Category" : "Parent Category";
+  const palette = isSubView || isChildRow
+    ? "border-sky-200 bg-sky-50 text-sky-700"
+    : "border-violet-200 bg-violet-50 text-violet-700";
+  return (
+    <span
+      className={`inline-flex min-h-7 items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${palette}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function CategoryFormSectionHeader({ eyebrow, title, description, meta }) {
+  return (
+    <div className="mb-3 flex flex-col gap-2 border-b border-slate-100 pb-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="space-y-1">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+          {eyebrow}
+        </p>
+        <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
+        {description ? <p className="text-xs text-slate-500">{description}</p> : null}
+      </div>
+      {meta ? (
+        <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
+          {meta}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 export default function AdminCategoriesPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -100,11 +133,15 @@ export default function AdminCategoriesPage() {
   const [selectedParent, setSelectedParent] = useState(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState({ type: "success", message: "" });
   const [selectedIds, setSelectedIds] = useState([]);
   const [imageFileName, setImageFileName] = useState("");
   const [localPreviewUrl, setLocalPreviewUrl] = useState("");
   const [uploadError, setUploadError] = useState("");
+  const [deletingCategoryId, setDeletingCategoryId] = useState(null);
+  const [deletingCategoryName, setDeletingCategoryName] = useState("");
+  const [publishingCategoryId, setPublishingCategoryId] = useState(null);
+  const [publishContext, setPublishContext] = useState({ name: "", nextPublished: false });
   const [form, setForm] = useState({
     name: "",
     code: "",
@@ -123,10 +160,14 @@ export default function AdminCategoriesPage() {
   }, [search]);
 
   useEffect(() => {
-    if (!notice) return;
-    const timer = setTimeout(() => setNotice(""), 2600);
+    if (!notice?.message) return;
+    const timer = setTimeout(() => setNotice({ type: "success", message: "" }), 2600);
     return () => clearTimeout(timer);
   }, [notice]);
+
+  const showNotice = (message, type = "success") => {
+    setNotice({ type, message });
+  };
 
   const params = useMemo(
     () => ({
@@ -156,9 +197,12 @@ export default function AdminCategoriesPage() {
       qc.invalidateQueries({ queryKey: ["admin-categories"] });
       qc.invalidateQueries({ queryKey: ["storeCategories"] });
       qc.invalidateQueries({ queryKey: ["storefront", "categories"] });
-      setNotice("Category created.");
+      showNotice("Category created.");
       setIsFormOpen(false);
       setEditing(null);
+    },
+    onError: (error) => {
+      showNotice(error?.response?.data?.message || "Failed to create category.", "error");
     },
   });
 
@@ -168,9 +212,12 @@ export default function AdminCategoriesPage() {
       qc.invalidateQueries({ queryKey: ["admin-categories"] });
       qc.invalidateQueries({ queryKey: ["storeCategories"] });
       qc.invalidateQueries({ queryKey: ["storefront", "categories"] });
-      setNotice("Category updated.");
+      showNotice("Category updated.");
       setIsFormOpen(false);
       setEditing(null);
+    },
+    onError: (error) => {
+      showNotice(error?.response?.data?.message || "Failed to update category.", "error");
     },
   });
 
@@ -180,10 +227,16 @@ export default function AdminCategoriesPage() {
       qc.invalidateQueries({ queryKey: ["admin-categories"] });
       qc.invalidateQueries({ queryKey: ["storeCategories"] });
       qc.invalidateQueries({ queryKey: ["storefront", "categories"] });
-      setNotice("Category deleted.");
+      showNotice(
+        deletingCategoryName ? `${deletingCategoryName} deleted.` : "Category deleted."
+      );
+      setDeletingCategoryId(null);
+      setDeletingCategoryName("");
     },
     onError: (error) => {
-      setNotice(error?.response?.data?.message || "Failed to delete category.");
+      showNotice(error?.response?.data?.message || "Failed to delete category.", "error");
+      setDeletingCategoryId(null);
+      setDeletingCategoryName("");
     },
   });
 
@@ -195,14 +248,17 @@ export default function AdminCategoriesPage() {
       qc.invalidateQueries({ queryKey: ["storefront", "categories"] });
       const affected = Array.isArray(variables?.ids) ? variables.ids.length : 0;
       setSelectedIds([]);
-      setNotice(
+      showNotice(
         affected > 0
           ? `${affected} categor${affected > 1 ? "ies" : "y"} deleted.`
           : "Selected categories deleted."
       );
     },
     onError: (error) => {
-      setNotice(error?.response?.data?.message || "Failed to delete selected categories.");
+      showNotice(
+        error?.response?.data?.message || "Failed to delete selected categories.",
+        "error"
+      );
     },
   });
 
@@ -216,10 +272,34 @@ export default function AdminCategoriesPage() {
       }
       setForm((prev) => ({ ...prev, icon: url }));
       setUploadError("");
-      setNotice("Image uploaded.");
+      showNotice("Image uploaded.");
     },
     onError: (error) => {
       setUploadError(error?.response?.data?.message || "Failed to upload image.");
+    },
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: ({ id, payload }) => updateAdminCategory(id, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-categories"] });
+      qc.invalidateQueries({ queryKey: ["storeCategories"] });
+      qc.invalidateQueries({ queryKey: ["storefront", "categories"] });
+      showNotice(
+        publishContext?.name
+          ? `${publishContext.name} ${publishContext.nextPublished ? "published" : "unpublished"}.`
+          : "Category visibility updated."
+      );
+      setPublishingCategoryId(null);
+      setPublishContext({ name: "", nextPublished: false });
+    },
+    onError: (error) => {
+      showNotice(
+        error?.response?.data?.message || "Failed to update category visibility.",
+        "error"
+      );
+      setPublishingCategoryId(null);
+      setPublishContext({ name: "", nextPublished: false });
     },
   });
 
@@ -282,6 +362,9 @@ export default function AdminCategoriesPage() {
       updateMutation.isPending ||
       updateMutation.isLoading
   );
+  const isFormBusy = Boolean(
+    isSaving || uploadMutation.isPending || uploadMutation.isLoading
+  );
 
   const openCreate = () => {
     setEditing(null);
@@ -316,7 +399,7 @@ export default function AdminCategoriesPage() {
   };
 
   const closeForm = () => {
-    if (isSaving || uploadMutation.isPending || uploadMutation.isLoading) return;
+    if (isFormBusy) return;
     setIsFormOpen(false);
     setEditing(null);
   };
@@ -334,15 +417,28 @@ export default function AdminCategoriesPage() {
   };
 
   const handleDemoAction = (label) => {
-    setNotice(`${label} is demo-only.`);
+    showNotice(`${label} is demo-only.`);
   };
 
   const handleDeleteSelected = () => {
     const ids = selectedIds
       .map((value) => Number(value))
       .filter((value) => Number.isFinite(value) && value > 0);
-    if (ids.length === 0 || bulkMutation.isPending) return;
-    if (!window.confirm(`Delete ${ids.length} selected categor${ids.length > 1 ? "ies" : "y"}?`)) {
+    if (ids.length === 0) {
+      showNotice("Select at least one category before running bulk delete.", "error");
+      return;
+    }
+    if (bulkMutation.isPending || bulkMutation.isLoading) return;
+    const contextLabel = isSubView
+      ? ` under ${selectedParentName}`
+      : parentsOnly
+      ? " from the parent categories view"
+      : " from the current filtered list";
+    if (
+      !window.confirm(
+        `Delete ${ids.length} selected categor${ids.length > 1 ? "ies" : "y"}${contextLabel}? This action cannot be undone.`
+      )
+    ) {
       return;
     }
     bulkMutation.mutate({ action: "delete", ids });
@@ -368,6 +464,7 @@ export default function AdminCategoriesPage() {
 
   const handleSubmit = (event) => {
     event.preventDefault();
+    if (isFormBusy) return;
     const name = toStringSafe(form.name);
     if (!name) return;
 
@@ -401,7 +498,10 @@ export default function AdminCategoriesPage() {
 
   const handleTogglePublished = (category) => {
     if (!category?.id || !category?.name) return;
-    updateMutation.mutate({
+    const nextPublished = !Boolean(category.published);
+    setPublishingCategoryId(category.id);
+    setPublishContext({ name: category.name, nextPublished });
+    publishMutation.mutate({
       id: category.id,
       payload: {
         name: category.name,
@@ -409,9 +509,31 @@ export default function AdminCategoriesPage() {
         description: category.description || undefined,
         icon: category.icon || undefined,
         parent_id: category.parentId ?? category.parent_id ?? null,
-        published: !Boolean(category.published),
+        published: nextPublished,
       },
     });
+  };
+
+  const handleDeleteCategory = (category) => {
+    if (!category?.id || !category?.name) return;
+    const isChildRow = hasParentCategory(category);
+    const parentLabel =
+      category?.parent?.name ||
+      category?.parentName ||
+      (isChildRow ? `#${getCategoryParentId(category)}` : "");
+    const relationHint = isChildRow
+      ? ` It is currently nested under ${parentLabel || "a parent category"}.`
+      : " Check child category placement before removing this parent category.";
+    if (
+      !window.confirm(
+        `Delete ${category.name}?${relationHint} This action cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    setDeletingCategoryId(category.id);
+    setDeletingCategoryName(category.name);
+    deleteMutation.mutate(category.id);
   };
 
   const previewImageUrl = useMemo(() => {
@@ -462,26 +584,66 @@ export default function AdminCategoriesPage() {
         </div>
       </div>
 
-      {notice ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
-          {notice}
+      {notice?.message ? (
+        <div
+          className={`rounded-xl px-4 py-2 text-sm ${
+            notice.type === "error"
+              ? "border border-rose-200 bg-rose-50 text-rose-700"
+              : "border border-emerald-200 bg-emerald-50 text-emerald-700"
+          }`}
+        >
+          {notice.message}
         </div>
       ) : null}
 
       <div className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="mb-4 flex flex-col gap-3 border-b border-slate-100 pb-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+              Category Controls
+            </p>
+            <h2 className="text-lg font-semibold text-slate-900">
+              {isSubView ? "Keep child categories grouped under the right parent" : "Organize parent categories and sub category access"}
+            </h2>
+            <p className="text-sm text-slate-500">
+              {isSubView
+                ? `Review child records under ${selectedParentName} before editing or publishing them.`
+                : "Search, filter, and manage category hierarchy before opening the category drawer."}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500">
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+              Visible now: {tableItems.length}
+            </span>
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+              Selected: {selectedIds.length}
+            </span>
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+              {isSubView ? `Parent: ${selectedParentName}` : `Active filters: ${activeFilterCount}`}
+            </span>
+          </div>
+        </div>
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="relative w-full xl:max-w-xl">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={isSubView ? "Search sub category name" : "Search category name"}
-              className={`${fieldClass} pl-9`}
-            />
+          <div className="w-full xl:max-w-xl">
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Search hierarchy
+            </p>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder={isSubView ? "Search sub category name" : "Search category name"}
+                className={`${fieldClass} pl-9`}
+              />
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <div className="mr-1 hidden text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 xl:block">
+              Quick actions
+            </div>
             {!isSubView ? (
               <>
                 <button
@@ -514,7 +676,9 @@ export default function AdminCategoriesPage() {
               type="button"
               onClick={handleDeleteSelected}
               className={btnDanger}
-              disabled={selectedIds.length === 0 || bulkMutation.isPending}
+              disabled={
+                selectedIds.length === 0 || bulkMutation.isPending || bulkMutation.isLoading
+              }
             >
               <Trash2 className="h-4 w-4" />
               {bulkMutation.isPending ? "Deleting..." : "Delete"}
@@ -527,31 +691,46 @@ export default function AdminCategoriesPage() {
         </div>
 
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <button type="button" onClick={handleApplyFilters} className={`${btnGreen} w-full`}>
-            <Filter className="h-4 w-4" />
-            Apply
-          </button>
-          <button type="button" onClick={handleResetFilters} className={`${btnOutline} w-full`}>
-            <RotateCcw className="h-4 w-4" />
-            Reset
-          </button>
+          <div>
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Apply filters
+            </p>
+            <button type="button" onClick={handleApplyFilters} className={`${btnGreen} w-full`}>
+              <Filter className="h-4 w-4" />
+              Apply
+            </button>
+          </div>
+          <div>
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Clear filters
+            </p>
+            <button type="button" onClick={handleResetFilters} className={`${btnOutline} w-full`}>
+              <RotateCcw className="h-4 w-4" />
+              Reset
+            </button>
+          </div>
           {!isSubView ? (
-            <div className="flex h-11 items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-600 sm:justify-center sm:gap-3">
-              <span>Parents Only</span>
-              <button
-                type="button"
-                onClick={() => setParentsOnly((prev) => !prev)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
-                  parentsOnly ? "bg-emerald-500" : "bg-slate-300"
-                }`}
-                aria-label="Toggle parents only"
-              >
-                <span
-                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
-                    parentsOnly ? "translate-x-5" : "translate-x-0.5"
+            <div>
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                Scope
+              </p>
+              <div className="flex h-11 items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-600 sm:justify-center sm:gap-3">
+                <span>{parentsOnly ? "Parents only" : "All category levels"}</span>
+                <button
+                  type="button"
+                  onClick={() => setParentsOnly((prev) => !prev)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                    parentsOnly ? "bg-emerald-500" : "bg-slate-300"
                   }`}
-                />
-              </button>
+                  aria-label="Toggle parents only"
+                >
+                  <span
+                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
+                      parentsOnly ? "translate-x-5" : "translate-x-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
           ) : null}
         </div>
@@ -567,7 +746,24 @@ export default function AdminCategoriesPage() {
         </div>
       ) : tableItems.length === 0 ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
-          {isSubView ? "No sub categories found." : "No categories found."}
+          <div className="space-y-1">
+            <p className="font-medium text-slate-700">
+              {debouncedSearch || !parentsOnly
+                ? isSubView
+                  ? "No sub categories match the current filters."
+                  : "No categories match the current filters."
+                : isSubView
+                ? "No sub categories added under this parent yet."
+                : "No categories added yet."}
+            </p>
+            <p>
+              {isSubView
+                ? `Try a different search term or add a child category under ${selectedParentName}.`
+                : debouncedSearch || !parentsOnly
+                ? "Adjust search or reset filters to return to the full catalog view."
+                : "Add a category to start organizing your product catalog hierarchy."}
+            </p>
+          </div>
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -581,6 +777,9 @@ export default function AdminCategoriesPage() {
                 of <span className="font-semibold text-slate-700">{meta.total || 0}</span>
               </>
             )}
+            <span className="ml-2 inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+              {selectedIds.length} selected
+            </span>
           </div>
           <div className="-mx-4 w-auto overflow-x-auto px-4 pb-1 md:mx-0 md:w-full md:px-0">
             <table className="w-full min-w-[980px] text-left text-sm">
@@ -611,7 +810,15 @@ export default function AdminCategoriesPage() {
                   const hasImage = isImagePath(iconValue);
                   const hasEmojiIcon = isEmojiLike(iconValue);
                   const isChildRow = hasParentCategory(category);
+                  const isDeletingRow = deletingCategoryId === category.id && deleteMutation.isPending;
+                  const isPublishingRow =
+                    publishingCategoryId === category.id && publishMutation.isPending;
+                  const isRowBusy = isDeletingRow || isPublishingRow;
                   const canOpenSubcategories = !isSubView && !isChildRow;
+                  const parentLabel =
+                    category?.parent?.name ||
+                    category?.parentName ||
+                    (isChildRow ? `#${getCategoryParentId(category)}` : "Top level");
                   return (
                     <tr
                       key={category.id}
@@ -631,7 +838,12 @@ export default function AdminCategoriesPage() {
                         />
                       </td>
                       <td className={`${tableCell} font-medium tabular-nums text-slate-700`}>
-                        {category.code || category.id}
+                        <div className="space-y-1">
+                          <div>{category.code || category.id}</div>
+                          <div className="text-[11px] font-medium text-slate-400">
+                            {category.code ? `ID #${category.id}` : "Generated code"}
+                          </div>
+                        </div>
                       </td>
                       <td className={tableCell}>
                         {hasImage ? (
@@ -664,18 +876,21 @@ export default function AdminCategoriesPage() {
                           ) : (
                             <span className="font-medium text-slate-900">{category.name}</span>
                           )}
-                          {!isSubView && isChildRow ? (
-                            <p className="truncate text-xs text-slate-500">
-                              Parent:{" "}
-                              {category?.parent?.name ||
-                                category?.parentName ||
-                                `#${getCategoryParentId(category)}`}
-                            </p>
-                          ) : null}
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                            <CategoryTypeBadge isChildRow={isChildRow} isSubView={isSubView} />
+                            <span className="truncate">
+                              {isSubView || isChildRow ? `Parent: ${parentLabel}` : "Open to manage child records"}
+                            </span>
+                          </div>
                         </div>
                       </td>
                       <td className={`${tableCell} max-w-[300px] text-slate-500`}>
-                        <span className="line-clamp-1">{category.description || "-"}</span>
+                        <div className="space-y-1">
+                          <span className="line-clamp-1">{category.description || "-"}</span>
+                          <span className="block text-[11px] font-medium text-slate-400">
+                            {isChildRow || isSubView ? "Child metadata" : "Catalog landing group"}
+                          </span>
+                        </div>
                       </td>
                       <td className={tableCell}>
                         <div className="flex items-center gap-2">
@@ -683,9 +898,10 @@ export default function AdminCategoriesPage() {
                           <button
                             type="button"
                             onClick={() => handleTogglePublished(category)}
+                            disabled={isPublishingRow}
                             className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
                               category.published ? "bg-emerald-500" : "bg-slate-300"
-                            }`}
+                            } ${isPublishingRow ? "cursor-wait opacity-60" : ""}`}
                             aria-label={`Toggle publish for ${category.name}`}
                           >
                             <span
@@ -694,6 +910,13 @@ export default function AdminCategoriesPage() {
                               }`}
                             />
                           </button>
+                        </div>
+                        <div className="mt-1 text-[11px] font-medium text-slate-400">
+                          {isPublishingRow
+                            ? "Updating visibility..."
+                            : category.published
+                            ? "Visible to catalog mapping"
+                            : "Hidden from active mapping"}
                         </div>
                       </td>
                       <td className={`${tableCell} text-right`}>
@@ -715,6 +938,7 @@ export default function AdminCategoriesPage() {
                                 ? "text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
                                 : "pointer-events-auto cursor-not-allowed text-slate-500 opacity-40"
                             }`}
+                            disabled={isRowBusy}
                             aria-label={
                               canOpenSubcategories
                                 ? `Open sub categories for ${category.name}`
@@ -726,23 +950,28 @@ export default function AdminCategoriesPage() {
                           <button
                             type="button"
                             onClick={() => openEdit(category)}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-100"
+                            disabled={isRowBusy}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                             aria-label={`Edit ${category.name}`}
                           >
                             <Pencil className="h-4 w-4" />
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
-                              if (window.confirm(`Delete ${category.name}?`)) {
-                                deleteMutation.mutate(category.id);
-                              }
-                            }}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 text-rose-600 hover:border-rose-300 hover:bg-rose-50"
+                            onClick={() => handleDeleteCategory(category)}
+                            disabled={isRowBusy}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 text-rose-600 hover:border-rose-300 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
                             aria-label={`Delete ${category.name}`}
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
+                        </div>
+                        <div className="mt-1 text-[11px] font-medium text-slate-400">
+                          {isDeletingRow
+                            ? "Deleting category..."
+                            : canOpenSubcategories
+                            ? "View children or quick edit"
+                            : "Quick edit"}
                         </div>
                       </td>
                     </tr>
@@ -794,8 +1023,25 @@ export default function AdminCategoriesPage() {
                     {editing ? "Edit Category" : "Add Category"}
                   </h2>
                   <p className="mt-1 text-xs text-slate-500">
-                    Add your Product and necessary information from here
+                    {editing
+                      ? "Adjust category details, hierarchy, and visibility without leaving the catalog workspace."
+                      : "Create a new catalog group and place it in the right parent level before publishing it."}
                   </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-emerald-700">
+                      {editing ? "Edit Mode" : "Create Mode"}
+                    </span>
+                    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
+                      {isSubView
+                        ? `Parent: ${selectedParentName}`
+                        : form.parent_id
+                        ? `Parent #${form.parent_id}`
+                        : "Top-level category"}
+                    </span>
+                    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
+                      {form.published ? "Ready to publish" : "Saved as inactive"}
+                    </span>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <select
@@ -821,125 +1067,163 @@ export default function AdminCategoriesPage() {
               className="flex-1 space-y-4 overflow-y-auto px-6 py-5"
               onSubmit={handleSubmit}
             >
-              <div>
-                <label className="text-xs font-semibold text-slate-500">Name</label>
-                <input
-                  value={form.name}
-                  onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-                  className="mt-2 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none"
-                  placeholder="Category title"
-                  required
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <CategoryFormSectionHeader
+                  eyebrow="Basic Details"
+                  title="Name the category and describe its role"
+                  description="Use a short title and a practical description so admin mapping and storefront grouping stay aligned."
+                  meta={editing ? `Editing #${editing.id}` : "New category"}
                 />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-500">Description</label>
-                <textarea
-                  value={form.description}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, description: event.target.value }))
-                  }
-                  rows={3}
-                  className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                  placeholder="Category Description"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-500">Parent Category</label>
-                <select
-                  value={form.parent_id}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, parent_id: event.target.value }))
-                  }
-                  disabled={isSubView}
-                  className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm focus:border-emerald-500 focus:outline-none"
-                >
-                  {isSubView ? (
-                    <option value={String(selectedParent?.id ?? "")}>{selectedParentName}</option>
-                  ) : (
-                    <>
-                      <option value="">Home</option>
-                      {parentOptions
-                        .filter((category) => !editing || category.id !== editing.id)
-                        .map((category) => (
-                          <option key={category.id} value={category.id}>
-                            {category.name}
-                          </option>
-                        ))}
-                    </>
-                  )}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-500">Category Image</label>
-                <label className="mt-2 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-xs text-slate-500">
-                  <Upload className="h-4 w-4 text-slate-400" />
-                  <span className="font-medium text-slate-600">Drag your images here</span>
-                  <span>Only *.jpeg, *.jpg and *.png images are accepted</span>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500">Name</label>
                   <input
-                    type="file"
-                    className="hidden"
-                    accept="image/*"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      setImageFileName(file?.name || "");
-                      if (!file) return;
-                      setLocalPreviewUrl((prev) => {
-                        if (toStringSafe(prev).startsWith("blob:")) URL.revokeObjectURL(prev);
-                        return URL.createObjectURL(file);
-                      });
-                      uploadMutation.mutate(file);
-                    }}
+                    value={form.name}
+                    onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+                    className="mt-2 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none"
+                    placeholder="Category title"
+                    required
                   />
-                </label>
-                {imageFileName ? (
-                  <p className="mt-1 text-xs text-slate-500">Selected file: {imageFileName}</p>
-                ) : null}
-                {uploadMutation.isPending || uploadMutation.isLoading ? (
-                  <p className="mt-1 text-xs text-slate-500">Uploading image...</p>
-                ) : null}
-                {uploadError ? (
-                  <p className="mt-1 text-xs text-rose-600">{uploadError}</p>
-                ) : null}
-                <input
-                  value={form.icon}
-                  onChange={(event) => setForm((prev) => ({ ...prev, icon: event.target.value }))}
-                  className="mt-2 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none"
-                  placeholder="Image URL (optional)"
-                />
-                {previewImageUrl ? (
-                  <div className="mt-3 flex min-h-28 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-2 sm:min-h-32">
-                    <img
-                      src={previewImageUrl}
-                      alt="Category preview"
-                      className="max-h-52 w-full rounded-lg object-contain"
-                    />
-                  </div>
-                ) : null}
+                </div>
+
+                <div className="mt-4">
+                  <label className="text-xs font-semibold text-slate-500">Description</label>
+                  <textarea
+                    value={form.description}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, description: event.target.value }))
+                    }
+                    rows={3}
+                    className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                    placeholder="Category Description"
+                  />
+                </div>
               </div>
 
-              <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                <span className="text-sm font-medium text-slate-700">Published</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-500">{form.published ? "Yes" : "No"}</span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setForm((prev) => ({ ...prev, published: !Boolean(prev.published) }))
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <CategoryFormSectionHeader
+                  eyebrow="Hierarchy"
+                  title="Choose where this category should live"
+                  description="Parent selection determines whether the record stays top-level or becomes a child category."
+                  meta={isSubView ? "Parent locked" : "Hierarchy control"}
+                />
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                  <label className="text-xs font-semibold text-slate-500">Parent Category</label>
+                  <select
+                    value={form.parent_id}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, parent_id: event.target.value }))
                     }
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
-                      form.published ? "bg-emerald-500" : "bg-slate-300"
-                    }`}
-                    aria-label="Toggle published"
+                    disabled={isSubView}
+                    className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100"
                   >
-                    <span
-                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
-                        form.published ? "translate-x-5" : "translate-x-0.5"
-                      }`}
+                    {isSubView ? (
+                      <option value={String(selectedParent?.id ?? "")}>{selectedParentName}</option>
+                    ) : (
+                      <>
+                        <option value="">Home</option>
+                        {parentOptions
+                          .filter((category) => !editing || category.id !== editing.id)
+                          .map((category) => (
+                            <option key={category.id} value={category.id}>
+                              {category.name}
+                            </option>
+                          ))}
+                      </>
+                    )}
+                  </select>
+                  <p className="mt-2 text-xs text-slate-500">
+                    {isSubView
+                      ? `This drawer is locked to ${selectedParentName} because it was opened from the sub category view.`
+                      : form.parent_id
+                      ? "This record will be stored as a child category under the selected parent."
+                      : "Leave it on Home to keep this record as a top-level category."}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <CategoryFormSectionHeader
+                  eyebrow="Media & Visibility"
+                  title="Upload an icon and confirm storefront visibility"
+                  description="Use a recognizable image and decide whether this category should be active right after save."
+                  meta={previewImageUrl ? "Preview ready" : "Optional media"}
+                />
+                <div>
+                  <label className="text-xs font-semibold text-slate-500">Category Image</label>
+                  <label className="mt-2 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-xs text-slate-500">
+                    <Upload className="h-4 w-4 text-slate-400" />
+                    <span className="font-medium text-slate-600">Drag your images here</span>
+                    <span>Only *.jpeg, *.jpg and *.png images are accepted</span>
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept="image/*"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        setImageFileName(file?.name || "");
+                        if (!file) return;
+                        setLocalPreviewUrl((prev) => {
+                          if (toStringSafe(prev).startsWith("blob:")) URL.revokeObjectURL(prev);
+                          return URL.createObjectURL(file);
+                        });
+                        uploadMutation.mutate(file);
+                      }}
                     />
-                  </button>
+                  </label>
+                  {imageFileName ? (
+                    <p className="mt-1 text-xs text-slate-500">Selected file: {imageFileName}</p>
+                  ) : null}
+                  {uploadMutation.isPending || uploadMutation.isLoading ? (
+                    <p className="mt-1 text-xs text-slate-500">Uploading image...</p>
+                  ) : null}
+                  {uploadError ? (
+                    <p className="mt-1 text-xs text-rose-600">{uploadError}</p>
+                  ) : null}
+                  <input
+                    value={form.icon}
+                    onChange={(event) => setForm((prev) => ({ ...prev, icon: event.target.value }))}
+                    className="mt-2 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none"
+                    placeholder="Image URL (optional)"
+                  />
+                  {previewImageUrl ? (
+                    <div className="mt-3 flex min-h-28 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-2 sm:min-h-32">
+                      <img
+                        src={previewImageUrl}
+                        alt="Category preview"
+                        className="max-h-52 w-full rounded-lg object-contain"
+                      />
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                  <div>
+                    <span className="text-sm font-medium text-slate-700">Published</span>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {form.published
+                        ? "This category will be active for catalog mapping after save."
+                        : "Keep this category hidden until the hierarchy is fully ready."}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500">{form.published ? "Yes" : "No"}</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm((prev) => ({ ...prev, published: !Boolean(prev.published) }))
+                      }
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                        form.published ? "bg-emerald-500" : "bg-slate-300"
+                      }`}
+                      aria-label="Toggle published"
+                    >
+                      <span
+                        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
+                          form.published ? "translate-x-5" : "translate-x-0.5"
+                        }`}
+                      />
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -953,26 +1237,40 @@ export default function AdminCategoriesPage() {
             </form>
 
             <div className="sticky bottom-0 border-t border-slate-200 bg-white px-6 py-4">
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={closeForm}
-                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  form="category-form"
-                  disabled={
-                    isSaving ||
-                    uploadMutation.isPending ||
-                    uploadMutation.isLoading
-                  }
-                  className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                >
-                  {editing ? "Update Category" : "Add Category"}
-                </button>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-1 text-xs text-slate-500">
+                  <p className="font-semibold uppercase tracking-[0.08em] text-slate-500">
+                    Category Action Panel
+                  </p>
+                  <p>
+                    {editing
+                      ? "Review hierarchy and visibility before updating this category."
+                      : "Save this category when hierarchy, media, and publish state are ready."}
+                  </p>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={closeForm}
+                    className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    form="category-form"
+                    disabled={isFormBusy}
+                    className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  >
+                    {isFormBusy
+                      ? editing
+                        ? "Saving..."
+                        : "Creating..."
+                      : editing
+                      ? "Update Category"
+                      : "Add Category"}
+                  </button>
+                </div>
               </div>
             </div>
           </aside>

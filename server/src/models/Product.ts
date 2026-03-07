@@ -12,6 +12,7 @@ export interface ProductAttributes {
   stock: number;
   userId: number;
   categoryId?: number;
+  defaultCategoryId?: number | null;
   status: "active" | "inactive" | "draft";
   isPublished: boolean;
   description?: string;
@@ -56,6 +57,7 @@ class Product
   declare stock: number;
   declare userId: number;
   declare categoryId?: number;
+  declare defaultCategoryId?: number | null;
   declare status: "active" | "inactive" | "draft";
   declare isPublished: boolean;
   declare description?: string;
@@ -84,6 +86,16 @@ class Product
     Product.belongsTo(models.Category, {
       foreignKey: "categoryId",
       as: "category",
+    });
+    Product.belongsTo(models.Category, {
+      foreignKey: "defaultCategoryId",
+      as: "defaultCategory",
+    });
+    Product.belongsToMany(models.Category, {
+      through: models.ProductCategory,
+      foreignKey: "productId",
+      otherKey: "categoryId",
+      as: "categories",
     });
     Product.belongsTo(models.User, {
       foreignKey: "userId",
@@ -144,6 +156,14 @@ class Product
           },
         },
         categoryId: {
+          type: DataTypes.INTEGER.UNSIGNED,
+          allowNull: true,
+          references: {
+            model: "categories",
+            key: "id",
+          },
+        },
+        defaultCategoryId: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: true,
           references: {

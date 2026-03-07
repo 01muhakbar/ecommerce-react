@@ -1,75 +1,98 @@
-# TASK-3 UI Parity Sprint #2 (Cart + Checkout)
+# TASK-3 - Patch Service Fallback Berisiko pada Products & Orders
 
-## Amati Notes (KachaBazar)
+## Task ID
 
-- Visual language dominan: kartu putih dengan border halus, radius besar, aksen hijau untuk CTA utama, dan latar abu lembut.
-- Cart feel: daftar item padat namun rapi (thumbnail, nama produk, harga, qty stepper, remove), lalu ringkasan total di panel terpisah.
-- Checkout feel: layout dua kolom desktop (form di kiri, order summary di kanan), dan stack vertikal di mobile.
-- Summary card menggunakan hierarki harga yang jelas (subtotal/shipping/discount/total) dengan CTA utama menonjol.
-- Responsiveness: mobile mempertahankan CTA full-width, spacing ringkas, dan blok informasi tetap terbaca tanpa layout patah.
+`TASK-3`
 
-## Discovery & File Budget
+## Objective
 
-### Route/entry aktif MVF
+Mengurangi fallback service yang bisa menyamarkan kegagalan API pada `products.service.js` dan `orders.service.js`, supaya Admin dan Storefront lebih disiplin mengikuti source of truth backend tanpa refactor besar.
 
-- `client/src/pages/store/StoreCartPage.jsx` (cart page + cart drawer)
-- `client/src/pages/store/Checkout.jsx` (checkout form + order summary)
-- `client/src/pages/store/StoreCheckoutSuccessPage.jsx` (success page, kandidat minor alignment jika diperlukan)
+## Selected Risky Fallbacks
 
-### Planned file changes (<=10)
+1. `client/src/api/products.service.js`
+   - Dummy fallback pada `listProducts()`
+   - Dummy fallback pada `createProduct()`
+   - Dummy fallback pada `updateProduct()`
+   - Dummy fallback pada `deleteProduct()`
+2. `client/src/api/orders.service.js`
+   - Dummy fallback pada `listOrders()`
+   - Dummy fallback pada `updateOrderStatus()`
 
-1. `client/src/pages/store/StoreCartPage.jsx`
-2. `client/src/pages/store/Checkout.jsx`
-3. `client/src/pages/store/StoreCheckoutSuccessPage.jsx` (opsional, hanya jika perlu alignment ringan)
+## Why These Were Prioritized
 
-### Actual file changes
+- `products.service.js` dipakai oleh halaman Store utama melalui `useProducts`, termasuk Home, Search, Product Detail related products, dan KachaBazar demo home.
+- `orders.service.js` dipakai aktif oleh dashboard admin untuk recent orders dan update status cepat.
+- Fallback ini dapat membuat fetch gagal tampak seperti data valid, atau membuat mutasi admin tampak sukses walau backend gagal menyimpan perubahan.
 
-1. `client/src/pages/store/StoreCartPage.jsx`
-2. `client/src/pages/store/Checkout.jsx`
+## Files Changed
 
-## Before/After Notes
+- `client/src/api/products.service.js`
+- `client/src/api/orders.service.js`
+- `CODEx_REPORTS/TASK-3.md`
 
-### Cart page + cart drawer (`StoreCartPage.jsx`)
+## What Changed
 
-- Before:
-  - Item row masih compact/basic, hierarki harga belum tegas, summary card masih sederhana.
-  - Drawer footer belum menonjolkan total secara jelas.
-- After:
-  - Item row lebih mendekati pola KachaBazar: thumbnail lebih tegas, informasi harga + total item, qty stepper lebih konsisten, remove action tetap stabil.
-  - Summary area diperjelas (subtotal + total + dashed separator), badge jumlah item ditampilkan di card summary.
-  - Mobile CTA tetap full-width, desktop tetap 2 kolom (items + summary) dengan spacing lebih rapi.
+### `client/src/api/products.service.js`
 
-### Checkout layout + summary (`Checkout.jsx`)
+- Menghapus import dummy products.
+- Menghapus fallback dummy pada `listProducts()`.
+- Menghapus fallback dummy pada `createProduct()`, `updateProduct()`, dan `deleteProduct()`.
+- Menghapus helper dummy-only yang tidak lagi dipakai.
 
-- Before:
-  - Form sections masih terasa campuran panel abu, hierarchy visual belum sekuat referensi.
-  - Order summary card sudah ada, tapi density item row/stepper/button belum konsisten dengan target parity.
-  - Tombol submit berpotensi shifting isi saat loading.
-- After:
-  - Checkout card diberi hierarchy lebih jelas (label “Secure Checkout”, border/shadow lebih konsisten).
-  - Form section distandarkan ke card putih ber-border (lebih dekat feel KachaBazar).
-  - Order Summary ditingkatkan: item badge, item row lebih rapi, qty control density diseragamkan.
-  - Tombol `Place Order` sekarang menjaga stabilitas isi saat loading (`spinner slot` tetap ada), tetap disable saat submit/sync.
-  - Tidak ada perubahan API call, payload, ataupun kalkulasi subtotal/discount/total.
+### `client/src/api/orders.service.js`
 
-## Commands & Results
+- Menghapus import dummy orders.
+- Menghapus fallback dummy pada `listOrders()`.
+- Menghapus fallback dummy pada `updateOrderStatus()`.
+- Menghapus helper dummy-only yang tidak lagi dipakai.
 
-- `pnpm qa:mvf` -> PASS
-  - Artifact: `.codex-artifacts/qa-mvf/20260303-083000/result.json`
-  - Summary: `.codex-artifacts/qa-mvf/20260303-083000/summary.txt`
-- `pnpm --filter client exec vite build` -> PASS
-- `pnpm dev` (smoke startup + route readiness)
-  - Client ready: `http://localhost:5173`
-  - Server ready: `http://localhost:3001`
-  - Route checks:
-    - `http://localhost:5173/cart` -> `200`
-    - `http://localhost:5173/checkout` -> `200`
-    - `http://localhost:5173/checkout/success` -> `200`
+## Before vs After
 
-## Known Gaps + Rekomendasi Task #4
+### Before
 
-- Pixel parity belum 100% karena implementasi tetap mengikuti komponen/style system lokal repo.
-- Cart drawer masih page-level implementation (belum global drawer system), sesuai scope.
-- Checkout success page tidak diubah karena alignment saat ini sudah konsisten dan tidak menghambat MVF.
-- Typographic scale masih menggunakan token Tailwind lokal, bukan token khusus parity reference.
-- Rekomendasi TASK #4: parity sprint untuk `Product Detail + Order Tracking` agar transisi end-to-end store flow lebih seragam dengan acuan KachaBazar.
+- Saat API products/orders gagal dan env dummy aktif, service bisa mengembalikan data lokal dummy atau mengembalikan sukses palsu.
+- Home/Search/Product related products bisa tetap terlihat berisi walau fetch katalog admin gagal.
+- Dashboard admin bisa tetap menampilkan recent orders atau update status seolah sukses walau API bermasalah.
+
+### After
+
+- Saat API gagal, service melempar error ke hook/page caller.
+- Hook dan halaman existing sekarang menampilkan error/empty state yang lebih jujur.
+- Tidak ada lagi mutasi products/orders yang diam-diam sukses terhadap data dummy lokal.
+
+## Verification Run
+
+1. `pnpm --filter client exec vite build`
+   - PASS
+2. `pnpm qa:mvf`
+   - Run 1: FAIL karena masalah startup/proses lokal transient
+   - Run 2: PASS
+3. QA artifact:
+   - `.codex-artifacts/qa-mvf/20260306-215708/result.json`
+   - `.codex-artifacts/qa-mvf/20260306-215708/summary.txt`
+
+## MVF Impact
+
+- Store Home: PASS
+- Store Search: PASS
+- Product Detail: PASS
+- Cart / Checkout / Success / Tracking: PASS
+- Admin Login: PASS
+- Admin Orders List: PASS
+- Admin Order Detail: PASS
+- Admin Update Status Persist: PASS
+
+## Risks / Follow-up
+
+- Environment dev yang sebelumnya mengandalkan env dummy untuk tetap terlihat "jalan" sekarang akan memunculkan error state yang lebih jujur.
+- `products.service.js` masih dipakai pada jalur Store lama/hook lama, jadi task lanjutan sebaiknya audit apakah seluruh jalur read products sudah memakai contract yang sama dengan public store API.
+- `Dashboard.jsx` masih memakai `orders.service.js` lama, sedangkan halaman admin orders utama memakai `lib/adminApi.js`. Ada peluang konsolidasi ringan pada task terpisah, tetapi itu di luar scope task ini.
+
+## Recommended Next Task
+
+`[TASK-4] Audit Contract Read Path Products (Store hooks vs public store API)`
+
+## Final Status
+
+`PASS`

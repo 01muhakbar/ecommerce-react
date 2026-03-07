@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "react-router-dom";
+import { Search } from "lucide-react";
 import { fetchAdminLanguages } from "../../lib/adminApi.js";
 import ThemeToggle from "../admin/ThemeToggle.jsx";
 import AdminProfileMenu from "../admin/AdminProfileMenu.jsx";
@@ -182,73 +183,85 @@ export default function Navbar({ theme = "light", onToggleTheme }) {
           <span />
           <span />
         </button>
-        <div>
-          <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-400">
-            Admin Panel
-          </p>
-          <p className="text-[15px] font-semibold text-slate-800">{pageTitle}</p>
+        <div className="navbar__title-block">
+          <p className="navbar__eyebrow">Admin Panel</p>
+          <p className="navbar__page-title">{pageTitle}</p>
+        </div>
+        <div className="navbar__search-shell" role="search" aria-label="Admin search">
+          <Search size={16} className="navbar__search-icon" />
+          <input
+            type="search"
+            value=""
+            readOnly
+            tabIndex={-1}
+            aria-label="Admin search placeholder"
+            placeholder={`Search inside ${pageTitle.toLowerCase()}...`}
+            className="navbar__search-input"
+          />
         </div>
       </div>
       <div className="navbar__actions">
-        <div className="navbar__lang-wrap" ref={langDropdownRef}>
-          <button
-            className={`navbar__lang ${langOpen ? "is-open" : ""}`}
-            type="button"
-            onClick={() => {
-              setActiveMenu(null);
-              setLangOpen((prev) => !prev);
-            }}
-            aria-haspopup="menu"
-            aria-expanded={langOpen}
-          >
-            <span className="navbar__lang-text">{chipText}</span>
-            <svg viewBox="0 0 24 24" aria-hidden="true" className="navbar__lang-caret">
-              <path d="M7 10l5 5 5-5" />
-            </svg>
-          </button>
-          {langOpen ? (
-            <div className="navbar__lang-menu" role="menu">
-              {languagesQuery.isLoading ? (
-                <p className="navbar__lang-empty">Loading languages...</p>
-              ) : publishedLanguages.length === 0 ? (
-                <p className="navbar__lang-empty">No published languages.</p>
-              ) : (
-                publishedLanguages.map((language) => {
-                  const isSelected = selectedLanguage?.isoCode === language.isoCode;
-                  return (
-                    <button
-                      key={language.id || language.isoCode}
-                      type="button"
-                      role="menuitem"
-                      className={`navbar__lang-item ${isSelected ? "is-selected" : ""}`}
-                      onClick={() => handleLanguageSelect(language)}
-                    >
-                      <span className="navbar__lang-item-main">
-                        {(language.flag || language.isoCode).toUpperCase()}{" "}
-                        {language.name.toUpperCase()}
-                      </span>
-                      <span className="navbar__lang-item-iso">
-                        {language.isoCode.toUpperCase()}
-                      </span>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          ) : null}
+        <div className="navbar__cluster">
+          <div className="navbar__lang-wrap" ref={langDropdownRef}>
+            <button
+              className={`navbar__lang ${langOpen ? "is-open" : ""}`}
+              type="button"
+              onClick={() => {
+                setActiveMenu(null);
+                setLangOpen((prev) => !prev);
+              }}
+              aria-haspopup="menu"
+              aria-expanded={langOpen}
+            >
+              <span className="navbar__lang-text">{chipText}</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true" className="navbar__lang-caret">
+                <path d="M7 10l5 5 5-5" />
+              </svg>
+            </button>
+            {langOpen ? (
+              <div className="navbar__lang-menu" role="menu">
+                {languagesQuery.isLoading ? (
+                  <p className="navbar__lang-empty">Loading languages...</p>
+                ) : publishedLanguages.length === 0 ? (
+                  <p className="navbar__lang-empty">No published languages.</p>
+                ) : (
+                  publishedLanguages.map((language) => {
+                    const isSelected = selectedLanguage?.isoCode === language.isoCode;
+                    return (
+                      <button
+                        key={language.id || language.isoCode}
+                        type="button"
+                        role="menuitem"
+                        className={`navbar__lang-item ${isSelected ? "is-selected" : ""}`}
+                        onClick={() => handleLanguageSelect(language)}
+                      >
+                        <span className="navbar__lang-item-main">
+                          {(language.flag || language.isoCode).toUpperCase()}{" "}
+                          {language.name.toUpperCase()}
+                        </span>
+                        <span className="navbar__lang-item-iso">
+                          {language.isoCode.toUpperCase()}
+                        </span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            ) : null}
+          </div>
+          <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+          <AdminNotifications
+            open={activeMenu === "notify"}
+            onToggle={() => toggleMenu("notify")}
+            containerRef={notifyDropdownRef}
+          />
+          <AdminProfileMenu
+            open={activeMenu === "profile"}
+            onToggle={() => toggleMenu("profile")}
+            onClose={() => setActiveMenu(null)}
+            containerRef={profileDropdownRef}
+          />
         </div>
-        <ThemeToggle theme={theme} onToggle={onToggleTheme} />
-        <AdminNotifications
-          open={activeMenu === "notify"}
-          onToggle={() => toggleMenu("notify")}
-          containerRef={notifyDropdownRef}
-        />
-        <AdminProfileMenu
-          open={activeMenu === "profile"}
-          onToggle={() => toggleMenu("profile")}
-          onClose={() => setActiveMenu(null)}
-          containerRef={profileDropdownRef}
-        />
       </div>
     </header>
   );

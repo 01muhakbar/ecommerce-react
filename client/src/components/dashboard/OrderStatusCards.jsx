@@ -46,16 +46,25 @@ export default function OrderStatusCards({
           <div className={`status-mini-card__icon status-mini-card__icon--${item.id}`}>
             {ICONS[item.id]}
           </div>
-          <div>
+          <div className="status-mini-card__content">
             <div className="status-mini-card__label">
               {labelMap[item.id] || item.label}
             </div>
+            <div className="status-mini-card__value">{item.count}</div>
             {item.id === "pending" ? (
               <div className="status-mini-card__note">
                 ({formatPendingAmount(pendingAmount)})
               </div>
             ) : null}
-            <div className="status-mini-card__value">{item.count}</div>
+            <div className="status-mini-card__hint">
+              {item.id === "total"
+                ? "All recorded orders"
+                : item.id === "pending"
+                  ? "Need manual attention"
+                  : item.id === "processing"
+                    ? "Currently in fulfillment"
+                    : "Successfully completed"}
+            </div>
           </div>
         </div>
       ))}

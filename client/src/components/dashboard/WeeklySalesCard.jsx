@@ -34,37 +34,53 @@ export default function WeeklySalesCard({
     }
     return normalized;
   };
+  const summaryValue = useMemo(() => {
+    const total = data.reduce((sum, item) => sum + Number(item.value || 0), 0);
+    if (activeTab === "orders") {
+      return total;
+    }
+    return typeof formatMoney === "function" ? formatMoney(total) : total;
+  }, [activeTab, data, formatMoney]);
 
   return (
     <div className="dashboard-card dashboard-card--chart">
       <div className="dashboard-card__header">
-        <div>
+        <div className="dashboard-card__header-copy">
+          <span className="dashboard-card__eyebrow">Trend overview</span>
           <h3 className="dashboard-card__title">Weekly Sales</h3>
           <span className="dashboard-card__hint">Last 7 days</span>
         </div>
-        <div className="dashboard-tabs" role="tablist" aria-label="Sales Tabs">
-          <button
-            type="button"
-            className={`dashboard-tab ${
-              activeTab === "sales" ? "is-active" : ""
-            }`}
-            onClick={() => setActiveTab("sales")}
-            role="tab"
-            aria-selected={activeTab === "sales"}
-          >
-            Sales
-          </button>
-          <button
-            type="button"
-            className={`dashboard-tab ${
-              activeTab === "orders" ? "is-active" : ""
-            }`}
-            onClick={() => setActiveTab("orders")}
-            role="tab"
-            aria-selected={activeTab === "orders"}
-          >
-            Orders
-          </button>
+        <div className="dashboard-card__header-right">
+          <div className="dashboard-card__metric">
+            <span className="dashboard-card__metric-label">
+              {activeTab === "sales" ? "7-day sales" : "7-day orders"}
+            </span>
+            <strong>{summaryValue}</strong>
+          </div>
+          <div className="dashboard-tabs" role="tablist" aria-label="Sales Tabs">
+            <button
+              type="button"
+              className={`dashboard-tab ${
+                activeTab === "sales" ? "is-active" : ""
+              }`}
+              onClick={() => setActiveTab("sales")}
+              role="tab"
+              aria-selected={activeTab === "sales"}
+            >
+              Sales
+            </button>
+            <button
+              type="button"
+              className={`dashboard-tab ${
+                activeTab === "orders" ? "is-active" : ""
+              }`}
+              onClick={() => setActiveTab("orders")}
+              role="tab"
+              aria-selected={activeTab === "orders"}
+            >
+              Orders
+            </button>
+          </div>
         </div>
       </div>
       <div className="dashboard-chart">

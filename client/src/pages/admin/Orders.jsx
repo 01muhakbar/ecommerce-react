@@ -43,6 +43,16 @@ const getCustomerName = (order) =>
 
 const getCustomerHint = (order) => toText(order?.customer?.email || order?.ref) || "";
 
+const getStatusNote = (status) => {
+  const value = toUIStatus(status || "pending");
+  if (value === "pending") return "Needs review";
+  if (value === "processing") return "Being prepared";
+  if (value === "shipping") return "In delivery";
+  if (value === "delivered" || value === "complete") return "Completed";
+  if (value === "cancel" || value === "cancelled") return "Stopped";
+  return "Awaiting action";
+};
+
 const methodLabelMap = {
   cash: "Cash",
   card: "Card",
@@ -494,8 +504,13 @@ export default function Orders() {
                     rowIndex % 2 === 0 ? "bg-white" : "bg-slate-50/35"
                   }`}
                 >
-                  <td className="px-4 py-3.5 font-semibold text-slate-900">
-                    {getInvoiceLabel(order)}
+                  <td className="px-4 py-3.5">
+                    <div className="space-y-1">
+                      <div className="font-semibold text-slate-900">{getInvoiceLabel(order)}</div>
+                      <div className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        Ref Ready
+                      </div>
+                    </div>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3.5 text-slate-600">
                     {formatDateTime(orderDateValue)}
@@ -511,10 +526,19 @@ export default function Orders() {
                     {formatMoney(order.totalAmount || order.amount || 0)}
                   </td>
                   <td className="px-4 py-3.5">
-                    <OrderStatusBadge status={uiStatus || "-"} />
+                    <div className="space-y-1.5">
+                      <OrderStatusBadge status={uiStatus || "-"} />
+                      <div className="text-[11px] font-medium text-slate-400">
+                        {getStatusNote(order.status)}
+                      </div>
+                    </div>
                   </td>
                   <td className="w-[170px] px-4 py-3.5">
-                    <div className="flex items-center gap-2">
+                    <div className="space-y-2">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                        Quick Update
+                      </div>
+                      <div className="flex items-center gap-2">
                       <select
                         value={actionStatus}
                         onChange={(event) => onUpdateStatus(order, event.target.value)}
@@ -530,6 +554,7 @@ export default function Orders() {
                       {isUpdating ? (
                         <UiUpdatingBadge label="Saving..." />
                       ) : null}
+                      </div>
                     </div>
                   </td>
                   <td className="w-[120px] px-4 py-3.5">

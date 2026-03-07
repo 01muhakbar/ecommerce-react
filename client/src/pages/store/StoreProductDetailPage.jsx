@@ -56,6 +56,12 @@ const HIGHLIGHT_ITEMS = [
   },
 ];
 
+const QUICK_BUY_BENEFITS = [
+  { icon: Truck, title: "Fast delivery", text: "Same-day delivery in selected areas." },
+  { icon: Banknote, title: "Cash on delivery", text: "Pay when the order arrives at your door." },
+  { icon: RotateCcw, title: "Easy returns", text: "Support is available if the order needs follow-up." },
+];
+
 const toPositiveNumber = (value, fallback = 0) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -265,6 +271,9 @@ function ProductSummaryPanel({
     >
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2.5">
+          <span className="inline-flex h-8 items-center rounded-full bg-slate-100 px-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+            Product Details
+          </span>
           <span
             className={`inline-flex h-8 items-center rounded-full border px-3 text-xs font-semibold uppercase tracking-wide ${
               hasStock
@@ -287,28 +296,60 @@ function ProductSummaryPanel({
         >
           {product?.name || "Product"}
         </h1>
-        <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
-          <RatingStars rating={ratingAvg} showValue />
-          <span className="text-slate-300">|</span>
-          <span className="font-medium text-slate-600">
-            ({reviewCount} {reviewCount === 1 ? "review" : "reviews"})
-          </span>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm text-slate-700">
+            <RatingStars rating={ratingAvg} showValue />
+            <span className="text-slate-300">|</span>
+            <span className="font-medium text-slate-600">
+              {reviewCount} {reviewCount === 1 ? "review" : "reviews"}
+            </span>
+          </div>
+          <div className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+            {categoryName}
+          </div>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-          Price
-        </p>
-        <div className="mt-2 flex flex-wrap items-end gap-2.5">
-          <span className="text-3xl font-bold leading-none text-slate-900 sm:text-[38px]">
-            {formatCurrency(currentPrice)}
-          </span>
-          {hasDiscount ? (
-            <span className="text-base font-medium text-slate-400 line-through sm:text-lg">
-              {formatCurrency(originalPrice)}
-            </span>
-          ) : null}
+      <div className="rounded-[24px] border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 shadow-[0_10px_22px_rgba(15,23,42,0.05)] sm:p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+              Price
+            </p>
+            <div className="mt-2 flex flex-wrap items-end gap-2.5">
+              <span className="text-3xl font-bold leading-none text-slate-900 sm:text-[40px]">
+                {formatCurrency(currentPrice)}
+              </span>
+              {hasDiscount ? (
+                <span className="text-base font-medium text-slate-400 line-through sm:text-lg">
+                  {formatCurrency(originalPrice)}
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-2 text-sm text-slate-500">
+              Taxes and shipping are calculated during checkout.
+            </p>
+          </div>
+          <div className="grid gap-2 sm:min-w-[200px]">
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-600">
+                Availability
+              </p>
+              <p className="mt-1 text-sm font-semibold text-slate-900">
+                {hasStock ? `Ready to order (${stockLabel})` : "Currently unavailable"}
+              </p>
+            </div>
+            {hasDiscount ? (
+              <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-rose-600">
+                  Savings
+                </p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">
+                  Save {discountPercent.toFixed(1)}% on this item today
+                </p>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
 
@@ -335,10 +376,20 @@ function ProductSummaryPanel({
         </div>
       </div>
 
-      <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-          Quantity
-        </p>
+      <div className="space-y-4 rounded-[24px] border border-slate-200 bg-slate-50/80 p-4 shadow-[0_10px_22px_rgba(15,23,42,0.05)] sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+              Quantity
+            </p>
+            <p className="mt-1 text-sm text-slate-500">
+              Adjust quantity, then add the product to your cart.
+            </p>
+          </div>
+          <div className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">
+            {hasStock ? "Ready to Buy" : "Unavailable"}
+          </div>
+        </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="grid h-12 w-full grid-cols-3 overflow-hidden rounded-full border border-slate-300 bg-white sm:w-[188px]">
             <button
@@ -365,7 +416,7 @@ function ProductSummaryPanel({
             type="button"
             disabled={!hasStock || cartLoading || isProductLoading}
             onClick={onAddToCart}
-            className="inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-8 text-base font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:flex-1"
+            className="inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-8 text-base font-semibold text-white shadow-[0_14px_26px_rgba(5,150,105,0.28)] transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:flex-1"
           >
             Add to Cart
           </button>
@@ -375,6 +426,22 @@ function ProductSummaryPanel({
             ? `Available stock: ${stockLabel}`
             : "Stock availability is updated at checkout."}
         </p>
+        <div className="grid gap-2.5 sm:grid-cols-3">
+          {QUICK_BUY_BENEFITS.map((benefit) => (
+            <div
+              key={benefit.title}
+              className="rounded-2xl border border-white bg-white/80 px-3 py-3 shadow-[0_4px_10px_rgba(15,23,42,0.04)]"
+            >
+              <div className="flex items-center gap-2">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                  <benefit.icon className="h-4 w-4" />
+                </span>
+                <p className="text-sm font-semibold text-slate-900">{benefit.title}</p>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-slate-500">{benefit.text}</p>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="space-y-3 border-t border-slate-200 pt-4">

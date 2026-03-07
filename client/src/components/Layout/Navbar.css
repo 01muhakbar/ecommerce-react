@@ -15,7 +15,9 @@
 .navbar__left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
 }
 
 .navbar__menu {
@@ -41,6 +43,75 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  margin-left: 16px;
+}
+
+.navbar__title-block {
+  display: grid;
+  gap: 2px;
+  min-width: max-content;
+}
+
+.navbar__eyebrow {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.navbar__page-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.navbar__search-shell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 180px;
+  max-width: 440px;
+  height: 44px;
+  padding: 0 14px 0 40px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+}
+
+.navbar__search-icon {
+  position: absolute;
+  left: 14px;
+  color: #94a3b8;
+}
+
+.navbar__search-input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: #475569;
+  font-size: 13px;
+  outline: none;
+  pointer-events: none;
+}
+
+.navbar__search-input::placeholder {
+  color: #94a3b8;
+}
+
+.navbar__cluster {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px 6px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.05);
 }
 
 .navbar__lang {
@@ -433,6 +504,30 @@
   color: #94a3b8;
 }
 
+.admin-theme-dark .navbar__page-title {
+  color: #f8fafc;
+}
+
+.admin-theme-dark .navbar__eyebrow {
+  color: #64748b;
+}
+
+.admin-theme-dark .navbar__search-shell,
+.admin-theme-dark .navbar__cluster {
+  border-color: #334155;
+  background: rgba(15, 23, 42, 0.92);
+  box-shadow: 0 12px 24px rgba(2, 6, 23, 0.28);
+}
+
+.admin-theme-dark .navbar__search-input {
+  color: #cbd5e1;
+}
+
+.admin-theme-dark .navbar__search-input::placeholder,
+.admin-theme-dark .navbar__search-icon {
+  color: #64748b;
+}
+
 .admin-theme-dark .navbar__icon {
   color: #34d399;
 }
@@ -505,4 +600,53 @@
 .admin-theme-dark .navbar__notify-delete:hover {
   border-color: #881337;
   background: #4c0519;
+}
+
+@media (max-width: 1080px) {
+  .navbar {
+    padding: 0 18px;
+  }
+
+  .navbar__search-shell {
+    max-width: 320px;
+  }
+}
+
+@media (max-width: 840px) {
+  .navbar {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px 18px;
+  }
+
+  .navbar__left,
+  .navbar__actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .navbar__actions {
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 640px) {
+  .navbar__left {
+    flex-wrap: wrap;
+  }
+
+  .navbar__title-block {
+    min-width: auto;
+  }
+
+  .navbar__search-shell,
+  .navbar__cluster {
+    width: 100%;
+    max-width: none;
+  }
+
+  .navbar__cluster {
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
 }

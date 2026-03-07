@@ -35,33 +35,6 @@ const slides = [
   },
 ];
 
-const dummyCoupons = [
-  {
-    id: 1,
-    code: "SUMMER24",
-    discountLabel: "10% Off",
-    title: "Special discount for all grocery products",
-    countdown: "00 : 00 : 00 : 00",
-    status: "Active",
-  },
-  {
-    id: 2,
-    code: "WELCOME",
-    discountLabel: `${formatCurrency(100)} Off`,
-    title: "Get instant savings for your first checkout",
-    countdown: "00 : 00 : 00 : 00",
-    status: "Active",
-  },
-  {
-    id: 3,
-    code: "SAVE10",
-    discountLabel: "10% Off",
-    title: "Weekend limited voucher for selected products",
-    countdown: "00 : 00 : 00 : 00",
-    status: "Inactive",
-  },
-];
-
 export default function KachaBazarDemoHomePage() {
   const {
     data: categoriesData,
@@ -107,17 +80,27 @@ export default function KachaBazarDemoHomePage() {
   const [copiedCode, setCopiedCode] = useState("");
   const [coupons, setCoupons] = useState([]);
   const [couponError, setCouponError] = useState("");
+  const [isCouponsLoading, setIsCouponsLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
     const loadCoupons = async () => {
+      if (mounted) {
+        setIsCouponsLoading(true);
+        setCouponError("");
+      }
       try {
         const response = await fetchStoreCoupons();
         if (!mounted) return;
-        setCoupons(response.data || []);
+        setCoupons(Array.isArray(response.data) ? response.data : []);
       } catch (err) {
         if (!mounted) return;
-        setCouponError("Failed to load coupons.");
+        setCoupons([]);
+        setCouponError("Failed to load coupons from the store API.");
+      } finally {
+        if (mounted) {
+          setIsCouponsLoading(false);
+        }
       }
     };
     loadCoupons();
@@ -127,28 +110,25 @@ export default function KachaBazarDemoHomePage() {
   }, []);
 
   const popularProducts = rawProducts;
-  const couponList =
-    coupons.length > 0
-      ? coupons.map((coupon) => ({
-          id: coupon.id,
-          code: coupon.code,
-          discountLabel:
-            coupon.discountType === "percent"
-              ? `${coupon.amount}% Off`
-              : `${formatCurrency(Number(coupon.amount || 0))} Off`,
-          title:
-            coupon.discountType === "percent"
-              ? `Save up to ${coupon.amount}% on selected items`
-              : `Flat savings of ${formatCurrency(Number(coupon.amount || 0))}`,
-          countdown: "00 : 00 : 00 : 00",
-          status:
-            coupon.expiresAt && Number.isFinite(Date.parse(coupon.expiresAt))
-              ? Date.parse(coupon.expiresAt) > Date.now()
-                ? "Active"
-                : "Inactive"
-              : "Active",
-        }))
-      : dummyCoupons;
+  const couponList = coupons.map((coupon) => ({
+    id: coupon.id,
+    code: coupon.code,
+    discountLabel:
+      coupon.discountType === "percent"
+        ? `${coupon.amount}% Off`
+        : `${formatCurrency(Number(coupon.amount || 0))} Off`,
+    title:
+      coupon.discountType === "percent"
+        ? `Save up to ${coupon.amount}% on selected items`
+        : `Flat savings of ${formatCurrency(Number(coupon.amount || 0))}`,
+    countdown: "00 : 00 : 00 : 00",
+    status:
+      coupon.expiresAt && Number.isFinite(Date.parse(coupon.expiresAt))
+        ? Date.parse(coupon.expiresAt) > Date.now()
+          ? "Active"
+          : "Inactive"
+        : "Active",
+  }));
 
   const safeProducts = useMemo(
     () =>
@@ -224,6 +204,7 @@ export default function KachaBazarDemoHomePage() {
             <div>
               <CouponPanel
                 couponList={couponList}
+                isLoading={isCouponsLoading}
                 couponError={couponError}
                 copiedCode={copiedCode}
                 onCopy={handleCopyCoupon}

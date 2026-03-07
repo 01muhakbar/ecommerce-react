@@ -153,6 +153,38 @@ export const createAdminProduct = async (payload) => {
   return data;
 };
 
+export const exportAdminProducts = async (params = {}) => {
+  const query = new URLSearchParams(
+    Object.entries({
+      q: params?.q || undefined,
+      categoryId: params?.categoryId || undefined,
+    }).filter(([, value]) => value !== undefined && value !== null && value !== "")
+  ).toString();
+  const endpoint = query ? `/api/admin/products/export?${query}` : "/api/admin/products/export";
+  const response = await fetch(endpoint, { credentials: "include" });
+
+  if (!response.ok) {
+    const fallback = `Failed to export products (${response.status}).`;
+    try {
+      const payload = await response.json();
+      throw new Error(payload?.message || fallback);
+    } catch {
+      throw new Error(fallback);
+    }
+  }
+
+  return response;
+};
+
+export const importAdminProducts = async (file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await adminApi.post("/admin/products/import", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+};
+
 export const updateAdminProduct = async (id, payload) => {
   const { data } = await adminApi.patch(`/admin/products/${id}`, payload);
   return data;

@@ -1,67 +1,99 @@
-# TASK-5 Storefront About Us (Render from Store Customization)
+# TASK-5 - Checkout Parity Polish Prioritas Tinggi pada Storefront
 
-## Discovery (Route + Endpoint)
+## Task ID
 
-### Route discovery
+`TASK-5`
 
-- Store route exists:
-  - `client/src/App.jsx`: `path="about-us"` -> `StoreAboutUsPage`
-  - Alias route: `path="about"` -> redirect to `/about-us`
-- Current About page file:
-  - `client/src/pages/store/StoreAboutUsPage.jsx`
-  - Current content is static/hardcoded (not bound to customization API).
+## Objective
 
-### Endpoint discovery
+Memoles halaman checkout aktif agar lebih dekat ke pola storefront KachaBazar pada area dengan dampak UX tertinggi, tanpa mengubah flow submit, backend, atau contract API.
 
-- Admin customization endpoint exists:
-  - `GET/PUT /api/admin/store/customization?lang=...`
-  - Guarded by `requireAdmin` in `server/src/app.ts`.
-- Public/store endpoint for customization **not found**:
-  - No `/api/store/customization` route in `server/src/routes/store.ts`.
-  - No equivalent customization endpoint in `server/src/routes/public.ts`.
+## Audited Page
 
-## Candidate Files (from Step A)
+- `/checkout`
+- Implementasi aktif: `client/src/pages/store/Checkout.jsx`
+- Referensi audit: `https://kachabazar-store-nine.vercel.app`
 
-1. `client/src/pages/store/StoreAboutUsPage.jsx`
-2. `client/src/App.jsx` (route confirmed, likely no change needed)
-3. `client/src/api/store.service.ts` (candidate if public fetch method existed)
-4. `server/src/routes/store.ts` (checked for public customization endpoint)
-5. `server/src/routes/public.ts` (checked for public customization endpoint)
-6. `server/src/app.ts` (checked route mounting + auth guards)
+## Key Parity Gaps
 
-## Blocking Issue (STOP Triggered)
+1. `Form step context`
+   - Checkout sudah lengkap, tetapi pembuka halaman belum cukup membantu user memahami urutan langkah.
+   - Dibanding pola storefront modern seperti KachaBazar, user belum langsung mendapat konteks `contact -> shipping -> review`.
 
-STOP condition hit:
-- `Tidak ada endpoint publik yang bisa dipakai untuk fetch customization`
-- Implementasi TASK #5 sesuai scope akan membutuhkan endpoint baru atau perubahan policy auth, which is explicitly a STOP condition in prompt.
+2. `Summary hierarchy`
+   - Summary card sudah informatif, tetapi total amount belum cukup dominan.
+   - CTA submit belum didampingi reassurance yang jelas mengenai hasil setelah submit.
 
-## Command Evidence
+3. `CTA clarity`
+   - Tombol submit sudah terlihat, tetapi belum cukup didukung helper copy yang menenangkan dan menjelaskan next step.
 
-- Endpoint checks:
-  - `http://localhost:3001/api/store/customization?lang=en` -> `404` with body `{"success":false,"message":"Not found"}`
-  - `http://localhost:3001/api/admin/store/customization?lang=en` -> `401` with body `{"success":false,"message":"Unauthorized"}`
+## Selected Polish Areas
 
-## File Changed List
+1. `Checkout header + form step context`
+2. `Summary hierarchy + submit reassurance`
 
-- `CODEx_REPORTS/TASK-5.md` (this report only)
+## Files Changed
 
-## UI Blocks Implemented Checklist
+- `client/src/pages/store/Checkout.jsx`
+- `CODEx_REPORTS/TASK-5.md`
 
-- Not implemented due STOP gate.
+## What Changed
 
-## Sync Test Admin -> Store
+### `client/src/pages/store/Checkout.jsx`
 
-- Not executable for storefront because no public customization read endpoint exists.
+- Memperjelas intro checkout dengan copy yang lebih deskriptif.
+- Menambahkan 3 step cards kecil di bagian atas:
+  - Contact Details
+  - Shipping Details
+  - Review & Place
+- Memperkuat summary card dengan blok `Estimated Total` yang lebih dominan.
+- Menambahkan helper copy bahwa summary sudah merefleksikan shipping, discount, dan store settings.
+- Menambahkan reassurance block bahwa submit akan mengarah ke success page dengan order reference yang bisa dilacak.
+- Menambahkan helper text kecil di bawah tombol submit untuk memperjelas konfirmasi user.
 
-## Commands Output (qa + build)
+## Before vs After
 
-- Not run for this task because no application code change was allowed after STOP condition.
+### Before
 
-## Known Gaps + Recommendation (Task #6)
+- Checkout sudah usable, tetapi terasa lebih seperti form panjang + sidebar ringkasan biasa.
+- User belum cukup dibantu memahami tahapan visual checkout.
+- Total dan next-step clarity belum cukup dominan.
 
-1. Public customization read endpoint does not exist.
-2. Storefront cannot safely consume admin-only endpoint.
-3. About page currently static and cannot sync from admin customization.
+### After
 
-Recommendation for next task (requires explicit approval):
-- Add a dedicated **public read-only endpoint** for store customization (lang-scoped, sanitized output), then wire `/about-us` to that endpoint.
+- Checkout sekarang lebih terasa seperti flow bertahap: isi data, konfirmasi shipping, lalu review & place.
+- Summary lebih menonjolkan total akhir.
+- CTA submit sekarang didampingi reassurance yang menjelaskan hasil setelah order dibuat.
+
+## Verification Run
+
+1. `pnpm --filter client exec vite build`
+   - PASS
+2. `pnpm qa:mvf`
+   - PASS
+3. QA artifact:
+   - `.codex-artifacts/qa-mvf/20260306-221239/result.json`
+   - `.codex-artifacts/qa-mvf/20260306-221239/summary.txt`
+
+## MVF Impact
+
+- Cart: PASS
+- Checkout: PASS
+- Checkout success: PASS
+- Tracking: PASS
+- Home/Search/Product detail: PASS
+- Admin login/orders/update status persist: PASS
+
+## Risks / Follow-up
+
+- Summary card masih cukup padat karena item list, coupon, totals, dan submit berada di satu card. Itu masih aman untuk task kecil ini, tetapi bisa dipecah lebih elegan pada fase polish lanjutan.
+- Checkout belum dipecah ke komponen kecil terpisah. Saya sengaja tidak melakukannya agar scope tetap aman.
+- Ada peluang polish lanjutan pada mobile spacing dan grouping address toggle/saved address area, tetapi tidak perlu untuk task ini.
+
+## Recommended Next Task
+
+`[TASK-6] Product Detail Parity Polish - Action Block + Related Products Hierarchy`
+
+## Final Status
+
+`PASS`

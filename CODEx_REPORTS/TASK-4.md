@@ -1,121 +1,109 @@
-# TASK-4 Store Customization About Us (Backend + Admin UI Parity Dashtar)
+# TASK-4 - MVF Parity Audit + Polish Prioritas Tinggi pada Storefront
 
-## Discovery
+## Task ID
 
-### Confirmed main files
+`TASK-4`
 
-- Backend: `server/src/routes/admin.storeCustomization.ts`
-- Frontend Admin: `client/src/pages/admin/StoreCustomization.jsx`
+## Objective
 
-### Existing pattern findings
+Melakukan audit parity terhadap flow Storefront MVF dan memoles 2 area visual/UX dengan dampak tertinggi agar lebih dekat ke arah KachaBazar, tanpa menambah fitur baru dan tanpa mengubah flow data.
 
-- Backend sudah memakai `DEFAULT_CUSTOMIZATION` + `sanitizeCustomization()` dengan normalizer per-domain (`normalizeHome`, `normalizeProductSlugPage`, `normalizeSeoSettings`).
-- Frontend admin memakai satu file monolitik `StoreCustomization.jsx` dengan:
-  - `getDefaultCustomization()`
-  - `normalizeCustomizationPayload()`
-  - state slice per tab (`homeState`, `productSlugPageState`, `seoSettingsState`)
-  - pola upload image reusable (validate + fileToDataUrl + drop active + preview + remove).
-- Tab `aboutUs` sudah ada di daftar tab, tetapi masih masuk fallback `Coming soon`.
+## Audited Pages
 
-## Planned Files (before coding)
+- `/` via `client/src/pages/store/KachaBazarDemoHomePage.jsx`
+- `/cart` via `client/src/pages/store/StoreCartPage.jsx`
+- `/checkout` via `client/src/pages/store/Checkout.jsx`
+- `/order/:ref` via `client/src/pages/store/StoreOrderTrackingPage.jsx`
+- Referensi visual: `https://kachabazar-store-nine.vercel.app`
 
-1. `server/src/routes/admin.storeCustomization.ts`
-   - Tambah schema default `aboutUs`, normalizer `normalizeAboutUs`, dan wiring ke `sanitizeCustomization`.
-2. `client/src/pages/admin/StoreCustomization.jsx`
-   - Tambah default + normalize payload untuk `aboutUs`.
-   - Tambah state + handlers + UI tab `aboutUs` (enable toggles, text fields, upload/preview/remove, team member tabs 1..6).
-3. `CODEx_REPORTS/TASK-4.md`
-   - Laporan task.
+## Key Parity Gaps
 
-## File Budget
+1. `Cart`
+   - Summary card masih fungsional, tetapi hierarchy visual belum cukup kuat.
+   - CTA checkout belum terasa seutama pola KachaBazar.
+   - Informasi "apa yang akan terjadi di langkah berikutnya" masih lemah.
 
-- Planned app files changed: **2** (<= 12).
-- Planned docs changed: **1**.
+2. `Order Tracking`
+   - Halaman terlalu invoice-first.
+   - Status order sudah ada, tetapi progress dan next-step clarity belum menonjol.
+   - Reassurance block dan struktur status belum sekuat referensi storefront e-commerce.
 
-## File Changed List (Actual)
+3. `Checkout`
+   - Sudah cukup kuat dari task sebelumnya, jadi bukan prioritas polish tertinggi pada task ini.
 
-1. `server/src/routes/admin.storeCustomization.ts`
-   - Added `aboutUs` default schema.
-   - Added `normalizeAboutUs(root)` for backward-compatible sanitization.
-   - Wired `aboutUs` into `sanitizeCustomization()` output.
-2. `client/src/pages/admin/StoreCustomization.jsx`
-   - Added frontend default + normalization for `aboutUs`.
-   - Added About Us state slice + save payload merge.
-   - Implemented full About Us admin tab UI (sections, toggles, dropzones, previews, remove, member tabs 1..6).
-3. `CODEx_REPORTS/TASK-4.md`
-   - Discovery, implementation notes, and QA outputs.
+4. `Home`
+   - Sudah paling dekat ke arah KachaBazar dibanding halaman MVF lainnya.
 
-## Backend Notes (Schema + Normalization)
+## Selected Polish Areas
 
-### Final `aboutUs` shape in backend default
+1. `Cart summary hierarchy + CTA clarity`
+2. `Order tracking status clarity + top-level hierarchy`
 
-- `aboutUs.pageHeader`: `enabled`, `backgroundImageDataUrl`, `pageTitle`
-- `aboutUs.topContentLeft`: `enabled`, `topTitle`, `topDescription`, `boxOne|boxTwo|boxThree` (`title`, `subtitle`, `description`)
-- `aboutUs.topContentRight`: `enabled`, `imageDataUrl`
-- `aboutUs.contentSection`: `enabled`, `firstParagraph`, `secondParagraph`, `contentImageDataUrl`
-- `aboutUs.ourTeam`: `enabled`, `title`, `description`, `members[6]` with `imageDataUrl`, `title`, `subTitle`
+## Files Changed
 
-### Sanitization behavior
+- `client/src/pages/store/StoreCartPage.jsx`
+- `client/src/pages/store/StoreOrderTrackingPage.jsx`
+- `CODEx_REPORTS/TASK-4.md`
 
-- Handles legacy/partial payload safely:
-  - all text fields normalized to string via `toText`
-  - all `enabled` normalized via `toBool`
-  - member alias support (`subtitle` -> `subTitle`, `image` -> `imageDataUrl`)
-- `ourTeam.members` always normalized to exactly 6 items (pads missing items from default).
-- Existing old records without `aboutUs` now receive full defaults on sanitize/GET.
+## What Changed
 
-## Frontend About Us Checklist
+### `client/src/pages/store/StoreCartPage.jsx`
 
-- [x] Page Header
-  - [x] Enable toggle
-  - [x] Background upload (drag-drop + input + preview + remove)
-  - [x] Page title input
-- [x] About Page Top Content Left
-  - [x] Enable toggle
-  - [x] Top title + top description
-  - [x] Box One/Two/Three: title + subtitle + description
-- [x] Page Top Content Right
-  - [x] Enable toggle
-  - [x] Image upload (drag-drop + preview + remove)
-- [x] Content Section
-  - [x] Enable toggle
-  - [x] First paragraph + second paragraph
-  - [x] Content image upload (drag-drop + preview + remove)
-- [x] Our Team
-  - [x] Enable toggle
-  - [x] Team title + description
-  - [x] Tabs Member 1..6
-  - [x] Per-member image upload + title + sub title
-- [x] Update button persists to backend (`updateAdminStoreCustomization` flow existing)
-- [x] Existing tab flow (`home`, `productSlugPage`, `seoSettings`) preserved
+- Memperkuat hero/header cart dengan eyebrow label, copy yang lebih jelas, dan item count badge.
+- Memperkuat summary card dengan blok `Estimated Total` yang lebih dominan.
+- Menambahkan explanatory note bahwa shipping/tax difinalkan di checkout.
+- Mempertegas CTA `Proceed to Checkout` agar lebih menonjol.
 
-## Commands + Results
+### `client/src/pages/store/StoreOrderTrackingPage.jsx`
 
-- `pnpm --filter client exec vite build` -> **PASS**
-- Admin route readiness check (dev stack active):
-  - `http://localhost:5173/admin/store/customization` -> `200`
-  - `http://localhost:5173/admin/store/customization?tab=aboutUs` -> `200`
-- Admin API persistence check -> **PASS**
-  - login admin ok (`superadmin@local.dev`)
-  - GET existing lang contains `aboutUs`
-  - PUT partial `aboutUs` update succeeds
-  - GET after refresh returns updated values and `members` tetap `6`
-- Fresh language default check -> **PASS**
-  - `lang=qaaboutusnew` returns `aboutUs` default
-  - `pageHeader.pageTitle=About Us`
-  - `ourTeam.members` count = `6`
-- `pnpm qa:mvf` -> **PASS**
-  - Artifact: `.codex-artifacts/qa-mvf/20260303-084504/result.json`
-  - Summary: `.codex-artifacts/qa-mvf/20260303-084504/summary.txt`
+- Menambahkan top tracking hero dengan status-aware title, reference chip, status chip, dan date chip.
+- Menambahkan card `Next Step` supaya user langsung paham konteks order saat ini.
+- Menambahkan visual progress section 4 tahap: received, processing, on delivery, delivered.
+- Menambahkan cancelled-state treatment yang lebih jelas untuk progress section.
 
-## Known Gaps (max 5)
+## Before vs After
 
-1. UI parity mengikuti pola Dashtar secara struktur/interaksi, belum pixel-perfect screenshot-by-screenshot.
-2. About Us tab masih berada dalam file monolitik `StoreCustomization.jsx` (sesuai scope, tanpa refactor besar).
-3. Verifikasi interaksi UI dilakukan via route readiness + API persistence (bukan screenshot visual otomatis).
-4. Image storage tetap DataURL inline (sesuai batasan task, belum upload storage server).
-5. Query param `?tab=aboutUs` belum mengubah active tab secara otomatis (route tetap terbuka, tab dipilih via UI).
+### Before
 
-## Next Recommendation
+- `Cart` terasa seperti daftar item + summary biasa, dengan total dan CTA yang belum cukup dominan.
+- `Order tracking` lebih mirip invoice mentah; status ada, tetapi belum menjadi pusat perhatian pertama.
 
-- Task berikutnya: implement render storefront public About Us page memakai schema `aboutUs` yang sudah tersimpan, termasuk language-aware content retrieval.
+### After
+
+- `Cart` sekarang lebih punya hierarchy seperti storefront e-commerce modern: headline, summary emphasis, total highlight, dan CTA yang lebih jelas.
+- `Order tracking` sekarang membuka dengan reassurance + progress context dulu, baru invoice detail di bawahnya.
+
+## Verification Run
+
+1. `pnpm --filter client exec vite build`
+   - PASS
+2. `pnpm qa:mvf`
+   - PASS
+3. QA artifact:
+   - `.codex-artifacts/qa-mvf/20260306-220621/result.json`
+   - `.codex-artifacts/qa-mvf/20260306-220621/summary.txt`
+
+## MVF Impact
+
+- Home: PASS
+- Cart: PASS
+- Checkout: PASS
+- Checkout success: PASS
+- Order tracking: PASS
+- Search: PASS
+- Product detail: PASS
+- Admin login/orders/update status persist: PASS
+
+## Risks / Follow-up
+
+- Tracking page masih memuat invoice table yang padat; parity penuh ke storefront reference masih butuh fase polish lanjutan, bukan task ini.
+- Cart drawer di layout masih mengikuti hierarchy lama; saya sengaja tidak redesign drawer agar scope tidak melebar.
+- Checkout masih punya peluang polish pada grouping field dan side summary, tetapi tidak saya sentuh di task ini karena cart/tracking memberi ROI parity yang lebih tinggi.
+
+## Recommended Next Task
+
+`[TASK-5] Checkout Parity Polish - Form Grouping + Summary CTA Hierarchy`
+
+## Final Status
+
+`PASS`

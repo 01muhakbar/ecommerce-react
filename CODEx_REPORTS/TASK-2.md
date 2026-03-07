@@ -1,99 +1,157 @@
-# TASK-2 UI Parity Sprint #1 (Search Store + Admin Orders)
+# TASK-2 Patch Dummy Fallback Berisiko Tinggi pada Storefront MVF
 
-## Amati Notes
+Date: 2026-03-06 (Asia/Singapore)  
+Workspace: `C:\Users\user\Documents\ecommerce-react`
 
-### A) KachaBazar Search (target parity points)
+## Task ID
 
-- Search page pattern prioritizes two-column layout on desktop:
-  - Left filter panel (fixed visual width)
-  - Right result panel (title + count + sort + product grid)
-- Mobile pattern keeps result area clean and surfaces filter controls through a dedicated trigger (panel/drawer style interaction).
-- Product grid cards use dense spacing, clear price prominence, and compact metadata.
-- No-result state is rendered as a card section in the same content flow (not blank screen).
+`TASK-2`
 
-### B) Dashtar Orders (target parity points)
+## Objective
 
-- Top toolbar groups controls in one stable header region (search + filters + action buttons).
-- Orders table uses clear header contrast, comfortable row padding, and hover emphasis.
-- Status badges are compact pill styles with semantic colors.
-- Pagination is aligned in a stable footer area.
-- Feedback for row update should not push table layout (prefer compact inline indicator/toast style).
+Mengurangi fallback runtime Storefront yang paling berisiko membuat Home dan Checkout tampil tidak sesuai source of truth backend/public API, dengan patch kecil tanpa refactor besar dan tanpa mengubah contract API.
 
-## Discovery & File Budget
+## Selected Risky Fallbacks
 
-### Route files discovered
+1. `client/src/pages/store/KachaBazarDemoHomePage.jsx`
+   - Home memakai `dummyCoupons` saat coupon publik kosong/gagal.
+   - Risiko: homepage terlihat punya promo aktif walau backend/public API tidak memberi data itu.
 
-- Store search route: `client/src/pages/store/StoreSearchPage.jsx`
-- Admin orders route: `client/src/pages/admin/Orders.jsx`
+2. `client/src/components/Layout/StoreLayout.jsx`
+   - Public store settings memakai default permissive (`true`) untuk social login, analytics, chat, dan sebagian payment flags saat payload belum ada.
+   - Risiko: Storefront bisa terlihat mengaktifkan fitur yang belum dinyalakan admin/public settings.
 
-### Supporting components discovered
+3. `client/src/pages/store/Checkout.jsx`
+   - Checkout payment flags juga fallback ke permissive defaults.
+   - Risiko: checkout bisa menampilkan opsi payment yang tidak datang dari store settings publik.
 
-- `client/src/components/store/SearchProductCard.jsx`
-- `client/src/components/admin/OrderStatusBadge.jsx`
-- `client/src/components/ui-states/UiUpdatingBadge.jsx`
-- `client/src/components/ui-states/UiEmptyState.jsx`
-- `client/src/components/ui-states/UiErrorState.jsx`
+## Files Changed
 
-### Planned file changes (<=10)
+- `client/src/pages/store/KachaBazarDemoHomePage.jsx`
+- `client/src/components/kachabazar-demo/CouponPanel.jsx`
+- `client/src/components/Layout/StoreLayout.jsx`
+- `client/src/pages/store/Checkout.jsx`
+- `CODEx_REPORTS/TASK-2.md`
 
-1. `client/src/pages/store/StoreSearchPage.jsx`
-2. `client/src/components/store/SearchProductCard.jsx`
-3. `client/src/pages/admin/Orders.jsx`
-4. `client/src/components/admin/OrderStatusBadge.jsx`
+## What Changed
 
-### Actual files changed
+### `client/src/pages/store/KachaBazarDemoHomePage.jsx`
 
-1. `client/src/pages/store/StoreSearchPage.jsx`
-2. `client/src/components/store/SearchProductCard.jsx`
-3. `client/src/pages/admin/Orders.jsx`
-4. `client/src/components/admin/OrderStatusBadge.jsx`
+- Menghapus `dummyCoupons` sebagai fallback runtime.
+- Menambahkan `isCouponsLoading` agar panel coupon punya state loading yang jelas.
+- Saat fetch coupon gagal, home sekarang menampilkan error/empty state yang jujur, bukan promo dummy.
 
-## Before/After Notes
+### `client/src/components/kachabazar-demo/CouponPanel.jsx`
 
-### Store `/search` (KachaBazar parity sprint)
+- Menambahkan dukungan `isLoading`.
+- Saat loading: panel menampilkan `"Loading active coupons..."`.
+- Saat kosong/error: panel menampilkan empty/error message langsung, tanpa inventing coupon cards.
 
-- Before:
-  - Single-column layout with top bar + grid.
-  - Filter controls not structured as desktop sidebar.
-  - Mobile had no dedicated filter trigger panel.
-- After:
-  - Desktop two-column layout (`280px` filter sidebar + result panel).
-  - Result header now shows query-centric title (`Search results for "..."`) + count.
-  - Mobile now has explicit `Filter` button opening slide-in panel with overlay.
-  - Filter form is consistent across desktop and mobile (search + category + apply/reset).
-  - Existing loading/empty/error states are preserved and placed in stable result area.
+### `client/src/components/Layout/StoreLayout.jsx`
 
-### Admin `/admin/orders` (Dashtar parity sprint)
+- Mengubah default public feature flags dari permissive ke conservative:
+  - payment flags default `false`
+  - social login flags default `false`
+  - analytics/chat default `false`
+- Efeknya: Storefront tidak lagi mengaktifkan fitur publik hanya karena payload settings belum tersedia.
 
-- Before:
-  - Controls were split grid sections, less dashboard-toolbar feel.
-  - Success notice rendered inline and could shift content flow.
-  - Empty state rendered as separate card outside table.
-- After:
-  - Toolbar restyled to grouped dashboard control area (search + filters + date + actions).
-  - Success feedback now fixed-position toast, reducing layout shift impact.
-  - Table rows have clearer alternating background + hover.
-  - Empty state rendered as proper empty table row (inside table body).
-  - Status update indicator shown inline compactly (`Saving...`) beside status select.
-  - Status badge styling tightened to compact uppercase pill style.
+### `client/src/pages/store/Checkout.jsx`
 
-## Commands & Results
+- Menyelaraskan default payment flags dengan pendekatan conservative (`false`).
+- Mengubah copy saat payment options kosong agar lebih jujur terhadap public settings:
+  - dari fallback COD-style wording
+  - menjadi pesan bahwa payment options publik belum terkonfigurasi.
 
-- `pnpm --filter client exec vite build` -> PASS
-- `pnpm dev` manual route readiness check:
-  - `/search?q=test` -> reachable
-  - `/admin/orders` -> reachable
-- `pnpm qa:mvf` -> PASS
-  - Artifact: `.codex-artifacts/qa-mvf/20260303-004631/result.json`
-  - Summary: `.codex-artifacts/qa-mvf/20260303-004631/summary.txt`
+## Before vs After
 
-## Known Gaps + Next Recommendation
+### Home Coupon Panel
 
-1. Search parity uses minimal custom mobile drawer in-page (not a shared global drawer component).
-2. Filter options in search remain limited to existing state (`q`, `category`, `sort`) by scope; no advanced facet filters.
-3. Orders table density and typography are closer to Dashtar but not pixel-identical.
-4. Orders toast is local to page; no unified global toast stack yet.
-5. Pagination visuals improved but still use existing behavior contract.
+- Sebelum:
+  - Jika coupon publik kosong/gagal, home tetap menampilkan `dummyCoupons`.
+  - User bisa mengira promo benar-benar berasal dari backend.
+- Sesudah:
+  - Home hanya menampilkan coupon dari public API.
+  - Jika loading/error/kosong, panel menyatakan kondisi sebenarnya.
 
-Recommended Task #3:
-- Continue parity on store product/category listing and admin order-detail print view for stronger visual consistency end-to-end.
+### Public Store Settings
+
+- Sebelum:
+  - Saat payload settings belum ada, Storefront default menganggap beberapa fitur aktif.
+  - Risiko terutama ke social login dan payment visibility.
+- Sesudah:
+  - Saat payload settings belum ada, fitur publik optional dianggap nonaktif sampai backend/public settings benar-benar menyatakan aktif.
+
+### Checkout Payment Options
+
+- Sebelum:
+  - Checkout bisa tetap menampilkan opsi payment dari default lokal yang permissive.
+- Sesudah:
+  - Checkout lebih disiplin mengikuti `storeSettings` publik.
+  - Jika tidak ada opsi payment publik, UI menyatakan hal itu dengan jelas.
+
+## Verification Run
+
+1. `pnpm --filter client exec vite build`
+   - PASS
+
+2. `pnpm qa:mvf` run #1
+   - FAIL
+   - Penyebab: port/process state transient (`3001` sempat terpakai saat script mencoba start stack)
+
+3. `powershell -ExecutionPolicy Bypass -File .\tmp_dev01_verify.ps1`
+   - PASS
+   - Digunakan untuk cleanup/verifikasi port + boot stack segar
+
+4. `pnpm qa:mvf` run #2
+   - PASS
+   - Artifact:
+     - `.codex-artifacts/qa-mvf/20260306-214038/result.json`
+     - `.codex-artifacts/qa-mvf/20260306-214038/summary.txt`
+
+5. Runtime route check tambahan
+   - `GET /` -> `200`
+   - `GET /checkout` -> `200`
+
+## MVF Impact
+
+### Terdampak langsung
+
+- Home -> PASS
+- Checkout page -> PASS
+
+### Diverifikasi tetap aman
+
+- Search -> PASS
+- Product detail -> PASS
+- Cart interaction/API -> PASS
+- Checkout submit -> PASS
+- Success page -> PASS
+- Order tracking -> PASS
+- Admin login/orders/status persist -> PASS
+
+## Risks / Follow-up
+
+1. Jika public store settings memang belum terisi di environment tertentu, beberapa fitur Storefront sekarang akan lebih cepat terlihat nonaktif. Ini perubahan yang disengaja agar UI jujur terhadap backend.
+
+2. `Checkout.jsx` masih punya behavior existing bahwa order submission berjalan sebagai COD-oriented flow. Task ini tidak mengubah contract itu.
+
+3. Dummy fallback paling berbahaya yang masih tersisa ada di sisi admin service:
+   - `client/src/api/orders.service.js`
+   - `client/src/api/products.service.js`
+
+4. `StoreContactUsPage.jsx` masih memiliki submit simulasi lokal. Itu belum disentuh karena bukan MVF Store utama dan tidak perlu dicampur ke patch ini.
+
+## Recommended Next Task
+
+`[TASK-3] Remove Risky Admin Dummy Fallbacks (Orders + Products Service)`
+
+Fokus aman:
+
+- kurangi dummy fallback pada admin service
+- buat error state lebih jujur saat API admin gagal
+- jangan ubah contract API
+- jangan refactor besar
+
+## Final Status
+
+`PASS`

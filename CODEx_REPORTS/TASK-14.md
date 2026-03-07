@@ -1,149 +1,90 @@
-# TASK-14 — Store Customization "Checkout" (Backend + Admin UI)
+# TASK-14 - Admin Product Form / Drawer Parity Audit + Polish Prioritas Tinggi
 
-## File Changed List
-1. `server/src/routes/admin.storeCustomization.ts`
-- Added `checkout` to `DEFAULT_CUSTOMIZATION`.
-- Added `normalizeCheckout(root)` for full nested fallback normalization.
-- Wired `checkout` into `sanitizeCustomization()` output.
+## Objective
 
-2. `client/src/pages/admin/StoreCustomization.jsx`
-- Added checkout defaults to `getDefaultCustomization()`.
-- Added `normalizeCheckout(source, defaults)` and integrated into `normalizeCustomizationPayload()`.
-- Added `checkoutState` lifecycle wiring (`load` + `update success`).
-- Added `checkout` payload mapping into `onSave` to persist fields.
-- Added `onChangeCheckoutField(sectionKey, field, value)` handler.
-- Implemented full UI for `activeTab === "checkout"` (replacing fallback coming soon for this tab).
+Meningkatkan parity UI/UX Add/Edit Product Form agar lebih dekat ke arah Dashtar pada area dengan dampak visual dan operasional tertinggi, tanpa mengubah backend, contract API, atau logic CRUD produk.
 
-3. `CODEx_REPORTS/TASK-14.md`
-- Final execution report.
+## Audited Component
 
-## Final Schema Checkout
-```json
-{
-  "checkout": {
-    "personalDetails": {
-      "sectionTitle": "Personal Details",
-      "firstNameLabel": "First Name",
-      "lastNameLabel": "Last Name",
-      "emailLabel": "Email Address",
-      "phoneLabel": "Phone",
-      "firstNamePlaceholder": "First Name",
-      "lastNamePlaceholder": "Last Name",
-      "emailPlaceholder": "Email Address",
-      "phonePlaceholder": "Phone Number"
-    },
-    "shippingDetails": {
-      "sectionTitle": "Shipping Details",
-      "streetAddressLabel": "Street Address",
-      "cityLabel": "City",
-      "countryLabel": "Country",
-      "zipLabel": "Zip / Postal",
-      "streetAddressPlaceholder": "Street Address",
-      "cityPlaceholder": "City",
-      "countryPlaceholder": "Country",
-      "zipPlaceholder": "Zip Code",
-      "shippingCostLabel": "Shipping Cost",
-      "shippingOneNameLabel": "Shipping One Name",
-      "shippingOneNameDefault": "FedEx",
-      "shippingOneDescriptionLabel": "Shipping One Description",
-      "shippingOneDescriptionDefault": "Delivery: Today Cost :",
-      "shippingOneCostLabel": "Shipping One Cost",
-      "shippingOneCostDefault": "60",
-      "shippingTwoNameLabel": "Shipping Two Name",
-      "shippingTwoNameDefault": "UPS",
-      "shippingTwoDescriptionLabel": "Shipping Two Description",
-      "shippingTwoDescriptionDefault": "Delivery: 7 Days Cost :",
-      "shippingTwoCostLabel": "Shipping Two Cost",
-      "shippingTwoCostDefault": "20",
-      "paymentMethodLabel": "Payment Method",
-      "paymentMethodPlaceholder": "Payment Method"
-    },
-    "buttons": {
-      "continueButtonLabel": "Continue Shipping",
-      "confirmButtonLabel": "Confirm Order"
-    },
-    "cartItemSection": {
-      "sectionTitle": "Cart Item Section",
-      "orderSummaryLabel": "Order Summary",
-      "applyButtonLabel": "Apply",
-      "subTotalLabel": "Sub Total",
-      "discountLabel": "Discount",
-      "totalCostLabel": "Total Cost"
-    }
-  }
-}
-```
+- `client/src/pages/admin/ProductForm.jsx`
+- `client/src/pages/admin/ProductPreviewDrawer.jsx`
 
-## UI Field Checklist (Admin Checkout Tab)
-### Personal Details
-- [x] Section Title
-- [x] First Name Label + Placeholder
-- [x] Last Name Label + Placeholder
-- [x] Email Label + Placeholder
-- [x] Phone Label + Placeholder
+## Key Parity Gaps
 
-### Shipping Details
-- [x] Section Title
-- [x] Street Address Label + Placeholder
-- [x] City Label + Placeholder
-- [x] Country Label + Placeholder
-- [x] Zip Label + Placeholder
-- [x] Shipping Cost Label
-- [x] Shipping One Name/Description/Cost (Label + Default)
-- [x] Shipping Two Name/Description/Cost (Label + Default)
-- [x] Payment Method Label + Placeholder
+- Header form masih terlalu tipis untuk konteks add/edit yang sering dipakai admin.
+- Section cards sudah rapi, tetapi hierarchy antar section belum cukup terasa seperti control panel.
+- Footer CTA masih fungsional, namun belum cukup kuat sebagai area keputusan akhir.
 
-### Buttons
-- [x] Continue Button Label
-- [x] Confirm Button Label
+## Selected Polish Areas
 
-### Cart Item Section
-- [x] Section Title
-- [x] Order Summary Label
-- [x] Apply Button Label
-- [x] Sub Total Label
-- [x] Discount Label
-- [x] Total Cost Label
+1. `Header context + meta summary rhythm`
+2. `Section hierarchy + sticky CTA clarity`
 
-## Persist Test Result
-### Backend default test (new language)
-- Request: `GET /api/admin/store/customization?lang=qa14`
-- Result:
-  - `hasCheckout = true`
-  - `checkout.personalDetails.sectionTitle = "Personal Details"`
-  - `checkout.shippingDetails.shippingOneNameDefault = "FedEx"`
+## Files Changed
 
-### Save + refresh persist test (en)
-- Update fields via admin API (`PUT /api/admin/store/customization?lang=en`):
-  - `checkout.personalDetails.sectionTitle = "Personal Details QA 20260303112506"`
-  - `checkout.shippingDetails.cityPlaceholder = "City QA Placeholder"`
-  - `checkout.buttons.confirmButtonLabel = "Confirm Order QA"`
-- Re-fetch and verify: persisted `true`.
-- Restore original values: done (`restored = true`).
+- `client/src/pages/admin/ProductForm.jsx`
 
-### Admin route check
-- `GET http://localhost:5173/admin/store/customization?tab=checkout` -> HTTP `200`.
+## What Changed
 
-## Commands Output
-1. `pnpm --filter client exec vite build`
-- PASS
-- `vite v7.1.9`
-- `✓ built in 14.92s`
+### 1. Header Context
 
-2. `pnpm qa:mvf`
-- PASS
-- `QA-MONEY: PASS`
-- Store/Admin MVF checks all PASS.
-- Artifacts:
-  - `RESULT_FILE=.codex-artifacts/qa-mvf/20260303-112433/result.json`
-  - `SUMMARY_FILE=.codex-artifacts/qa-mvf/20260303-112433/summary.txt`
+- Menambahkan chips ringkas pada header untuk mode form, kategori aktif, dan jumlah media.
+- Mempertahankan breadcrumb dan title existing, tetapi menambahkan context row agar orientasi add/edit lebih cepat terbaca.
 
-## Known Gaps
-1. Tab checkout saat ini baru mengatur CMS text/settings; belum dibinding ke storefront checkout page (sesuai out-of-scope task ini).
-2. Tidak ada validasi format khusus untuk field biaya shipping (disimpan string by design).
-3. Tidak ada preview live hasil teks checkout di sisi admin (hanya form + persist).
+### 2. Section Hierarchy
 
-## Recommendation for Task #15
-1. Extend public store customization endpoint with `include=checkout` whitelist.
-2. Bind storefront checkout page labels/placeholders/buttons/summary texts from `customization.checkout`.
-3. Add fallback behavior per-language when checkout customization missing/partial on storefront.
+- Menambahkan helper `SectionHeader` untuk memberi eyebrow, title, description, dan meta chip di setiap section utama.
+- Menguatkan visual grouping untuk section:
+  - Basic Info
+  - Category
+  - Pricing
+  - Inventory
+  - Images
+  - Metadata
+
+### 3. CTA Footer
+
+- Footer dibuat lebih jelas sebagai final action bar dengan label konteks dan helper summary.
+- CTA submit diberi emphasis visual yang lebih kuat, sementara tombol cancel tetap konsisten.
+
+## Before vs After
+
+- Sebelum: form terasa utilitarian dan semua section punya bobot visual yang hampir sama.
+- Sesudah: form lebih terasa seperti admin control panel, header lebih informatif, section lebih terstruktur, dan footer action lebih jelas.
+
+## Verification Run
+
+- `pnpm --filter client exec vite build` -> PASS
+- `pnpm qa:mvf` -> PASS
+  - Artifact: `.codex-artifacts/qa-mvf/20260307-091433/result.json`
+  - Summary: `.codex-artifacts/qa-mvf/20260307-091433/summary.txt`
+
+### Products flow spot-check
+
+- create/detail -> PASS
+- edit/update detail -> PASS
+- list after update -> PASS
+
+Validation sample after patch:
+
+- create detail:
+  - `price = 175000`
+  - `salePrice = 141000`
+- update detail:
+  - `price = 226000`
+  - `salePrice = 189000`
+- list after update:
+  - `price = 226000`
+  - `salePrice = 189000`
+
+## Regression Check
+
+- products list -> PASS
+- add/edit form compile -> PASS
+- update submit contract -> PASS
+- price sync from TASK-13 -> PASS
+- refresh/persist via detail/list refetch -> PASS
+
+## Final Status
+
+PASS

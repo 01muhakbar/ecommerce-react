@@ -1,105 +1,74 @@
-# CODEx REPORT — TASK-17
+# TASK-17
 
-## Ringkasan hasil
-TASK-17 selesai:
-- Endpoint publik `GET /api/store/customization` sekarang mendukung `include=dashboardSetting` dengan whitelist ketat.
-- Halaman account/dashboard storefront sudah bind label utama ke `customization.dashboardSetting` secara non-blocking dengan fallback default.
-- Auth/order/profile logic tidak diubah.
+## Objective
 
-## File changed list
-1. `server/src/routes/store.customization.ts`
-   - Tambah include parser untuk `dashboardSetting` (`dashboardsetting`, `dashboard-setting`, `dashboard_setting`).
-   - Tambah whitelist return `customization.dashboardSetting` hanya jika diminta.
-2. `client/src/api/store.service.ts`
-   - Perluas type `StoreCustomizationResponse` agar mencakup `dashboardSetting` (dan key publik lain yang sudah dipakai).
-3. `client/src/layouts/AccountLayout.jsx`
-   - Fetch non-blocking `getStoreCustomization({ include: "dashboardSetting" })`.
-   - Bind label sidebar: Dashboard, My Orders, Update Profile, Change Password.
-4. `client/src/pages/account/AccountDashboardPage.jsx`
-   - Fetch non-blocking dashboard setting.
-   - Bind heading dashboard, label stat cards (total/pending/processing/complete), heading recent orders.
-5. `client/src/pages/account/AccountOrdersPage.jsx`
-   - Fetch non-blocking dashboard setting.
-   - Bind page title My Orders.
-6. `client/src/pages/account/AccountProfilePage.jsx`
-   - Fetch non-blocking dashboard setting.
-   - Bind heading Update Profile, label Name/Email, label submit button.
-7. `CODEx_REPORTS/TASK-17.md`
-   - Laporan task.
+Meningkatkan parity UI/UX halaman Categories Admin agar lebih dekat ke Dashtar pada area dengan dampak operasional tertinggi, tanpa mengubah backend, contract API, atau logic CRUD categories.
 
-## API include=dashboardSetting
-### Request
-```bash
-curl "http://localhost:3001/api/store/customization?lang=en&include=dashboardSetting"
-```
+## Audited Page
 
-### Response sample
-```json
-{
-  "success": true,
-  "lang": "en",
-  "customization": {
-    "dashboardSetting": {
-      "dashboard": {
-        "dashboardLabel": "Dashboard",
-        "totalOrdersLabel": "Total Orders",
-        "pendingOrderValue": "Pending Orders",
-        "processingOrderValue": "Processing Order",
-        "completeOrderValue": "Complete Orders",
-        "recentOrderValue": "Recent Orders",
-        "myOrderValue": "My Orders"
-      },
-      "updateProfile": {
-        "sectionTitleValue": "Update Profile",
-        "fullNameLabel": "Full Name",
-        "emailAddressLabel": "Email Address",
-        "updateButtonValue": "Update Profile",
-        "changePasswordLabel": "Change Password"
-      }
-    }
-  }
-}
-```
+- `client/src/pages/admin/AdminCategoriesPage.jsx`
 
-### Whitelist checks
-- `GET /api/store/customization?lang=en` -> `default_keys=aboutUs` (tetap backward compatible)
-- `GET /api/store/customization?lang=en&include=dashboardSetting` -> `include_dashboardSetting_keys=dashboardSetting`
-- `GET /api/store/customization?lang=en&include=aboutUs,dashboardSetting` -> `aboutUs,dashboardSetting`
+## Key Parity Gaps
 
-## Mapping table (source -> target UI)
-- `dashboard.dashboardLabel` -> Account sidebar `Dashboard`, Dashboard page title
-- `dashboard.myOrderValue` -> Account sidebar `My Orders`, Orders page title
-- `dashboard.totalOrdersLabel` -> Dashboard stat card label total
-- `dashboard.pendingOrderValue` -> Dashboard stat card label pending
-- `dashboard.processingOrderValue` -> Dashboard stat card label processing
-- `dashboard.completeOrderValue` -> Dashboard stat card label complete
-- `dashboard.recentOrderValue` -> Dashboard section title recent orders
-- `updateProfile.sectionTitleValue` -> Account sidebar `Update Profile`, Profile page title
-- `updateProfile.fullNameLabel` -> Profile form name label
-- `updateProfile.emailAddressLabel` -> Profile form email label
-- `updateProfile.updateButtonValue` -> Profile submit button label
-- `updateProfile.changePasswordLabel` -> Disabled sidebar item label
+- Header dan filter area masih cukup utilitarian, belum punya rhythm control panel yang kuat seperti halaman admin lain yang sudah dipoles.
+- Hierarchy row categories masih datar, sehingga parent category, child category, code, dan action context belum cukup cepat dipindai.
+- Parent-child clarity masih tersebar di beberapa elemen kecil dan belum cukup tegas di area nama/metadata row.
 
-## Manual sync test (admin -> store)
-Dijalankan via API:
-1. Login admin.
-2. Update admin customization `dashboardSetting` (dashboardLabel, recentOrderValue, sectionTitleValue).
-3. Fetch public endpoint `include=dashboardSetting`.
-4. Nilai cocok (True) lalu dikembalikan ke nilai awal.
+## Selected Polish Areas
 
-Output:
-- `sync_dashboardLabel=True`
-- `sync_recentOrderValue=True`
-- `sync_profileTitle=True`
+- `Header/filter rhythm + control panel clarity`
+- `Category row hierarchy + parent-child emphasis`
 
-## Commands output
-1. `pnpm qa:mvf` -> PASS
-   - artifact: `.codex-artifacts/qa-mvf/20260303-115323/result.json`
-2. `pnpm --filter client exec vite build` -> PASS
+## Files Changed
 
-## Known gaps
-1. UI account saat ini tidak memiliki area invoice message / tombol print/download, jadi field tersebut belum ter-bind (sesuai aturan: tidak menambah fitur baru).
-2. UI account profile belum punya field address/phone/password, jadi label-field tersebut belum terpakai.
+- `client/src/pages/admin/AdminCategoriesPage.jsx`
+- `CODEx_REPORTS/TASK-17.md`
 
-## STOP point
-Siap lanjut Task #18 (SEO settings binding meta tags).
+## What Changed
+
+### `client/src/pages/admin/AdminCategoriesPage.jsx`
+
+- Menambahkan blok `Category Controls` di atas area filter/action agar control panel terasa lebih jelas dan kontekstual.
+- Menambahkan badges ringkas untuk `Visible now`, `Selected`, dan context parent/filter agar admin lebih cepat membaca status halaman.
+- Menambahkan label kecil pada area search, apply/reset, dan scope toggle untuk memperkuat hierarchy visual.
+- Menambahkan `CategoryTypeBadge` agar parent category vs child category lebih tegas di setiap row.
+- Memperkuat kolom `ID`, `Name`, `Description`, `Status`, dan `Actions` dengan helper copy kecil:
+  - code + fallback ID meta
+  - parent/child context
+  - description purpose hint
+  - publish status hint
+  - action hint `View children or quick edit`
+- Menambahkan chip selected count pada header tabel.
+
+## Before vs After
+
+- Sebelum:
+  - categories page rapi tetapi control area masih terasa generik
+  - row data cukup lengkap, namun hierarchy parent-child dan action context belum cukup kuat
+- Sesudah:
+  - control area lebih terasa seperti admin workspace
+  - row categories lebih cepat dipindai
+  - parent category, child category, dan action intent lebih jelas secara visual
+
+## Verification Run
+
+- `pnpm --filter client exec vite build` -> PASS
+- `pnpm qa:mvf` -> PASS
+  - artifact: `.codex-artifacts/qa-mvf/20260307-095254/result.json`
+- categories route check -> PASS
+  - `http://localhost:5173/admin/categories` -> `200`
+
+## MVF Impact
+
+- Admin login -> PASS
+- Dashboard -> PASS
+- Orders list -> PASS
+- Order detail -> PASS
+- Update status -> PASS
+- Categories page -> PASS
+- Persist after refresh -> PASS
+- Store MVF smoke tetap PASS
+
+## Final Status
+
+PASS

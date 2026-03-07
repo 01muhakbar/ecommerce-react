@@ -236,6 +236,27 @@ const buildVariants = (product, normalizedTags, baseImageUrl) => {
   });
 };
 
+const getProductCategoryContext = (product) => {
+  const selectedCategories = Array.isArray(product?.categories)
+    ? product.categories.filter(Boolean)
+    : [];
+  const fallbackDefaultId = Number(product?.defaultCategoryId ?? product?.categoryId ?? 0);
+  const defaultCategory =
+    product?.defaultCategory ||
+    product?.category ||
+    selectedCategories.find((category) => Number(category?.id) === fallbackDefaultId) ||
+    null;
+  const relatedCategories = selectedCategories.filter(
+    (category) => Number(category?.id) !== Number(defaultCategory?.id ?? 0)
+  );
+
+  return {
+    defaultCategory,
+    relatedCategories,
+    selectedCategories,
+  };
+};
+
 export default function ProductPreviewDrawer({ productId, onClose, onEdit }) {
   const detailQuery = useQuery({
     queryKey: ["admin-product-preview", productId],
@@ -256,6 +277,7 @@ export default function ProductPreviewDrawer({ productId, onClose, onEdit }) {
   const imageUrl = resolveAssetUrl(
     product?.imageUrl || product?.promoImagePath || product?.imagePaths?.[0] || FALLBACK_THUMBNAIL
   );
+  const categoryContext = useMemo(() => getProductCategoryContext(product), [product]);
   const variants = useMemo(
     () => buildVariants(product, displayTags, imageUrl),
     [product, displayTags, imageUrl]
@@ -365,10 +387,49 @@ export default function ProductPreviewDrawer({ productId, onClose, onEdit }) {
                   </p>
                 </div>
 
-                <p className="text-sm text-slate-600">
-                  <span className="font-semibold text-slate-700">Category:</span>{" "}
-                  {product.category?.name || "-"}
-                </p>
+                <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                      Default Category
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">
+                      {categoryContext.defaultCategory?.name || "-"}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Primary storefront placement for this product.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                      Selected Categories
+                    </p>
+                    {categoryContext.selectedCategories.length > 0 ? (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {categoryContext.selectedCategories.map((category) => (
+                          <span
+                            key={category.id}
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                              Number(category.id) ===
+                              Number(categoryContext.defaultCategory?.id ?? 0)
+                                ? "border border-sky-200 bg-sky-50 text-sky-700"
+                                : "border border-slate-200 bg-white text-slate-600"
+                            }`}
+                          >
+                            {category.name}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-sm text-slate-500">No categories assigned.</p>
+                    )}
+                    {categoryContext.relatedCategories.length > 0 ? (
+                      <p className="mt-2 text-xs text-slate-500">
+                        {categoryContext.relatedCategories.length} secondary category
+                        {categoryContext.relatedCategories.length > 1 ? "ies" : "y"} linked.
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
 
                 <div className="space-y-2">
                   <p className="text-sm font-semibold text-slate-700">Tags</p>

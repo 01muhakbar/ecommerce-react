@@ -44,8 +44,8 @@ const PAYMENT_OPTIONS = [
 
 const DEFAULT_STORE_SETTINGS_FLAGS = {
   payments: {
-    cashOnDeliveryEnabled: true,
-    stripeEnabled: true,
+    cashOnDeliveryEnabled: false,
+    stripeEnabled: false,
     razorPayEnabled: false,
   },
 };
@@ -962,8 +962,9 @@ export default function CheckoutPage() {
                   Secure Checkout
                 </p>
                 <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">Checkout</h1>
-                <p className="mt-1 text-sm text-slate-500">
-                  Complete your delivery details and confirm order.
+                <p className="mt-1 max-w-2xl text-sm text-slate-500">
+                  Complete your delivery details, confirm payment preference, and review the
+                  final order summary before placing the order.
                 </p>
                 {checkoutCustomizationQuery.isLoading ? (
                   <p className="mt-2 text-xs text-slate-500">Loading checkout labels...</p>
@@ -1002,6 +1003,35 @@ export default function CheckoutPage() {
                 >
                   {useDefaultShipping ? "Yes" : "No"}
                 </span>
+              </div>
+            </div>
+            <div className="mb-6 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-600">
+                  Step 1
+                </p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">Contact Details</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  Add the customer name, email, and phone used for delivery updates.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  Step 2
+                </p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">Shipping Details</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  Confirm the address and choose the delivery option that fits your order.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  Step 3
+                </p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">Review & Place</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  Double-check the summary, then submit to generate the order reference.
+                </p>
               </div>
             </div>
 
@@ -1305,8 +1335,8 @@ export default function CheckoutPage() {
                   </div>
                 ) : (
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                    No payment options are configured. Orders are processed as COD in this
-                    environment.
+                    No public payment options are configured right now. Please check the
+                    store settings before placing an order.
                   </div>
                 )}
                 {paymentOptionId !== "cash" && paymentOptions.length > 0 ? (
@@ -1339,16 +1369,40 @@ export default function CheckoutPage() {
 
         <aside className="space-y-4 lg:sticky lg:top-24">
           <div className="rounded-[30px] border border-slate-200 bg-white p-4 shadow-[0_16px_34px_rgba(15,23,42,0.06)] sm:p-6">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-              Checkout Summary
-            </p>
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-slate-900 sm:text-xl">
-                {checkoutCopy.cartItemSection.orderSummaryLabel}
-              </h3>
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                {totalQty} Items
-              </span>
+            <div className="space-y-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                Checkout Summary
+              </p>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-slate-900 sm:text-xl">
+                  {checkoutCopy.cartItemSection.orderSummaryLabel}
+                </h3>
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  {totalQty} Items
+                </span>
+              </div>
+              <p className="text-sm leading-6 text-slate-500">
+                Review items, coupon impact, shipping, and the final amount before you submit.
+              </p>
+            </div>
+
+            <div className="mt-5 rounded-[24px] bg-slate-900 px-4 py-4 text-white shadow-[0_18px_34px_rgba(15,23,42,0.18)] sm:px-5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-300">
+                Estimated Total
+              </p>
+              <div className="mt-2 flex items-end justify-between gap-4">
+                <div>
+                  <p className="text-3xl font-extrabold leading-none sm:text-[34px]">
+                    {formatCurrency(total)}
+                  </p>
+                  <p className="mt-2 text-xs text-slate-300">
+                    Shipping, discounts, and store settings are reflected live in this summary.
+                  </p>
+                </div>
+                <div className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-200">
+                  Submit Next
+                </div>
+              </div>
             </div>
 
             <div className="mt-4 space-y-3">
@@ -1522,6 +1576,11 @@ export default function CheckoutPage() {
               </div>
             </div>
 
+            <div className="mt-6 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3.5 text-sm text-emerald-900">
+              After placing the order, you will be redirected to the success page with a trackable
+              order reference.
+            </div>
+
             <button
               type="submit"
               disabled={isSubmitting || isRemoteSyncing || couponStatus === "loading"}
@@ -1537,6 +1596,9 @@ export default function CheckoutPage() {
                 {isSubmitting ? "Processing..." : checkoutCopy.buttons.confirmButtonLabel}
               </span>
             </button>
+            <p className="mt-3 text-center text-xs leading-5 text-slate-500">
+              By placing this order, you confirm the contact and shipping details above.
+            </p>
           </div>
         </aside>
       </form>

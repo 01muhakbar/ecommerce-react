@@ -51,12 +51,45 @@ const buildCategoryTree = (categories) => {
   return (byParent.get(0) || []).map(attachChildren);
 };
 
+const collectExpandableIds = (nodes, bucket = new Set()) => {
+  (Array.isArray(nodes) ? nodes : []).forEach((node) => {
+    if (Array.isArray(node?.children) && node.children.length > 0) {
+      bucket.add(Number(node.id));
+      collectExpandableIds(node.children, bucket);
+    }
+  });
+  return bucket;
+};
+
+const normalizeSelectedCategoryIds = (value) =>
+  Array.from(
+    new Set(
+      (Array.isArray(value) ? value : [])
+        .map((entry) => Number(entry))
+        .filter((entry) => Number.isInteger(entry) && entry > 0)
+    )
+  );
+
+const resolveDefaultCategoryId = (categoryIds, currentDefaultCategoryId) => {
+  const normalizedIds = normalizeSelectedCategoryIds(categoryIds);
+  const normalizedDefault = Number(currentDefaultCategoryId);
+
+  if (normalizedIds.length === 0) return null;
+  if (Number.isInteger(normalizedDefault) && normalizedIds.includes(normalizedDefault)) {
+    return normalizedDefault;
+  }
+  return normalizedIds[0];
+};
+
 const fieldInputClass =
   "h-11 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-700 transition focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100";
 const fieldTextareaClass =
   "h-32 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-700 transition focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100";
-const sectionCardClass = "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm";
+const sectionCardClass =
+  "rounded-[24px] border border-slate-200/90 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.45)]";
 const sectionTitleClass = "text-base font-semibold text-slate-900";
+const resolveSalePriceValue = (value) =>
+  String(value || "").trim() === "" ? null : Number(value);
 
 function FormRow({ label, helper, children }) {
   return (
@@ -70,8 +103,27 @@ function FormRow({ label, helper, children }) {
   );
 }
 
-function CategoryTree({ tree, selectedId, onSelect }) {
-  const [expanded, setExpanded] = useState(() => new Set());
+function SectionHeader({ eyebrow, title, description, meta = null }) {
+  return (
+    <div className="mb-4 flex flex-col gap-3 border-b border-slate-100 pb-4 lg:flex-row lg:items-start lg:justify-between">
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+          {eyebrow}
+        </p>
+        <h2 className={`${sectionTitleClass} mt-1`}>{title}</h2>
+        <p className="mt-1 text-xs text-slate-500">{description}</p>
+      </div>
+      {meta ? <div className="shrink-0">{meta}</div> : null}
+    </div>
+  );
+}
+
+function CategoryTree({ tree, selectedIds, onToggle }) {
+  const [expanded, setExpanded] = useState(() => collectExpandableIds(tree));
+
+  useEffect(() => {
+    setExpanded(collectExpandableIds(tree));
+  }, [tree]);
 
   const toggleExpand = (id) => {
     setExpanded((prev) => {
@@ -86,6 +138,7 @@ function CategoryTree({ tree, selectedId, onSelect }) {
     const nodeId = Number(node?.id);
     const hasChildren = Array.isArray(node?.children) && node.children.length > 0;
     const isOpen = expanded.has(nodeId);
+    const isSelected = selectedIds.includes(nodeId);
 
     return (
       <div key={nodeId} className="space-y-1">
@@ -105,10 +158,9 @@ function CategoryTree({ tree, selectedId, onSelect }) {
           <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
           <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
             <input
-              type="radio"
-              name="category-tree"
-              checked={String(selectedId || "") === String(nodeId)}
-              onChange={() => onSelect(String(nodeId))}
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => onToggle(nodeId)}
               className="h-4 w-4 border-slate-300 text-emerald-600 focus:ring-emerald-400"
             />
             {node?.name}
@@ -150,8 +202,8 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
     description: "",
     sku: "",
     barcode: "",
-    categoryId: "",
-    defaultCategoryId: "",
+    categoryIds: [],
+    defaultCategoryId: null,
     price: "",
     salePrice: "",
     stock: "",
@@ -173,6 +225,19 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
 
   const categories = categoriesQuery.data?.data || [];
   const categoryTree = useMemo(() => buildCategoryTree(categories), [categories]);
+  const selectedCategories = useMemo(() => {
+    const selectedIdSet = new Set(normalizeSelectedCategoryIds(form.categoryIds));
+    return categories.filter((category) => selectedIdSet.has(Number(category.id)));
+  }, [categories, form.categoryIds]);
+  const selectedCategoryLabel = useMemo(() => {
+    if (selectedCategories.length === 0) return "No category selected";
+    if (selectedCategories.length === 1) return selectedCategories[0].name;
+    return `${selectedCategories.length} categories selected`;
+  }, [selectedCategories]);
+  const defaultCategoryOptions = selectedCategories;
+  const footerSummary = isEdit
+    ? "Update product details and refresh the catalog view."
+    : "Save this draft to push it into the products catalog.";
   const closeForm = () => {
     if (typeof onClose === "function") {
       onClose();
@@ -192,7 +257,19 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
 
     const initialName = String(product.name || "");
     const initialSlug = String(product.slug || "");
-    const initialCategoryId = String(product.categoryId || "");
+    const initialCategoryIds = normalizeSelectedCategoryIds(
+      product.categoryIds?.length
+        ? product.categoryIds
+        : product.defaultCategoryId
+          ? [product.defaultCategoryId]
+          : product.categoryId
+            ? [product.categoryId]
+            : []
+    );
+    const initialDefaultCategoryId = resolveDefaultCategoryId(
+      initialCategoryIds,
+      product.defaultCategoryId ?? product.categoryId ?? null
+    );
     const initialImage =
       product.promoImagePath ||
       (Array.isArray(product.imagePaths) ? product.imagePaths[0] : "") ||
@@ -207,8 +284,8 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
       description: product.description || "",
       sku: product.sku || "",
       barcode: product.barcode || "",
-      categoryId: initialCategoryId,
-      defaultCategoryId: initialCategoryId,
+      categoryIds: initialCategoryIds,
+      defaultCategoryId: initialDefaultCategoryId,
       price: String(product.price ?? ""),
       salePrice: String(product.salePrice ?? ""),
       stock: String(product.stock ?? ""),
@@ -319,12 +396,21 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
     return uploadedUrls;
   };
 
-  const onSelectCategory = (categoryId) => {
-    setForm((prev) => ({
-      ...prev,
-      categoryId,
-      defaultCategoryId: prev.defaultCategoryId || categoryId,
-    }));
+  const onToggleCategory = (categoryId) => {
+    setForm((prev) => {
+      const nextCategoryIds = prev.categoryIds.includes(categoryId)
+        ? prev.categoryIds.filter((entry) => entry !== categoryId)
+        : [...prev.categoryIds, categoryId];
+
+      return {
+        ...prev,
+        categoryIds: normalizeSelectedCategoryIds(nextCategoryIds),
+        defaultCategoryId: resolveDefaultCategoryId(
+          nextCategoryIds,
+          prev.defaultCategoryId
+        ),
+      };
+    });
   };
 
   const handleTagKeyDown = (event) => {
@@ -355,8 +441,7 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
     const name = String(form.name || "").trim();
     const price = Number(form.price);
     const stock = Number(form.stock || 0);
-    const salePrice =
-      String(form.salePrice || "").trim() === "" ? null : Number(form.salePrice);
+    const salePrice = resolveSalePriceValue(form.salePrice);
 
     if (!name) {
       setNotice({ type: "error", message: "Product title is required." });
@@ -374,6 +459,27 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
       setNotice({ type: "error", message: "Sale price must be a valid number." });
       return;
     }
+    if (salePrice != null && salePrice >= price) {
+      setNotice({
+        type: "error",
+        message: "Sale price must be lower than product price.",
+      });
+      return;
+    }
+    if (form.categoryIds.length === 0) {
+      setNotice({
+        type: "error",
+        message: "Select at least one category before saving this product.",
+      });
+      return;
+    }
+    if (!form.defaultCategoryId || !form.categoryIds.includes(Number(form.defaultCategoryId))) {
+      setNotice({
+        type: "error",
+        message: "Choose one default category from the selected categories.",
+      });
+      return;
+    }
 
     try {
       const uploadedUrls = await uploadSelectedImages();
@@ -386,10 +492,9 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
         salePrice: salePrice ?? undefined,
         stock,
         status: form.status,
-        categoryId: form.categoryId ? Number(form.categoryId) : undefined,
-        defaultCategoryId: form.defaultCategoryId
-          ? Number(form.defaultCategoryId)
-          : undefined,
+        categoryIds: normalizeSelectedCategoryIds(form.categoryIds),
+        defaultCategoryId: Number(form.defaultCategoryId),
+        categoryId: Number(form.defaultCategoryId),
         imageUrl,
         imageUrls: uploadedUrls.length > 0 ? uploadedUrls : undefined,
         sku: form.sku || undefined,
@@ -438,6 +543,17 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
               <p className="text-sm text-slate-600">
                 Create and manage product information with consistent catalog details.
               </p>
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <span className="inline-flex items-center rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-emerald-700">
+                  {isEdit ? "Edit Mode" : "Create Mode"}
+                </span>
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
+                  Category: {selectedCategoryLabel}
+                </span>
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
+                  Media: {localImages.length}
+                </span>
+              </div>
             </div>
             <div className="flex items-center gap-3 self-start md:self-auto">
               <select className="h-10 min-w-[82px] rounded-[10px] border border-emerald-500 bg-white px-3 text-sm font-medium text-slate-700 focus:outline-none">
@@ -488,12 +604,16 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
             {isEdit && productQuery.isLoading ? null : (
               <div className="space-y-5">
                 <section className={sectionCardClass}>
-                  <div className="mb-4">
-                    <h2 className={sectionTitleClass}>Basic Info</h2>
-                    <p className="mt-1 text-xs text-slate-500">
-                      Set product identity and primary descriptive information.
-                    </p>
-                  </div>
+                  <SectionHeader
+                    eyebrow="Identity"
+                    title="Basic Info"
+                    description="Set product identity and primary descriptive information."
+                    meta={
+                      <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
+                        Required for catalog listing
+                      </span>
+                    }
+                  />
                   <div className="grid gap-4 lg:grid-cols-2">
                     <div className="lg:col-span-2">
                       <FormRow label="Product Title/Name">
@@ -546,46 +666,71 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
                 </section>
 
                 <section className={sectionCardClass}>
-                  <div className="mb-4">
-                    <h2 className={sectionTitleClass}>Category</h2>
-                    <p className="mt-1 text-xs text-slate-500">
-                      Assign category placement for storefront navigation.
-                    </p>
-                  </div>
+                  <SectionHeader
+                    eyebrow="Placement"
+                    title="Category"
+                    description="Assign category placement for storefront navigation."
+                    meta={
+                      <span className="inline-flex items-center rounded-full border border-sky-100 bg-sky-50 px-3 py-1 text-[11px] font-semibold text-sky-700">
+                        {selectedCategoryLabel}
+                      </span>
+                    }
+                  />
                   <div className="grid gap-4 lg:grid-cols-2">
                     <div className="lg:col-span-2">
-                      <FormRow label="Category">
+                      <FormRow
+                        label="Category"
+                        helper="Select all categories that should include this product in the catalog tree."
+                      >
                         <div className="space-y-2">
                           <input
                             type="text"
                             readOnly
-                            value={
-                              categories.find((cat) => String(cat.id) === String(form.categoryId))
-                                ?.name || ""
-                            }
-                            placeholder="Select Category"
+                            value={selectedCategories.map((category) => category.name).join(", ")}
+                            placeholder="Select one or more categories"
                             className={fieldInputClass}
                           />
+                          {selectedCategories.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {selectedCategories.map((category) => (
+                                <span
+                                  key={category.id}
+                                  className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] font-semibold text-sky-700"
+                                >
+                                  {category.name}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
                           <div className="max-h-60 overflow-auto rounded-lg border border-slate-200 bg-white p-2">
                             <CategoryTree
                               tree={categoryTree}
-                              selectedId={form.categoryId}
-                              onSelect={onSelectCategory}
+                              selectedIds={form.categoryIds}
+                              onToggle={onToggleCategory}
                             />
                           </div>
                         </div>
                       </FormRow>
                     </div>
-                    <FormRow label="Default Category">
+                    <FormRow
+                      label="Default Category"
+                      helper="Choose the primary category from the selected categories above."
+                    >
                       <select
-                        value={form.defaultCategoryId}
+                        value={form.defaultCategoryId ? String(form.defaultCategoryId) : ""}
                         onChange={(event) =>
-                          setForm((prev) => ({ ...prev, defaultCategoryId: event.target.value }))
+                          setForm((prev) => ({
+                            ...prev,
+                            defaultCategoryId: event.target.value
+                              ? Number(event.target.value)
+                              : null,
+                          }))
                         }
+                        disabled={defaultCategoryOptions.length === 0}
                         className={fieldInputClass}
                       >
                         <option value="">Default Category</option>
-                        {categories.map((category) => (
+                        {defaultCategoryOptions.map((category) => (
                           <option key={category.id} value={String(category.id)}>
                             {category.name}
                           </option>
@@ -596,12 +741,16 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
                 </section>
 
                 <section className={sectionCardClass}>
-                  <div className="mb-4">
-                    <h2 className={sectionTitleClass}>Pricing</h2>
-                    <p className="mt-1 text-xs text-slate-500">
-                      Configure base and sale price presentation.
-                    </p>
-                  </div>
+                  <SectionHeader
+                    eyebrow="Commercial"
+                    title="Pricing"
+                    description="Configure base price first. Sale price is optional and must stay lower."
+                    meta={
+                      <span className="inline-flex items-center rounded-full border border-amber-100 bg-amber-50 px-3 py-1 text-[11px] font-semibold text-amber-700">
+                        Base + promo pricing
+                      </span>
+                    }
+                  />
                   <div className="grid gap-4 lg:grid-cols-2">
                     <FormRow label="Product Price">
                       <div className="flex items-center overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
@@ -643,36 +792,35 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
                 </section>
 
                 <section className={sectionCardClass}>
-                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h2 className={sectionTitleClass}>Inventory</h2>
-                      <p className="mt-1 text-xs text-slate-500">
-                        Manage stock and variant-related display settings.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-orange-500">
-                        Does this product have variants?
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setHasVariants((prev) => !prev)}
-                        className={`relative inline-flex h-8 w-[66px] items-center rounded-full px-1 transition ${
-                          hasVariants ? "bg-emerald-500" : "bg-rose-500"
-                        }`}
-                        aria-label="Toggle variants"
-                      >
-                        <span
-                          className={`inline-block h-6 w-6 rounded-full bg-white shadow transition ${
-                            hasVariants ? "translate-x-[34px]" : "translate-x-0"
-                          }`}
-                        />
-                        <span className="absolute right-2 text-sm font-semibold text-white">
-                          {hasVariants ? "Yes" : "No"}
+                  <SectionHeader
+                    eyebrow="Operations"
+                    title="Inventory"
+                    description="Manage stock and variant-related display settings."
+                    meta={
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-orange-500">
+                          Does this product have variants?
                         </span>
-                      </button>
-                    </div>
-                  </div>
+                        <button
+                          type="button"
+                          onClick={() => setHasVariants((prev) => !prev)}
+                          className={`relative inline-flex h-8 w-[66px] items-center rounded-full px-1 transition ${
+                            hasVariants ? "bg-emerald-500" : "bg-rose-500"
+                          }`}
+                          aria-label="Toggle variants"
+                        >
+                          <span
+                            className={`inline-block h-6 w-6 rounded-full bg-white shadow transition ${
+                              hasVariants ? "translate-x-[34px]" : "translate-x-0"
+                            }`}
+                          />
+                          <span className="absolute right-2 text-sm font-semibold text-white">
+                            {hasVariants ? "Yes" : "No"}
+                          </span>
+                        </button>
+                      </div>
+                    }
+                  />
                   <div className="grid gap-4 lg:grid-cols-2">
                     <FormRow label="Product Quantity">
                       <input
@@ -704,12 +852,16 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
                 </section>
 
                 <section className={sectionCardClass}>
-                  <div className="mb-4">
-                    <h2 className={sectionTitleClass}>Images</h2>
-                    <p className="mt-1 text-xs text-slate-500">
-                      Upload product visuals and review selected previews.
-                    </p>
-                  </div>
+                  <SectionHeader
+                    eyebrow="Media"
+                    title="Images"
+                    description="Upload product visuals and review selected previews."
+                    meta={
+                      <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
+                        {localImages.length} file(s) attached
+                      </span>
+                    }
+                  />
                   <FormRow label="Product Images">
                     <div className="space-y-3">
                       <div
@@ -783,12 +935,16 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
                 </section>
 
                 <section className={sectionCardClass}>
-                  <div className="mb-4">
-                    <h2 className={sectionTitleClass}>Metadata</h2>
-                    <p className="mt-1 text-xs text-slate-500">
-                      Keep slug and tags organized for search and display.
-                    </p>
-                  </div>
+                  <SectionHeader
+                    eyebrow="Discovery"
+                    title="Metadata"
+                    description="Keep slug and tags organized for search and display."
+                    meta={
+                      <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
+                        {form.tags.length} tag(s)
+                      </span>
+                    }
+                  />
                   <div className="grid gap-4 lg:grid-cols-2">
                     <div className="lg:col-span-2">
                       <FormRow label="Product Tags">
@@ -840,35 +996,46 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
               isDrawerMode ? "sticky bottom-0 shadow-[0_-8px_24px_-20px_rgba(15,23,42,0.45)]" : ""
             }`}
           >
-            {isDrawerMode ? (
+            <div className="space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                Final action
+              </p>
+              <p className="text-sm font-semibold text-slate-900">
+                {isEdit ? "Review product changes before updating" : "Review product details before saving"}
+              </p>
+              <p className="text-xs text-slate-500">{footerSummary}</p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {isDrawerMode ? (
+                <button
+                  type="button"
+                  onClick={closeForm}
+                  className="inline-flex h-12 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-800 transition hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+              ) : (
+                <Link
+                  to="/admin/products"
+                  className="inline-flex h-12 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-800 transition hover:bg-slate-100"
+                >
+                  Cancel
+                </Link>
+              )}
               <button
-                type="button"
-                onClick={closeForm}
-                className="inline-flex h-12 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-800 transition hover:bg-slate-100"
+                type="submit"
+                disabled={isSubmitting}
+                className="inline-flex h-12 items-center justify-center rounded-xl bg-emerald-600 px-6 text-sm font-semibold text-white shadow-[0_14px_26px_-18px_rgba(5,150,105,0.7)] transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Cancel
+                {isSubmitting
+                  ? isEdit
+                    ? "Saving..."
+                    : "Creating..."
+                  : isEdit
+                    ? "Update Product"
+                    : "Add Product"}
               </button>
-            ) : (
-              <Link
-                to="/admin/products"
-                className="inline-flex h-12 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-800 transition hover:bg-slate-100"
-              >
-                Cancel
-              </Link>
-            )}
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="inline-flex h-12 items-center justify-center rounded-xl bg-emerald-600 px-6 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isSubmitting
-                ? isEdit
-                  ? "Saving..."
-                  : "Creating..."
-                : isEdit
-                  ? "Update Product"
-                  : "Add Product"}
-            </button>
+            </div>
           </div>
         </form>
       </div>

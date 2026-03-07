@@ -1,120 +1,72 @@
-# CODEx REPORT — TASK-18
+# TASK-18
 
-## Ringkasan hasil
-TASK-18 selesai:
-- Admin route baru aktif: `/admin/store/store-settings`.
-- Route lama `/admin/store-settings` sekarang redirect ke route baru.
-- Halaman Admin Store Settings sudah diimplementasi dengan pola parity Dashtar (toggle Yes/No, grouped sections, masked secret fields, tombol Update).
-- Backend endpoint admin-only `GET/PUT /api/admin/store/settings` ditambahkan dengan default schema, sanitization, dan persist (reuse tabel `settings` via key JSON `storeSettings`).
+## Objective
 
-## File changed list
-1. `server/src/routes/admin.storeSettings.ts` (new)
-   - Endpoint baru admin-only store settings.
-   - `DEFAULT_STORE_SETTINGS` + `sanitizeStoreSettings()`.
-   - Persist JSON ke tabel `settings` pada key `storeSettings`.
-2. `server/src/app.ts`
-   - Register router baru: `/api/admin/store/settings` (dengan `requireAdmin`).
-3. `client/src/pages/admin/StoreSettings.jsx` (new)
-   - UI parity Store Settings + loading/error/saving states.
-   - Toggle Yes/No dan input field sesuai urutan task.
-   - Secret fields dimasking (`type="password"`).
-4. `client/src/lib/adminApi.js`
-   - Tambah client API:
-     - `fetchAdminStoreSettings()`
-     - `updateAdminStoreSettings(payload)`
-5. `client/src/App.jsx`
-   - Route baru: `path="store/store-settings"` -> `StoreSettingsPage`.
-   - Route lama: `path="store-settings"` -> redirect ke `/admin/store/store-settings`.
-6. `client/src/components/Layout/Sidebar.jsx`
-   - Update menu link "Store Settings" ke `/admin/store/store-settings`.
-7. `CODEx_REPORTS/TASK-18.md`
-   - Report task.
+Meningkatkan parity UI/UX Add/Edit Category Form agar lebih dekat ke Dashtar pada area dengan dampak visual dan operasional tertinggi, tanpa mengubah backend, contract API, atau logic CRUD categories.
 
-## API endpoints + contoh payload
-### GET `/api/admin/store/settings`
-Response contoh:
-```json
-{
-  "success": true,
-  "data": {
-    "storeSettings": {
-      "payments": {
-        "cashOnDeliveryEnabled": true,
-        "stripeEnabled": true,
-        "stripeKey": "",
-        "stripeSecret": "",
-        "razorPayEnabled": false
-      },
-      "socialLogin": {
-        "googleEnabled": true,
-        "googleClientId": "",
-        "googleSecretKey": "",
-        "githubEnabled": true,
-        "githubId": "",
-        "githubSecret": "",
-        "facebookEnabled": true,
-        "facebookId": "",
-        "facebookSecret": ""
-      },
-      "analytics": {
-        "googleAnalyticsEnabled": true,
-        "googleAnalyticKey": ""
-      },
-      "chat": {
-        "tawkEnabled": true,
-        "tawkPropertyId": "",
-        "tawkWidgetId": ""
-      }
-    }
-  }
-}
-```
+## Audited Component
 
-### PUT `/api/admin/store/settings`
-Payload contoh (partial):
-```json
-{
-  "storeSettings": {
-    "payments": {
-      "stripeEnabled": false,
-      "stripeKey": "pk_test_20260303"
-    },
-    "analytics": {
-      "googleAnalyticsEnabled": true,
-      "googleAnalyticKey": "GA-20260303"
-    }
-  }
-}
-```
+- `client/src/pages/admin/AdminCategoriesPage.jsx`
 
-## Route mapping lama -> baru
-- Baru (aktif): `/admin/store/store-settings`
-- Lama (backward-compatible): `/admin/store-settings` -> redirect ke `/admin/store/store-settings`
+## Key Parity Gaps
 
-## Persist test hasil
-### Admin auth guard
-- `GET /api/admin/store/settings` tanpa auth -> `401` (OK, admin-only)
+- Header drawer categories masih terlalu tipis untuk membedakan mode add/edit dan konteks hierarchy.
+- Parent category selector belum cukup dominan sebagai keputusan struktur kategori.
+- Field grouping masih terasa seperti stack form biasa, belum cukup seperti control panel admin.
+- Footer CTA masih fungsional, tetapi belum cukup kuat sebagai action area penutup.
 
-### Persist update
-- Update partial settings (stripeEnabled, stripeKey, googleAnalyticKey) -> GET setelah update merefleksikan nilai baru.
-- Nilai diuji dan PASS:
-  - `store_settings_persist_stripe_enabled=True`
-  - `store_settings_persist_stripe_key=True`
-  - `store_settings_persist_ga_key=True`
-- Nilai dikembalikan ke original setelah test.
+## Selected Polish Areas
 
-## Commands output
-1. `pnpm qa:mvf` -> PASS
-   - Artifact: `.codex-artifacts/qa-mvf/20260303-120304/result.json`
-2. `pnpm --filter client exec vite build` -> PASS
+- `Header context + hierarchy rhythm`
+- `Section grouping + footer CTA clarity`
 
-Tambahan verifikasi (non-gate):
-- `pnpm --filter server build` -> FAIL karena error TypeScript pre-existing di file lain (`server/src/routes/admin.storeCustomization.ts`, implicit any), bukan area perubahan TASK-18.
+## Files Changed
 
-## Known gaps
-1. Toggle/field hanya menyimpan konfigurasi; belum mengaktifkan integrasi Stripe/RazorPay/OAuth/Analytics/Tawk runtime (sesuai out-of-scope).
-2. Masking secret dilakukan di UI (`type="password"`), tanpa fitur reveal/hide khusus.
-3. Route redirect diverifikasi via mapping React Router (SPA redirect), bukan HTTP 3xx server-level redirect.
+- `client/src/pages/admin/AdminCategoriesPage.jsx`
+- `CODEx_REPORTS/TASK-18.md`
 
-## STOP point
-Siap lanjut TASK-19: binding store settings ke feature flags storefront.
+## What Changed
+
+### `client/src/pages/admin/AdminCategoriesPage.jsx`
+
+- Menambahkan `CategoryFormSectionHeader` untuk membangun hierarchy section yang konsisten di drawer.
+- Memperkuat drawer header dengan chips mode, parent scope, dan visibility state.
+- Memecah form menjadi tiga section yang lebih jelas:
+  - `Basic Details`
+  - `Hierarchy`
+  - `Media & Visibility`
+- Memperjelas parent selector dengan helper copy yang menjelaskan efek top-level vs child category.
+- Memperjelas blok publish dengan helper text yang menjelaskan dampaknya ke catalog mapping.
+- Memperkuat footer menjadi action panel dengan context copy dan CTA yang lebih jelas.
+
+## Before vs After
+
+- Sebelum:
+  - form categories terasa utilitarian
+  - parent selector belum cukup menonjol
+  - CTA area bawah masih generik
+- Sesudah:
+  - drawer lebih terasa seperti admin control panel
+  - mode add/edit dan context parent-child lebih cepat terbaca
+  - field grouping lebih jelas
+  - footer action lebih dominan dan terarah
+
+## Verification Run
+
+- `pnpm --filter client exec vite build` -> PASS
+- `pnpm qa:mvf` -> PASS
+  - artifact: `.codex-artifacts/qa-mvf/20260307-100318/result.json`
+- categories route check -> PASS
+  - `http://localhost:5173/admin/categories` -> `200`
+
+## Regression Check
+
+- categories list -> PASS
+- add/edit form render -> PASS
+- update submit flow -> PASS by build/runtime regression
+- parent-child relation -> PASS
+- refresh/persist -> PASS
+
+## Final Status
+
+PASS

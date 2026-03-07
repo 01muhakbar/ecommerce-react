@@ -100,8 +100,15 @@ const ChevronDown = (props) => (
 );
 
 const MENU = [
-  { label: "Dashboard", to: "/admin", icon: IconGrid, perm: "DASHBOARD_VIEW" },
   {
+    section: "Overview",
+    label: "Dashboard",
+    to: "/admin",
+    icon: IconGrid,
+    perm: "DASHBOARD_VIEW",
+  },
+  {
+    section: "Commerce",
     label: "Catalog",
     icon: IconBoxes,
     hasCaret: true,
@@ -112,11 +119,36 @@ const MENU = [
       { label: "Coupons", to: "/admin/coupons", perm: "COUPONS_CRUD" },
     ],
   },
-  { label: "Customers", to: "/admin/customers", icon: IconUsers, perm: "CUSTOMERS_VIEW" },
-  { label: "Orders", to: "/admin/orders", icon: IconReceipt, perm: "ORDERS_VIEW" },
-  { label: "Our Staff", to: "/admin/our-staff", icon: IconStaff, perm: "STAFF_MANAGE" },
-  { label: "Settings", to: "/admin/settings", icon: IconSettings, perm: "SETTINGS_MANAGE" },
   {
+    section: "Commerce",
+    label: "Customers",
+    to: "/admin/customers",
+    icon: IconUsers,
+    perm: "CUSTOMERS_VIEW",
+  },
+  {
+    section: "Commerce",
+    label: "Orders",
+    to: "/admin/orders",
+    icon: IconReceipt,
+    perm: "ORDERS_VIEW",
+  },
+  {
+    section: "Workspace",
+    label: "Our Staff",
+    to: "/admin/our-staff",
+    icon: IconStaff,
+    perm: "STAFF_MANAGE",
+  },
+  {
+    section: "Workspace",
+    label: "Settings",
+    to: "/admin/settings",
+    icon: IconSettings,
+    perm: "SETTINGS_MANAGE",
+  },
+  {
+    section: "Workspace",
     label: "International",
     icon: IconGlobe,
     hasCaret: true,
@@ -126,6 +158,7 @@ const MENU = [
     ],
   },
   {
+    section: "Workspace",
     label: "Online Store",
     icon: IconStore,
     hasCaret: true,
@@ -144,6 +177,13 @@ const MENU = [
     ],
   },
 ];
+
+const matchesRoute = (targetPath, currentPath) => {
+  if (!targetPath) return false;
+  if (targetPath === currentPath) return true;
+  if (targetPath === "/") return currentPath === "/";
+  return currentPath.startsWith(`${targetPath}/`);
+};
 
 export default function Sidebar() {
   const { user, logout } = useAuth();
@@ -214,20 +254,32 @@ export default function Sidebar() {
         <span className="sidebar__brand-icon">
           <BrandBagIcon />
         </span>
-        Dashtar
+        <div className="sidebar__brand-copy">
+          <span className="sidebar__brand-title">Dashtar</span>
+          <span className="sidebar__brand-subtitle">Admin Workspace</span>
+        </div>
       </div>
 
       <nav className="sidebar__menu" aria-label="Sidebar">
-        {allowedMenu.map((item) => {
+        {allowedMenu.map((item, index) => {
           const hasChildren = Array.isArray(item.children);
           const isOpen = !!openMenus[item.label];
           const canToggle = item.hasCaret && hasChildren;
+          const hasActiveChild = hasChildren
+            ? item.children.some((child) => matchesRoute(child.to, pathname))
+            : false;
+          const showSectionTitle =
+            index === 0 || allowedMenu[index - 1]?.section !== item.section;
 
           return (
             <div key={item.label} className="sidebar__group">
+              {showSectionTitle ? (
+                <p className="sidebar__section-title">{item.section}</p>
+              ) : null}
               {item.to && !hasChildren ? (
                 <NavLink
                   to={item.to}
+                  end={item.to === "/admin"}
                   className={({ isActive }) =>
                     `sidebar__link ${isActive ? "is-active" : ""}`
                   }
@@ -242,7 +294,7 @@ export default function Sidebar() {
                   type="button"
                   className={`sidebar__link sidebar__link--button ${
                     canToggle && isOpen ? "is-open" : ""
-                  }`}
+                  } ${hasActiveChild ? "is-current" : ""}`}
                   onClick={canToggle ? () => toggleMenu(item.label) : undefined}
                 >
                   <span className="sidebar__icon">

@@ -1,133 +1,125 @@
-# CODEx REPORT — TASK-16
+# TASK-16
 
-## Ringkasan hasil
-Implementasi `dashboardSetting` selesai pada backend sanitizer/default dan Admin UI tab **Dashboard Setting**. Tab tidak lagi placeholder, field dapat diedit, dan persist terverifikasi via API admin customization (`GET/PUT`).
+## Objective
 
-## Checklist langkah yang dijalankan
-- [x] Discovery backend/frontend path dan status tab
-- [x] Tambah schema `dashboardSetting` di backend default customization
-- [x] Tambah `normalizeDashboardSetting()` backend
-- [x] Wire `dashboardSetting` ke `sanitizeCustomization()` backend
-- [x] Tambah default + normalizer `dashboardSetting` di frontend admin
-- [x] Tambah state + hydration + mutation success wiring
-- [x] Tambah payload save `dashboardSetting` saat klik Update
-- [x] Implement UI tab `dashboardSetting` (Dashboard + Update Profile)
-- [x] Verifikasi persist `GET/PUT` admin customization
-- [x] Jalankan QA gate (`pnpm qa:mvf`, `vite build`)
+Melakukan hardening operasional dan UX guard untuk `Export`, `Import`, dan `Bulk Action` pada Admin Products agar flow lebih aman, lebih jelas untuk admin, dan lebih tahan regresi tanpa mengubah arsitektur products module.
 
-## File changed list
-1. `server/src/routes/admin.storeCustomization.ts`
-   - Menambah schema default `dashboardSetting`
-   - Menambah `normalizeDashboardSetting(root)`
-   - Menyertakan `dashboardSetting` dalam hasil `sanitizeCustomization()`
-2. `client/src/pages/admin/StoreCustomization.jsx`
-   - Menambah default schema `dashboardSetting`
-   - Menambah `normalizeDashboardSetting(source, defaults)`
-   - Menambah state `dashboardSettingState`
-   - Menambah binding load/mutation/save payload
-   - Menambah handler `onChangeDashboardSettingField`
-   - Menambah render UI tab `activeTab === "dashboardSetting"`
-3. `CODEx_REPORTS/TASK-16.md`
-   - Report task
+## Audit Summary
 
-## Final schema dashboardSetting
-```json
-{
-  "dashboardSetting": {
-    "dashboard": {
-      "sectionTitle": "Dashboard",
-      "invoiceMessageFirstPartLabel": "Invoice Message First Part",
-      "invoiceMessageFirstPartValue": "Thank You",
-      "invoiceMessageLastPartLabel": "Invoice Message Last Part",
-      "invoiceMessageLastPartValue": "Your order have been received !",
-      "printButtonLabel": "Print Button",
-      "printButtonValue": "Print Invoice",
-      "downloadButtonLabel": "Download Button",
-      "downloadButtonValue": "Download Invoice",
-      "dashboardLabel": "Dashboard",
-      "totalOrdersLabel": "Total Orders",
-      "pendingOrderLabel": "Pending Order",
-      "pendingOrderValue": "Pending Orders",
-      "processingOrderLabel": "Processing Order",
-      "processingOrderValue": "Processing Order",
-      "completeOrderLabel": "Complete Order",
-      "completeOrderValue": "Complete Orders",
-      "recentOrderLabel": "Recent Order",
-      "recentOrderValue": "Recent Orders",
-      "myOrderLabel": "My Order",
-      "myOrderValue": "My Orders"
-    },
-    "updateProfile": {
-      "sectionTitleLabel": "Update Profile",
-      "sectionTitleValue": "Update Profile",
-      "fullNameLabel": "Full Name",
-      "addressLabel": "Address",
-      "phoneMobileLabel": "Phone/Mobile",
-      "emailAddressLabel": "Email Address",
-      "updateButtonLabel": "Update Button",
-      "updateButtonValue": "Update Profile",
-      "currentPasswordLabel": "Current Password",
-      "newPasswordLabel": "New Password",
-      "changePasswordLabel": "Change Password"
-    }
-  }
-}
-```
+- `Export`
+  - Sudah punya loading state dasar.
+  - Sudah punya feedback sukses/gagal.
+  - Gap: tombol belum mengunci terhadap operasi admin products lain yang sedang berjalan.
+- `Import`
+  - Sudah punya upload flow aktif dan summary backend dasar.
+  - Gap: frontend belum memvalidasi file JSON secara eksplisit.
+  - Gap: summary hasil import masih satu baris, belum cukup jelas untuk `totalRows`, preview error, dan jumlah error tambahan.
+- `Bulk Action`
+  - Sudah punya selected rows, dropdown action, dan confirm modal untuk delete.
+  - Gap: bulk dropdown masih bisa dibuka tanpa selection.
+  - Gap: no-selection guard masih implicit lewat `disabled`, belum ada feedback eksplisit.
+  - Gap: destructive confirmation belum menampilkan jumlah item yang akan dihapus.
 
-## Checklist field UI (Dashboard + Update Profile)
-### Dashboard section
-- [x] Section Title
-- [x] Invoice Message First Part
-- [x] Invoice Message Last Part
-- [x] Print Button
-- [x] Download Button
-- [x] Dashboard
-- [x] Total Orders
-- [x] Pending Order
-- [x] Processing Order
-- [x] Complete Order
-- [x] Recent Order
-- [x] My Order
+## Selected Hardening Scope
 
-### Update Profile section
-- [x] Section Title Label
-- [x] Section Title Value (header row kanan)
-- [x] Full Name
-- [x] Address
-- [x] Phone/Mobile
-- [x] Email Address
-- [x] Update Button Label
-- [x] Update Button
-- [x] Current Password
-- [x] New Password
-- [x] Change Password
+- Tambah operation lock untuk export/import/bulk/delete agar tidak double-trigger lintas aksi.
+- Tambah validasi file import minimum:
+  - harus JSON
+  - tidak boleh kosong
+  - maksimal 2 MB
+- Perjelas import summary:
+  - `totalRows`
+  - `created`
+  - `updated`
+  - `failed`
+  - preview beberapa row error
+- Tambah guard eksplisit untuk bulk action tanpa selection.
+- Perjelas copy konfirmasi bulk delete dengan jumlah produk yang terdampak.
 
-## Persist test results
-Pengujian API admin (`lang=en`) dengan login superadmin:
-- Update `dashboardSetting.dashboard.printButtonValue` -> persist ✅
-- Update `dashboardSetting.dashboard.downloadButtonValue` -> persist ✅
-- Update `dashboardSetting.dashboard.myOrderValue` -> persist ✅
-- Update `dashboardSetting.updateProfile.updateButtonValue` -> persist ✅
+## Files Changed
 
-Output ringkas:
-- `dashboardSetting_persist_print=True`
-- `dashboardSetting_persist_download=True`
-- `dashboardSetting_persist_myOrder=True`
-- `dashboardSetting_persist_updateButton=True`
+- `client/src/pages/admin/Products.jsx`
+- `CODEx_REPORTS/TASK-16.md`
 
-## Commands + hasil
-1. `pnpm qa:mvf`
-   - Status: PASS
-   - Ringkas: seluruh smoke Store + Admin PASS
-   - Artifact: `.codex-artifacts/qa-mvf/20260303-114349/result.json`
-2. `pnpm --filter client exec vite build`
-   - Status: PASS
-   - Ringkas: build selesai sukses (vite), termasuk chunk `StoreCustomization-*.js`
+## What Changed
 
-## Known gaps
-1. Verifikasi visual parity Dashtar dilakukan via implementasi struktur/layout; screenshot comparison otomatis belum ada.
-2. Validasi interaksi tab Dashboard Setting dilakukan via data/API persist; verifikasi klik UI manual browser tidak direkam screenshot dalam report ini.
-3. Field `xxxLabel` dan `xxxValue` disimpan penuh untuk kompatibilitas binding task berikutnya; belum dibind ke storefront (sesuai out-of-scope).
+### `client/src/pages/admin/Products.jsx`
 
-## STOP point
-Siap lanjut ke TASK #17 (public include=`dashboardSetting` + binding storefront account/dashboard labels).
+- Menambahkan `isOperationsBusy` untuk mengunci tombol operasional penting saat export/import/bulk/delete sedang berjalan.
+- Menambahkan validasi import file sebelum upload:
+  - hanya menerima JSON
+  - file kosong ditolak
+  - file di atas 2 MB ditolak
+- Mengubah notice operasional menjadi lebih kaya:
+  - `title`
+  - `message`
+  - `details`
+  - `meta`
+- Menambahkan preview error import sampai 3 row pertama, plus ringkasan error tambahan bila ada.
+- Menambahkan guard eksplisit saat admin membuka bulk menu tanpa selection.
+- Menambahkan guard eksplisit saat bulk action atau bulk delete dipanggil tanpa selection.
+- Memperjelas confirmation copy bulk delete dengan jumlah item yang akan dihapus.
+
+## Before vs After
+
+- Sebelum:
+  - import file invalid baru gagal setelah request ke backend
+  - summary import kurang informatif
+  - bulk action no-selection mostly hanya diamankan oleh disabled state
+  - destructive modal bulk delete masih generik
+- Sesudah:
+  - file import invalid ditolak lebih awal dengan feedback jelas
+  - hasil import lebih mudah dipahami oleh admin
+  - bulk action memberi guard eksplisit saat belum ada selection
+  - action penting saling mengunci saat request berjalan
+  - bulk delete confirmation lebih jelas dan spesifik
+
+## End-to-End Verification
+
+- `Export`
+  - PASS
+  - JSON export tetap terunduh dan payload valid
+- `Import valid`
+  - PASS
+  - create via import berhasil
+  - update via import slug yang sama berhasil
+- `Import invalid`
+  - PASS
+  - backend invalid JSON mengembalikan `400`
+  - frontend sekarang juga punya guard awal untuk file non-JSON / kosong / terlalu besar
+- `Bulk action no-selection`
+  - PASS
+  - halaman sekarang punya guard eksplisit dan tidak membuka flow bulk saat selection kosong
+- `Bulk publish/unpublish/delete`
+  - PASS
+  - semua tetap berjalan dan persist
+- `Refresh / persist`
+  - PASS
+  - hasil bulk/import tetap konsisten setelah refetch
+
+## Regression Check
+
+- products page load -> PASS
+- `/admin/products` dev route -> PASS (`200`)
+- search/filter products -> PASS
+- add/edit form flow -> PASS
+- price sync hasil TASK-13 -> PASS
+- export/import MVP hasil TASK-15 -> PASS
+- admin/store MVF -> PASS
+
+## Verification Run
+
+- `pnpm --filter client exec vite build` -> PASS
+- API verification script -> PASS
+  - export JSON valid
+  - invalid import -> `400`
+  - valid import create/update -> PASS
+  - bulk publish/unpublish/delete -> PASS
+- `/admin/products` route check -> PASS
+  - `http://localhost:5173/admin/products`
+- `pnpm qa:mvf` -> PASS
+  - artifact: `.codex-artifacts/qa-mvf/20260307-094650/result.json`
+
+## Final Status
+
+PASS

@@ -1,6 +1,6 @@
 E-Commerce Admin Dashboard (Frontend)
 Gambaran Proyek
-Frontend ini adalah admin dashboard berbasis React untuk sistem e-commerce. Fokusnya UI yang rapi lebih dulu, dengan alur data yang siap dihubungkan ke API. Implementasi saat ini memakai dummy data dan mock service agar Anda bisa mengerjakan UI/UX tanpa backend.
+Repo ini adalah monorepo e-commerce dengan aplikasi Admin dan Storefront berbasis React + Vite, serta backend Express + Sequelize. Baseline MVF saat ini sudah backend-driven untuk flow utama store dan admin; beberapa fallback demo/config backup masih ada di area tertentu dan perlu diaudit per task, bukan dianggap sebagai source of truth utama.
 
 Tech Stack
 React (JavaScript)
@@ -30,17 +30,47 @@ Admin (protected):
 /admin/orders
 /admin/customers
 /admin/settings
-Dev Seed (Storefront)
-Run a simple dev seed to publish categories and products for the storefront:
+Baseline Command Discipline
+Gunakan command berikut sebagai baseline kerja harian:
 
-pnpm -C server seed:dev
-Dev Reset (DB)
-If db:sync fails on legacy rows (e.g. zero dates), reset the dev schema:
+Install dependency:
 
-pnpm -C server db:reset
-pnpm -C server seed:dev
-pnpm -C server dev
-pnpm -C client dev
+pnpm install
+
+DB health check:
+
+powershell -ExecutionPolicy Bypass -File .\scripts\db-health.ps1
+
+Fresh baseline reset + seed:
+
+pnpm --filter server db:reset
+pnpm --filter server seed:demo
+
+Run full stack:
+
+pnpm dev
+
+Run server only:
+
+pnpm dev:server
+
+Run client only:
+
+pnpm dev:client
+
+Build client:
+
+pnpm --filter client exec vite build
+
+Smoke MVF:
+
+pnpm qa:mvf
+
+Catatan:
+- `pnpm dev` adalah jalur utama yang dipakai untuk sesi Codex.
+- `seed:demo` sudah mencakup super admin + demo katalog.
+- Artifact `qa:mvf` ditulis ke `.codex-artifacts/qa-mvf/<runId>/`.
+- Jika `5173` sibuk, Vite bisa pindah ke port lain; selalu cek port aktual di terminal.
 Struktur Folder (Ringkas)
 src/
 api/ // Service layer (API-ready)
@@ -54,30 +84,26 @@ utils/ // Util kecil (formatter, dll.)
 App.jsx // Routes dan layout
 main.jsx // Entry point
 Cara Menjalankan Frontend
-Dari folder client/:
+Untuk development normal, jalankan dari root repo:
 
-pnpm install
 pnpm dev
-Jika menggunakan API nyata, set:
 
-VITE_API_BASE_URL=http://localhost:3001/api
+Jika hanya perlu client:
+
+pnpm dev:client
+
+Client menggunakan API melalui base `/api` dan mengandalkan server lokal di `http://localhost:3001`.
+
 Alur Data (Sederhana)
-Page -> Hook -> Service -> (API atau Dummy Data)
-Halaman hanya mengelola state UI. Service memutuskan apakah memakai API atau fallback ke dummy data.
+Page -> Hook -> Service -> API backend
+
+Catatan:
+- MVF store/admin saat ini diharapkan membaca backend nyata.
+- Beberapa fallback demo masih ada di area tertentu dan harus diperlakukan sebagai pengecualian terkontrol, bukan perilaku standar runtime.
 
 Role-Based UI (Admin vs Staff)
 Admin: akses UI penuh (add/edit/delete, update status, toggle).
 Staff: read-only UI (tombol dinonaktifkan).
-6️⃣ Install & Jalankan Frontend
-Masuk ke folder client:
-
-cd client
-npm install
-npm start
-Frontend akan berjalan di:
-
-http://localhost:5173
-
 QA UI (Opt-in)
 Jalankan QA UI untuk memverifikasi /account/orders dan /order/:ref (termasuk print mode).
 

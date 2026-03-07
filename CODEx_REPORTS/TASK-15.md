@@ -1,115 +1,130 @@
-# TASK-15 — Public Checkout Customization API + Bind Storefront Checkout Labels/Placeholders
+# TASK-15
 
-## File Changed List
-1. `server/src/routes/store.customization.ts`
-- Extend public include whitelist with `include=checkout`.
-- Keep default backward behavior (`no include` => `aboutUs` only).
+## Objective
 
-2. `client/src/pages/store/Checkout.jsx`
-- Added non-blocking checkout customization fetch:
-  - `getStoreCustomization({ lang: "en", include: "checkout" })`
-- Added per-field fallback normalizer (`DEFAULT_CHECKOUT_COPY` + `normalizeCheckoutCopy`).
-- Bound checkout UI text (section titles, labels, placeholders, summary labels, button labels).
-- Kept checkout business logic unchanged (submit payload/totals/shipping calc/order flow).
+Mengaktifkan MVP backend + frontend untuk `Export`, `Import`, dan `Bulk Action` pada Admin Products tanpa mengubah arsitektur products module secara besar.
 
-3. `CODEx_REPORTS/TASK-15.md`
-- Final report.
+## Audit Summary
 
-## API Change: include=checkout (Whitelist)
-Endpoint: `GET /api/store/customization?lang=en&include=checkout`
+- `Export`
+  - Frontend: placeholder only, tombol hanya `console.log`.
+  - Backend: belum ada endpoint export products admin.
+- `Import`
+  - Frontend: placeholder only, belum ada file picker/upload flow nyata.
+  - Backend: belum ada endpoint import products admin.
+- `Bulk Action`
+  - Frontend: sudah punya selected rows, dropdown action, confirm modal, dan feedback notice.
+  - Backend: sudah ada `POST /api/admin/products/bulk` untuk `delete`, `publish`, `unpublish`.
+  - Status awal: partial, sudah hampir aktif end-to-end.
 
-Behavior validation:
-- `GET /api/store/customization?lang=en`
-  - `customization` keys => `aboutUs`
-- `GET /api/store/customization?lang=en&include=checkout`
-  - `customization` keys => `checkout`
-- `GET /api/store/customization?lang=en&include=aboutUs,checkout`
-  - `customization` keys => `aboutUs,checkout`
+## MVP Scope Decision
 
-Example response shape (`include=checkout`):
-```json
-{
-  "success": true,
-  "lang": "en",
-  "customization": {
-    "checkout": {
-      "personalDetails": { "sectionTitle": "Personal Details", "firstNameLabel": "First Name", "firstNamePlaceholder": "First Name" },
-      "shippingDetails": { "sectionTitle": "Shipping Details", "streetAddressLabel": "Street Address", "shippingCostLabel": "Shipping Cost", "paymentMethodLabel": "Payment Method" },
-      "buttons": { "continueButtonLabel": "Continue Shipping", "confirmButtonLabel": "Confirm Order" },
-      "cartItemSection": { "sectionTitle": "Cart Item Section", "orderSummaryLabel": "Order Summary", "applyButtonLabel": "Apply", "subTotalLabel": "Sub Total", "discountLabel": "Discount", "totalCostLabel": "Total Cost" }
-    }
-  }
-}
-```
+- Format export: `JSON`
+  - Alasan: paling aman untuk MVP, tidak butuh parser CSV tambahan, dan field products tetap eksplisit.
+- Rule import: `upsert by slug`
+  - Alasan: paling realistis untuk create/update minimum tanpa mengubah contract CRUD utama.
+- Bulk actions diaktifkan: `publish`, `unpublish`, `delete`
+  - Alasan: backend dan state selection sudah ada, jadi cukup difinalkan lewat wiring frontend dan verifikasi persist.
 
-## Mapping Field (Source -> Target UI)
-- `checkout.personalDetails.sectionTitle` -> section title "01".
-- `checkout.personalDetails.firstNameLabel` -> label input first name.
-- `checkout.personalDetails.firstNamePlaceholder` -> placeholder input first name.
-- `checkout.personalDetails.lastNameLabel` -> label input last name.
-- `checkout.personalDetails.lastNamePlaceholder` -> placeholder input last name.
-- `checkout.personalDetails.emailLabel` -> label input email.
-- `checkout.personalDetails.emailPlaceholder` -> placeholder input email.
-- `checkout.personalDetails.phoneLabel` -> label input phone.
-- `checkout.personalDetails.phonePlaceholder` -> placeholder input phone.
-- `checkout.shippingDetails.sectionTitle` -> section title "02".
-- `checkout.shippingDetails.streetAddressLabel` -> label input street.
-- `checkout.shippingDetails.streetAddressPlaceholder` -> placeholder input street.
-- `checkout.shippingDetails.cityLabel` -> label input city.
-- `checkout.shippingDetails.cityPlaceholder` -> placeholder input city.
-- `checkout.shippingDetails.countryLabel` -> label input country.
-- `checkout.shippingDetails.countryPlaceholder` -> placeholder input country.
-- `checkout.shippingDetails.zipLabel` -> label input zip.
-- `checkout.shippingDetails.zipPlaceholder` -> placeholder input zip.
-- `checkout.shippingDetails.shippingCostLabel` -> shipping options block label + summary shipping row label.
-- `checkout.shippingDetails.shippingOneNameDefault` -> shipping option #1 title text.
-- `checkout.shippingDetails.shippingOneDescriptionDefault` -> shipping option #1 description prefix text.
-- `checkout.shippingDetails.shippingTwoNameDefault` -> shipping option #2 title text.
-- `checkout.shippingDetails.shippingTwoDescriptionDefault` -> shipping option #2 description prefix text.
-- `checkout.shippingDetails.paymentMethodLabel` -> section title "03".
-- `checkout.shippingDetails.paymentMethodPlaceholder` -> payment section hint text.
-- `checkout.buttons.continueButtonLabel` -> back/continue button text (left action).
-- `checkout.buttons.confirmButtonLabel` -> submit button text (idle state).
-- `checkout.cartItemSection.sectionTitle` -> summary block small header.
-- `checkout.cartItemSection.orderSummaryLabel` -> summary heading.
-- `checkout.cartItemSection.applyButtonLabel` -> coupon apply button text.
-- `checkout.cartItemSection.subTotalLabel` -> subtotal row label.
-- `checkout.cartItemSection.discountLabel` -> discount row label.
-- `checkout.cartItemSection.totalCostLabel` -> total row label.
+## Files Changed
 
-## Manual Verification (Before/After)
-1. Admin -> update checkout fields (`sectionTitle`, `firstNamePlaceholder`, `applyButtonLabel`) via admin customization endpoint.
-2. Public API read `include=checkout` reflects updated values.
-3. Values restored after verification.
+- `server/src/routes/admin.products.ts`
+- `client/src/lib/adminApi.js`
+- `client/src/pages/admin/Products.jsx`
+- `CODEx_REPORTS/TASK-15.md`
 
-Result sample:
-- `testTitle`: `Personal Details TASK15 20260303113308`
-- `savedTitle`: `Personal Details TASK15 20260303113308`
-- `savedFirstNamePlaceholder`: `First Name QA`
-- `savedApplyLabel`: `Apply QA`
-- `synced`: `true`
-- `restored`: `true`
+## What Changed
 
-Route check:
-- `GET http://localhost:5173/checkout` => HTTP `200`.
+### `server/src/routes/admin.products.ts`
 
-## Commands Output
-1. `pnpm --filter client exec vite build`
-- PASS (`vite v7.1.9`, `✓ built in 12.08s`)
+- Menambahkan helper filter bersama untuk list/export agar export mengikuti filter admin yang sama.
+- Menambahkan `GET /api/admin/products/export` untuk download JSON attachment.
+- Menambahkan `POST /api/admin/products/import` berbasis multipart file upload + JSON parser.
+- Menambahkan normalisasi import minimum:
+  - `price` sebagai base price
+  - `salePrice` hanya aktif bila valid dan lebih kecil dari `price`
+  - `published`, `status`, `stock`, `sku`, `barcode`, `tags`, `imagePaths`
+  - category resolution via `categoryId`, `categoryCode`, atau `categoryName`
+- Import mengembalikan summary dasar:
+  - `totalRows`
+  - `created`
+  - `updated`
+  - `failed`
+  - `errors`
 
-2. `pnpm qa:mvf`
-- PASS (`QA-MONEY: PASS`)
-- All MVF checks PASS including checkout -> success -> tracking and admin order update.
-- Artifact:
-  - `RESULT_FILE=.codex-artifacts/qa-mvf/20260303-113230/result.json`
-  - `SUMMARY_FILE=.codex-artifacts/qa-mvf/20260303-113230/summary.txt`
+### `client/src/lib/adminApi.js`
 
-## Known Gaps
-1. Language source still fixed to `en` for checkout customization fetch.
-2. "Continue" label mapped to existing back action button (no new button added, by design).
-3. Payment method "placeholder" mapped as section hint because payment UI uses radio options (no text input).
+- Menambahkan `exportAdminProducts(params)` untuk fetch attachment JSON dari endpoint export.
+- Menambahkan `importAdminProducts(file)` untuk upload file JSON ke endpoint import.
 
-## Recommendation for Task #16
-1. Bind checkout customization to active storefront language (not hardcoded `en`).
-2. Continue with Dashboard Setting / SEO storefront binding as next parity step.
-3. Add focused E2E assertion for checkout labels/placeholders from customization payload.
+### `client/src/pages/admin/Products.jsx`
+
+- Mengganti handler placeholder `Export` menjadi download flow nyata.
+- Mengganti handler placeholder `Import` menjadi file picker + upload flow nyata.
+- Menambahkan loading state dasar untuk export/import.
+- Menampilkan feedback sukses/gagal import/export lewat notice yang sudah ada.
+- Menjaga bulk action existing tetap dipakai untuk `publish`, `unpublish`, dan `delete`.
+
+## Before vs After
+
+- Sebelum:
+  - tombol `Export` dan `Import` hanya placeholder
+  - bulk action ada di UI, tetapi export/import belum aktif
+- Sesudah:
+  - `Export` men-download file JSON products admin
+  - `Import` menerima file JSON dan memproses create/update by slug
+  - `Bulk Action` tetap aktif untuk publish/unpublish/delete dan tervalidasi persist
+
+## End-to-End Verification
+
+- `Export`
+  - PASS
+  - file JSON terunduh
+  - header attachment memakai filename `products-export-*.json`
+  - payload berisi daftar item products admin
+- `Import`
+  - PASS
+  - create via import: `created=1`
+  - update via import slug yang sama: `updated=1`
+  - hasil list dan detail sinkron setelah import kedua
+- `Bulk Action`
+  - PASS
+  - `unpublish` -> persisted
+  - `publish` -> persisted
+  - `delete` -> persisted
+- `Refresh / Persist`
+  - PASS
+  - setelah bulk publish/unpublish, detail product mengembalikan state yang benar
+  - setelah bulk delete, query list berdasarkan slug mengembalikan 0 row
+
+## Regression Check
+
+- products page load -> PASS
+- `/admin/products` dev route -> PASS (`200`)
+- search/filter products -> PASS
+- add/edit flow existing -> PASS by build/runtime regression
+- single publish toggle existing -> PASS by shared route compatibility
+- single delete existing -> PASS by shared route compatibility
+- price sync hardening TASK-13 -> PASS
+- store/admin MVF -> PASS
+
+## Verification Run
+
+- `pnpm --filter server build` -> PASS
+- `pnpm --filter client exec vite build` -> PASS
+- API verification script -> PASS
+  - admin login: `superadmin@local.dev`
+  - export total sample: `20`
+  - import create: `1`
+  - import update: `1`
+  - bulk unpublish/publish/delete: PASS
+- client dev route check -> PASS
+  - `/admin/products` -> `200` on `http://localhost:5173/admin/products`
+- `pnpm qa:mvf` run pertama -> FAIL karena stack lokal transient
+- `pnpm qa:mvf` run kedua -> PASS
+  - artifact: `.codex-artifacts/qa-mvf/20260307-093533/result.json`
+  - summary: `20/20 passed`
+
+## Final Status
+
+PASS

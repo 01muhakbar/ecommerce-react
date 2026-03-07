@@ -1,118 +1,111 @@
-# TASK-8 Report — Store Customization FAQs
+# TASK-8 - Admin Dashboard Parity Audit + Polish Prioritas Tinggi pada Top Summary
 
-## Discovery
-- Backend file confirmed: `server/src/routes/admin.storeCustomization.ts`
-- Frontend file confirmed: `client/src/pages/admin/StoreCustomization.jsx`
-- FAQs tab status before implementation: placeholder (`Coming soon`) via generic fallback branch.
-- Reusable upload/toggle utilities were already available and reused (`ImageUploadField`, `SegmentedToggle`, `fileToDataUrl`, `validateCustomizationLogoFile`).
+## Task ID
 
-## File Changed List
-1. `server/src/routes/admin.storeCustomization.ts`
-- Added FAQ defaults and fixed item length (`8`).
-- Added `faqs` schema inside `DEFAULT_CUSTOMIZATION`.
-- Added `normalizeFaqs(root)` helper with strict shape + fallback + fixed 8 items.
-- Wired `faqs` into `sanitizeCustomization()` output.
+`TASK-8`
 
-2. `client/src/pages/admin/StoreCustomization.jsx`
-- Added FAQ defaults (`faqs`) in `getDefaultCustomization()`.
-- Added FAQ normalization helpers: `normalizeFaqItems`, `normalizeFaqs`.
-- Added state slices: `faqsState`, `faqsImageErrors`, `faqsDropActive`.
-- Added FAQ handlers: block toggles, item updates, image upload/drop/remove.
-- Added FAQ payload merge in `onSave` (items normalized back to fixed 8).
-- Implemented full `activeTab === "faqs"` UI with 3 sections:
-  - FAQs Page Header
-  - FAQs Left Column
-  - FAQs content items (Title/Description One..Eight)
+## Objective
 
-3. `CODEx_REPORTS/TASK-8.md`
-- This report.
+Melakukan audit parity pada dashboard admin dan memoles area atas fold dengan ROI tertinggi agar lebih dekat ke arah Dashtar, tanpa mengubah backend, contract API, atau logic analytics.
 
-## Final Schema `faqs`
-```json
-{
-  "faqs": {
-    "pageHeader": {
-      "enabled": true,
-      "backgroundImageDataUrl": "",
-      "pageTitle": "FAQs"
-    },
-    "leftColumn": {
-      "enabled": true,
-      "leftImageDataUrl": ""
-    },
-    "content": {
-      "enabled": true,
-      "items": [
-        { "title": "...", "description": "..." },
-        { "title": "...", "description": "..." },
-        { "title": "...", "description": "..." },
-        { "title": "...", "description": "..." },
-        { "title": "...", "description": "..." },
-        { "title": "...", "description": "..." },
-        { "title": "...", "description": "..." },
-        { "title": "...", "description": "..." }
-      ]
-    }
-  }
-}
-```
+## Audited Page
 
-Normalization guarantees:
-- `enabled` fields forced to boolean.
-- string fields fallback to defaults.
-- image DataURL fields fallback to `""`.
-- `content.items` always fixed length `8` (pad/fill using defaults).
+- `client/src/pages/Dashboard.jsx`
+- Komponen top summary yang diaudit:
+  - `client/src/components/dashboard/KPIOverviewCards.jsx`
+  - `client/src/components/dashboard/OrderStatusCards.jsx`
 
-## UI Section Checklist
-- FAQs Page Header:
-  - Enable toggle: `PASS`
-  - Background upload (drag-drop/input + preview + remove): `PASS`
-  - Page title input: `PASS`
-- FAQs Left Column:
-  - Enable toggle: `PASS`
-  - Left image upload (drag-drop/input + preview + remove): `PASS`
-- FAQs content list:
-  - Enable toggle: `PASS`
-  - `Faq Title One..Eight`: `PASS`
-  - `Faq Description One..Eight`: `PASS`
+## Key Parity Gaps
 
-## Persist Test Result
-### A) New language default check
-- Request: `GET /api/admin/store/customization?lang=qa8`
-- Result:
-  - `freshLangHasFaqs=True`
-  - `freshLangFaqItemsCount=8`
-  - `freshLangFaqHeaderTitle=FAQs`
+1. `Dashboard header hierarchy`
+   - Header dashboard masih terlalu tipis untuk area paling sering dilihat admin.
+   - Context, access state, dan quick-glance info belum cukup kuat.
 
-### B) Update + persist check (lang=en)
-- Updated via admin endpoint:
-  - `faqs.pageHeader.pageTitle`
-  - `faqs.pageHeader.backgroundImageDataUrl`
-  - `faqs.leftColumn.leftImageDataUrl`
-  - `faqs.content.items[0]` title+description (partial update)
-- Re-fetched from admin endpoint:
-  - `persistFaqHeaderTitle=FAQs QA 20260303095529`
-  - `persistFaqItemsCount=8`
-  - `persistFaqItemOneTitle=Faq Title One QA 20260303095529`
-  - `persistFaqBgDataUrl=True`
-  - `persistFaqLeftImageDataUrl=True`
+2. `Top summary readability`
+   - KPI cards dan status cards sudah menampilkan data benar, tetapi quick scan readability belum cukup tajam.
+   - Label, value, dan subtext masih bisa lebih tegas agar terasa lebih seperti dashboard admin modern.
 
-## Commands Output
+## Selected Polish Areas
+
+1. `Dashboard header hierarchy + top context`
+2. `Top summary cards emphasis + metric readability`
+
+## Files Changed
+
+- `client/src/pages/Dashboard.jsx`
+- `client/src/components/dashboard/KPIOverviewCards.jsx`
+- `client/src/components/dashboard/OrderStatusCards.jsx`
+- `client/src/pages/Dashboard.css`
+- `CODEx_REPORTS/TASK-8.md`
+
+## What Changed
+
+### `client/src/pages/Dashboard.jsx`
+
+- Menambahkan hero/header context yang lebih kuat.
+- Menambahkan 3 quick-glance cards kecil:
+  - recent orders
+  - pending amount
+  - overview access
+
+### `client/src/components/dashboard/KPIOverviewCards.jsx`
+
+- Menambahkan top row dengan icon + tag.
+- Memperjelas hierarchy title, main value, dan caption.
+- Membuat kartu KPI lebih mudah dipindai secara visual.
+
+### `client/src/components/dashboard/OrderStatusCards.jsx`
+
+- Menambahkan hint kecil pada tiap status card.
+- Memperjelas urutan label -> value -> note/hint agar lebih scan-friendly.
+
+### `client/src/pages/Dashboard.css`
+
+- Menambahkan styling hero/header dashboard.
+- Memperkuat hierarchy visual KPI cards dan status cards.
+- Menjaga responsif layout untuk desktop dan mobile.
+
+## Before vs After
+
+### Before
+
+- Dashboard sudah fungsional, tetapi area atas fold terasa datar.
+- KPI dan status cards belum cukup memberi ritme visual dan scan clarity.
+
+### After
+
+- Dashboard sekarang membuka dengan header yang lebih kontekstual dan cepat dipahami.
+- KPI dan status cards lebih mudah dibaca cepat, lebih dekat ke rasa Dashtar-style admin summary.
+
+## Verification Run
+
 1. `pnpm --filter client exec vite build`
-- PASS
-
+   - PASS
 2. `pnpm qa:mvf`
-- PASS
-- Artifact: `.codex-artifacts/qa-mvf/20260303-095427/result.json`
-- Summary: `.codex-artifacts/qa-mvf/20260303-095427/summary.txt`
+   - PASS
+3. QA artifact:
+   - `.codex-artifacts/qa-mvf/20260306-225024/result.json`
+   - `.codex-artifacts/qa-mvf/20260306-225024/summary.txt`
 
-3. `pnpm --filter server exec tsx -e "import './src/routes/admin.storeCustomization.ts'; console.log('server-route-load=PASS')"`
-- PASS (`server-route-load=PASS`)
+## MVF Impact
 
-## Known Gaps
-1. FAQ tab currently does not auto-select from URL query (`?tab=faqs`) because tab selection logic is still local state only.
-2. FAQ item count is intentionally fixed to 8 (by requirement), no dynamic add/remove UI.
-3. Storefront FAQ rendering is not included in this task (next task candidate).
+- Admin login: PASS
+- Dashboard: PASS
+- Orders list: PASS
+- Order detail: PASS
+- Update status: PASS
+- Persist after refresh: PASS
+- Store MVF smoke tetap PASS
+
+## Risks / Follow-up
+
+- Chart area dan recent orders table masih mengikuti layout lama. Itu sengaja tidak disentuh agar scope tidak melebar ke redesign dashboard penuh.
+- KPI colors masih berbasis existing variant map. Jika ingin lebih dekat lagi ke referensi Dashtar, task lanjutan bisa fokus ke chart/table rhythm dan topbar polish.
 
 ## Recommended Next Task
-- Implement public include whitelist + storefront `/faq` page using `customization.faqs` with loading/error/empty states and enabled block handling.
+
+`[TASK-9] Admin Dashboard Parity Polish - Charts + Recent Orders Table Rhythm`
+
+## Final Status
+
+`PASS`

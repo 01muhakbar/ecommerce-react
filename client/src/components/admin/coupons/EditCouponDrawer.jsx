@@ -22,6 +22,25 @@ const deriveActive = (coupon) => {
 
 const sectionCardClass = "rounded-2xl border border-slate-200 bg-white p-4 shadow-sm";
 
+function CouponDrawerSectionHeader({ eyebrow, title, description, meta }) {
+  return (
+    <div className="mb-3 flex flex-col gap-2 border-b border-slate-100 pb-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="space-y-1">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+          {eyebrow}
+        </p>
+        <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
+        {description ? <p className="text-xs text-slate-500">{description}</p> : null}
+      </div>
+      {meta ? (
+        <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
+          {meta}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 export default function EditCouponDrawer({
   open,
   onClose,
@@ -130,6 +149,17 @@ export default function EditCouponDrawer({
               <p className="mt-1 text-sm text-slate-500">
                 Update coupon validity window and discount settings.
               </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-emerald-700">
+                  Edit Mode
+                </span>
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
+                  {coupon?.code || "Code unavailable"}
+                </span>
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
+                  {active ? "Currently visible" : "Currently hidden"}
+                </span>
+              </div>
             </div>
             <button
               type="button"
@@ -146,10 +176,12 @@ export default function EditCouponDrawer({
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
             <section className={sectionCardClass}>
-              <h3 className="text-base font-semibold text-slate-900">Basic Info</h3>
-              <p className="mt-1 text-xs text-slate-500">
-                Review language and coupon identity details.
-              </p>
+              <CouponDrawerSectionHeader
+                eyebrow="Basic Info"
+                title="Review campaign identity before changing rules"
+                description="Keep the language and campaign code visible so edits stay aligned with the live promotion."
+                meta={coupon?.campaignName || coupon?.name || "Promotion"}
+              />
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -179,10 +211,12 @@ export default function EditCouponDrawer({
             </section>
 
             <section className={sectionCardClass}>
-              <h3 className="text-base font-semibold text-slate-900">Validity</h3>
-              <p className="mt-1 text-xs text-slate-500">
-                Configure campaign active period and coupon availability.
-              </p>
+              <CouponDrawerSectionHeader
+                eyebrow="Validity"
+                title="Confirm active window and publish state"
+                description="Adjust the live period first so the promotion timing stays accurate before saving any discount changes."
+                meta={endDate ? `Ends ${endDate}` : "No expiry yet"}
+              />
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -235,13 +269,26 @@ export default function EditCouponDrawer({
                   </button>
                 </div>
               </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-500">
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1">
+                  {startDate ? `Starts ${startDate}` : "Start date optional"}
+                </span>
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1">
+                  {endDate ? `Ends ${endDate}` : "End date optional"}
+                </span>
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1">
+                  {active ? "Visible after update" : "Hidden after update"}
+                </span>
+              </div>
             </section>
 
             <section className={sectionCardClass}>
-              <h3 className="text-base font-semibold text-slate-900">Discount</h3>
-              <p className="mt-1 text-xs text-slate-500">
-                Adjust discount type and minimum spend requirements.
-              </p>
+              <CouponDrawerSectionHeader
+                eyebrow="Discount Setup"
+                title="Keep discount value and threshold in the same review block"
+                description="Use this section to confirm type, amount, and minimum spend before updating the live campaign."
+                meta={discountType === "percent" ? "Percent mode" : "Fixed mode"}
+              />
               <div className="mt-4 space-y-4">
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -339,6 +386,11 @@ export default function EditCouponDrawer({
                     </div>
                   </div>
                 </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-500">
+                  {discountType === "percent"
+                    ? "Percentage promos should stay easy to compare against the campaign validity window, especially before publishing changes."
+                    : "Fixed promos should be reviewed with the minimum amount so the updated campaign remains profitable."}
+                </div>
               </div>
             </section>
 
@@ -350,22 +402,34 @@ export default function EditCouponDrawer({
           </div>
 
           <footer className="sticky bottom-0 border-t border-slate-200 bg-white/95 px-6 py-4 backdrop-blur">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={isSubmitting}
-                className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:border-slate-300"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isSubmitting ? UPDATING : "Update Coupon"}
-              </button>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1 text-xs text-slate-500">
+                <p className="font-semibold uppercase tracking-[0.08em] text-slate-500">
+                  Coupon Action Panel
+                </p>
+                <p>
+                  {coupon?.code
+                    ? `${coupon.code} will keep ${discountType === "percent" ? "percentage" : "fixed"} pricing after this update.`
+                    : "Review validity, visibility, and discount value before updating this coupon."}
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:min-w-[280px]">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={isSubmitting}
+                  className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:border-slate-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSubmitting ? UPDATING : "Update Coupon"}
+                </button>
+              </div>
             </div>
           </footer>
         </form>

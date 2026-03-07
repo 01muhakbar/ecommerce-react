@@ -50,37 +50,65 @@ export default function RecentOrderRow({
   const method = order?.method || order?.paymentMethod || "COD";
   const customerName =
     order?.customerName || order?.customer?.name || order?.customer || "Guest";
+  const statusNote =
+    statusValue === "pending"
+      ? "Needs review"
+      : statusValue === "processing"
+        ? "In progress"
+        : statusValue === "shipped"
+          ? "On route"
+          : statusValue === "completed"
+            ? "Completed"
+            : "Stopped";
 
   return (
     <tr>
-      <td>{formatInvoice(order)}</td>
+      <td>
+        <div className="dashboard-recent__invoice-cell">
+          <div className="dashboard-recent__invoice">{formatInvoice(order)}</div>
+          <div className="dashboard-recent__cell-hint">Recent order</div>
+        </div>
+      </td>
       <td>{displayOrderTime}</td>
-      <td>{customerName}</td>
-      <td>{method}</td>
+      <td>
+        <div className="dashboard-recent__customer-cell">
+          <div className="dashboard-recent__customer-name">{customerName}</div>
+          <div className="dashboard-recent__cell-hint">{method}</div>
+        </div>
+      </td>
+      <td>
+        <span className="dashboard-recent__method-chip">{method}</span>
+      </td>
       <td className="dashboard-recent__amount">
         {displayAmount}
       </td>
       <td>
-        <span className={getStatusBadgeClass(statusValue)}>{statusValue}</span>
+        <div className="dashboard-recent__status-cell">
+          <span className={getStatusBadgeClass(statusValue)}>{statusValue}</span>
+          <span className="dashboard-recent__cell-hint">{statusNote}</span>
+        </div>
       </td>
       <td>
-        <select
-          className="dashboard-recent__select"
-          value={statusValue}
-          onChange={(event) =>
-            onStatusChange?.(order, event.target.value)
-          }
-          disabled={!isAdmin}
-          title={
-            isAdmin ? "Update status" : "Only admin can update status"
-          }
-        >
-          {STATUS_OPTIONS.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
+        <div className="dashboard-recent__action-cell">
+          <span className="dashboard-recent__cell-hint">Quick update</span>
+          <select
+            className="dashboard-recent__select"
+            value={statusValue}
+            onChange={(event) =>
+              onStatusChange?.(order, event.target.value)
+            }
+            disabled={!isAdmin}
+            title={
+              isAdmin ? "Update status" : "Only admin can update status"
+            }
+          >
+            {STATUS_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </div>
       </td>
       <td>
         <div className="dashboard-recent__invoice-actions">

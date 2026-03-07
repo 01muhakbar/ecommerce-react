@@ -4,6 +4,7 @@ import sequelize from "../config/database.js";
 import { initUser, User } from "./User.js";
 import { Product } from "./Product.js";
 import { Category } from "./Category.js";
+import { ProductCategory } from "./ProductCategory.js";
 import { Cart } from "./Cart.js";
 import { CartItem } from "./CartItem.js";
 import { Order } from "./Order.js";
@@ -86,6 +87,7 @@ function initModels() {
   initUser(sequelize);
   Product.initModel(sequelize);
   Category.initModel(sequelize);
+  ProductCategory.initModel(sequelize);
   Cart.initModel(sequelize);
   CartItem.initModel(sequelize);
   Order.initModel(sequelize);
@@ -102,6 +104,7 @@ function initModels() {
     User,
     Product,
     Category,
+    ProductCategory,
     Cart,
     CartItem,
     Order,
@@ -124,6 +127,41 @@ function initModels() {
 
 // Jalankan init sekali waktu file ini di-import
 initModels();
+
+async function backfillProductCategoryAssignments() {
+  const products = await Product.findAll({
+    attributes: ["id", "categoryId", "defaultCategoryId"],
+  });
+
+  const categoryLinks: Array<{ productId: number; categoryId: number }> = [];
+
+  for (const product of products) {
+    const productId = Number((product as any).get?.("id") ?? (product as any).id);
+    const categoryId = Number(
+      (product as any).get?.("categoryId") ?? (product as any).categoryId ?? 0
+    );
+    const defaultCategoryId = Number(
+      (product as any).get?.("defaultCategoryId") ?? (product as any).defaultCategoryId ?? 0
+    );
+    const resolvedDefaultCategoryId =
+      defaultCategoryId > 0 ? defaultCategoryId : categoryId > 0 ? categoryId : null;
+
+    if (resolvedDefaultCategoryId && defaultCategoryId <= 0) {
+      await product.update({ defaultCategoryId: resolvedDefaultCategoryId } as any);
+    }
+
+    if (resolvedDefaultCategoryId) {
+      categoryLinks.push({
+        productId,
+        categoryId: resolvedDefaultCategoryId,
+      });
+    }
+  }
+
+  if (categoryLinks.length > 0) {
+    await ProductCategory.bulkCreate(categoryLinks as any, { ignoreDuplicates: true });
+  }
+}
 
 // Helper untuk sync schema → langsung terlihat di phpMyAdmin
 export async function syncDb() {
@@ -158,6 +196,7 @@ export async function syncDb() {
   try {
     // gunakan alter agar kolom baru otomatis disesuaikan (aman untuk dev)
     await sequelize.sync({ alter: true });
+    await backfillProductCategoryAssignments();
   } finally {
     queryInterface.removeConstraint = originalRemoveConstraint;
   }
@@ -183,6 +222,7 @@ export {
   User,
   Product,
   Category,
+  ProductCategory,
   Cart,
   CartItem,
   Order,

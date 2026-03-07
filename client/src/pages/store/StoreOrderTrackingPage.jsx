@@ -68,6 +68,52 @@ const normalizeTrackingPayload = (response) =>
   response ??
   null;
 
+const normalizeStatusValue = (status) => String(status || "").trim().toLowerCase();
+
+const TRACKING_STEPS = [
+  { key: "pending", label: "Order received", matches: ["pending"] },
+  { key: "processing", label: "Processing", matches: ["processing"] },
+  { key: "shipping", label: "On delivery", matches: ["shipping", "shipped"] },
+  { key: "delivered", label: "Delivered", matches: ["complete", "delivered"] },
+];
+
+const getTrackingStepIndex = (status) => {
+  const normalized = normalizeStatusValue(status);
+  return TRACKING_STEPS.findIndex((step) => step.matches.includes(normalized));
+};
+
+const getTrackingSummary = (status) => {
+  const normalized = normalizeStatusValue(status);
+  if (normalized === "processing") {
+    return {
+      title: "Your order is being prepared",
+      description: "The store is confirming items and getting them ready for dispatch.",
+    };
+  }
+  if (normalized === "shipping" || normalized === "shipped") {
+    return {
+      title: "Your order is on the way",
+      description: "Delivery is in progress. Keep this page for the latest status and invoice reference.",
+    };
+  }
+  if (normalized === "complete" || normalized === "delivered") {
+    return {
+      title: "Your order has been delivered",
+      description: "The order is complete. You can keep this page as your invoice and delivery record.",
+    };
+  }
+  if (normalized === "cancelled" || normalized === "canceled") {
+    return {
+      title: "This order was cancelled",
+      description: "Please contact the store if you need help placing the order again.",
+    };
+  }
+  return {
+    title: "Your order has been received",
+    description: "The store has your order and will confirm processing shortly.",
+  };
+};
+
 export default function StoreOrderTrackingPage() {
   const { ref } = useParams();
   const orderRefParam = String(ref || "").trim();
@@ -115,6 +161,11 @@ export default function StoreOrderTrackingPage() {
   const discount = order?.discount ?? order?.discountAmount ?? order?.discountTotal ?? 0;
   const totalAmount = order?.totalAmount ?? order?.total ?? order?.grandTotal ?? 0;
   const statusLabel = getOrderStatusLabel(order?.status);
+  const normalizedStatus = normalizeStatusValue(order?.status);
+  const trackingStepIndex = getTrackingStepIndex(order?.status);
+  const trackingSummary = getTrackingSummary(order?.status);
+  const isCancelled =
+    normalizedStatus === "cancelled" || normalizedStatus === "canceled";
   const errorMessage =
     error?.response?.data?.message || error?.message || GENERIC_ERROR;
 
@@ -195,9 +246,127 @@ export default function StoreOrderTrackingPage() {
         </div>
       ) : null}
 
-      <div className="no-print mb-6 rounded-2xl border border-emerald-200 bg-emerald-100 px-4 py-3 text-sm text-emerald-900 sm:mb-8 sm:px-6 sm:py-4 sm:text-base">
-        Thank You <span className="font-semibold text-emerald-700">{customerName}</span>,
-        Your order have been received !
+      <div className="no-print mb-6 grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.75fr)]">
+        <div className="rounded-[30px] bg-gradient-to-br from-emerald-600 via-emerald-500 to-emerald-700 px-5 py-6 text-white shadow-[0_24px_48px_rgba(5,150,105,0.25)] sm:px-6 sm:py-7">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-100">
+            Order Tracking
+          </p>
+          <h1 className="mt-3 text-3xl font-extrabold leading-tight tracking-tight sm:text-[38px]">
+            {trackingSummary.title}
+          </h1>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-emerald-50 sm:text-[15px]">
+            Thank you <span className="font-semibold text-white">{customerName}</span>.{" "}
+            {trackingSummary.description}
+          </p>
+          <div className="mt-5 flex flex-wrap gap-2.5">
+            <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-white">
+              Ref #{invoiceRef || "-"}
+            </span>
+            <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-white">
+              {statusLabel}
+            </span>
+            <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-white">
+              {formatDate(createdAt)}
+            </span>
+          </div>
+        </div>
+
+        <div
+          className={`rounded-[30px] border px-5 py-6 shadow-[0_18px_34px_rgba(15,23,42,0.07)] sm:px-6 ${
+            isCancelled
+              ? "border-rose-200 bg-rose-50 text-rose-900"
+              : "border-slate-200 bg-white text-slate-900"
+          }`}
+        >
+          <p
+            className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${
+              isCancelled ? "text-rose-600" : "text-emerald-600"
+            }`}
+          >
+            Next Step
+          </p>
+          <h2 className="mt-3 text-xl font-bold leading-tight">
+            {isCancelled ? "Contact the store for resolution" : "Keep this page for updates"}
+          </h2>
+          <p className={`mt-3 text-sm leading-6 ${isCancelled ? "text-rose-700" : "text-slate-500"}`}>
+            {isCancelled
+              ? "This invoice remains available, but the order will not move forward unless the store recreates it."
+              : "Use the order reference for support, tracking checks, or printing the invoice after delivery."}
+          </p>
+          <div className="mt-5 space-y-3">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Payment Method
+              </p>
+              <p className="mt-1.5 text-sm font-semibold text-slate-900">{paymentMethod}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Delivery Address
+              </p>
+              <p className="mt-1.5 text-sm text-slate-700">{customerAddress}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="no-print mb-6 rounded-[30px] border border-slate-200 bg-white px-4 py-5 shadow-[0_18px_34px_rgba(15,23,42,0.06)] sm:px-6 sm:py-6">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-600">
+              Delivery Progress
+            </p>
+            <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+              Track every stage of this order
+            </h2>
+          </div>
+          <p className="text-sm text-slate-500">
+            Current status: <span className="font-semibold text-slate-900">{statusLabel}</span>
+          </p>
+        </div>
+
+        {isCancelled ? (
+          <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-800">
+            This order is cancelled, so delivery progress has stopped.
+          </div>
+        ) : (
+          <div className="mt-5 grid gap-3 md:grid-cols-4">
+            {TRACKING_STEPS.map((step, index) => {
+              const isComplete = trackingStepIndex >= index;
+              const isCurrent = trackingStepIndex === index;
+              return (
+                <div
+                  key={step.key}
+                  className={`rounded-2xl border px-4 py-4 transition ${
+                    isCurrent
+                      ? "border-emerald-300 bg-emerald-50"
+                      : isComplete
+                        ? "border-emerald-200 bg-white"
+                        : "border-slate-200 bg-slate-50"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`inline-flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold ${
+                        isComplete
+                          ? "bg-emerald-600 text-white"
+                          : "bg-white text-slate-500 border border-slate-200"
+                      }`}
+                    >
+                      {index + 1}
+                    </span>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                        Step {index + 1}
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{step.label}</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="print-area overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_45px_rgba(15,23,42,0.08)]">

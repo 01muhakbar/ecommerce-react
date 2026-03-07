@@ -12,25 +12,25 @@ import { getStoreSettings } from "../../api/store.service.ts";
 
 const DEFAULT_PUBLIC_STORE_SETTINGS = {
   payments: {
-    cashOnDeliveryEnabled: true,
-    stripeEnabled: true,
+    cashOnDeliveryEnabled: false,
+    stripeEnabled: false,
     razorPayEnabled: false,
     stripeKey: "",
   },
   socialLogin: {
-    googleEnabled: true,
-    githubEnabled: true,
-    facebookEnabled: true,
+    googleEnabled: false,
+    githubEnabled: false,
+    facebookEnabled: false,
     googleClientId: "",
     githubId: "",
     facebookId: "",
   },
   analytics: {
-    googleAnalyticsEnabled: true,
+    googleAnalyticsEnabled: false,
     googleAnalyticKey: "",
   },
   chat: {
-    tawkEnabled: true,
+    tawkEnabled: false,
     tawkPropertyId: "",
     tawkWidgetId: "",
   },
