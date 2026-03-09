@@ -1,245 +1,174 @@
-# TASK-1 Baseline Command Discipline + Dummy Fallback Audit
+# TASK-1 Audit & Perfectkan MVF Store -> Checkout -> Admin Order Sync
 
-Date: 2026-03-06 (Asia/Singapore)  
+Date: 2026-03-07 (Asia/Singapore)  
 Workspace: `C:\Users\user\Documents\ecommerce-react`
 
-## Task ID
+## CODEx REPORT
 
-`TASK-1`
+### Ringkasan
 
-## Objective
+- Audit end-to-end menunjukkan flow MVF inti sudah backend-driven dan stabil:
+  - katalog store memakai endpoint backend nyata
+  - checkout membuat order real di database
+  - admin orders membaca order checkout yang sama
+  - update status di admin tersimpan dan terbaca ulang di tracking/account
+- Tidak ditemukan blocker yang membutuhkan perubahan schema DB, kontrak API breaking, atau refactor besar.
+- Perbaikan kode yang dilakukan hanya satu gap kecil di area account order: link fallback login `401` diarahkan ke route store yang benar.
 
-Membakukan command kerja harian Codex dan memetakan fallback runtime yang masih ada di frontend, lalu mengklasifikasikan mana yang aman, mana yang berisiko ke sinkronisasi Admin ↔ Client, dan mana yang sebaiknya diprioritaskan untuk patch kecil berikutnya.
+### Area yang diaudit
 
-## Files Audited
+- Root:
+  - `README.md`
+  - `MVP_TEST_SCRIPT.md`
+  - `CODEx_REPORTS/TASK-0.md`
+  - `package.json`
+- Client:
+  - `client/src/App.jsx`
+  - `client/src/storefront.jsx`
+  - `client/src/hooks/useCart.ts`
+  - `client/src/store/cart.store.ts`
+  - `client/src/api/cartApi.ts`
+  - `client/src/api/store.service.ts`
+  - `client/src/pages/store/KachaBazarDemoHomePage.jsx`
+  - `client/src/pages/store/StoreSearchPage.jsx`
+  - `client/src/pages/store/StoreCategoryPage.jsx`
+  - `client/src/pages/store/StoreProductDetailPage.jsx`
+  - `client/src/pages/store/StoreCartPage.jsx`
+  - `client/src/pages/store/Checkout.jsx`
+  - `client/src/pages/store/StoreCheckoutSuccessPage.jsx`
+  - `client/src/pages/store/StoreOrderTrackingPage.jsx`
+  - `client/src/pages/account/AccountOrdersPage.jsx`
+  - `client/src/pages/account/AccountOrderDetailPage.jsx`
+  - `client/src/pages/admin/Orders.jsx`
+  - `client/src/pages/admin/OrderDetail.jsx`
+  - `client/src/lib/adminApi.js`
+- Server:
+  - `server/src/app.ts`
+  - `server/src/routes/store.ts`
+  - `server/src/routes/admin.orders.ts`
+  - `server/src/routes/cartRoutes.ts`
+  - `server/src/controllers/cartController.ts`
+  - `server/src/routes/public.ts`
 
-- `package.json`
-- `README.md`
-- `DEVELOPMENT.md`
-- `client/src/api/products.service.js`
-- `client/src/api/orders.service.js`
-- `client/src/pages/store/KachaBazarDemoHomePage.jsx`
-- `client/src/hooks/useCart.ts`
-- `client/src/pages/store/StoreAboutUsPage.jsx`
-- `client/src/pages/store/StoreFaqPage.jsx`
-- `client/src/pages/store/StoreContactUsPage.jsx`
-- `client/src/pages/store/StoreOffersPage.jsx`
-- `client/src/pages/store/StorePrivacyPolicyPage.jsx`
-- `client/src/pages/store/StoreTermsAndConditionsPage.jsx`
-- `client/src/pages/admin/StoreCustomization.jsx`
-- `client/src/pages/admin/StoreSettings.jsx`
-- `client/src/components/Layout/Navbar.jsx`
+### File yang diubah
 
-## Files Changed
-
+- `client/src/pages/account/AccountOrdersPage.jsx`
+- `MVP_TEST_SCRIPT.md`
 - `CODEx_REPORTS/TASK-1.md`
-- `README.md`
-- `DEVELOPMENT.md`
 
-## Baseline Command Discipline
+### Temuan Audit
 
-### Command Utama
+#### A. Bug fungsional
 
-- Install dependency:
-  - `pnpm install`
-- Jalankan seluruh stack:
-  - `pnpm dev`
-- Jalankan server saja:
-  - `pnpm dev:server`
-- Jalankan client saja:
-  - `pnpm dev:client`
-- Reset DB lokal:
-  - `pnpm --filter server db:reset`
-- Seed demo baseline:
-  - `pnpm --filter server seed:demo`
-- Build client:
+- Tidak ditemukan bug fungsional besar pada flow utama `store -> checkout -> admin orders -> status sync`.
+- Flow runtime yang diuji semuanya PASS.
+
+#### B. Gap sinkronisasi data
+
+- Tidak ditemukan mismatch kontrak yang memutus MVF.
+- Verifikasi manual tambahan menunjukkan status hasil update admin sinkron pada tiga pembaca client:
+  - `/api/store/orders/:ref`
+  - `/api/store/my/orders`
+  - `/api/store/orders/my/:id`
+
+#### C. Gap kecil UX yang mengganggu MVF
+
+- `client/src/pages/account/AccountOrdersPage.jsx`
+  - Saat API mengembalikan `401`, link fallback mengarah ke `/login`.
+  - Route store yang valid di repo adalah `/auth/login`.
+  - Ini tidak memutus checkout/admin sync, tetapi merusak recovery path di area account orders saat sesi habis.
+
+### Perbaikan yang dilakukan
+
+- Mengubah link fallback login pada `AccountOrdersPage` dari `/login` menjadi `/auth/login`.
+- Memperbarui `MVP_TEST_SCRIPT.md` agar checklist manual mencakup:
+  - verifikasi `/user/my-orders`
+  - verifikasi `/user/my-orders/:id` atau tracking setelah admin update status
+  - catatan route login store yang benar
+
+### Validasi Source of Truth
+
+#### Sudah backend-driven
+
+- Home:
+  - kategori dari `/api/store/categories`
+  - produk dari `/api/products`
+  - kupon dari `/api/store/coupons`
+- Search:
+  - hasil dari `/api/products`
+- Category:
+  - kategori dari `/api/store/categories`
+  - produk kategori dari `/api/store/products`
+- Product detail:
+  - detail dari `/api/store/products/:id-or-slug`
+  - related products dari `/api/products`
+- Cart auth flow:
+  - baca/update cart dari `/api/cart`
+- Checkout:
+  - create order ke `/api/store/orders`
+- Success:
+  - menampilkan ref backend nyata dari response checkout
+- Tracking:
+  - baca order dari `/api/store/orders/:ref`
+- Account orders:
+  - baca list dari `/api/store/my/orders`
+- Account order detail:
+  - baca detail dari `/api/store/orders/my/:id`
+- Admin orders:
+  - list/detail/update dari `/api/admin/orders*`
+
+#### Fallback yang masih ada tetapi tidak memutus MVF inti
+
+- `useCart` tetap punya guest/local fallback sebelum auth remote aktif.
+- Ini bukan source of truth order final; checkout tetap memakai endpoint backend terproteksi.
+
+#### Debt yang belum disentuh karena out of scope
+
+- `qa:mvf` saat ini belum mengotomasi verifikasi `account orders` dan `account order detail`; saya sudah verifikasi area ini manual/API.
+- Beberapa dummy/config fallback di luar flow order inti masih ada di repo, tetapi tidak menjadi blocker MVF task ini.
+
+### Verifikasi
+
+- [x] Build
   - `pnpm --filter client exec vite build`
-- Smoke MVF:
+- [x] Smoke
   - `pnpm qa:mvf`
+  - Hasil: `20/20 passed`
+  - Artifact:
+    - `.codex-artifacts/qa-mvf/20260307-122116/result.json`
+    - `.codex-artifacts/qa-mvf/20260307-122116/summary.txt`
+- [x] Manual check
+  - register + login store user
+  - add to cart
+  - create order
+  - admin update status ke `shipping`
+  - re-check:
+    - `/api/store/orders/:ref`
+    - `/api/store/my/orders`
+    - `/api/store/orders/my/:id`
+  - hasil:
+    - tracking status = `shipping`
+    - account orders status = `shipping`
+    - account detail status = `shipping`
 
-### Command Cadangan
-
-- Cek DB health:
-  - `powershell -ExecutionPolicy Bypass -File .\scripts\db-health.ps1`
-- Sync schema tanpa reset:
-  - `pnpm db:sync`
-- Seed tambahan:
-  - `pnpm seed:analytics`
-  - `pnpm seed:customers`
-- UI QA opt-in:
-  - `pnpm qa:ui`
-
-### Catatan Environment
-
-- Port default:
-  - client `5173`
-  - server `3001`
-- Vite bisa pindah port jika `5173` sibuk.
-- `mysql` CLI tidak wajib ada di PATH karena `scripts/db-health.ps1` sudah fallback ke `c:\xampp\mysql\bin\mysql.exe`.
-- Seed baseline yang paling aman untuk sesi audit/dev adalah:
-  - `pnpm --filter server db:reset`
-  - `pnpm --filter server seed:demo`
-  - `pnpm dev`
-- Artifact `qa:mvf` disimpan di `.codex-artifacts/qa-mvf/<runId>/`.
-
-## Fallback Findings
-
-1. `client/src/api/products.service.js`
-   - Admin products service punya dummy fallback untuk list/create/update/delete.
-   - Aktif hanya saat `import.meta.env.DEV` dan `VITE_ALLOW_DUMMY_PRODUCTS === "true"`.
-
-2. `client/src/api/orders.service.js`
-   - Admin orders service punya dummy fallback untuk list dan update status.
-   - Aktif hanya saat `import.meta.env.DEV` dan `VITE_ALLOW_DUMMY_ORDERS === "true"`.
-
-3. `client/src/pages/store/KachaBazarDemoHomePage.jsx`
-   - Home demo memakai `dummyCoupons` bila fetch coupon publik gagal atau kosong.
-
-4. `client/src/hooks/useCart.ts`
-   - Cart punya guest-mode fallback dan `fallbackCart` berbasis store/local snapshot.
-   - Dipakai saat user belum remote-auth, auth hilang, atau snapshot remote stale.
-
-5. `client/src/pages/store/StoreAboutUsPage.jsx`
-   - Ada `DEFAULT_ABOUT_US` untuk normalisasi field customization yang kosong.
-
-6. `client/src/pages/store/StoreFaqPage.jsx`
-   - Ada `DEFAULT_FAQS` untuk page header, left image, dan item list.
-
-7. `client/src/pages/store/StoreContactUsPage.jsx`
-   - Ada `DEFAULT_CONTACT_US` untuk info kontak dan deskripsi form.
-   - Form submit masih local-only success simulation, bukan backend submission.
-
-8. `client/src/pages/store/StoreOffersPage.jsx`
-   - Ada `DEFAULT_OFFERS` untuk page header dan `activeCouponCode`.
-
-9. `client/src/pages/store/StorePrivacyPolicyPage.jsx`
-   - Ada `DEFAULT_POLICY`, tetapi halaman tetap empty bila payload policy tidak ada.
-
-10. `client/src/pages/store/StoreTermsAndConditionsPage.jsx`
-    - Ada `DEFAULT_TERMS`, tetapi halaman tetap empty bila payload terms tidak ada.
-
-11. `client/src/pages/admin/StoreCustomization.jsx`
-    - Admin form memakai `getDefaultCustomization()` dan sejumlah default HTML/text agar form tetap bisa dirender walau response belum lengkap.
-
-12. `client/src/pages/admin/StoreSettings.jsx`
-    - Admin settings memakai `DEFAULT_STORE_SETTINGS` untuk inisialisasi dan normalisasi.
-
-13. `client/src/components/Layout/Navbar.jsx`
-    - Language selector memakai fallback ke storage, lalu `en`, lalu language published pertama.
-
-## Fallback Classification
-
-### SAFE-DEMO
-
-- `client/src/hooks/useCart.ts`
-  - Guest cart fallback adalah perilaku yang memang dibutuhkan untuk flow guest user.
-  - Tidak mengubah source of truth admin; lebih ke mode lokal sementara sebelum login.
-
-- `client/src/components/Layout/Navbar.jsx`
-  - Fallback language hanya untuk pengalaman admin navbar saat daftar bahasa belum termuat.
-  - Tidak menulis kontrak data baru ke backend.
-
-### RISKY-SYNC
-
-- `client/src/api/products.service.js`
-  - Jika env mengaktifkan dummy fallback, admin bisa melihat list/create/update/delete produk lokal yang tidak berasal dari backend.
-  - Risiko langsung pada sinkronisasi `products` antara Admin dan Client.
-
-- `client/src/api/orders.service.js`
-  - Jika env mengaktifkan dummy fallback, admin orders bisa tampak hidup walau API gagal.
-  - Ini paling berbahaya karena bisa menyamarkan bug fetch/status update dan menipu audit persist status.
-
-- `client/src/pages/store/KachaBazarDemoHomePage.jsx`
-  - `dummyCoupons` membuat homepage tetap terlihat punya promo walau coupon publik kosong/gagal dimuat.
-  - Risiko pada sinkronisasi `coupons` dan `customization/home promo`.
-
-- `client/src/pages/store/StoreContactUsPage.jsx`
-  - Info konten adalah config backup, tetapi submit form masih local-only success simulation.
-  - Ini bukan sync Admin ↔ Client utama, tapi bisa memberi impresi fitur contact sudah benar-benar tersambung.
-
-### CONFIG-BACKUP
-
-- `client/src/pages/store/StoreAboutUsPage.jsx`
-- `client/src/pages/store/StoreFaqPage.jsx`
-- `client/src/pages/store/StoreContactUsPage.jsx` untuk field konten
-- `client/src/pages/store/StoreOffersPage.jsx`
-- `client/src/pages/store/StorePrivacyPolicyPage.jsx`
-- `client/src/pages/store/StoreTermsAndConditionsPage.jsx`
-- `client/src/pages/admin/StoreCustomization.jsx`
-- `client/src/pages/admin/StoreSettings.jsx`
-
-Alasan:
-
-- Fallback ini dipakai untuk menormalkan shape data ketika field konfigurasi belum lengkap.
-- Mayoritas tidak menimpa payload backend; hanya mengisi default value agar UI tidak kosong/pecah.
-- Masih boleh ada selama source of truth tetap backend dan kondisi empty/error tetap terlihat jelas.
-
-### REMOVE-LATER
-
-- `client/src/api/products.service.js`
-  - Dummy mutation fallback sebaiknya dipisahkan atau dihapus pada task lanjutan kecil.
-
-- `client/src/api/orders.service.js`
-  - Dummy list/status update fallback sebaiknya diprioritaskan untuk audit/pengurangan.
-
-- `client/src/pages/store/KachaBazarDemoHomePage.jsx`
-  - `dummyCoupons` sebaiknya diganti empty/loading state yang jujur terhadap data publik.
-
-- `client/src/pages/store/StoreContactUsPage.jsx`
-  - Submit simulasi lokal sebaiknya dipindah ke task tersendiri: tetap local-only namun diberi label jelas, atau dihubungkan ke backend jika memang dibutuhkan produk.
-
-## Cross-App Sync Risks
-
-### Products
-
-- Risiko tertinggi ada di `client/src/api/products.service.js`.
-- Admin bisa bekerja dengan dummy product list saat API gagal, sementara client store tetap membaca data backend yang berbeda.
-
-### Orders
-
-- Risiko tertinggi ada di `client/src/api/orders.service.js`.
-- Admin orders/status update bisa tampak sukses di dev fallback, padahal data order real di backend tidak berubah.
-
-### Coupons
-
-- Risiko ada di `client/src/pages/store/KachaBazarDemoHomePage.jsx`.
-- Client home bisa tetap menampilkan kupon dummy saat data publik kupon kosong/gagal.
-
-### Customization / Settings
-
-- Mayoritas fallback di content pages dan admin customization/settings adalah config backup, bukan dummy source of truth.
-- Risiko utamanya bukan mismatch data CRUD, tetapi UI bisa terlihat “cukup lengkap” walau admin belum benar-benar mengisi semua field.
-
-### Auth / Session
-
-- `useCart.ts` guest fallback aman untuk guest flow, tetapi tetap perlu diawasi agar tidak dianggap sebagai remote cart source.
-- Baseline saat ini masih aman karena MVF checkout dan tracking sudah memakai backend real.
-
-## Priority Tindak Lanjut
-
-1. Audit dan kurangi dummy fallback pada admin service:
-   - `client/src/api/orders.service.js`
-   - `client/src/api/products.service.js`
-
-2. Hilangkan `dummyCoupons` dari home demo dan ganti dengan state yang jujur terhadap response coupon publik.
-
-3. Dokumentasikan dengan tegas bahwa content defaults adalah `config backup`, bukan data publik final.
-
-4. Putuskan status form Contact Us:
-   - tetap local placeholder yang dilabeli jelas, atau
-   - dijadikan fitur backend-driven pada task terpisah.
-
-## Recommended Next Task
-
-`[TASK-2] Remove Risky Admin Dummy Fallbacks (Orders + Products Read Path Audit)`
-
-Scope aman:
-
-- fokus hanya audit/patch kecil pada `client/src/api/orders.service.js` dan `client/src/api/products.service.js`
-- jangan sentuh contract API
-- jangan ubah schema
-- target utamanya membuat dev gagal dengan jujur saat API admin gagal, bukan diam-diam pindah ke dummy data
-
-## Final Status
+### Hasil
 
 `PASS`
+
+### Catatan risiko
+
+- Flow guest cart masih mengandalkan fallback lokal sebelum auth; ini aman untuk pre-checkout, tetapi tetap bukan source of truth final.
+- `qa:mvf` belum meng-cover loop sinkronisasi balik ke account area, jadi regresi di area itu masih bergantung ke manual/API check sampai automation diperluas.
+
+### Yang sengaja tidak disentuh
+
+- Tidak mengubah schema database.
+- Tidak mengubah kontrak request/response API.
+- Tidak mengubah logic order/cart/auth lintas modul.
+- Tidak menyentuh halaman admin lain, styling global besar, atau parity UI di luar flow MVF.
+
+### Next step yang disarankan
+
+- `TASK-2` yang aman dan bernilai tinggi:
+  - perluas `qa:mvf` agar otomatis memverifikasi `account orders` dan `account order detail` setelah admin update status
+  - tetap tanpa ubah kontrak API atau schema DB

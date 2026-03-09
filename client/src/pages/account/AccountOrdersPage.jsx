@@ -150,7 +150,7 @@ export default function AccountOrdersPage() {
           {error?.response?.status === 401 ? (
             <>
               Please login.{" "}
-              <Link to="/login" className="font-medium text-rose-700 underline">
+              <Link to="/auth/login" className="font-medium text-rose-700 underline">
                 Go to login
               </Link>
             </>

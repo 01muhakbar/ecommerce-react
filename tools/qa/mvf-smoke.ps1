@@ -62,6 +62,7 @@ $DevLogPath = Join-Path $RepoRoot $DevLogRelPath
 $Results = [ordered]@{}
 $GeneratedStoreEmail = $null
 $GeneratedOrderRef = $null
+$GeneratedOrderId = $null
 $StartedDevHere = $false
 $DevJob = $null
 $ScriptError = $null
@@ -159,19 +160,22 @@ try {
   }
 
   $orderRef = $null
+  $orderId = $null
   if ($productId) {
     try {
       $orderBody = @{ customer = @{ name = "MVF QA User"; phone = "0800000000"; address = "Local Test Address" }; paymentMethod = "COD"; items = @(@{ productId = [int]$productId; qty = 1 }) } | ConvertTo-Json -Depth 5
       $orderResp = Invoke-RestMethod -Uri "$BaseApi/store/orders" -Method Post -WebSession $storeSession -ContentType "application/json" -Body $orderBody -TimeoutSec 30
       $orderData = if ($orderResp.data) { $orderResp.data } else { $orderResp }
+      $orderId = [int](Coalesce @($orderData.id, $orderData.orderId))
       $orderRef = [string](Coalesce @($orderData.invoiceNo, $orderData.ref, $orderData.invoice, $orderData.id))
-      $ok = -not [string]::IsNullOrWhiteSpace($orderRef)
-      Set-Result "store_checkout_success_ref" $ok ("ref=" + $orderRef)
+      $ok = (-not [string]::IsNullOrWhiteSpace($orderRef)) -and ($orderId -gt 0)
+      Set-Result "store_checkout_success_ref" $ok ("ref=" + $orderRef + " orderId=" + $orderId)
     } catch { Set-Result "store_checkout_success_ref" $false $_.Exception.Message }
   } else {
     Set-Result "store_checkout_success_ref" $false "Skipped: missing productId"
   }
   $GeneratedOrderRef = $orderRef
+  $GeneratedOrderId = $orderId
 
   if ($orderRef) {
     try {
@@ -249,11 +253,51 @@ try {
       $ok = ($persistStatus -eq $newStatus)
       Set-Result "admin_refresh_persist" $ok ("expected=" + $newStatus + " actual=" + $persistStatus)
     } catch { Set-Result "admin_refresh_persist" $false $_.Exception.Message }
+
+    try {
+      if ([string]::IsNullOrWhiteSpace($newStatus)) { throw "New status unavailable" }
+      if ([string]::IsNullOrWhiteSpace($orderRef)) { throw "Order ref unavailable" }
+      $trackingAfter = Invoke-RestMethod -Uri "$BaseApi/store/orders/$orderRef" -Method Get -TimeoutSec 20
+      $trackingDataAfter = if ($trackingAfter.data) { $trackingAfter.data } else { $trackingAfter }
+      $trackingStatusAfter = [string](Coalesce @($trackingDataAfter.status, ""))
+      $trackingResolvedRef = [string](Coalesce @($trackingDataAfter.ref, $trackingDataAfter.invoiceNo, $trackingDataAfter.id))
+      $ok = ($trackingStatusAfter -eq $newStatus) -and ($trackingResolvedRef -eq $orderRef)
+      Set-Result "store_tracking_status_sync" $ok ("expected=" + $newStatus + " actual=" + $trackingStatusAfter + " ref=" + $trackingResolvedRef)
+    } catch { Set-Result "store_tracking_status_sync" $false $_.Exception.Message }
+
+    try {
+      if ([string]::IsNullOrWhiteSpace($newStatus)) { throw "New status unavailable" }
+      $myOrdersResp = Invoke-RestMethod -Uri "$BaseApi/store/my/orders" -Method Get -WebSession $storeSession -TimeoutSec 20
+      $myOrdersItems = @($myOrdersResp.data)
+      $myOrder = @($myOrdersItems | Where-Object {
+        ("$($_.invoiceNo)" -eq "$orderRef") -or ("$($_.ref)" -eq "$orderRef") -or ([string]$_.id -eq [string]$orderId)
+      }) | Select-Object -First 1
+      if (-not $myOrder) { throw "Order not found in /store/my/orders" }
+      $accountStatus = [string](Coalesce @($myOrder.status, ""))
+      $accountInvoice = [string](Coalesce @($myOrder.invoiceNo, $myOrder.ref, $myOrder.id))
+      $ok = ($accountStatus -eq $newStatus)
+      Set-Result "account_orders_status_sync" $ok ("expected=" + $newStatus + " actual=" + $accountStatus + " invoice=" + $accountInvoice)
+    } catch { Set-Result "account_orders_status_sync" $false $_.Exception.Message }
+
+    try {
+      if ([string]::IsNullOrWhiteSpace($newStatus)) { throw "New status unavailable" }
+      if (-not $orderId -or $orderId -le 0) { throw "Order id unavailable" }
+      $myOrderDetailResp = Invoke-RestMethod -Uri "$BaseApi/store/orders/my/$orderId" -Method Get -WebSession $storeSession -TimeoutSec 20
+      $myOrderDetail = if ($myOrderDetailResp.data) { $myOrderDetailResp.data } else { $myOrderDetailResp }
+      $detailStatus = [string](Coalesce @($myOrderDetail.status, ""))
+      $detailInvoice = [string](Coalesce @($myOrderDetail.invoiceNo, $myOrderDetail.ref, $myOrderDetail.id))
+      $detailItemsCount = @($myOrderDetail.items).Count
+      $ok = ($detailStatus -eq $newStatus) -and ($detailItemsCount -ge 1)
+      Set-Result "account_order_detail_status_sync" $ok ("expected=" + $newStatus + " actual=" + $detailStatus + " items=" + $detailItemsCount + " invoice=" + $detailInvoice)
+    } catch { Set-Result "account_order_detail_status_sync" $false $_.Exception.Message }
   } else {
     Set-Result "admin_orders_search_filter" $false "No order ref available to test search/filter"
     Set-Result "admin_order_detail_get" $false "No order ref available to test detail"
     Set-Result "admin_update_status_badge_changed" $false "No order ref available to test status update"
     Set-Result "admin_refresh_persist" $false "No order ref available to test persistence"
+    Set-Result "store_tracking_status_sync" $false "No order ref available to test tracking sync"
+    Set-Result "account_orders_status_sync" $false "No order ref available to test account order list sync"
+    Set-Result "account_order_detail_status_sync" $false "No order id available to test account order detail sync"
   }
 }
 catch {
@@ -284,6 +328,7 @@ $resultObj = [ordered]@{
   api = $BaseApi
   generatedStoreEmail = $GeneratedStoreEmail
   generatedOrderRef = $GeneratedOrderRef
+  generatedOrderId = $GeneratedOrderId
   total = $total
   passed = $passedCount
   failed = $failed.Count
