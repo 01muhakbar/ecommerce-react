@@ -13,6 +13,11 @@ export interface OrderAttributes {
   id: number;
   invoiceNo: string;
   userId: number;
+  checkoutMode?: "LEGACY" | "SINGLE_STORE" | "MULTI_STORE" | null;
+  subtotalAmount?: number | null;
+  shippingAmount?: number | null;
+  serviceFeeAmount?: number | null;
+  paymentStatus?: "UNPAID" | "PARTIALLY_PAID" | "PAID" | null;
   shippingDetails?: {
     fullName: string;
     phoneNumber: string;
@@ -55,6 +60,11 @@ export class Order
   declare id: number;
   declare invoiceNo: string;
   declare userId: number;
+  declare checkoutMode?: "LEGACY" | "SINGLE_STORE" | "MULTI_STORE" | null;
+  declare subtotalAmount?: number | null;
+  declare shippingAmount?: number | null;
+  declare serviceFeeAmount?: number | null;
+  declare paymentStatus?: "UNPAID" | "PARTIALLY_PAID" | "PAID" | null;
   declare shippingDetails?: {
     fullName: string;
     phoneNumber: string;
@@ -103,6 +113,10 @@ export class Order
       foreignKey: { name: "orderId", field: "order_id" },
       as: "items",
     });
+    Order.hasMany(models.Suborder, {
+      foreignKey: { name: "orderId", field: "order_id" },
+      as: "suborders",
+    });
   }
   static initModel(sequelize: Sequelize): typeof Order {
     Order.init(
@@ -121,6 +135,36 @@ export class Order
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
           references: { model: "Users", key: "id" },
+        },
+        checkoutMode: {
+          type: DataTypes.ENUM("LEGACY", "SINGLE_STORE", "MULTI_STORE"),
+          allowNull: true,
+          defaultValue: "LEGACY",
+          field: "checkout_mode",
+        },
+        subtotalAmount: {
+          type: DataTypes.DECIMAL(12, 2),
+          allowNull: true,
+          defaultValue: 0,
+          field: "subtotal_amount",
+        },
+        shippingAmount: {
+          type: DataTypes.DECIMAL(12, 2),
+          allowNull: true,
+          defaultValue: 0,
+          field: "shipping_amount",
+        },
+        serviceFeeAmount: {
+          type: DataTypes.DECIMAL(12, 2),
+          allowNull: true,
+          defaultValue: 0,
+          field: "service_fee_amount",
+        },
+        paymentStatus: {
+          type: DataTypes.ENUM("UNPAID", "PARTIALLY_PAID", "PAID"),
+          allowNull: true,
+          defaultValue: "UNPAID",
+          field: "payment_status",
         },
         shippingDetails: {
           type: DataTypes.JSON,

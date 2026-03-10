@@ -3,23 +3,32 @@ import { Link, useNavigate, useOutletContext } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Banknote, CreditCard, Trash2, WalletCards } from "lucide-react";
 import { createOrderSchema } from "@ecommerce/schemas";
+import { useAuth } from "../../auth/useAuth.js";
 import { useCartStore } from "../../store/cart.store.ts";
 import {
   createStoreOrder,
   getStoreCustomization,
+  previewCheckoutByStore,
   quoteStoreCoupon,
 } from "../../api/store.service.ts";
-import { getDefaultAddress, listAddresses } from "../../api/userAddresses.ts";
+import { getDefaultAddress } from "../../api/userAddresses.ts";
 import { formatCurrency } from "../../utils/format.js";
 import { GENERIC_ERROR, ORDER_FAILED } from "../../constants/uiMessages.js";
+import {
+  getCityOptions,
+  getDistrictOptions,
+  getProvinceOptions,
+} from "../../utils/idRegions.ts";
+import {
+  buildFullName,
+  formatAddressSummary,
+  resolveAddressEmailAddress,
+  splitFullName,
+  toUserAddressPayload,
+} from "../../utils/userAddress.ts";
 
 const INPUT_CLASS =
   "mt-2 h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 shadow-[0_1px_1px_rgba(15,23,42,0.03)] focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100";
-
-const SHIPPING_OPTIONS_BASE = [
-  { id: "ups_today", cost: 60 },
-  { id: "ups_7_days", cost: 20 },
-];
 
 const PAYMENT_OPTIONS = [
   {
@@ -87,19 +96,22 @@ const DEFAULT_CHECKOUT_COPY = {
   },
   shippingDetails: {
     sectionTitle: "Shipping Details",
-    streetAddressLabel: "Street Address",
-    cityLabel: "City",
-    countryLabel: "Country",
-    zipLabel: "Zip Code",
-    streetAddressPlaceholder: "Street Address",
-    cityPlaceholder: "City",
-    countryPlaceholder: "Country",
-    zipPlaceholder: "Zip Code",
-    shippingCostLabel: "Shipping Cost",
-    shippingOneNameDefault: "UPS Delivery",
-    shippingOneDescriptionDefault: "Delivery: Today Cost :",
-    shippingTwoNameDefault: "UPS Delivery",
-    shippingTwoDescriptionDefault: "Delivery: 7 Days Cost :",
+    provinceLabel: "Province",
+    cityLabel: "City/Regency",
+    districtLabel: "Subdistrict",
+    postalCodeLabel: "Postal Code",
+    streetNameLabel: "Street Name",
+    houseNumberLabel: "House Number",
+    buildingLabel: "Building",
+    otherDetailsLabel: "Other Details",
+    provincePlaceholder: "Select Province",
+    cityPlaceholder: "Select City/Regency",
+    districtPlaceholder: "Select Subdistrict",
+    postalCodePlaceholder: "Postal Code",
+    streetNamePlaceholder: "Street Name",
+    houseNumberPlaceholder: "House Number",
+    buildingPlaceholder: "Building",
+    otherDetailsPlaceholder: "Block / Unit / Reference",
     paymentMethodLabel: "Payment Method",
     paymentMethodPlaceholder: "Select a preferred payment option.",
   },
@@ -120,6 +132,42 @@ const DEFAULT_CHECKOUT_COPY = {
 const toCopyText = (value, fallback = "") => {
   const normalized = String(value ?? "").trim();
   return normalized || fallback;
+};
+
+const normalizeRegionLabel = (value, fallback) => {
+  const normalized = toCopyText(value, fallback);
+  if (normalized === "Country") {
+    return "Province";
+  }
+  if (
+    normalized === "City / Kabupaten/Kota" ||
+    normalized === "City / Regency" ||
+    normalized === "City"
+  ) {
+    return "City/Regency";
+  }
+  if (normalized === "District / Kecamatan" || normalized === "District") {
+    return "Subdistrict";
+  }
+  return normalized;
+};
+
+const normalizeRegionPlaceholder = (value, fallback) => {
+  const normalized = toCopyText(value, fallback);
+  if (normalized === "Country" || normalized === "Select Country") {
+    return "Select Province";
+  }
+  if (
+    normalized === "Select City / Kabupaten/Kota" ||
+    normalized === "Select City / Regency" ||
+    normalized === "Select City"
+  ) {
+    return "Select City/Regency";
+  }
+  if (normalized === "Select District / Kecamatan" || normalized === "Select District") {
+    return "Select Subdistrict";
+  }
+  return normalized;
 };
 
 const normalizeCheckoutCopy = (raw) => {
@@ -182,57 +230,69 @@ const normalizeCheckoutCopy = (raw) => {
         shippingDetails.sectionTitle,
         DEFAULT_CHECKOUT_COPY.shippingDetails.sectionTitle
       ),
-      streetAddressLabel: toCopyText(
-        shippingDetails.streetAddressLabel,
-        DEFAULT_CHECKOUT_COPY.shippingDetails.streetAddressLabel
+      provinceLabel: normalizeRegionLabel(
+        shippingDetails.provinceLabel ?? shippingDetails.countryLabel,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.provinceLabel
       ),
-      cityLabel: toCopyText(
+      cityLabel: normalizeRegionLabel(
         shippingDetails.cityLabel,
         DEFAULT_CHECKOUT_COPY.shippingDetails.cityLabel
       ),
-      countryLabel: toCopyText(
-        shippingDetails.countryLabel,
-        DEFAULT_CHECKOUT_COPY.shippingDetails.countryLabel
+      districtLabel: normalizeRegionLabel(
+        shippingDetails.districtLabel,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.districtLabel
       ),
-      zipLabel: toCopyText(
-        shippingDetails.zipLabel,
-        DEFAULT_CHECKOUT_COPY.shippingDetails.zipLabel
+      postalCodeLabel: toCopyText(
+        shippingDetails.postalCodeLabel ?? shippingDetails.zipLabel,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.postalCodeLabel
       ),
-      streetAddressPlaceholder: toCopyText(
-        shippingDetails.streetAddressPlaceholder,
-        DEFAULT_CHECKOUT_COPY.shippingDetails.streetAddressPlaceholder
+      streetNameLabel: toCopyText(
+        shippingDetails.streetNameLabel ?? shippingDetails.streetAddressLabel,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.streetNameLabel
       ),
-      cityPlaceholder: toCopyText(
+      houseNumberLabel: toCopyText(
+        shippingDetails.houseNumberLabel,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.houseNumberLabel
+      ),
+      buildingLabel: toCopyText(
+        shippingDetails.buildingLabel,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.buildingLabel
+      ),
+      otherDetailsLabel: toCopyText(
+        shippingDetails.otherDetailsLabel,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.otherDetailsLabel
+      ),
+      provincePlaceholder: normalizeRegionPlaceholder(
+        shippingDetails.provincePlaceholder ?? shippingDetails.countryPlaceholder,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.provincePlaceholder
+      ),
+      cityPlaceholder: normalizeRegionPlaceholder(
         shippingDetails.cityPlaceholder,
         DEFAULT_CHECKOUT_COPY.shippingDetails.cityPlaceholder
       ),
-      countryPlaceholder: toCopyText(
-        shippingDetails.countryPlaceholder,
-        DEFAULT_CHECKOUT_COPY.shippingDetails.countryPlaceholder
+      districtPlaceholder: normalizeRegionPlaceholder(
+        shippingDetails.districtPlaceholder,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.districtPlaceholder
       ),
-      zipPlaceholder: toCopyText(
-        shippingDetails.zipPlaceholder,
-        DEFAULT_CHECKOUT_COPY.shippingDetails.zipPlaceholder
+      postalCodePlaceholder: toCopyText(
+        shippingDetails.postalCodePlaceholder ?? shippingDetails.zipPlaceholder,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.postalCodePlaceholder
       ),
-      shippingCostLabel: toCopyText(
-        shippingDetails.shippingCostLabel,
-        DEFAULT_CHECKOUT_COPY.shippingDetails.shippingCostLabel
+      streetNamePlaceholder: toCopyText(
+        shippingDetails.streetNamePlaceholder ?? shippingDetails.streetAddressPlaceholder,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.streetNamePlaceholder
       ),
-      shippingOneNameDefault: toCopyText(
-        shippingDetails.shippingOneNameDefault,
-        DEFAULT_CHECKOUT_COPY.shippingDetails.shippingOneNameDefault
+      houseNumberPlaceholder: toCopyText(
+        shippingDetails.houseNumberPlaceholder,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.houseNumberPlaceholder
       ),
-      shippingOneDescriptionDefault: toCopyText(
-        shippingDetails.shippingOneDescriptionDefault,
-        DEFAULT_CHECKOUT_COPY.shippingDetails.shippingOneDescriptionDefault
+      buildingPlaceholder: toCopyText(
+        shippingDetails.buildingPlaceholder,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.buildingPlaceholder
       ),
-      shippingTwoNameDefault: toCopyText(
-        shippingDetails.shippingTwoNameDefault,
-        DEFAULT_CHECKOUT_COPY.shippingDetails.shippingTwoNameDefault
-      ),
-      shippingTwoDescriptionDefault: toCopyText(
-        shippingDetails.shippingTwoDescriptionDefault,
-        DEFAULT_CHECKOUT_COPY.shippingDetails.shippingTwoDescriptionDefault
+      otherDetailsPlaceholder: toCopyText(
+        shippingDetails.otherDetailsPlaceholder,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.otherDetailsPlaceholder
       ),
       paymentMethodLabel: toCopyText(
         shippingDetails.paymentMethodLabel,
@@ -295,26 +355,6 @@ const resolveOrderPayload = (response) => {
   );
 };
 
-const splitFullName = (fullName) => {
-  const normalized = String(fullName || "").trim().replace(/\s+/g, " ");
-  if (!normalized) return { firstName: "", lastName: "" };
-  const [first, ...rest] = normalized.split(" ");
-  return {
-    firstName: first || "",
-    lastName: rest.join(" "),
-  };
-};
-
-const getStreetAddressFromUserAddress = (address) =>
-  [
-    `${address?.streetName || ""} ${address?.houseNumber || ""}`.trim(),
-    address?.building || "",
-    address?.otherDetails || "",
-  ]
-    .map((part) => String(part || "").trim())
-    .filter(Boolean)
-    .join(", ");
-
 function SectionTitle({ number, title, hint }) {
   return (
     <div className="space-y-1">
@@ -332,6 +372,18 @@ function fieldClass(hasError) {
     hasError ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100" : ""
   }`;
 }
+
+const EMPTY_CHECKOUT_SHIPPING_FORM = {
+  province: "",
+  city: "",
+  district: "",
+  postalCode: "",
+  streetName: "",
+  building: "",
+  houseNumber: "",
+  otherDetails: "",
+  markAs: "HOME",
+};
 
 function resolveCouponReasonMessage(reason, minSpend) {
   switch (reason) {
@@ -351,6 +403,7 @@ function resolveCouponReasonMessage(reason, minSpend) {
 export default function CheckoutPage() {
   const navigate = useNavigate();
   const { storeSettings } = useOutletContext() || {};
+  const { user } = useAuth() || {};
   const queryClient = useQueryClient();
   const items = useCartStore((state) => state.items);
   const hasHydrated = useCartStore((state) => state.hasHydrated);
@@ -364,16 +417,10 @@ export default function CheckoutPage() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [streetAddress, setStreetAddress] = useState("");
-  const [city, setCity] = useState("");
-  const [country, setCountry] = useState("");
-  const [zipCode, setZipCode] = useState("");
+  const [shippingForm, setShippingForm] = useState(EMPTY_CHECKOUT_SHIPPING_FORM);
   const [useDefaultShipping, setUseDefaultShipping] = useState(false);
-  const [savedAddresses, setSavedAddresses] = useState([]);
-  const [selectedAddressId, setSelectedAddressId] = useState("");
   const [isAddressLoading, setIsAddressLoading] = useState(false);
   const [addressStatus, setAddressStatus] = useState("");
-  const [shippingOptionId, setShippingOptionId] = useState(SHIPPING_OPTIONS_BASE[0].id);
   const [paymentOptionId, setPaymentOptionId] = useState(PAYMENT_OPTIONS[0].id);
   const [couponCode, setCouponCode] = useState("");
   const [couponMessage, setCouponMessage] = useState("");
@@ -387,15 +434,18 @@ export default function CheckoutPage() {
     firstName: "",
     lastName: "",
     phone: "",
-    streetAddress: "",
+    province: "",
     city: "",
-    country: "",
-    zipCode: "",
+    district: "",
+    postalCode: "",
+    streetName: "",
+    houseNumber: "",
   });
   const submitLockRef = useRef(false);
   const firstNameRef = useRef(null);
   const phoneRef = useRef(null);
-  const streetRef = useRef(null);
+  const provinceRef = useRef(null);
+  const streetNameRef = useRef(null);
   const resolveHasAuthHint = () => {
     try {
       return (
@@ -439,26 +489,15 @@ export default function CheckoutPage() {
     setPaymentOptionId(paymentOptions[0].id);
   }, [paymentOptions, paymentOptionId]);
 
-  const shippingOptions = useMemo(
-    () => [
-      {
-        ...SHIPPING_OPTIONS_BASE[0],
-        title: checkoutCopy.shippingDetails.shippingOneNameDefault,
-        descriptionText: checkoutCopy.shippingDetails.shippingOneDescriptionDefault,
-      },
-      {
-        ...SHIPPING_OPTIONS_BASE[1],
-        title: checkoutCopy.shippingDetails.shippingTwoNameDefault,
-        descriptionText: checkoutCopy.shippingDetails.shippingTwoDescriptionDefault,
-      },
-    ],
-    [checkoutCopy]
-  );
-
   useEffect(() => {
     if (!checkoutCustomizationQuery.isError) return;
     console.warn("[checkout] failed to load checkout customization; using defaults.");
   }, [checkoutCustomizationQuery.isError]);
+
+  useEffect(() => {
+    if (!user?.email) return;
+    setEmail((prev) => (prev.trim() ? prev : String(user.email).trim()));
+  }, [user?.email]);
 
   useEffect(() => {
     let mounted = true;
@@ -487,31 +526,26 @@ export default function CheckoutPage() {
     };
   }, [navigate]);
 
-  useEffect(() => {
-    if (!resolveHasAuthHint()) return;
-    let active = true;
-    (async () => {
-      try {
-        const items = await listAddresses();
-        if (!active) return;
-        setSavedAddresses(Array.isArray(items) ? items : []);
-      } catch {
-        if (!active) return;
-        setSavedAddresses([]);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
-
   const hasItems = items.length > 0;
-  const isAuthenticated = resolveHasAuthHint();
-  const lockAddressFields = isSubmitting || useDefaultShipping || isAddressLoading;
-  const shippingOption =
-    shippingOptions.find((option) => option.id === shippingOptionId) ||
-    shippingOptions[0];
-  const shippingCost = Number(shippingOption?.cost || 0);
+  const lockAddressFields = isSubmitting || isAddressLoading || useDefaultShipping;
+  const shippingCost = 0;
+  const provinceOptions = useMemo(
+    () => getProvinceOptions(shippingForm.province),
+    [shippingForm.province]
+  );
+  const cityOptions = useMemo(
+    () => getCityOptions(shippingForm.province, shippingForm.city),
+    [shippingForm.province, shippingForm.city]
+  );
+  const districtOptions = useMemo(
+    () =>
+      getDistrictOptions(
+        shippingForm.province,
+        shippingForm.city,
+        shippingForm.district
+      ),
+    [shippingForm.province, shippingForm.city, shippingForm.district]
+  );
 
   const summaryItems = useMemo(
     () =>
@@ -525,6 +559,21 @@ export default function CheckoutPage() {
       })),
     [items]
   );
+  const checkoutPreviewSignature = useMemo(
+    () =>
+      summaryItems
+        .map((item) => `${item.productId}:${item.qty}`)
+        .sort()
+        .join("|"),
+    [summaryItems]
+  );
+  const checkoutPreviewQuery = useQuery({
+    queryKey: ["checkout-preview-by-store", checkoutPreviewSignature],
+    queryFn: () => previewCheckoutByStore(),
+    enabled: hasHydrated && hasItems && !isRemoteSyncing && resolveHasAuthHint(),
+    staleTime: 10_000,
+    retry: false,
+  });
 
   const subtotalValue = Number(subtotal || 0);
   const discountValue = Number(discount || 0);
@@ -534,32 +583,29 @@ export default function CheckoutPage() {
     ? Math.max(0, quotedTotalValue)
     : Math.max(0, subtotalValue + shippingCost - discountValue);
 
-  const fullName = `${firstName} ${lastName}`.trim();
-  const shippingAddress = [
-    streetAddress.trim(),
-    city.trim(),
-    country.trim(),
-    zipCode.trim(),
-  ]
-    .filter(Boolean)
-    .join(", ");
+  const fullName = buildFullName(firstName, lastName);
   const phoneValue = phone.trim();
   const paymentMethod = "COD";
+  const normalizedShippingForm = useMemo(
+    () => toUserAddressPayload({ ...shippingForm, fullName, phoneNumber: phoneValue }),
+    [shippingForm, fullName, phoneValue]
+  );
+  const shippingAddress = formatAddressSummary(normalizedShippingForm);
   const shippingDetailsPayload = useMemo(
     () => ({
       fullName,
       phoneNumber: phoneValue,
-      province: country.trim(),
-      city: city.trim(),
-      district: city.trim(),
-      postalCode: zipCode.trim(),
-      streetName: streetAddress.trim(),
-      building: "",
-      houseNumber: "N/A",
-      otherDetails: "",
-      markAs: "HOME",
+      province: normalizedShippingForm.province,
+      city: normalizedShippingForm.city,
+      district: normalizedShippingForm.district,
+      postalCode: normalizedShippingForm.postalCode,
+      streetName: normalizedShippingForm.streetName,
+      building: normalizedShippingForm.building || "",
+      houseNumber: normalizedShippingForm.houseNumber,
+      otherDetails: normalizedShippingForm.otherDetails || "",
+      markAs: normalizedShippingForm.markAs,
     }),
-    [fullName, phoneValue, country, city, zipCode, streetAddress]
+    [fullName, phoneValue, normalizedShippingForm]
   );
 
   const payloadDraft = useMemo(
@@ -589,16 +635,46 @@ export default function CheckoutPage() {
       shippingDetailsPayload,
     ]
   );
+  const checkoutPreviewData = checkoutPreviewQuery.data?.data;
+  const checkoutPreviewGroups = checkoutPreviewData?.groups ?? [];
+  const checkoutPreviewInvalidItems = checkoutPreviewData?.invalidItems ?? [];
+  const checkoutPreviewSummary = checkoutPreviewData?.summary ?? null;
+  const checkoutMode = checkoutPreviewData?.checkoutMode ?? "SINGLE_STORE";
+  const previewHasPaymentBlocker = checkoutPreviewGroups.some(
+    (group) => !group.paymentAvailable
+  );
   const applyAddressToCheckoutForm = (address) => {
-    const normalized = address && typeof address === "object" ? address : {};
+    const normalized = toUserAddressPayload(address || {});
     const fullNameParts = splitFullName(normalized.fullName);
+    const nextEmail = resolveAddressEmailAddress(address, user?.email);
     setFirstName(fullNameParts.firstName);
     setLastName(fullNameParts.lastName);
-    setPhone(String(normalized.phoneNumber || ""));
-    setStreetAddress(getStreetAddressFromUserAddress(normalized));
-    setCity(String(normalized.city || ""));
-    setCountry(String(normalized.province || ""));
-    setZipCode(String(normalized.postalCode || ""));
+    setEmail(nextEmail);
+    setPhone(normalized.phoneNumber);
+    setFieldErrors((prev) => ({
+      ...prev,
+      firstName: "",
+      lastName: "",
+      phone: "",
+      province: "",
+      city: "",
+      district: "",
+      postalCode: "",
+      streetName: "",
+      houseNumber: "",
+    }));
+    setShippingForm((prev) => ({
+      ...prev,
+      province: normalized.province,
+      city: normalized.city,
+      district: normalized.district,
+      postalCode: normalized.postalCode,
+      streetName: normalized.streetName,
+      building: normalized.building || "",
+      houseNumber: normalized.houseNumber,
+      otherDetails: normalized.otherDetails || "",
+      markAs: normalized.markAs,
+    }));
   };
 
   const loadDefaultAddress = async () => {
@@ -612,7 +688,9 @@ export default function CheckoutPage() {
         return null;
       }
       applyAddressToCheckoutForm(defaultAddress);
-      setSelectedAddressId(String(defaultAddress.id || ""));
+      setAddressStatus(
+        "Default shipping address applied. Disable the toggle to edit manually."
+      );
       return defaultAddress;
     } catch (requestError) {
       setUseDefaultShipping(false);
@@ -742,17 +820,6 @@ export default function CheckoutPage() {
     await loadDefaultAddress();
   };
 
-  const handleSelectSavedAddress = (event) => {
-    const nextId = String(event.target.value || "");
-    setSelectedAddressId(nextId);
-    if (!nextId) return;
-    const selected = savedAddresses.find((item) => String(item?.id || "") === nextId);
-    if (!selected) return;
-    setUseDefaultShipping(false);
-    setAddressStatus("");
-    applyAddressToCheckoutForm(selected);
-  };
-
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (submitLockRef.current || isSubmitting) {
@@ -770,41 +837,66 @@ export default function CheckoutPage() {
       firstName: "",
       lastName: "",
       phone: "",
-      streetAddress: "",
+      province: "",
       city: "",
-      country: "",
-      zipCode: "",
+      district: "",
+      postalCode: "",
+      streetName: "",
+      houseNumber: "",
     });
 
-    if (!firstName.trim() || !lastName.trim() || !phoneValue || !streetAddress.trim()) {
+    const requiredShippingFields = {
+      province: shippingForm.province.trim(),
+      city: shippingForm.city.trim(),
+      district: shippingForm.district.trim(),
+      postalCode: shippingForm.postalCode.trim(),
+      streetName: shippingForm.streetName.trim(),
+      houseNumber: shippingForm.houseNumber.trim(),
+    };
+
+    if (
+      !firstName.trim() ||
+      !lastName.trim() ||
+      !phoneValue ||
+      !requiredShippingFields.province ||
+      !requiredShippingFields.city ||
+      !requiredShippingFields.district ||
+      !requiredShippingFields.postalCode ||
+      !requiredShippingFields.streetName ||
+      !requiredShippingFields.houseNumber
+    ) {
       setError("Please complete required checkout fields.");
       const nextErrors = {
         firstName: firstName.trim() ? "" : "First name is required.",
         lastName: lastName.trim() ? "" : "Last name is required.",
         phone: phoneValue ? "" : "Phone is required.",
-        streetAddress: streetAddress.trim() ? "" : "Street address is required.",
-        city: city.trim() ? "" : "City is required.",
-        country: country.trim() ? "" : "Country is required.",
-        zipCode: zipCode.trim() ? "" : "ZIP code is required.",
+        province: requiredShippingFields.province ? "" : "Province is required.",
+        city: requiredShippingFields.city ? "" : "City/Regency is required.",
+        district: requiredShippingFields.district ? "" : "Subdistrict is required.",
+        postalCode: requiredShippingFields.postalCode ? "" : "Postal code is required.",
+        streetName: requiredShippingFields.streetName ? "" : "Street name is required.",
+        houseNumber: requiredShippingFields.houseNumber ? "" : "House number is required.",
       };
       setFieldErrors(nextErrors);
       if (nextErrors.firstName) {
         focusField(firstNameRef);
       } else if (nextErrors.phone) {
         focusField(phoneRef);
-      } else if (nextErrors.streetAddress) {
-        focusField(streetRef);
+      } else if (nextErrors.province) {
+        focusField(provinceRef);
+      } else if (nextErrors.streetName) {
+        focusField(streetNameRef);
       }
       return;
     }
 
-    if (!/^\d{5}$/.test(zipCode.trim())) {
-      setError("ZIP code must be 5 digits.");
+    if (!/^\d{5}$/.test(requiredShippingFields.postalCode)) {
+      setError("Postal code must be 5 digits.");
       setFieldErrors((prev) => ({
         ...prev,
-        zipCode: "ZIP code must be 5 digits.",
+        postalCode: "Postal code must be 5 digits.",
       }));
-      focusField(streetRef);
+      focusField(streetNameRef);
       return;
     }
 
@@ -814,10 +906,12 @@ export default function CheckoutPage() {
         firstName: "",
         lastName: "",
         phone: "",
-        streetAddress: "",
+        province: "",
         city: "",
-        country: "",
-        zipCode: "",
+        district: "",
+        postalCode: "",
+        streetName: "",
+        houseNumber: "",
       };
       for (const issue of parsed.error.issues) {
         const path = issue.path.join(".");
@@ -828,7 +922,7 @@ export default function CheckoutPage() {
           nextErrors.phone = issue.message;
         }
         if (path === "customer.address") {
-          nextErrors.streetAddress = issue.message;
+          nextErrors.streetName = issue.message;
         }
       }
       setFieldErrors(nextErrors);
@@ -837,8 +931,10 @@ export default function CheckoutPage() {
         focusField(firstNameRef);
       } else if (nextErrors.phone) {
         focusField(phoneRef);
-      } else if (nextErrors.streetAddress) {
-        focusField(streetRef);
+      } else if (nextErrors.province) {
+        focusField(provinceRef);
+      } else if (nextErrors.streetName) {
+        focusField(streetNameRef);
       }
       return;
     }
@@ -1021,7 +1117,7 @@ export default function CheckoutPage() {
                 </p>
                 <p className="mt-1 text-sm font-semibold text-slate-900">Shipping Details</p>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
-                  Confirm the address and choose the delivery option that fits your order.
+                  Confirm the destination details used for delivery.
                 </p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
@@ -1035,38 +1131,17 @@ export default function CheckoutPage() {
               </div>
             </div>
 
-            {isAuthenticated ? (
-              <div className="mb-4">
-                <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                  Select Saved Address
-                </label>
-                <select
-                  value={selectedAddressId}
-                  onChange={handleSelectSavedAddress}
-                  disabled={isSubmitting || isAddressLoading || savedAddresses.length === 0}
-                  className="mt-2 h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-400 focus:outline-none"
-                >
-                  <option value="">Choose saved address</option>
-                  {savedAddresses.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.fullName} - {item.city}, {item.province}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : null}
-
-            {useDefaultShipping ? (
-              <p className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+            {isAddressLoading || addressStatus ? (
+              <p
+                className={`mt-3 rounded-xl border px-3 py-2 text-xs ${
+                  useDefaultShipping
+                    ? "border-emerald-100 bg-emerald-50 text-emerald-700"
+                    : "border-rose-100 bg-rose-50 text-rose-700"
+                }`}
+              >
                 {isAddressLoading
                   ? "Loading your default shipping address..."
-                  : "Use Default Shipping Address is enabled."}
-              </p>
-            ) : null}
-
-            {!useDefaultShipping && addressStatus ? (
-              <p className="mt-3 rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-                {addressStatus}
+                  : addressStatus}
               </p>
             ) : null}
 
@@ -1163,130 +1238,233 @@ export default function CheckoutPage() {
                 <SectionTitle
                   number="02."
                   title={checkoutCopy.shippingDetails.sectionTitle}
-                  hint="Choose destination and shipping option."
+                  hint="Confirm the delivery destination."
                 />
                 <div className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium text-slate-700">
-                      {checkoutCopy.shippingDetails.streetAddressLabel} *
-                    </label>
-                    <input
-                      ref={streetRef}
-                      type="text"
-                      value={streetAddress}
-                      onChange={(event) => {
-                        setStreetAddress(event.target.value);
-                        if (fieldErrors.streetAddress) {
-                          setFieldErrors((prev) => ({ ...prev, streetAddress: "" }));
-                        }
-                      }}
-                      disabled={lockAddressFields}
-                      placeholder={checkoutCopy.shippingDetails.streetAddressPlaceholder}
-                      className={fieldClass(Boolean(fieldErrors.streetAddress))}
-                    />
-                    {fieldErrors.streetAddress ? (
-                      <p className="mt-1 text-xs text-rose-600">{fieldErrors.streetAddress}</p>
-                    ) : null}
-                  </div>
-                  <div className="grid gap-4 lg:grid-cols-3">
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div>
+                      <label className="text-sm font-medium text-slate-700">
+                        {checkoutCopy.shippingDetails.provinceLabel} *
+                      </label>
+                      <select
+                        ref={provinceRef}
+                        value={shippingForm.province}
+                        onChange={(event) => {
+                          const province = event.target.value;
+                          setShippingForm((prev) => ({
+                            ...prev,
+                            province,
+                            city: "",
+                            district: "",
+                          }));
+                          if (fieldErrors.province || fieldErrors.city || fieldErrors.district) {
+                            setFieldErrors((prev) => ({
+                              ...prev,
+                              province: "",
+                              city: "",
+                              district: "",
+                            }));
+                          }
+                        }}
+                        disabled={lockAddressFields}
+                        className={fieldClass(Boolean(fieldErrors.province))}
+                      >
+                        <option value="">
+                          {checkoutCopy.shippingDetails.provincePlaceholder}
+                        </option>
+                        {provinceOptions.map((item) => (
+                          <option key={item} value={item}>
+                            {item}
+                          </option>
+                        ))}
+                      </select>
+                      {fieldErrors.province ? (
+                        <p className="mt-1 text-xs text-rose-600">{fieldErrors.province}</p>
+                      ) : null}
+                    </div>
                     <div>
                       <label className="text-sm font-medium text-slate-700">
                         {checkoutCopy.shippingDetails.cityLabel} *
                       </label>
-                      <input
-                        type="text"
-                        value={city}
+                      <select
+                        value={shippingForm.city}
                         onChange={(event) => {
-                          setCity(event.target.value);
-                          if (fieldErrors.city) {
-                            setFieldErrors((prev) => ({ ...prev, city: "" }));
+                          const city = event.target.value;
+                          setShippingForm((prev) => ({
+                            ...prev,
+                            city,
+                            district: "",
+                          }));
+                          if (fieldErrors.city || fieldErrors.district) {
+                            setFieldErrors((prev) => ({
+                              ...prev,
+                              city: "",
+                              district: "",
+                            }));
                           }
                         }}
-                        disabled={lockAddressFields}
-                        placeholder={checkoutCopy.shippingDetails.cityPlaceholder}
+                        disabled={lockAddressFields || !shippingForm.province}
                         className={fieldClass(Boolean(fieldErrors.city))}
-                      />
+                      >
+                        <option value="">
+                          {shippingForm.province
+                            ? checkoutCopy.shippingDetails.cityPlaceholder
+                            : "Select Province first"}
+                        </option>
+                        {cityOptions.map((item) => (
+                          <option key={item} value={item}>
+                            {item}
+                          </option>
+                        ))}
+                      </select>
                       {fieldErrors.city ? (
                         <p className="mt-1 text-xs text-rose-600">{fieldErrors.city}</p>
                       ) : null}
                     </div>
                     <div>
                       <label className="text-sm font-medium text-slate-700">
-                        {checkoutCopy.shippingDetails.countryLabel} *
+                        {checkoutCopy.shippingDetails.districtLabel} *
                       </label>
-                      <input
-                        type="text"
-                        value={country}
+                      <select
+                        value={shippingForm.district}
                         onChange={(event) => {
-                          setCountry(event.target.value);
-                          if (fieldErrors.country) {
-                            setFieldErrors((prev) => ({ ...prev, country: "" }));
+                          setShippingForm((prev) => ({
+                            ...prev,
+                            district: event.target.value,
+                          }));
+                          if (fieldErrors.district) {
+                            setFieldErrors((prev) => ({ ...prev, district: "" }));
                           }
                         }}
-                        disabled={lockAddressFields}
-                        placeholder={checkoutCopy.shippingDetails.countryPlaceholder}
-                        className={fieldClass(Boolean(fieldErrors.country))}
-                      />
-                      {fieldErrors.country ? (
-                        <p className="mt-1 text-xs text-rose-600">{fieldErrors.country}</p>
+                        disabled={lockAddressFields || !shippingForm.city}
+                        className={fieldClass(Boolean(fieldErrors.district))}
+                      >
+                        <option value="">
+                          {shippingForm.city
+                            ? checkoutCopy.shippingDetails.districtPlaceholder
+                            : "Select City/Regency first"}
+                        </option>
+                        {districtOptions.map((item) => (
+                          <option key={item} value={item}>
+                            {item}
+                          </option>
+                        ))}
+                      </select>
+                      {fieldErrors.district ? (
+                        <p className="mt-1 text-xs text-rose-600">{fieldErrors.district}</p>
                       ) : null}
                     </div>
                     <div>
                       <label className="text-sm font-medium text-slate-700">
-                        {checkoutCopy.shippingDetails.zipLabel} *
+                        {checkoutCopy.shippingDetails.postalCodeLabel} *
                       </label>
                       <input
                         type="text"
-                        value={zipCode}
+                        inputMode="numeric"
+                        value={shippingForm.postalCode}
                         onChange={(event) => {
-                          setZipCode(event.target.value);
-                          if (fieldErrors.zipCode) {
-                            setFieldErrors((prev) => ({ ...prev, zipCode: "" }));
+                          setShippingForm((prev) => ({
+                            ...prev,
+                            postalCode: event.target.value.replace(/\D/g, "").slice(0, 5),
+                          }));
+                          if (fieldErrors.postalCode) {
+                            setFieldErrors((prev) => ({ ...prev, postalCode: "" }));
                           }
                         }}
                         disabled={lockAddressFields}
-                        placeholder={checkoutCopy.shippingDetails.zipPlaceholder}
-                        className={fieldClass(Boolean(fieldErrors.zipCode))}
+                        placeholder={checkoutCopy.shippingDetails.postalCodePlaceholder}
+                        className={fieldClass(Boolean(fieldErrors.postalCode))}
                       />
-                      {fieldErrors.zipCode ? (
-                        <p className="mt-1 text-xs text-rose-600">{fieldErrors.zipCode}</p>
+                      {fieldErrors.postalCode ? (
+                        <p className="mt-1 text-xs text-rose-600">{fieldErrors.postalCode}</p>
                       ) : null}
                     </div>
                   </div>
-                </div>
-
-                <div className="pt-1">
-                  <p className="text-xs font-semibold uppercase text-slate-600">
-                    {checkoutCopy.shippingDetails.shippingCostLabel}
-                  </p>
-                  <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                    {shippingOptions.map((option) => {
-                      const selected = shippingOptionId === option.id;
-                      return (
-                        <label
-                          key={option.id}
-                          className={`cursor-pointer rounded-2xl border p-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition ${
-                            selected
-                              ? "border-emerald-400 bg-emerald-50"
-                              : "border-slate-200 bg-white hover:border-slate-300"
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name="shippingOption"
-                            className="sr-only"
-                            checked={selected}
-                            onChange={() => setShippingOptionId(option.id)}
-                          />
-                          <div className="text-sm font-semibold text-slate-900">
-                            {option.title}
-                          </div>
-                          <div className="mt-1 text-xs text-slate-500">
-                            {option.descriptionText} {formatCurrency(option.cost)}
-                          </div>
-                        </label>
-                      );
-                    })}
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div>
+                      <label className="text-sm font-medium text-slate-700">
+                        {checkoutCopy.shippingDetails.streetNameLabel} *
+                      </label>
+                      <input
+                        ref={streetNameRef}
+                        type="text"
+                        value={shippingForm.streetName}
+                        onChange={(event) => {
+                          setShippingForm((prev) => ({
+                            ...prev,
+                            streetName: event.target.value,
+                          }));
+                          if (fieldErrors.streetName) {
+                            setFieldErrors((prev) => ({ ...prev, streetName: "" }));
+                          }
+                        }}
+                        disabled={lockAddressFields}
+                        placeholder={checkoutCopy.shippingDetails.streetNamePlaceholder}
+                        className={fieldClass(Boolean(fieldErrors.streetName))}
+                      />
+                      {fieldErrors.streetName ? (
+                        <p className="mt-1 text-xs text-rose-600">{fieldErrors.streetName}</p>
+                      ) : null}
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700">
+                        {checkoutCopy.shippingDetails.houseNumberLabel} *
+                      </label>
+                      <input
+                        type="text"
+                        value={shippingForm.houseNumber}
+                        onChange={(event) => {
+                          setShippingForm((prev) => ({
+                            ...prev,
+                            houseNumber: event.target.value,
+                          }));
+                          if (fieldErrors.houseNumber) {
+                            setFieldErrors((prev) => ({ ...prev, houseNumber: "" }));
+                          }
+                        }}
+                        disabled={lockAddressFields}
+                        placeholder={checkoutCopy.shippingDetails.houseNumberPlaceholder}
+                        className={fieldClass(Boolean(fieldErrors.houseNumber))}
+                      />
+                      {fieldErrors.houseNumber ? (
+                        <p className="mt-1 text-xs text-rose-600">{fieldErrors.houseNumber}</p>
+                      ) : null}
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700">
+                        {checkoutCopy.shippingDetails.buildingLabel}
+                      </label>
+                      <input
+                        type="text"
+                        value={shippingForm.building}
+                        onChange={(event) => {
+                          setShippingForm((prev) => ({
+                            ...prev,
+                            building: event.target.value,
+                          }));
+                        }}
+                        disabled={lockAddressFields}
+                        placeholder={checkoutCopy.shippingDetails.buildingPlaceholder}
+                        className={INPUT_CLASS}
+                      />
+                    </div>
+                    <div className="lg:col-span-2">
+                      <label className="text-sm font-medium text-slate-700">
+                        {checkoutCopy.shippingDetails.otherDetailsLabel}
+                      </label>
+                      <textarea
+                        value={shippingForm.otherDetails}
+                        onChange={(event) => {
+                          setShippingForm((prev) => ({
+                            ...prev,
+                            otherDetails: event.target.value,
+                          }));
+                        }}
+                        disabled={lockAddressFields}
+                        placeholder={checkoutCopy.shippingDetails.otherDetailsPlaceholder}
+                        className={`${INPUT_CLASS} h-24 py-3`}
+                      />
+                    </div>
                   </div>
                 </div>
               </section>
@@ -1294,6 +1472,199 @@ export default function CheckoutPage() {
               <section className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4 sm:p-5">
                 <SectionTitle
                   number="03."
+                  title="Order Summary by Store"
+                  hint={
+                    checkoutMode === "MULTI_STORE"
+                      ? "Your cart is grouped by store for the multi-store QRIS transition."
+                      : "This cart currently resolves to a single store."
+                  }
+                />
+                {checkoutPreviewQuery.isLoading || isRemoteSyncing ? (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {[0, 1].map((item) => (
+                      <div
+                        key={item}
+                        className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                      >
+                        <div className="h-5 w-40 animate-pulse rounded bg-slate-200" />
+                        <div className="h-16 animate-pulse rounded-2xl bg-slate-200" />
+                        <div className="h-10 animate-pulse rounded-2xl bg-slate-200" />
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {checkoutPreviewQuery.isError ? (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    Grouped checkout preview is temporarily unavailable. Existing checkout can
+                    still continue with the current single-order flow.
+                  </div>
+                ) : null}
+                {!checkoutPreviewQuery.isLoading && !checkoutPreviewQuery.isError ? (
+                  <>
+                    {previewHasPaymentBlocker ? (
+                      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                        Some stores do not have an active QRIS payment profile yet. This stage
+                        only shows readiness and does not block the existing submit flow.
+                      </div>
+                    ) : null}
+                    {checkoutPreviewInvalidItems.length > 0 ? (
+                      <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                        {checkoutPreviewInvalidItems.length} item(s) are not mapped to a store
+                        yet. They are excluded from the store-grouped preview until the product
+                        store mapping is completed.
+                      </div>
+                    ) : null}
+                    {checkoutPreviewSummary ? (
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                            Checkout Mode
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-slate-900">
+                            {checkoutMode === "MULTI_STORE" ? "Multi-Store" : "Single Store"}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                            Preview Items
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-slate-900">
+                            {checkoutPreviewSummary.totalItems} items in{" "}
+                            {checkoutPreviewGroups.length} store
+                            {checkoutPreviewGroups.length === 1 ? "" : "s"}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                            Preview Total
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-slate-900">
+                            {formatCurrency(checkoutPreviewSummary.grandTotal)}
+                          </p>
+                        </div>
+                      </div>
+                    ) : null}
+                    <div className="space-y-4">
+                      {checkoutPreviewGroups.map((group) => (
+                        <article
+                          key={group.storeId}
+                          className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4"
+                        >
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="text-base font-semibold text-slate-900">
+                                  {group.storeName}
+                                </h3>
+                                <span
+                                  className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${
+                                    group.paymentAvailable
+                                      ? "bg-emerald-100 text-emerald-700"
+                                      : "bg-amber-100 text-amber-700"
+                                  }`}
+                                >
+                                  {group.paymentAvailable ? "QRIS Ready" : "QRIS Not Ready"}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-xs text-slate-500">
+                                {group.storeSlug
+                                  ? `/${group.storeSlug}`
+                                  : `Store ID ${group.storeId}`}
+                              </p>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+                              Payment Profile:{" "}
+                              <span className="font-semibold text-slate-900">
+                                {group.paymentProfileStatus}
+                              </span>
+                            </div>
+                          </div>
+
+                          {group.warning ? (
+                            <p className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+                              {group.warning}
+                            </p>
+                          ) : null}
+                          {group.paymentInstruction ? (
+                            <p className="mt-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs leading-5 text-slate-600">
+                              {group.paymentInstruction}
+                            </p>
+                          ) : null}
+
+                          <div className="mt-4 space-y-3">
+                            {group.items.map((item) => (
+                              <div
+                                key={`${group.storeId}-${item.productId}`}
+                                className="flex gap-3 rounded-2xl border border-slate-200 bg-white p-3"
+                              >
+                                <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-slate-100">
+                                  {item.image ? (
+                                    <img
+                                      src={item.image}
+                                      alt={item.productName}
+                                      className="h-full w-full object-cover"
+                                    />
+                                  ) : (
+                                    <div className="flex h-full w-full items-center justify-center text-[10px] text-slate-400">
+                                      IMG
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-semibold text-slate-900">
+                                    {item.productName}
+                                  </p>
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    Qty {item.qty} x {formatCurrency(item.price)}
+                                    {item.category?.name ? ` • ${item.category.name}` : ""}
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-xs text-slate-500">Line Total</p>
+                                  <p className="text-sm font-semibold text-slate-900">
+                                    {formatCurrency(item.lineTotal)}
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="mt-4 grid gap-3 md:grid-cols-3">
+                            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                                Subtotal
+                              </p>
+                              <p className="mt-1 text-sm font-semibold text-slate-900">
+                                {formatCurrency(group.subtotalAmount)}
+                              </p>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                                Shipping
+                              </p>
+                              <p className="mt-1 text-sm font-semibold text-slate-900">
+                                {formatCurrency(group.shippingAmount)}
+                              </p>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                                Store Total
+                              </p>
+                              <p className="mt-1 text-sm font-semibold text-slate-900">
+                                {formatCurrency(group.totalAmount)}
+                              </p>
+                            </div>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </>
+                ) : null}
+              </section>
+
+              <section className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4 sm:p-5">
+                <SectionTitle
+                  number="04."
                   title={checkoutCopy.shippingDetails.paymentMethodLabel}
                   hint={checkoutCopy.shippingDetails.paymentMethodPlaceholder}
                 />
@@ -1382,7 +1753,7 @@ export default function CheckoutPage() {
                 </span>
               </div>
               <p className="text-sm leading-6 text-slate-500">
-                Review items, coupon impact, shipping, and the final amount before you submit.
+                Review items, coupon impact, and the final amount before you submit.
               </p>
             </div>
 
@@ -1396,7 +1767,7 @@ export default function CheckoutPage() {
                     {formatCurrency(total)}
                   </p>
                   <p className="mt-2 text-xs text-slate-300">
-                    Shipping, discounts, and store settings are reflected live in this summary.
+                    Discounts and store settings are reflected live in this summary.
                   </p>
                 </div>
                 <div className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-200">
@@ -1549,12 +1920,6 @@ export default function CheckoutPage() {
                     {discountValue > 0
                       ? `- ${formatCurrency(discountValue)}`
                       : formatCurrency(0)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-slate-600">
-                  <span>{checkoutCopy.shippingDetails.shippingCostLabel}</span>
-                  <span className="font-semibold tabular-nums text-slate-900">
-                    {formatCurrency(shippingCost)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-slate-600">

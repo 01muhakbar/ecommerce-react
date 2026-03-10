@@ -53,12 +53,26 @@ import AccountLayout from "./layouts/AccountLayout.jsx";
 import AccountDashboardPage from "./pages/account/AccountDashboardPage.jsx";
 import AccountOrdersPage from "./pages/account/AccountOrdersPage.jsx";
 import AccountOrderDetailPage from "./pages/account/AccountOrderDetailPage.jsx";
+import AccountOrderPaymentPage from "./pages/account/AccountOrderPaymentPage.jsx";
 import AccountProfilePage from "./pages/account/AccountProfilePage.jsx";
 import AccountMyReviewPage from "./pages/account/AccountMyReviewPage.jsx";
 import AccountNotificationsPage from "./pages/account/AccountNotificationsPage.jsx";
 import AccountMyAccountPage from "./pages/account/AccountMyAccountPage.jsx";
 import AccountChangePasswordPage from "./pages/account/AccountChangePasswordPage.jsx";
 import AccountShippingAddressPage from "./pages/account/AccountShippingAddressPage.jsx";
+import AccountStorePaymentProfilePage from "./pages/account/AccountStorePaymentProfilePage.jsx";
+import AccountStorePaymentReviewPage from "./pages/account/AccountStorePaymentReviewPage.jsx";
+import AdminStorePaymentPage from "./pages/admin/AdminStorePaymentPage.jsx";
+import AdminStorePaymentReviewPage from "./pages/admin/AdminStorePaymentReviewPage.jsx";
+const AdminPaymentAuditPage = lazy(() =>
+  import("./pages/admin/AdminPaymentAuditPage.jsx")
+);
+const AdminPaymentAuditDetailPage = lazy(() =>
+  import("./pages/admin/AdminPaymentAuditDetailPage.jsx")
+);
+const AdminStorePaymentProfilesPage = lazy(() =>
+  import("./pages/admin/AdminStorePaymentProfilesPage.jsx")
+);
 
 function LegacyAccountOrderDetailRedirect() {
   const { id } = useParams();
@@ -109,10 +123,19 @@ export default function App() {
                 <Route path="dashboard" element={<AccountDashboardPage />} />
                 <Route path="my-orders" element={<AccountOrdersPage />} />
                 <Route path="my-orders/:id" element={<AccountOrderDetailPage />} />
+                <Route path="my-orders/:id/payment" element={<AccountOrderPaymentPage />} />
                 <Route path="notifications" element={<AccountNotificationsPage />} />
                 <Route path="my-reviews" element={<AccountMyReviewPage />} />
                 <Route path="my-account" element={<AccountMyAccountPage />} />
                 <Route path="shipping-address" element={<AccountShippingAddressPage />} />
+                <Route
+                  path="store-payment-profile"
+                  element={<Navigate to="/admin/online-store/store-payment" replace />}
+                />
+                <Route
+                  path="store-payment-review"
+                  element={<Navigate to="/admin/online-store/payment-review" replace />}
+                />
                 <Route path="update-profile" element={<AccountProfilePage />} />
                 <Route path="change-password" element={<AccountChangePasswordPage />} />
               </Route>
@@ -281,6 +304,38 @@ export default function App() {
                 }
               />
               <Route
+                path="online-store/store-payment"
+                element={
+                  <RequirePerm perm="DASHBOARD_VIEW">
+                    <AdminStorePaymentPage />
+                  </RequirePerm>
+                }
+              />
+              <Route
+                path="online-store/payment-review"
+                element={
+                  <RequirePerm perm="DASHBOARD_VIEW">
+                    <AdminStorePaymentReviewPage />
+                  </RequirePerm>
+                }
+              />
+              <Route
+                path="online-store/payment-audit"
+                element={
+                  <RequirePerm perm="DASHBOARD_VIEW">
+                    <AdminPaymentAuditPage />
+                  </RequirePerm>
+                }
+              />
+              <Route
+                path="online-store/payment-audit/:orderId"
+                element={
+                  <RequirePerm perm="DASHBOARD_VIEW">
+                    <AdminPaymentAuditDetailPage />
+                  </RequirePerm>
+                }
+              />
+              <Route
                 path="store/customization"
                 element={
                   <RequirePerm perm="SETTINGS_MANAGE">
@@ -305,6 +360,14 @@ export default function App() {
                 element={
                   <RequirePerm perm="SETTINGS_MANAGE">
                     <StoreSettingsPage />
+                  </RequirePerm>
+                }
+              />
+              <Route
+                path="store/payment-profiles"
+                element={
+                  <RequirePerm perm="SETTINGS_MANAGE">
+                    <AdminStorePaymentProfilesPage />
                   </RequirePerm>
                 }
               />

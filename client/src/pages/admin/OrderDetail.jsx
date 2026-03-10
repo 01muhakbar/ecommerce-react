@@ -7,6 +7,10 @@ import QueryState from "../../components/UI/QueryState.jsx";
 import OrderStatusBadge from "../../components/admin/OrderStatusBadge.jsx";
 import OrderStatusTimeline from "../../components/admin/OrderStatusTimeline.jsx";
 import useAdminLocale from "../../hooks/useAdminLocale.js";
+import {
+  CheckoutModeBadge,
+  PaymentStatusBadge,
+} from "../../components/payments/PaymentReadModelBadges.jsx";
 
 const labelize = (value) =>
   value ? value.charAt(0).toUpperCase() + value.slice(1) : "";
@@ -210,6 +214,8 @@ export default function OrderDetail() {
                         {createdAtFull}
                       </span>
                       <OrderStatusBadge status={order?.status || "-"} />
+                      <CheckoutModeBadge mode={order?.checkoutMode} />
+                      <PaymentStatusBadge status={order?.paymentStatus} prefix="Parent" />
                       <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium">
                         Total {formatMoney(totalAmount)}
                       </span>
@@ -262,7 +268,19 @@ export default function OrderDetail() {
                     Payment
                   </p>
                   <p className="mt-2 text-sm font-semibold text-slate-800">{paymentMethod}</p>
-                  <p className="mt-1 text-sm text-slate-500">Invoice: {invoiceRef}</p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <CheckoutModeBadge mode={order?.checkoutMode} />
+                    <PaymentStatusBadge status={order?.paymentStatus} prefix="Parent" />
+                  </div>
+                  <p className="mt-2 text-sm text-slate-500">Invoice: {invoiceRef}</p>
+                  {order?.id && String(order?.checkoutMode || "LEGACY").toUpperCase() !== "LEGACY" ? (
+                    <Link
+                      to={`/admin/online-store/payment-audit/${order.id}`}
+                      className="mt-3 inline-flex text-sm font-semibold text-emerald-700 underline underline-offset-2"
+                    >
+                      Open split payment audit
+                    </Link>
+                  ) : null}
                 </article>
 
                 <article className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -380,8 +398,9 @@ export default function OrderDetail() {
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                 Current Status
               </p>
-              <div className="mt-3">
+              <div className="mt-3 flex flex-wrap items-center gap-2">
                 <OrderStatusBadge status={order?.status || "-"} />
+                <PaymentStatusBadge status={order?.paymentStatus} prefix="Parent" />
               </div>
               <p className="mt-3 text-sm leading-6 text-slate-500">
                 {statusHelper}

@@ -655,7 +655,15 @@ router.get(
 
       const { rows, count } = await Order.findAndCountAll({
         where: { userId },
-        attributes: ["id", "invoiceNo", "status", "totalAmount", "createdAt"],
+        attributes: [
+          "id",
+          "invoiceNo",
+          "checkoutMode",
+          "status",
+          "paymentStatus",
+          "totalAmount",
+          "createdAt",
+        ],
         order: [["createdAt", "DESC"]],
         limit,
         offset,
@@ -671,6 +679,10 @@ router.get(
               getAttr(order, "ref") ??
               String(id ?? ""),
             status: toCanonicalOrderStatus(getAttr(order, "status")),
+            checkoutMode:
+              String(getAttr(order, "checkoutMode") || "").toUpperCase().trim() || "LEGACY",
+            paymentStatus:
+              String(getAttr(order, "paymentStatus") || "").toUpperCase().trim() || "UNPAID",
             totalAmount: Number(getAttr(order, "totalAmount") || 0),
             createdAt: getAttr(order, "createdAt"),
           };
@@ -698,7 +710,7 @@ router.get(
       if (!userId) return;
 
       const [rows] = await sequelize.query(
-        "SELECT id, invoice_no, status, total_amount, created_at, payment_method FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT 20",
+        "SELECT id, invoice_no, checkout_mode, status, payment_status, total_amount, created_at, payment_method FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT 20",
         { replacements: [userId] }
       );
 
@@ -706,7 +718,13 @@ router.get(
         data: (rows as any[]).map((row: any) => ({
           id: row.id,
           invoiceNo: row.invoice_no ?? row.invoiceNo ?? null,
+          checkoutMode: String(row.checkout_mode ?? row.checkoutMode ?? "LEGACY")
+            .toUpperCase()
+            .trim() || "LEGACY",
           status: toCanonicalOrderStatus(row.status ?? null),
+          paymentStatus: String(row.payment_status ?? row.paymentStatus ?? "UNPAID")
+            .toUpperCase()
+            .trim() || "UNPAID",
           totalAmount: Number(row.total_amount ?? row.totalAmount ?? 0),
           createdAt: row.created_at ?? row.createdAt ?? null,
           paymentMethod: row.payment_method ?? row.paymentMethod ?? null,
@@ -737,7 +755,9 @@ router.get(
         attributes: [
           "id",
           "invoiceNo",
+          "checkoutMode",
           "status",
+          "paymentStatus",
           "totalAmount",
           "couponCode",
           "discountAmount",
@@ -789,7 +809,15 @@ router.get(
           id: order.id,
           ref: order.invoiceNo || String(order.id),
           invoiceNo: order.invoiceNo,
+          checkoutMode:
+            String((order as any).checkoutMode || order.get?.("checkoutMode") || "LEGACY")
+              .toUpperCase()
+              .trim() || "LEGACY",
           status: toCanonicalOrderStatus(order.status),
+          paymentStatus:
+            String((order as any).paymentStatus || order.get?.("paymentStatus") || "UNPAID")
+              .toUpperCase()
+              .trim() || "UNPAID",
           totalAmount: Number(order.totalAmount || 0),
           subtotal,
           discount: discountAmount,

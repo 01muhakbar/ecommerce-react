@@ -1,7 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../api/axios.ts";
+import { fetchOrderCheckoutPayment } from "../../api/orderPayments.ts";
 import { formatCurrency } from "../../utils/format.js";
+import {
+  CheckoutModeBadge,
+  PaymentStatusBadge,
+  ProofReviewBadge,
+} from "../../components/payments/PaymentReadModelBadges.jsx";
 
 const fetchOrder = async (orderId) => {
   const { data } = await api.get(`/store/orders/my/${orderId}`);
@@ -32,6 +38,11 @@ export default function AccountOrderDetailPage() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["account", "orders", id],
     queryFn: () => fetchOrder(id),
+    enabled: Boolean(id),
+  });
+  const groupedQuery = useQuery({
+    queryKey: ["account", "orders", "grouped", id],
+    queryFn: () => fetchOrderCheckoutPayment(id),
     enabled: Boolean(id),
   });
 
@@ -73,6 +84,7 @@ export default function AccountOrderDetailPage() {
   const orderRef = order.invoiceNo || order.ref || `#${order.id}`;
   const discountValue = order.discount ?? order.discountAmount ?? 0;
   const subtotalValue = order.subtotal ?? 0;
+  const groupedOrder = groupedQuery.data?.data ?? null;
 
   return (
     <div className="space-y-6">
@@ -83,6 +95,9 @@ export default function AccountOrderDetailPage() {
             {orderRef}
           </h2>
           <p className="text-xs text-slate-500">Placed {formatDate(order.createdAt)}</p>
+          <div className="mt-2">
+            <CheckoutModeBadge mode={order.checkoutMode || groupedOrder?.checkoutMode} />
+          </div>
         </div>
         <span
           className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${statusStyles(
@@ -97,11 +112,83 @@ export default function AccountOrderDetailPage() {
         <h3 className="text-sm font-semibold text-slate-900">Summary</h3>
         <div className="mt-3 grid gap-2 text-sm text-slate-600 md:grid-cols-2">
           <div>Payment: {order.paymentMethod || "-"}</div>
+          <div>
+            <PaymentStatusBadge status={order.paymentStatus} prefix="Parent" />
+          </div>
           <div>Total: {money(order.totalAmount || 0)}</div>
           <div>Discount: {money(discountValue)}</div>
           <div>Subtotal: {money(subtotalValue)}</div>
         </div>
+        {order.id ? (
+          <div className="mt-4">
+            <Link
+              to={`/user/my-orders/${order.id}/payment`}
+              className="inline-flex h-10 items-center justify-center rounded-full border border-emerald-200 px-4 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
+            >
+              Payment by Store
+            </Link>
+          </div>
+        ) : null}
       </div>
+
+      {groupedOrder ? (
+        <div className="rounded-xl border border-slate-200 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900">Store Breakdown</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                Read-only payment lifecycle by store for this order.
+              </p>
+            </div>
+            <PaymentStatusBadge status={groupedOrder.paymentStatus} prefix="Parent" />
+          </div>
+          {groupedOrder.checkoutMode === "LEGACY" ? (
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              Legacy order. Split payment detail is not available for this order.
+            </div>
+          ) : (
+            <div className="mt-4 space-y-3">
+              {groupedOrder.groups.map((group) => (
+                <div
+                  key={`${group.suborderId || group.storeId || group.storeName}`}
+                  className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="font-semibold text-slate-900">{group.storeName}</h4>
+                        <PaymentStatusBadge status={group.paymentStatus} prefix="Suborder" />
+                        {group.payment?.status ? (
+                          <PaymentStatusBadge status={group.payment.status} prefix="Payment" />
+                        ) : null}
+                        {group.payment?.proof?.reviewStatus ? (
+                          <ProofReviewBadge
+                            status={group.payment.proof.reviewStatus}
+                            prefix="Proof"
+                          />
+                        ) : null}
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {group.suborderNumber || "Legacy"} • {group.items.length} item
+                        {group.items.length === 1 ? "" : "s"}
+                      </p>
+                      {group.payment?.proof?.reviewNote ? (
+                        <p className="mt-2 text-sm text-slate-600">
+                          Review note: {group.payment.proof.reviewNote}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="text-right text-sm text-slate-600">
+                      <p className="font-semibold text-slate-900">{money(group.totalAmount)}</p>
+                      <p>Fulfillment: {group.fulfillmentStatus}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
 
       <div className="rounded-xl border border-slate-200 p-4">
         <h3 className="text-sm font-semibold text-slate-900">Items</h3>

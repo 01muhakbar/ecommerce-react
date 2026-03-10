@@ -7,6 +7,10 @@ import { formatCurrency } from "../../utils/format.js";
 import {
   normalizeOrderStatus,
 } from "../../utils/orderStatus.js";
+import {
+  CheckoutModeBadge,
+  PaymentStatusBadge,
+} from "../../components/payments/PaymentReadModelBadges.jsx";
 
 const fetchOrders = async (page) => {
   const { data } = await api.get("/store/my/orders", {
@@ -190,18 +194,24 @@ export default function AccountOrdersPage() {
                   const paymentMethod = order.paymentMethod || order.method || "COD";
                   return (
                     <tr key={order.id} className="border-t border-slate-100 hover:bg-slate-50">
-                      <td className="px-5 py-4 font-semibold text-slate-900">
-                        {orderRef || `#${order.id}`}
+                      <td className="px-5 py-4">
+                        <div className="font-semibold text-slate-900">{orderRef || `#${order.id}`}</div>
+                        <div className="mt-2">
+                          <CheckoutModeBadge mode={order.checkoutMode} />
+                        </div>
                       </td>
                       <td className="px-5 py-4 text-slate-700">
                         {formatDate(getOrderDateValue(order))}
                       </td>
                       <td className="px-5 py-4 text-slate-700">{paymentMethod || "-"}</td>
                       <td className="px-5 py-4">
-                        <span className="flex items-center text-sm font-medium">
-                          <span className={`h-2 w-2 rounded-full ${statusUI.dot}`} />
-                          <span className={`ml-2 ${statusUI.text}`}>{statusUI.label}</span>
-                        </span>
+                        <div className="space-y-2">
+                          <span className="flex items-center text-sm font-medium">
+                            <span className={`h-2 w-2 rounded-full ${statusUI.dot}`} />
+                            <span className={`ml-2 ${statusUI.text}`}>{statusUI.label}</span>
+                          </span>
+                          <PaymentStatusBadge status={order.paymentStatus} prefix="Payment" />
+                        </div>
                       </td>
                       <td className="px-5 py-4 text-slate-700">{shippingProvider}</td>
                       <td className="px-5 py-4 text-slate-700">

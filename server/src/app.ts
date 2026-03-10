@@ -16,6 +16,10 @@ import {
 
 import authRouter from "./routes/auth.js";
 import cartRouter from "./routes/cartRoutes.js";
+import checkoutRouter from "./routes/checkout.js";
+import ordersRouter from "./routes/orders.js";
+import paymentsRouter from "./routes/payments.js";
+import sellerPaymentsRouter from "./routes/seller.payments.js";
 import catalogRouter from "./routes/admin.catalog.js";
 import statsRouter from "./routes/admin.stats.js";
 import analyticsRouter from "./routes/admin.analytics.js";
@@ -35,7 +39,10 @@ import adminCurrenciesRouter from "./routes/admin.currencies.js";
 import adminStoreCustomizationRouter from "./routes/admin.storeCustomization.js";
 import adminStoreSettingsRouter from "./routes/admin.storeSettings.js";
 import adminNotificationsRouter from "./routes/admin.notifications.js";
+import adminStorePaymentProfilesRouter from "./routes/admin.storePaymentProfiles.js";
+import adminPaymentsAuditRouter from "./routes/admin.payments.audit.js";
 import storeRouter from "./routes/store.js";
+import storesRouter from "./routes/stores.js";
 import storeCouponsRouter from "./routes/store.coupons.js";
 import storeCustomizationRouter from "./routes/store.customization.js";
 import storeSettingsRouter from "./routes/store.settings.js";
@@ -47,7 +54,8 @@ const app = express();
 app.set("trust proxy", 1);
 
 app.use(cookieParser());
-app.use(express.json());
+app.use(express.json({ limit: "5mb" }));
+app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 
 const allowedOrigins = [
   process.env.CLIENT_URL,
@@ -67,7 +75,12 @@ app.use("/api", healthRouter);
 app.use("/api", publicRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/cart", cartRouter);
+app.use("/api/checkout", checkoutRouter);
+app.use("/api/orders", ordersRouter);
+app.use("/api/payments", paymentsRouter);
+app.use("/api/seller", sellerPaymentsRouter);
 app.use("/api/store", storeRouter);
+app.use("/api/stores", storesRouter);
 app.use("/api/store/coupons", storeCouponsRouter);
 app.use("/api/store/customization", storeCustomizationRouter);
 app.use("/api/store/settings", storeSettingsRouter);
@@ -95,6 +108,7 @@ app.use("/api/admin/products", requireStaffOrAdmin, adminProductsRouter);
 app.use("/api/admin/orders", requireStaffOrAdmin, adminOrdersRouter);
 app.use("/api/admin/customers", requireStaffOrAdmin, adminCustomersRouter);
 app.use("/api/admin/notifications", requireStaffOrAdmin, adminNotificationsRouter);
+app.use("/api/admin/payments/audit", requireStaffOrAdmin, adminPaymentsAuditRouter);
 
 app.use("/api/admin/categories", requireAdmin, adminCategoriesRouter);
 app.use("/api/admin/coupons", requireAdmin, adminCouponsRouter);
@@ -108,6 +122,7 @@ app.use(
   adminStoreCustomizationRouter
 );
 app.use("/api/admin/store/settings", requireAdmin, adminStoreSettingsRouter);
+app.use("/api/admin/stores", requireAdmin, adminStorePaymentProfilesRouter);
 app.use("/api/admin", requireAdmin, adminAttributeValuesRouter);
 app.use("/api/admin", requireAdmin, adminProductAttributesRouter);
 
@@ -116,6 +131,16 @@ app.use("/api/admin/staff", requireSuperAdmin, staffRouter);
 
 // uploads (tentukan kebijakan; ini aku set staff+)
 app.use("/api/admin", requireStaffOrAdmin, adminUploadsRouter);
+
+app.use((error: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (error?.type === "entity.too.large" || error?.status === 413) {
+    return res.status(413).json({
+      success: false,
+      message: "Request payload is too large. Please upload a smaller image.",
+    });
+  }
+  return next(error);
+});
 
 // 404 handler (dev-only logging)
 app.use((req, res) => {

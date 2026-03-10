@@ -36,6 +36,16 @@ export default function StoreCategoryPage() {
     refetch: refetchCategories,
   } = useStoreCategories();
   const categoryTree = useMemo(() => buildCategoryTree(categories || []), [categories]);
+  const activeCategory = useMemo(() => {
+    const normalizedSlug = String(safeSlug || "").trim().toLowerCase();
+    if (!normalizedSlug) return null;
+    return (categories || []).find((item) => {
+      const key = String(item?.slug || item?.code || item?.id || "")
+        .trim()
+        .toLowerCase();
+      return key === normalizedSlug;
+    });
+  }, [categories, safeSlug]);
 
   useEffect(() => {
     if (isCategoryListMode) {
@@ -54,7 +64,7 @@ export default function StoreCategoryPage() {
     fetchStoreProducts({ category: safeSlug })
       .then((response) => {
         if (!isActive) return;
-        setProducts(response.data ?? response?.data?.data ?? []);
+        setProducts(response?.data?.items ?? []);
       })
       .catch(() => {
         if (!isActive) return;
@@ -161,7 +171,9 @@ export default function StoreCategoryPage() {
   return (
     <section className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold">Category: {safeSlug || "Unknown"}</h1>
+        <h1 className="text-2xl font-semibold">
+          Category: {activeCategory?.name || safeSlug || "Unknown"}
+        </h1>
         <p className="text-sm text-slate-500">Browse products in this category.</p>
       </div>
       <QueryState
@@ -177,7 +189,7 @@ export default function StoreCategoryPage() {
           {products.map((product) => (
             <Link
               key={product.id}
-              to={`/product/${product.id}`}
+              to={`/product/${encodeURIComponent(product.slug || product.id)}`}
               className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
             >
               <div className="text-sm font-semibold">{product.name}</div>

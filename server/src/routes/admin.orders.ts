@@ -75,6 +75,7 @@ const normalizeMethodInput = (raw: unknown): CanonicalMethod | "" => {
 const normalizeMethodOutput = (raw: unknown): CanonicalMethod => {
   const value = String(raw || "").toLowerCase().trim();
   if (!value) return "cash";
+  if (value.includes("qris")) return "card";
   if (value.includes("cod") || value.includes("cash")) return "cash";
   if (value.includes("credit card") || value.includes("credit_card")) return "card";
   if (value.includes("card") || value.includes("debit") || value.includes("visa")) {
@@ -290,7 +291,11 @@ const toOrderDetailPayload = (orderItem: any) => {
     id: getAttr(orderItem, "id"),
     ref: getAttr(orderItem, "invoiceNo") ?? String(getAttr(orderItem, "id") ?? ""),
     invoiceNo: getAttr(orderItem, "invoiceNo"),
+    checkoutMode:
+      String(getAttr(orderItem, "checkoutMode") || "").toUpperCase().trim() || "LEGACY",
     status: toUiStatus(getAttr(orderItem, "status")),
+    paymentStatus:
+      String(getAttr(orderItem, "paymentStatus") || "").toUpperCase().trim() || "UNPAID",
     totalAmount,
     subtotal,
     discount,
@@ -327,7 +332,9 @@ router.get("/", requireStaffOrAdmin, async (req, res) => {
       attributes: [
         "id",
         "invoiceNo",
+        "checkoutMode",
         "status",
+        "paymentStatus",
         "createdAt",
         "totalAmount",
         "customerName",
@@ -367,6 +374,8 @@ router.get("/", requireStaffOrAdmin, async (req, res) => {
         ref: invoiceNo ?? String(id ?? ""),
         orderId: id,
         invoiceNo,
+        checkoutMode:
+          String(getAttr(orderRow, "checkoutMode") || "").toUpperCase().trim() || "LEGACY",
         orderTime: getAttr(orderRow, "createdAt"),
         createdAt: getAttr(orderRow, "createdAt"),
         customerName,
@@ -380,6 +389,8 @@ router.get("/", requireStaffOrAdmin, async (req, res) => {
         amount,
         totalAmount: amount,
         status: toUiStatus(getAttr(orderRow, "status")),
+        paymentStatus:
+          String(getAttr(orderRow, "paymentStatus") || "").toUpperCase().trim() || "UNPAID",
       };
     });
 
@@ -413,7 +424,9 @@ const exportOrdersCsv = async (req: any, res: any) => {
       attributes: [
         "id",
         "invoiceNo",
+        "checkoutMode",
         "status",
+        "paymentStatus",
         "createdAt",
         "totalAmount",
         "customerName",

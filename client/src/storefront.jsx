@@ -2,87 +2,31 @@ import { Link } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCart } from "./hooks/useCart.ts";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "./api/axios.ts";
 import { prevData } from "./lib/rq.ts";
 import { formatCurrency } from "./utils/format.js";
 import { resolveProductImageUrl } from "./utils/productImage.js";
+import {
+  fetchStoreCategories,
+  fetchStoreProductById,
+  fetchStoreProducts,
+} from "./api/store.service.ts";
 
 const getImageSrc = (product) => resolveProductImageUrl(product);
 
-const fetchCategories = async () => {
-  const { data } = await api.get("/store/categories");
-  const items = Array.isArray(data?.data)
-    ? data.data
-    : data?.data?.items || [];
-  const normalizedItems = (items || []).map((category) => {
-    const slug =
-      category?.slug ??
-      category?.code ??
-      String(category?._id ?? category?.id ?? "");
-    return {
-      ...category,
-      slug,
-      code: category?.code ?? category?.slug ?? "",
-    };
-  });
-  const normalized = {
-    ...data,
-    data: {
-      ...(data?.data && !Array.isArray(data.data) ? data.data : {}),
-      items: normalizedItems,
-    },
-  };
-  if (process.env.NODE_ENV !== "production" && Array.isArray(data?.data)) {
-    console.debug("[storefront] normalized categories response");
-  }
-  return normalized;
-};
-
 const fetchProducts = async ({ q, search, category, page, limit }) => {
-  const params = {};
   const keyword = search ?? q;
-  if (keyword) params.q = keyword;
-  if (category) params.category = category;
-  if (page) params.page = page;
-  if (limit) {
-    params.limit = limit;
-    params.pageSize = limit;
-  }
-  const { data } = await api.get("/products", { params });
-  const items = Array.isArray(data?.data)
-    ? data.data
-    : data?.data?.items || [];
-  const meta = data?.meta || data?.data?.meta || {};
-  const resolvedLimit = meta.pageSize ?? meta.limit ?? limit;
-  const normalized = {
-    ...data,
-    data: {
-      ...(data?.data && !Array.isArray(data.data) ? data.data : {}),
-      items,
-    },
-    meta: {
-      ...meta,
-      page: meta.page ?? page,
-      limit: resolvedLimit,
-      total: meta.total,
-      totalPages: meta.totalPages,
-    },
-  };
-  if (process.env.NODE_ENV !== "production" && Array.isArray(data?.data)) {
-    console.debug("[storefront] normalized products response");
-  }
-  return normalized;
-};
-
-const fetchProduct = async (slug) => {
-  const { data } = await api.get(`/store/products/${encodeURIComponent(slug)}`);
-  return data;
+  return fetchStoreProducts({
+    search: keyword || undefined,
+    category,
+    page,
+    limit,
+  });
 };
 
 export const useCategories = () =>
   useQuery({
     queryKey: ["storefront", "categories"],
-    queryFn: fetchCategories,
+    queryFn: fetchStoreCategories,
     staleTime: 1000 * 60 * 5,
   });
 
@@ -113,7 +57,7 @@ export const useProducts = ({
 export const useProduct = (slug) =>
   useQuery({
     queryKey: ["storefront", "product", slug],
-    queryFn: () => fetchProduct(slug),
+    queryFn: () => fetchStoreProductById(slug),
     enabled: Boolean(slug),
     staleTime: 1000 * 30,
   });

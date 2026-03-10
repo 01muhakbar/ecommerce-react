@@ -6,6 +6,10 @@ import { toUIStatus } from "../../constants/orderStatus.js";
 import { prevData } from "../../lib/rq.ts";
 import useAdminLocale from "../../hooks/useAdminLocale.js";
 import OrderStatusBadge from "../../components/admin/OrderStatusBadge.jsx";
+import {
+  CheckoutModeBadge,
+  PaymentStatusBadge,
+} from "../../components/payments/PaymentReadModelBadges.jsx";
 import { Download, Eye, Filter, Printer, RotateCcw, Search } from "lucide-react";
 import {
   UiErrorState,
@@ -507,9 +511,7 @@ export default function Orders() {
                   <td className="px-4 py-3.5">
                     <div className="space-y-1">
                       <div className="font-semibold text-slate-900">{getInvoiceLabel(order)}</div>
-                      <div className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                        Ref Ready
-                      </div>
+                      <CheckoutModeBadge mode={order.checkoutMode} />
                     </div>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3.5 text-slate-600">
@@ -528,6 +530,7 @@ export default function Orders() {
                   <td className="px-4 py-3.5">
                     <div className="space-y-1.5">
                       <OrderStatusBadge status={uiStatus || "-"} />
+                      <PaymentStatusBadge status={order.paymentStatus} prefix="Payment" />
                       <div className="text-[11px] font-medium text-slate-400">
                         {getStatusNote(order.status)}
                       </div>

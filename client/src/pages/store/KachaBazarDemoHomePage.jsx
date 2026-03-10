@@ -66,15 +66,7 @@ export default function KachaBazarDemoHomePage() {
     });
     return map;
   }, [categories]);
-  const rawProductsCandidate =
-    productsData?.data?.items ??
-    productsData?.data?.products ??
-    productsData?.data?.data ??
-    productsData?.data ??
-    productsData?.items ??
-    productsData?.products ??
-    [];
-  const rawProducts = Array.isArray(rawProductsCandidate) ? rawProductsCandidate : [];
+  const rawProducts = productsData?.data?.items ?? [];
 
   const [activeSlide, setActiveSlide] = useState(0);
   const [copiedCode, setCopiedCode] = useState("");

@@ -11,6 +11,7 @@ export interface ProductAttributes {
   price: number;
   stock: number;
   userId: number;
+  storeId?: number | null;
   categoryId?: number;
   defaultCategoryId?: number | null;
   status: "active" | "inactive" | "draft";
@@ -56,6 +57,7 @@ class Product
   declare price: number;
   declare stock: number;
   declare userId: number;
+  declare storeId?: number | null;
   declare categoryId?: number;
   declare defaultCategoryId?: number | null;
   declare status: "active" | "inactive" | "draft";
@@ -100,6 +102,10 @@ class Product
     Product.belongsTo(models.User, {
       foreignKey: "userId",
       as: "seller",
+    });
+    Product.belongsTo(models.Store, {
+      foreignKey: { name: "storeId", field: "store_id" },
+      as: "store",
     });
   }
 
@@ -155,6 +161,15 @@ class Product
             key: "id",
           },
         },
+        storeId: {
+          type: DataTypes.INTEGER.UNSIGNED,
+          allowNull: true,
+          field: "store_id",
+          references: {
+            model: "stores",
+            key: "id",
+          },
+        },
         categoryId: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: true,
@@ -206,6 +221,57 @@ class Product
         modelName: "Product",
         tableName: "products",
         underscored: true,
+        hooks: {
+          beforeValidate: async (product: Product) => {
+            const ownerUserId = Number(product.get("userId") ?? 0);
+            const currentStoreId = Number(product.get("storeId") ?? 0);
+            if (!Number.isFinite(ownerUserId) || ownerUserId <= 0 || currentStoreId > 0) {
+              return;
+            }
+
+            const models = (product.sequelize as any)?.models ?? {};
+            const StoreModel = models.Store;
+            if (!StoreModel) return;
+
+            let store = await StoreModel.findOne({
+              where: { ownerUserId },
+              attributes: ["id", "name", "slug", "ownerUserId"],
+            });
+
+            if (!store) {
+              const UserModel = models.User;
+              const owner = UserModel
+                ? await UserModel.findByPk(ownerUserId, {
+                    attributes: ["id", "name", "email"],
+                  })
+                : null;
+              const ownerName = String(owner?.get?.("name") ?? owner?.name ?? "").trim();
+              const ownerEmail = String(owner?.get?.("email") ?? owner?.email ?? "").trim();
+              const baseName =
+                ownerName ||
+                (ownerEmail ? ownerEmail.split("@")[0].replace(/[._-]+/g, " ") : "") ||
+                `Store ${ownerUserId}`;
+              const normalizedBase =
+                baseName
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, "-")
+                  .replace(/^-+|-+$/g, "") || `store-${ownerUserId}`;
+              store = await StoreModel.create({
+                ownerUserId,
+                name: baseName.trim() || `Store ${ownerUserId}`,
+                slug: `${normalizedBase}-${ownerUserId}`,
+                status: "ACTIVE",
+              });
+            }
+
+            const resolvedStoreId = Number(
+              store?.getDataValue?.("id") ?? store?.get?.("id") ?? store?.id ?? 0
+            );
+            if (Number.isFinite(resolvedStoreId) && resolvedStoreId > 0) {
+              product.set("storeId", resolvedStoreId);
+            }
+          },
+        },
       }
     );
   }

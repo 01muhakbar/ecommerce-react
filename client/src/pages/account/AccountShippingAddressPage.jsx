@@ -1,72 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useOutletContext, useSearchParams } from "react-router-dom";
 import {
   createAddress,
   deleteAddress,
   listAddresses,
   updateAddress,
 } from "../../api/userAddresses.ts";
-import idRegions from "../../data/id-regions.json";
-
-const POSTAL_CODE_REGEX = /^\d{5}$/;
-
-const EMPTY_FORM = {
-  fullName: "",
-  phoneNumber: "",
-  province: "",
-  city: "",
-  district: "",
-  postalCode: "",
-  streetName: "",
-  building: "",
-  houseNumber: "",
-  otherDetails: "",
-  markAs: "HOME",
-  isPrimary: false,
-  isStore: false,
-  isReturn: false,
-};
-
-const toForm = (address) => ({
-  fullName: String(address?.fullName || ""),
-  phoneNumber: String(address?.phoneNumber || ""),
-  province: String(address?.province || ""),
-  city: String(address?.city || ""),
-  district: String(address?.district || ""),
-  postalCode: String(address?.postalCode || ""),
-  streetName: String(address?.streetName || ""),
-  building: String(address?.building || ""),
-  houseNumber: String(address?.houseNumber || ""),
-  otherDetails: String(address?.otherDetails || ""),
-  markAs: address?.markAs === "OFFICE" ? "OFFICE" : "HOME",
-  isPrimary: Boolean(address?.isPrimary),
-  isStore: Boolean(address?.isStore),
-  isReturn: Boolean(address?.isReturn),
-});
-
-const formatAddressSummary = (item) =>
-  [
-    `${item.streetName} ${item.houseNumber}`.trim(),
-    item.building || "",
-    item.district,
-    item.city,
-    item.province,
-    item.postalCode,
-  ]
-    .map((part) => String(part || "").trim())
-    .filter(Boolean)
-    .join(", ");
-
-const REGION_DATA = Array.isArray(idRegions?.provinces) ? idRegions.provinces : [];
-
-const withFallbackOption = (items, selectedValue) => {
-  const normalizedSelected = String(selectedValue || "").trim();
-  if (!normalizedSelected) return items;
-  if (items.includes(normalizedSelected)) return items;
-  return [normalizedSelected, ...items];
-};
+import {
+  getCityOptions,
+  getDistrictOptions,
+  getProvinceOptions,
+} from "../../utils/idRegions.ts";
+import {
+  EMAIL_ADDRESS_REGEX,
+  POSTAL_CODE_REGEX,
+  createEmptyUserAddressForm,
+  formatContactName,
+  formatAddressSummary,
+  resolveAddressEmailAddress,
+  toUserAddressForm,
+  toUserAddressPayload,
+} from "../../utils/userAddress.ts";
 
 export default function AccountShippingAddressPage() {
+  const { user } = useOutletContext() || {};
+  const accountEmail = String(user?.email || "").trim();
   const [searchParams, setSearchParams] = useSearchParams();
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -75,30 +33,19 @@ export default function AccountShippingAddressPage() {
   const [status, setStatus] = useState(null);
   const [addresses, setAddresses] = useState([]);
   const [editingId, setEditingId] = useState(0);
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState(() => createEmptyUserAddressForm(accountEmail));
 
   const provinceOptions = useMemo(
-    () => withFallbackOption(REGION_DATA.map((item) => String(item?.name || "")).filter(Boolean), form.province),
+    () => getProvinceOptions(form.province),
     [form.province]
   );
 
   const cityOptions = useMemo(() => {
-    const province = REGION_DATA.find((item) => String(item?.name || "") === String(form.province || ""));
-    const items = Array.isArray(province?.cities)
-      ? province.cities.map((item) => String(item?.name || "")).filter(Boolean)
-      : [];
-    return withFallbackOption(items, form.city);
+    return getCityOptions(form.province, form.city);
   }, [form.province, form.city]);
 
   const districtOptions = useMemo(() => {
-    const province = REGION_DATA.find((item) => String(item?.name || "") === String(form.province || ""));
-    const city = Array.isArray(province?.cities)
-      ? province.cities.find((item) => String(item?.name || "") === String(form.city || ""))
-      : null;
-    const items = Array.isArray(city?.districts)
-      ? city.districts.map((item) => String(item || "")).filter(Boolean)
-      : [];
-    return withFallbackOption(items, form.district);
+    return getDistrictOptions(form.province, form.city, form.district);
   }, [form.province, form.city, form.district]);
 
   const loadAddresses = async (withLoading = true) => {
@@ -127,12 +74,19 @@ export default function AccountShippingAddressPage() {
     const target = addresses.find((item) => Number(item.id) === idParam);
     if (!target) return;
     setEditingId(idParam);
-    setForm(toForm(target));
-  }, [isLoading, searchParams, addresses]);
+    setForm(toUserAddressForm(target, accountEmail));
+  }, [accountEmail, isLoading, searchParams, addresses]);
+
+  useEffect(() => {
+    if (!accountEmail) return;
+    setForm((prev) => ({ ...prev, emailAddress: accountEmail }));
+  }, [accountEmail]);
 
   const isFormValid = useMemo(() => {
     const requiredValues = [
-      form.fullName,
+      form.firstName,
+      form.lastName,
+      form.emailAddress,
       form.phoneNumber,
       form.province,
       form.city,
@@ -142,7 +96,11 @@ export default function AccountShippingAddressPage() {
       form.houseNumber,
     ];
     const allRequiredFilled = requiredValues.every((value) => String(value || "").trim());
-    return allRequiredFilled && POSTAL_CODE_REGEX.test(String(form.postalCode || "").trim());
+    return (
+      allRequiredFilled &&
+      EMAIL_ADDRESS_REGEX.test(String(form.emailAddress || "").trim()) &&
+      POSTAL_CODE_REGEX.test(String(form.postalCode || "").trim())
+    );
   }, [form]);
 
   const handleTextChange = (field) => (event) => {
@@ -174,7 +132,7 @@ export default function AccountShippingAddressPage() {
 
   const resetForm = () => {
     setEditingId(0);
-    setForm(EMPTY_FORM);
+    setForm(createEmptyUserAddressForm(accountEmail));
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.delete("id");
@@ -186,7 +144,7 @@ export default function AccountShippingAddressPage() {
     const id = Number(item?.id || 0);
     if (!id) return;
     setEditingId(id);
-    setForm(toForm(item));
+    setForm(toUserAddressForm(item, accountEmail));
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.set("id", String(id));
@@ -202,23 +160,7 @@ export default function AccountShippingAddressPage() {
       return;
     }
 
-    const payload = {
-      ...form,
-      fullName: String(form.fullName || "").trim(),
-      phoneNumber: String(form.phoneNumber || "").trim(),
-      province: String(form.province || "").trim(),
-      city: String(form.city || "").trim(),
-      district: String(form.district || "").trim(),
-      postalCode: String(form.postalCode || "").trim(),
-      streetName: String(form.streetName || "").trim(),
-      building: String(form.building || "").trim(),
-      houseNumber: String(form.houseNumber || "").trim(),
-      otherDetails: String(form.otherDetails || "").trim(),
-      markAs: form.markAs === "OFFICE" ? "OFFICE" : "HOME",
-      isPrimary: Boolean(form.isPrimary),
-      isStore: Boolean(form.isStore),
-      isReturn: Boolean(form.isReturn),
-    };
+    const payload = toUserAddressPayload(form);
 
     setIsSubmitting(true);
     try {
@@ -311,10 +253,25 @@ export default function AccountShippingAddressPage() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <input
                 type="text"
-                value={form.fullName}
-                onChange={handleTextChange("fullName")}
+                value={form.firstName}
+                onChange={handleTextChange("firstName")}
                 className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                placeholder="Full Name *"
+                placeholder="First Name *"
+              />
+              <input
+                type="text"
+                value={form.lastName}
+                onChange={handleTextChange("lastName")}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                placeholder="Last Name *"
+              />
+              <input
+                type="email"
+                value={form.emailAddress}
+                onChange={handleTextChange("emailAddress")}
+                readOnly={Boolean(accountEmail)}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm read-only:bg-slate-50 read-only:text-slate-500"
+                placeholder="Email Address *"
               />
               <input
                 type="text"
@@ -341,7 +298,9 @@ export default function AccountShippingAddressPage() {
                 disabled={!form.province}
                 className="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-50"
               >
-                <option value="">{form.province ? "Select City *" : "Select Province first"}</option>
+                <option value="">
+                  {form.province ? "Select City/Regency *" : "Select Province first"}
+                </option>
                 {cityOptions.map((item) => (
                   <option key={item} value={item}>
                     {item}
@@ -354,7 +313,9 @@ export default function AccountShippingAddressPage() {
                 disabled={!form.city}
                 className="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-50"
               >
-                <option value="">{form.city ? "Select District *" : "Select City first"}</option>
+                <option value="">
+                  {form.city ? "Select Subdistrict *" : "Select City/Regency first"}
+                </option>
                 {districtOptions.map((item) => (
                   <option key={item} value={item}>
                     {item}
@@ -397,6 +358,12 @@ export default function AccountShippingAddressPage() {
               className="h-20 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
               placeholder="Other Details (Block / Unit / Reference)"
             />
+
+            <p className="text-xs text-slate-500">
+              {accountEmail
+                ? "Email address follows your account email and will be used for checkout updates."
+                : "Add an email address for checkout updates."}
+            </p>
 
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
@@ -494,7 +461,12 @@ export default function AccountShippingAddressPage() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-slate-900">{item.fullName}</p>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {formatContactName(item) || "No name"}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {resolveAddressEmailAddress(item, accountEmail) || "No email provided"}
+                      </p>
                       <p className="text-xs text-slate-500">{item.phoneNumber}</p>
                       <p className="mt-2 text-sm text-slate-700">{formatAddressSummary(item)}</p>
                       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">

@@ -1,4 +1,9 @@
 import { api } from "./axios";
+import {
+  normalizeStorefrontCategoriesResponse,
+  normalizeStorefrontProductDetailResponse,
+  normalizeStorefrontProductsResponse,
+} from "../utils/storefrontCatalog.ts";
 
 const isDev = Boolean((import.meta as { env?: { DEV?: boolean } }).env?.DEV);
 
@@ -73,6 +78,54 @@ export type StoreShippingDetails = {
   markAs?: "HOME" | "OFFICE";
 };
 
+export type StoreCheckoutPreviewItem = {
+  productId: number;
+  productName: string;
+  slug: string;
+  qty: number;
+  price: number;
+  lineTotal: number;
+  image?: string | null;
+  stock?: number | null;
+  category?: StoreProductCategory | null;
+};
+
+export type StoreCheckoutPreviewGroup = {
+  storeId: number;
+  storeName: string;
+  storeSlug?: string;
+  subtotalAmount: number;
+  shippingAmount: number;
+  totalAmount: number;
+  paymentAvailable: boolean;
+  paymentMethod: "QRIS" | null;
+  paymentProfileStatus: "ACTIVE" | "PENDING" | "REJECTED" | "INACTIVE" | "MISSING" | string;
+  paymentInstruction?: string | null;
+  warning?: string | null;
+  items: StoreCheckoutPreviewItem[];
+};
+
+export type StoreCheckoutPreviewResponse = {
+  success: boolean;
+  data: {
+    checkoutMode: "SINGLE_STORE" | "MULTI_STORE";
+    summary: {
+      totalItems: number;
+      subtotalAmount: number;
+      shippingAmount: number;
+      grandTotal: number;
+      invalidItemCount?: number;
+    };
+    groups: StoreCheckoutPreviewGroup[];
+    invalidItems: Array<{
+      productId: number;
+      productName: string;
+      reason: string;
+    }>;
+  };
+  message?: string;
+};
+
 export type StoreCustomizationResponse = {
   success: boolean;
   lang: string;
@@ -136,32 +189,42 @@ export type StoreSettingsResponse = {
 };
 
 export type StoreProductsResponse = {
-  data: StoreProduct[];
+  data: {
+    items: StoreProduct[];
+  };
   meta: {
     page: number;
     limit: number;
     total: number;
+    totalPages?: number;
   };
 };
 
 export const fetchStoreCategories = async () => {
   const { data } = await api.get<{ data: StoreCategory[] }>("/store/categories");
-  return data;
+  return normalizeStorefrontCategoriesResponse(data);
 };
 
 export const fetchStoreProducts = async (params?: {
   search?: string;
+  q?: string;
   category?: string | number;
   page?: number;
   limit?: number;
 }) => {
-  const { data } = await api.get<StoreProductsResponse>("/store/products", { params });
-  return data;
+  const query = {
+    search: params?.search ?? params?.q,
+    category: params?.category,
+    page: params?.page,
+    limit: params?.limit,
+  };
+  const { data } = await api.get<StoreProductsResponse>("/store/products", { params: query });
+  return normalizeStorefrontProductsResponse(data);
 };
 
 export const fetchStoreProductById = async (id: string | number) => {
   const { data } = await api.get<{ data: StoreProductDetail }>(`/store/products/${id}`);
-  return data;
+  return normalizeStorefrontProductDetailResponse(data);
 };
 
 export const fetchStoreOrder = async (ref: string) => {
@@ -238,6 +301,18 @@ export const createStoreOrder = async (payload: {
       paymentMethod: "COD";
     };
   }>(url, payload, { withCredentials: true });
+  return data;
+};
+
+export const previewCheckoutByStore = async (payload?: {
+  cartId?: number;
+  shippingAddressId?: number;
+}) => {
+  const { data } = await api.post<StoreCheckoutPreviewResponse>(
+    "/checkout/preview",
+    payload ?? {},
+    { withCredentials: true }
+  );
   return data;
 };
 

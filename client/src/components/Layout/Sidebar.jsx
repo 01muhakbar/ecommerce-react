@@ -174,6 +174,26 @@ const MENU = [
         to: "/admin/store/store-settings",
         perm: "SETTINGS_MANAGE",
       },
+      {
+        label: "Store Payment",
+        to: "/admin/online-store/store-payment",
+        perm: "DASHBOARD_VIEW",
+      },
+      {
+        label: "Payment Review",
+        to: "/admin/online-store/payment-review",
+        perm: "DASHBOARD_VIEW",
+      },
+      {
+        label: "Payment Audit",
+        to: "/admin/online-store/payment-audit",
+        perm: "DASHBOARD_VIEW",
+      },
+      {
+        label: "Payment Profiles",
+        to: "/admin/store/payment-profiles",
+        perm: "SETTINGS_MANAGE",
+      },
     ],
   },
 ];
@@ -196,9 +216,11 @@ export default function Sidebar() {
       pathname.startsWith("/admin/languages") ||
       pathname.startsWith("/admin/currencies"),
     "Online Store":
+      pathname.startsWith("/admin/online-store/") ||
       pathname.startsWith("/admin/store/") ||
       pathname.startsWith("/admin/store-customization") ||
-      pathname.startsWith("/admin/store-settings"),
+      pathname.startsWith("/admin/store-settings") ||
+      pathname.startsWith("/admin/store/payment-profiles"),
   });
 
   useEffect(() => {
@@ -214,9 +236,11 @@ export default function Sidebar() {
 
   useEffect(() => {
     if (
+      pathname.startsWith("/admin/online-store/") ||
       pathname.startsWith("/admin/store/") ||
       pathname.startsWith("/admin/store-customization") ||
-      pathname.startsWith("/admin/store-settings")
+      pathname.startsWith("/admin/store-settings") ||
+      pathname.startsWith("/admin/store/payment-profiles")
     ) {
       setOpenMenus((prev) =>
         prev["Online Store"] ? prev : { ...prev, "Online Store": true }

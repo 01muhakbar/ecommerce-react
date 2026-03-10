@@ -507,13 +507,7 @@ export default function StoreProductDetailPage() {
   });
 
   const relatedProducts = useMemo(() => {
-    const raw =
-      relatedQuery.data?.data?.items ??
-      relatedQuery.data?.data ??
-      relatedQuery.data?.items ??
-      relatedQuery.data ??
-      [];
-    const items = Array.isArray(raw) ? raw : [];
+    const items = relatedQuery.data?.data?.items ?? [];
     const currentId = product?.id;
     const currentSlug = product?.slug;
     const norm = (value) => String(value || "").trim().toLowerCase();

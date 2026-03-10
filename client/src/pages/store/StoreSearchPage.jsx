@@ -30,11 +30,7 @@ export default function StoreSearchPage() {
     isLoading: categoriesLoading,
     isError: categoriesError,
   } = useCategories();
-  const categoryItems =
-    categoriesData?.data?.items ??
-    categoriesData?.data ??
-    [];
-  const categories = Array.isArray(categoryItems) ? categoryItems : [];
+  const categories = categoriesData?.data?.items ?? [];
 
   useEffect(() => {
     const nextQuery =
@@ -67,15 +63,8 @@ export default function StoreSearchPage() {
     keepPreviousData: false,
   });
 
-  const rawCandidate =
-    productsData?.data?.items ??
-    productsData?.data ??
-    productsData?.items ??
-    productsData?.products ??
-    productsData ??
-    [];
-  const normalizedProducts = Array.isArray(rawCandidate) ? rawCandidate : [];
-  const meta = productsData?.meta ?? productsData?.data?.meta;
+  const normalizedProducts = productsData?.data?.items ?? [];
+  const meta = productsData?.meta;
 
   const updateParams = (next) => {
     const params = new URLSearchParams(searchParams);
@@ -418,34 +407,16 @@ export default function StoreSearchPage() {
                 </div>
               ) : null}
               <div className="grid grid-cols-2 gap-3.5 sm:gap-4 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-                {sortedProducts.map((product, index) => {
-                  const title = product?.title ?? product?.name ?? "";
-                  const categoryObj =
-                    product?.category ??
-                    (product?.categoryName
-                      ? { name: product.categoryName }
-                      : { name: "Uncategorized" });
-                  const imageUrl =
-                    product?.promoImagePath ?? product?.imageUrl ?? product?.image ?? null;
-                  return (
-                    <SearchProductCard
-                      key={
-                        product?.id ??
-                        product?.slug ??
-                        `${product?.name || product?.title || "product"}-${index}`
-                      }
-                      product={{
-                        ...product,
-                        id: product?.id,
-                        name: product?.name ?? title,
-                        title,
-                        price: Number(product?.price ?? product?.salePrice ?? 0),
-                        category: categoryObj,
-                        imageUrl,
-                      }}
-                    />
-                  );
-                })}
+                {sortedProducts.map((product, index) => (
+                  <SearchProductCard
+                    key={
+                      product?.id ??
+                      product?.slug ??
+                      `${product?.name || product?.title || "product"}-${index}`
+                    }
+                    product={product}
+                  />
+                ))}
               </div>
               <Pagination
                 page={meta?.page ?? page}

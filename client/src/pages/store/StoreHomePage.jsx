@@ -44,9 +44,7 @@ export default function StoreHomePage() {
   } = useProducts({ page: 1, limit: 10 });
 
   const categories = categoriesData?.data?.items ?? [];
-  const rawPopular =
-    popularData?.data?.items ?? popularData?.data ?? popularData?.items ?? popularData ?? [];
-  const popularProducts = Array.isArray(rawPopular) ? rawPopular : [];
+  const popularProducts = popularData?.data?.items ?? [];
   const featuredCategories = categories.map((category) => ({
     id: category.id ?? category.code ?? category.slug,
     name: category.name ?? "Category",
