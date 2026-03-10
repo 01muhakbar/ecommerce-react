@@ -5,12 +5,15 @@ export const getMyStore = async () => {
   return data?.data ?? null;
 };
 
-export const getStorePaymentProfile = async (storeId) => {
+export const getStorePaymentProfile = async (storeId: number | string) => {
   const { data } = await api.get(`/stores/${storeId}/payment-profile`);
   return data?.data ?? null;
 };
 
-export const upsertStorePaymentProfile = async (storeId, payload) => {
+export const upsertStorePaymentProfile = async (
+  storeId: number | string,
+  payload: Record<string, unknown>
+) => {
   const { data } = await api.post(`/stores/${storeId}/payment-profile`, payload);
   return data?.data ?? null;
 };
@@ -20,7 +23,10 @@ export const fetchAdminStorePaymentProfiles = async () => {
   return Array.isArray(data?.data) ? data.data : [];
 };
 
-export const reviewAdminStorePaymentProfile = async (storeId, verificationStatus) => {
+export const reviewAdminStorePaymentProfile = async (
+  storeId: number | string,
+  verificationStatus: string
+) => {
   const { data } = await api.patch(`/admin/stores/${storeId}/payment-profile/review`, {
     verificationStatus,
   });

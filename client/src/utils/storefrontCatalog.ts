@@ -99,7 +99,7 @@ export const normalizeStorefrontCategoriesResponse = (payload: any) => {
               ? payload
               : [];
   const items = rawItems
-    .map((item, index) => normalizeStorefrontCategory(item, index))
+    .map((item: any, index: number) => normalizeStorefrontCategory(item, index))
     .filter(Boolean);
   const meta = payload?.meta ?? root?.meta ?? {
     page: 1,
@@ -242,7 +242,7 @@ export const normalizeStorefrontProductsResponse = (payload: any) => {
               ? payload
               : [];
   const items = rawItems
-    .map((item) => normalizeStorefrontProduct(item))
+    .map((item: any) => normalizeStorefrontProduct(item))
     .filter(Boolean);
   const metaSource = payload?.meta ?? root?.meta ?? {};
   const metaLimit = metaSource?.limit ?? metaSource?.pageSize ?? items.length;

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Bell,
+  BriefcaseBusiness,
   ClipboardList,
   KeyRound,
   LayoutDashboard,
@@ -65,6 +66,11 @@ function AccountSidebar({ user, onLogout, isLoggingOut, dashboardSettingCopy }) 
       Icon: ClipboardList,
     },
     { to: "/user/notifications", label: "Notifications", Icon: Bell },
+    {
+      to: "/user/store-invitations",
+      label: "Store Invitations",
+      Icon: BriefcaseBusiness,
+    },
     { to: "/user/my-reviews", label: "My Review", Icon: Star },
     {
       to: "/user/my-account",

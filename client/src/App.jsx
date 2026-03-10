@@ -62,8 +62,20 @@ import AccountChangePasswordPage from "./pages/account/AccountChangePasswordPage
 import AccountShippingAddressPage from "./pages/account/AccountShippingAddressPage.jsx";
 import AccountStorePaymentProfilePage from "./pages/account/AccountStorePaymentProfilePage.jsx";
 import AccountStorePaymentReviewPage from "./pages/account/AccountStorePaymentReviewPage.jsx";
+import AccountStoreInvitationsPage from "./pages/account/AccountStoreInvitationsPage.jsx";
 import AdminStorePaymentPage from "./pages/admin/AdminStorePaymentPage.jsx";
 import AdminStorePaymentReviewPage from "./pages/admin/AdminStorePaymentReviewPage.jsx";
+import SellerLayout from "./layouts/SellerLayout.jsx";
+import SellerOrderDetailPage from "./pages/seller/SellerOrderDetailPage.jsx";
+import SellerOrdersPage from "./pages/seller/SellerOrdersPage.jsx";
+import SellerPaymentProfilePage from "./pages/seller/SellerPaymentProfilePage.jsx";
+import SellerStoreProfilePage from "./pages/seller/SellerStoreProfilePage.jsx";
+import SellerTeamAuditPage from "./pages/seller/SellerTeamAuditPage.jsx";
+import SellerMemberLifecyclePage from "./pages/seller/SellerMemberLifecyclePage.jsx";
+import SellerCatalogPage from "./pages/seller/SellerCatalogPage.jsx";
+import SellerProductDetailPage from "./pages/seller/SellerProductDetailPage.jsx";
+import SellerTeamPage from "./pages/seller/SellerTeamPage.jsx";
+import SellerWorkspaceHome from "./pages/seller/SellerWorkspaceHome.jsx";
 const AdminPaymentAuditPage = lazy(() =>
   import("./pages/admin/AdminPaymentAuditPage.jsx")
 );
@@ -136,6 +148,7 @@ export default function App() {
                   path="store-payment-review"
                   element={<Navigate to="/admin/online-store/payment-review" replace />}
                 />
+                <Route path="store-invitations" element={<AccountStoreInvitationsPage />} />
                 <Route path="update-profile" element={<AccountProfilePage />} />
                 <Route path="change-password" element={<AccountChangePasswordPage />} />
               </Route>
@@ -153,10 +166,27 @@ export default function App() {
               path="account/profile"
               element={<Navigate to="/user/update-profile" replace />}
             />
+            <Route
+              path="account/store-invitations"
+              element={<Navigate to="/user/store-invitations" replace />}
+            />
           </Route>
 
           <Route path="/admin/login" element={<AdminLoginPage />} />
           <Route path="/admin/forbidden" element={<AdminForbiddenPage />} />
+          <Route path="/seller/stores/:storeId" element={<SellerLayout />}>
+            <Route index element={<SellerWorkspaceHome />} />
+            <Route path="dashboard" element={<SellerWorkspaceHome />} />
+            <Route path="profile" element={<SellerStoreProfilePage />} />
+            <Route path="team" element={<SellerTeamPage />} />
+            <Route path="team/:memberId" element={<SellerMemberLifecyclePage />} />
+            <Route path="team/audit" element={<SellerTeamAuditPage />} />
+            <Route path="catalog" element={<SellerCatalogPage />} />
+            <Route path="catalog/:productId" element={<SellerProductDetailPage />} />
+            <Route path="orders" element={<SellerOrdersPage />} />
+            <Route path="orders/:suborderId" element={<SellerOrderDetailPage />} />
+            <Route path="payment-profile" element={<SellerPaymentProfilePage />} />
+          </Route>
           <Route path="/admin" element={<AdminGuard />}>
             <Route element={<AdminLayout />}>
               <Route

@@ -3,6 +3,9 @@ import "dotenv/config";
 import sequelize from "../config/database.js";
 import { initUser, User } from "./User.js";
 import { Store } from "./Store.js";
+import { StoreRole } from "./StoreRole.js";
+import { StoreMember } from "./StoreMember.js";
+import { StoreAuditLog } from "./StoreAuditLog.js";
 import { StorePaymentProfile } from "./StorePaymentProfile.js";
 import { Product } from "./Product.js";
 import { Category } from "./Category.js";
@@ -23,6 +26,7 @@ import { Language } from "./Language.js";
 import { Currency } from "./Currency.js";
 import { Notification } from "./Notification.js";
 import { UserAddress } from "./UserAddress.js";
+import { ensureSystemStoreRoles } from "../services/seller/storeRoles.js";
 
 type ProductUserIdFkRow = {
   tableName: string;
@@ -93,6 +97,9 @@ function isUnknownConstraintError(error: any): boolean {
 function initModels() {
   initUser(sequelize);
   Store.initModel(sequelize);
+  StoreRole.initModel(sequelize);
+  StoreMember.initModel(sequelize);
+  StoreAuditLog.initModel(sequelize);
   StorePaymentProfile.initModel(sequelize);
   Product.initModel(sequelize);
   Category.initModel(sequelize);
@@ -117,6 +124,9 @@ function initModels() {
   const models: any = {
     User,
     Store,
+    StoreRole,
+    StoreMember,
+    StoreAuditLog,
     StorePaymentProfile,
     Product,
     Category,
@@ -288,6 +298,7 @@ export async function syncDb() {
   try {
     // gunakan alter agar kolom baru otomatis disesuaikan (aman untuk dev)
     await sequelize.sync({ alter: true });
+    await ensureSystemStoreRoles();
     await backfillProductCategoryAssignments();
     await backfillStoreAssignments();
   } finally {
@@ -305,6 +316,7 @@ export async function resetDbDev() {
   try {
     await sequelize.drop();
     await sequelize.sync({ force: true });
+    await ensureSystemStoreRoles();
     await backfillStoreAssignments();
   } finally {
     await sequelize.query("SET FOREIGN_KEY_CHECKS = 1;");
@@ -315,6 +327,9 @@ export {
   sequelize,
   User,
   Store,
+  StoreRole,
+  StoreMember,
+  StoreAuditLog,
   StorePaymentProfile,
   Product,
   Category,

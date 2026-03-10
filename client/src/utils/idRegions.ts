@@ -26,6 +26,7 @@ export type IdRegionProvinceOption = {
 };
 
 const normalizeText = (value: unknown) => String(value ?? "").trim();
+const regionsPayload = idRegions as RegionsPayload;
 
 const withFallbackOption = (items: string[], selectedValue = "") => {
   const normalizedSelected = normalizeText(selectedValue);
@@ -55,11 +56,8 @@ const normalizeCities = (cities: RegionProvince["cities"]) =>
     })
     .filter((city): city is IdRegionCityOption => Boolean(city));
 
-export const REGION_DATA: IdRegionProvinceOption[] = (Array.isArray(
-  (idRegions as RegionsPayload)?.provinces
-)
-  ? (idRegions as RegionsPayload).provinces
-  : []
+export const REGION_DATA: IdRegionProvinceOption[] = (
+  Array.isArray(regionsPayload.provinces) ? regionsPayload.provinces : []
 )
   .map((province) => {
     const name = normalizeText(province?.name);
@@ -95,7 +93,7 @@ export const getDistrictOptions = (
   const province = REGION_DATA.find(
     (item) => item.name === normalizeText(provinceName)
   );
-  const city = province?.cities.find(
+  const city = province?.cities?.find(
     (item) => item.name === normalizeText(cityName)
   );
   const items = Array.isArray(city?.districts) ? city.districts : [];
