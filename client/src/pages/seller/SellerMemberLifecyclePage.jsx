@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { History, ShieldCheck, UserRound } from "lucide-react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { getSellerStoreMemberLifecycle } from "../../api/sellerTeam.ts";
+import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
 
 const cardClass =
   "rounded-[24px] border border-stone-200 bg-white p-5 shadow-[0_16px_36px_-28px_rgba(28,25,23,0.28)]";
@@ -76,6 +77,9 @@ function currentStateSummary(member, lifecycle) {
   }
 
   if (member?.status === "INVITED") {
+    if (member?.invitation?.state === "EXPIRED") {
+      return "This invitation expired before acceptance. A store owner or admin must send it again before seller access can activate.";
+    }
     return "This membership is waiting for the invited user to accept before seller access becomes active.";
   }
 
@@ -110,14 +114,14 @@ export default function SellerMemberLifecyclePage() {
   const { storeId, memberId } = useParams();
   const { sellerContext } = useOutletContext() || {};
   const permissionKeys = sellerContext?.access?.permissionKeys || [];
-  const canViewLifecycle =
-    permissionKeys.includes("STORE_MEMBERS_MANAGE") ||
-    permissionKeys.includes("STORE_ROLES_MANAGE");
+  const canViewLifecycle = permissionKeys.includes("STORE_MEMBERS_MANAGE");
+  const numericMemberId = Number(memberId);
+  const hasValidMemberId = Number.isInteger(numericMemberId) && numericMemberId > 0;
 
   const lifecycleQuery = useQuery({
     queryKey: ["seller", "team", "lifecycle", storeId, memberId],
     queryFn: () => getSellerStoreMemberLifecycle(storeId, memberId),
-    enabled: Boolean(storeId) && Boolean(memberId) && canViewLifecycle,
+    enabled: Boolean(storeId) && hasValidMemberId && canViewLifecycle,
     retry: false,
   });
 
@@ -126,6 +130,16 @@ export default function SellerMemberLifecyclePage() {
       <section className={cardClass}>
         <p className="text-sm text-rose-600">
           Your current seller access does not include member lifecycle visibility.
+        </p>
+      </section>
+    );
+  }
+
+  if (!hasValidMemberId) {
+    return (
+      <section className={cardClass}>
+        <p className="text-sm text-rose-600">
+          Seller member lifecycle needs a valid member id in the URL.
         </p>
       </section>
     );
@@ -140,15 +154,16 @@ export default function SellerMemberLifecyclePage() {
   }
 
   if (lifecycleQuery.isError) {
-    const statusCode = Number(lifecycleQuery.error?.response?.status || 0);
     return (
       <section className={cardClass}>
         <p className="text-sm text-rose-600">
-          {statusCode === 404
-            ? "Member not found."
-            : lifecycleQuery.error?.response?.data?.message ||
-              lifecycleQuery.error?.message ||
-              "Failed to load member lifecycle."}
+          {getSellerRequestErrorMessage(lifecycleQuery.error, {
+            notFoundMessage: "Member not found.",
+            forbiddenMessage: "This account cannot access the selected seller workspace.",
+            permissionMessage:
+              "Your current seller access does not include member lifecycle visibility.",
+            fallbackMessage: "Failed to load member lifecycle.",
+          })}
         </p>
       </section>
     );
@@ -158,6 +173,14 @@ export default function SellerMemberLifecyclePage() {
   const member = data?.member || null;
   const historyItems = Array.isArray(data?.history?.items) ? data.history.items : [];
   const lifecycle = data?.lifecycle || {};
+
+  if (!member) {
+    return (
+      <section className={cardClass}>
+        <p className="text-sm text-stone-500">Member lifecycle is not available for this store.</p>
+      </section>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -173,8 +196,13 @@ export default function SellerMemberLifecyclePage() {
             <p className="mt-2 text-sm text-stone-500">{member?.email || "-"}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge tone={statusTone(member?.status)}>{member?.status || "UNKNOWN"}</Badge>
-            <Badge tone="sky">{member?.roleCode || "-"}</Badge>
+            <Badge tone={statusTone(member?.status)}>{member?.statusMeta?.label || member?.status || "UNKNOWN"}</Badge>
+            <Badge tone="sky">{member?.role?.name || member?.roleCode || "-"}</Badge>
+            {member?.invitation?.state ? (
+              <Badge tone={member.invitation.state === "EXPIRED" ? "rose" : "amber"}>
+                {member.invitation.label}
+              </Badge>
+            ) : null}
           </div>
         </div>
 
@@ -182,6 +210,11 @@ export default function SellerMemberLifecyclePage() {
           <p className="text-sm leading-6 text-stone-600">
             {currentStateSummary(member, lifecycle)}
           </p>
+          {member?.invitation?.expiresAt ? (
+            <p className="mt-3 text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
+              Invitation Expires: {formatDateTime(member.invitation.expiresAt)}
+            </p>
+          ) : null}
           {lifecycle?.removedSourceLabel ? (
             <p className="mt-3 text-xs font-semibold uppercase tracking-[0.2em] text-rose-700">
               Removal Source: {lifecycle.removedSourceLabel}
@@ -210,6 +243,9 @@ export default function SellerMemberLifecyclePage() {
               <p className="mt-2 text-sm font-medium text-stone-900">
                 {formatDateTime(lifecycle.invitedAt)}
               </p>
+              {member?.invitation?.state ? (
+                <p className="mt-2 text-xs text-stone-500">{member.invitation.label}</p>
+              ) : null}
             </div>
           </div>
         </article>
@@ -255,6 +291,41 @@ export default function SellerMemberLifecyclePage() {
       </section>
 
       <section className={cardClass}>
+        <h3 className="text-lg font-semibold text-stone-950">Role Snapshot</h3>
+        <p className="mt-1 text-sm text-stone-500">
+          Seller role and permission snapshot stored for this membership view.
+        </p>
+        <div className="mt-5 grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
+          <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Role</p>
+            <p className="mt-3 text-base font-semibold text-stone-900">
+              {member?.role?.name || member?.roleName || member?.roleCode || "-"}
+            </p>
+            <p className="mt-1 text-sm text-stone-500">{member?.role?.code || member?.roleCode || "-"}</p>
+            <p className="mt-3 text-sm leading-6 text-stone-600">
+              {member?.role?.description || "No role description is stored for this membership snapshot."}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">
+              Permission Snapshot
+            </p>
+            {Array.isArray(member?.role?.permissionKeys) && member.role.permissionKeys.length > 0 ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {member.role.permissionKeys.map((permissionKey) => (
+                  <Badge key={permissionKey} tone="emerald">
+                    {permissionKey}
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-stone-500">No permission snapshot was returned for this role.</p>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className={cardClass}>
         <h3 className="text-lg font-semibold text-stone-950">Lifecycle Timeline</h3>
         <p className="mt-1 text-sm text-stone-500">
           Lightweight timeline from the current membership row and team audit trail.
@@ -279,6 +350,9 @@ export default function SellerMemberLifecyclePage() {
                 </p>
                 <p className="mt-2 text-xs text-stone-500">
                   Actor: {item.actor?.name || item.actor?.email || "System"}
+                </p>
+                <p className="mt-1 text-xs text-stone-500">
+                  Snapshot: {item.target?.snapshot?.roleCode || "-"} / {item.target?.snapshot?.status || "-"}
                 </p>
                 <p className="mt-1 text-xs text-stone-500">
                   Before: {item.beforeState ? JSON.stringify(item.beforeState) : "-"}

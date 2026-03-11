@@ -2,25 +2,17 @@ import { useOutletContext, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { BadgeCheck, CreditCard, ImageIcon, ShieldAlert } from "lucide-react";
 import { getSellerPaymentProfile } from "../../api/sellerPaymentProfile.ts";
+import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
 
 const cardClass =
   "rounded-[24px] border border-stone-200 bg-white p-5 shadow-[0_16px_36px_-28px_rgba(28,25,23,0.28)]";
 
-const STATUS_CLASS = {
-  PENDING: "border-amber-200 bg-amber-50 text-amber-800",
-  ACTIVE: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  REJECTED: "border-rose-200 bg-rose-50 text-rose-700",
-  INACTIVE: "border-stone-300 bg-stone-200 text-stone-700",
+const TONE_CLASS = {
+  success: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  warning: "border-amber-200 bg-amber-50 text-amber-800",
+  danger: "border-rose-200 bg-rose-50 text-rose-700",
+  neutral: "border-stone-200 bg-stone-100 text-stone-700",
 };
-
-const ACTIVE_CLASS = {
-  true: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  false: "border-stone-200 bg-stone-100 text-stone-700",
-};
-
-const getStatusClass = (value) =>
-  STATUS_CLASS[String(value || "").toUpperCase()] ||
-  "border-stone-200 bg-stone-100 text-stone-700";
 
 const formatDate = (value) => {
   if (!value) return "-";
@@ -32,11 +24,23 @@ const formatDate = (value) => {
   }).format(date);
 };
 
-function Badge({ label, className }) {
+function Badge({ label, tone = "neutral" }) {
   return (
-    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${className}`}>
+    <span
+      className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${TONE_CLASS[tone] || TONE_CLASS.neutral}`}
+    >
       {label}
     </span>
+  );
+}
+
+function InfoRow({ label, value, hint }) {
+  return (
+    <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">{label}</p>
+      <p className="mt-2 text-sm font-medium text-stone-900">{value || "-"}</p>
+      {hint ? <p className="mt-1 text-xs text-stone-500">{hint}</p> : null}
+    </div>
   );
 }
 
@@ -71,21 +75,21 @@ export default function SellerPaymentProfilePage() {
   }
 
   if (profileQuery.isError) {
-    const status = Number(profileQuery.error?.response?.status || 0);
     return (
       <section className={cardClass}>
         <p className="text-sm text-rose-600">
-          {status === 404
-            ? "Store not found."
-            : profileQuery.error?.response?.data?.message ||
-              profileQuery.error?.message ||
-              "Failed to load seller payment profile."}
+          {getSellerRequestErrorMessage(profileQuery.error, {
+            permissionMessage:
+              "Your current seller access does not include payment profile visibility.",
+            fallbackMessage: "Failed to load seller payment profile.",
+          })}
         </p>
       </section>
     );
   }
 
   const profile = profileQuery.data;
+  const workspaceStore = sellerContext?.store || null;
 
   if (!profile) {
     return (
@@ -98,30 +102,47 @@ export default function SellerPaymentProfilePage() {
             No payment profile configured yet
           </h2>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-stone-600">
-            This seller workspace is read-only. The store does not have an active payment
-            profile record yet, or it has not been configured through the existing account/admin
-            flow.
+            The active store does not have a payment profile snapshot yet. Seller workspace stays
+            read-only here and relies on the existing account or admin-managed onboarding lane.
           </p>
         </section>
 
-        <section className={cardClass}>
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-stone-100 text-stone-700">
-              <ShieldAlert className="h-5 w-5" />
+        <section className="grid gap-4 lg:grid-cols-2">
+          <article className={cardClass}>
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-stone-100 text-stone-700">
+                <ShieldAlert className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-stone-950">Read-only empty state</h3>
+                <p className="mt-1 text-sm text-stone-500">
+                  No payment setup action is exposed from seller workspace in this phase.
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-lg font-semibold text-stone-950">Read-only empty state</h3>
-              <p className="mt-1 text-sm text-stone-500">
-                No update action is exposed here in this bridge phase.
-              </p>
+            <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-6 text-amber-900">
+              Payment destination setup remains governed by the existing account or admin review
+              flow. Seller workspace only shows the operational snapshot after it exists.
             </div>
-          </div>
+          </article>
+
+          <article className={cardClass}>
+            <h3 className="text-lg font-semibold text-stone-950">Store Scope</h3>
+            <div className="mt-5 grid gap-4">
+              <InfoRow label="Store" value={workspaceStore?.name || "-"} />
+              <InfoRow label="Store ID" value={storeId || "-"} />
+              <InfoRow label="Store Status" value={workspaceStore?.status || "-"} />
+            </div>
+          </article>
         </section>
       </div>
     );
   }
 
-  const isActive = Boolean(profile.isActive);
+  const readiness = profile.readiness || {};
+  const verificationMeta = profile.verificationMeta || {};
+  const activityMeta = profile.activityMeta || {};
+  const missingFields = readiness.missingFields || [];
 
   return (
     <div className="space-y-6">
@@ -135,20 +156,19 @@ export default function SellerPaymentProfilePage() {
               Seller payment profile overview
             </h2>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-stone-600">
-              This page reuses the existing store payment profile domain and exposes a safe
-              read-only seller view without touching the existing admin/account review flow.
+              This page exposes a store-scoped payment setup snapshot only. Readiness is based on
+              required payment destination fields plus the existing admin review status, not on a
+              separate seller-only payment system.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <Badge label={readiness.label || "Pending review"} tone={readiness.tone || "warning"} />
             <Badge
-              label={profile.verificationStatus || "PENDING"}
-              className={getStatusClass(profile.verificationStatus)}
+              label={verificationMeta.label || "Pending review"}
+              tone={verificationMeta.tone || "warning"}
             />
-            <Badge
-              label={isActive ? "ACTIVE" : "INACTIVE"}
-              className={ACTIVE_CLASS[String(isActive)]}
-            />
+            <Badge label={activityMeta.label || "Inactive"} tone={activityMeta.tone || "neutral"} />
           </div>
         </div>
       </section>
@@ -163,7 +183,7 @@ export default function SellerPaymentProfilePage() {
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">
                 Payment Type
               </p>
-              <p className="mt-1 text-sm text-stone-500">Static profile snapshot</p>
+              <p className="mt-1 text-sm text-stone-500">Store-scoped operational snapshot</p>
             </div>
           </div>
           <p className="mt-4 text-lg font-semibold text-stone-950">{profile.paymentType}</p>
@@ -180,7 +200,7 @@ export default function SellerPaymentProfilePage() {
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">
                 Merchant
               </p>
-              <p className="mt-1 text-sm text-stone-500">Read-only account data</p>
+              <p className="mt-1 text-sm text-stone-500">Read-only account-managed data</p>
             </div>
           </div>
           <p className="mt-4 text-lg font-semibold text-stone-950">{profile.merchantName || "-"}</p>
@@ -190,22 +210,29 @@ export default function SellerPaymentProfilePage() {
 
         <article className={cardClass}>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">
-            Review Timeline
+            Readiness
           </p>
-          <dl className="mt-4 space-y-3 text-sm text-stone-600">
-            <div className="flex items-center justify-between gap-3">
-              <dt>Created</dt>
-              <dd className="font-semibold text-stone-900">{formatDate(profile.createdAt)}</dd>
+          <p className="mt-4 text-3xl font-semibold text-stone-950">
+            {readiness.completedFields || 0}/{readiness.totalFields || 0}
+          </p>
+          <p className="mt-2 text-sm text-stone-600">{readiness.description || "-"}</p>
+          {missingFields.length ? (
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-900">
+                Missing Required Fields
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {missingFields.map((field) => (
+                  <span
+                    key={field.key}
+                    className="rounded-full border border-amber-200 bg-white px-3 py-1 text-xs font-semibold text-amber-900"
+                  >
+                    {field.label}
+                  </span>
+                ))}
+              </div>
             </div>
-            <div className="flex items-center justify-between gap-3">
-              <dt>Updated</dt>
-              <dd className="font-semibold text-stone-900">{formatDate(profile.updatedAt)}</dd>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <dt>Verified</dt>
-              <dd className="font-semibold text-stone-900">{formatDate(profile.verifiedAt)}</dd>
-            </div>
-          </dl>
+          ) : null}
         </article>
       </section>
 
@@ -217,7 +244,7 @@ export default function SellerPaymentProfilePage() {
             </div>
             <div>
               <h3 className="text-lg font-semibold text-stone-950">QRIS Preview</h3>
-              <p className="text-sm text-stone-500">Read-only image snapshot</p>
+              <p className="text-sm text-stone-500">Read-only payment destination image</p>
             </div>
           </div>
 
@@ -231,26 +258,71 @@ export default function SellerPaymentProfilePage() {
             </div>
           ) : (
             <div className="mt-5 rounded-2xl border border-dashed border-stone-300 bg-stone-50 px-4 py-10 text-center text-sm text-stone-500">
-              No QRIS image available.
+              No QRIS image snapshot is available for this store yet.
             </div>
           )}
-        </article>
 
-        <article className={cardClass}>
-          <h3 className="text-lg font-semibold text-stone-950">Instruction Snapshot</h3>
-          <p className="mt-2 text-sm text-stone-500">
-            This text is visible in read-only mode only.
-          </p>
-
-          <div className="mt-5 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4 text-sm leading-7 text-stone-700">
-            {profile.instructionText || "No payment instruction text has been set."}
-          </div>
-
-          <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-6 text-amber-900">
-            Write actions remain closed in this phase. Any profile edits or review flows still
-            belong to the existing account/admin paths.
+          <div className="mt-5 grid gap-4">
+            <InfoRow label="Store" value={profile.store?.name || workspaceStore?.name} />
+            <InfoRow label="Store Slug" value={profile.store?.slug || workspaceStore?.slug} />
+            <InfoRow label="Store Status" value={profile.store?.status || workspaceStore?.status} />
           </div>
         </article>
+
+        <div className="space-y-6">
+          <article className={cardClass}>
+            <h3 className="text-lg font-semibold text-stone-950">Instruction Snapshot</h3>
+            <p className="mt-2 text-sm text-stone-500">
+              This text is displayed in seller workspace as a read-only payment instruction.
+            </p>
+
+            <div className="mt-5 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4 text-sm leading-7 text-stone-700">
+              {profile.instructionText || "No payment instruction text has been set."}
+            </div>
+
+            {profile.qrisPayload ? (
+              <div className="mt-4 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4 text-sm leading-6 text-stone-700">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
+                  QRIS Payload
+                </p>
+                <p className="mt-2 break-all">{profile.qrisPayload}</p>
+              </div>
+            ) : null}
+          </article>
+
+          <article className={cardClass}>
+            <h3 className="text-lg font-semibold text-stone-950">Governance and Timeline</h3>
+            <p className="mt-2 text-sm text-stone-500">
+              Seller workspace consumes this as a snapshot. It does not open write actions here.
+            </p>
+
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <InfoRow
+                label="Verification"
+                value={verificationMeta.label || profile.verificationStatus}
+                hint={verificationMeta.description}
+              />
+              <InfoRow
+                label="Activity"
+                value={activityMeta.label || (profile.isActive ? "Active" : "Inactive")}
+                hint={activityMeta.description}
+              />
+              <InfoRow label="Created" value={formatDate(profile.createdAt)} />
+              <InfoRow label="Updated" value={formatDate(profile.updatedAt)} />
+              <InfoRow label="Verified" value={formatDate(profile.verifiedAt)} />
+              <InfoRow
+                label="Editability"
+                value={profile.governance?.canEdit ? "Editable" : "Read-only"}
+                hint={profile.governance?.note}
+              />
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-6 text-amber-900">
+              Payment profile readiness is a combination of required destination fields,
+              verification review, and active status. Seller workspace only reports that result.
+            </div>
+          </article>
+        </div>
       </section>
     </div>
   );

@@ -16,6 +16,8 @@ import {
   loadStoreMemberByUserId,
   listStoreMembersForTeam,
   resolveStoreRoleByCode,
+  isSellerInvitationExpired,
+  serializeSellerInvitationState,
   SELLER_TEAM_STATUS_CONTRACT,
   serializeStoreMember,
   serializeTeamMutationEnvelope,
@@ -74,6 +76,174 @@ const serializeRole = (role: any) => {
   };
 };
 
+function serializeActionMeta(action: string) {
+  if (action === SELLER_TEAM_AUDIT_ACTIONS.TEAM_MEMBER_INVITE) {
+    return { label: "Invitation created", tone: "amber" };
+  }
+  if (action === SELLER_TEAM_AUDIT_ACTIONS.TEAM_MEMBER_INVITE_ACCEPT) {
+    return { label: "Invitation accepted", tone: "emerald" };
+  }
+  if (action === SELLER_TEAM_AUDIT_ACTIONS.TEAM_MEMBER_INVITE_DECLINE) {
+    return { label: "Invitation declined", tone: "stone" };
+  }
+  if (action === SELLER_TEAM_AUDIT_ACTIONS.TEAM_MEMBER_REINVITE) {
+    return { label: "Invitation sent again", tone: "amber" };
+  }
+  if (action === SELLER_TEAM_AUDIT_ACTIONS.TEAM_MEMBER_ATTACH) {
+    return { label: "Member attached directly", tone: "emerald" };
+  }
+  if (action === SELLER_TEAM_AUDIT_ACTIONS.TEAM_MEMBER_ROLE_CHANGE) {
+    return { label: "Role changed", tone: "sky" };
+  }
+  if (action === SELLER_TEAM_AUDIT_ACTIONS.TEAM_MEMBER_DISABLE) {
+    return { label: "Member disabled", tone: "amber" };
+  }
+  if (action === SELLER_TEAM_AUDIT_ACTIONS.TEAM_MEMBER_REACTIVATE) {
+    return { label: "Member reactivated", tone: "emerald" };
+  }
+  if (action === SELLER_TEAM_AUDIT_ACTIONS.TEAM_MEMBER_REMOVE) {
+    return { label: "Member removed by store", tone: "rose" };
+  }
+  return { label: action || "Recorded action", tone: "stone" };
+}
+
+function serializeAuditSnapshot(beforeState: any, afterState: any, targetMember: any) {
+  const targetRole = targetMember?.role ?? targetMember?.get?.("role") ?? null;
+  const currentRoleCode = targetRole ? String(getAttr(targetRole, "code") || "") : null;
+  const currentRoleName = targetRole ? String(getAttr(targetRole, "name") || "") : null;
+  const snapshotRoleCode =
+    String(afterState?.roleCode || beforeState?.roleCode || currentRoleCode || "").trim() || null;
+  const snapshotStatus =
+    String(afterState?.status || beforeState?.status || getAttr(targetMember, "status") || "")
+      .trim()
+      .toUpperCase() || null;
+
+  return {
+    roleCode: snapshotRoleCode,
+    roleName:
+      snapshotRoleCode && currentRoleCode === snapshotRoleCode
+        ? currentRoleName
+        : snapshotRoleCode
+          ? String(snapshotRoleCode)
+          : null,
+    status: snapshotStatus,
+    currentRoleCode,
+    currentRoleName,
+  };
+}
+
+function buildTeamCapabilities(args: {
+  sellerAccess: any;
+  manageableRoleOptions: any[];
+}) {
+  const permissionKeys = Array.isArray(args.sellerAccess?.permissionKeys)
+    ? args.sellerAccess.permissionKeys
+    : [];
+  const canManageMembers = permissionKeys.includes("STORE_MEMBERS_MANAGE");
+  const canManageRoles = permissionKeys.includes("STORE_ROLES_MANAGE");
+  const manageableRoleCodes = args.manageableRoleOptions.map((role) => String(role.code || ""));
+
+  return {
+    canViewTeam: canManageMembers,
+    canViewLifecycle: canManageMembers,
+    canViewAudit: permissionKeys.includes("AUDIT_LOG_VIEW"),
+    canInviteMembers: canManageMembers && canManageRoles && manageableRoleCodes.length > 0,
+    canAttachMembers: canManageMembers && canManageRoles && manageableRoleCodes.length > 0,
+    canChangeRoles: canManageMembers && canManageRoles,
+    canChangeStatus: canManageMembers,
+    canRemoveMembers: canManageMembers,
+    canReinviteMembers: canManageMembers && canManageRoles,
+    manageableRoleCodes,
+  };
+}
+
+function buildMemberGovernance(args: {
+  sellerAccess: any;
+  member: any;
+}) {
+  const serializedMember = serializeStoreMember(args.member) as any;
+  const actorRoleCode = String(args.sellerAccess?.roleCode || "");
+  const actorMemberId = Number(args.sellerAccess?.memberId || 0) || null;
+  const permissionKeys = Array.isArray(args.sellerAccess?.permissionKeys)
+    ? args.sellerAccess.permissionKeys
+    : [];
+  const canManageMembers = permissionKeys.includes("STORE_MEMBERS_MANAGE");
+  const canManageRoles = permissionKeys.includes("STORE_ROLES_MANAGE");
+  const currentStatus = String(serializedMember.status || "").toUpperCase();
+  const isExpiredInvitation =
+    currentStatus === SELLER_TEAM_PERSISTENCE_STATUS.INVITED &&
+    String(serializedMember.invitation?.state || "").toUpperCase() === "EXPIRED";
+  const roleCode = String(serializedMember.roleCode || "");
+  const isSelf = actorMemberId !== null && Number(serializedMember.id) === actorMemberId;
+  const isOwner = roleCode === "STORE_OWNER";
+  const manageableTarget = canManageRole({
+    actorRoleCode,
+    targetRoleCode: roleCode,
+  });
+  const canEditRole =
+    canManageMembers &&
+    canManageRoles &&
+    !isSelf &&
+    !isOwner &&
+    manageableTarget;
+  const canToggleStatus =
+    canManageMembers &&
+    !isSelf &&
+    !isOwner &&
+    manageableTarget &&
+    [SELLER_TEAM_API_STATUS.ACTIVE, SELLER_TEAM_API_STATUS.DISABLED].includes(currentStatus as any);
+  const canRemove =
+    canManageMembers &&
+    !isSelf &&
+    !isOwner &&
+    manageableTarget &&
+    (actorRoleCode !== "STORE_ADMIN" || roleCode !== "STORE_ADMIN") &&
+    [SELLER_TEAM_PERSISTENCE_STATUS.ACTIVE, SELLER_TEAM_PERSISTENCE_STATUS.DISABLED].includes(
+      currentStatus as any
+    );
+  const canReinvite =
+    canManageMembers &&
+    canManageRoles &&
+    !isSelf &&
+    !isOwner &&
+    manageableTarget &&
+    (currentStatus === SELLER_TEAM_PERSISTENCE_STATUS.REMOVED || isExpiredInvitation);
+
+  let restrictionReason = null;
+  if (isSelf) restrictionReason = "Self mutation is blocked by backend.";
+  else if (isOwner) restrictionReason = "Store owner is protected in this phase.";
+  else if (!canManageMembers)
+    restrictionReason = "This actor cannot manage seller store members.";
+  else if (
+    actorRoleCode === "STORE_ADMIN" &&
+    roleCode === "STORE_ADMIN" &&
+    currentStatus !== SELLER_TEAM_PERSISTENCE_STATUS.REMOVED
+  ) {
+    restrictionReason = "Store admin cannot mutate another active store admin in this phase.";
+  } else if (!manageableTarget) {
+    restrictionReason = "Current seller role cannot manage this target role.";
+  } else if (isExpiredInvitation) {
+    restrictionReason =
+      "This invitation expired. Only an authorized store operator can send it again.";
+  } else if (currentStatus === SELLER_TEAM_PERSISTENCE_STATUS.INVITED) {
+    restrictionReason =
+      "Invitation rows can still have role adjustments, but activation and removal stay closed here.";
+  } else if (currentStatus === SELLER_TEAM_PERSISTENCE_STATUS.REMOVED && !canReinvite) {
+    restrictionReason = "Removed memberships can only be reopened through re-invite when allowed.";
+  }
+
+  return {
+    canViewLifecycle: canManageMembers,
+    canEditRole,
+    canToggleStatus,
+    canRemove,
+    canReinvite,
+    isSelf,
+    isOwner,
+    restrictionReason,
+  };
+}
+
 function parseAuditState(value: unknown) {
   if (!value) return null;
   try {
@@ -97,19 +267,24 @@ function serializeTeamAuditRow(log: any) {
   const targetUser = log?.targetUser ?? log?.get?.("targetUser") ?? null;
   const targetMember = log?.targetMember ?? log?.get?.("targetMember") ?? null;
   const targetRole = targetMember?.role ?? targetMember?.get?.("role") ?? null;
+  const beforeState = parseAuditState(getAttr(log, "beforeState"));
+  const afterState = parseAuditState(getAttr(log, "afterState"));
+  const action = String(getAttr(log, "action") || "");
 
   return {
     id: Number(getAttr(log, "id")),
-    action: String(getAttr(log, "action") || ""),
+    action,
+    actionMeta: serializeActionMeta(action),
     actor: serializeAuditActor(actorUser),
     target: {
       user: serializeAuditActor(targetUser),
       memberId: targetMember ? Number(getAttr(targetMember, "id")) : null,
       roleCode: targetRole ? String(getAttr(targetRole, "code") || "") : null,
       roleName: targetRole ? String(getAttr(targetRole, "name") || "") : null,
+      snapshot: serializeAuditSnapshot(beforeState, afterState, targetMember),
     },
-    beforeState: parseAuditState(getAttr(log, "beforeState")),
-    afterState: parseAuditState(getAttr(log, "afterState")),
+    beforeState,
+    afterState,
     createdAt: getAttr(log, "createdAt") || null,
   };
 }
@@ -185,13 +360,29 @@ function serializeInvitationRow(member: any) {
   const store = member?.store ?? member?.get?.("store") ?? null;
   const role = member?.role ?? member?.get?.("role") ?? null;
   const invitedByUser = member?.invitedByUser ?? member?.get?.("invitedByUser") ?? null;
+  const serializedMember = serializeStoreMember(member) as any;
+  const invitation = serializedMember.invitation ?? serializeSellerInvitationState(member);
 
   return {
     memberId: Number(getAttr(member, "id")),
-    status: String(getAttr(member, "status") || ""),
+    status: serializedMember.status,
+    statusMeta: serializedMember.statusMeta,
+    membershipStatus: serializedMember.status,
+    invitationState: String(invitation?.state || "PENDING"),
+    stateMeta: invitation
+      ? {
+          code: invitation.state,
+          label: invitation.label,
+          description: invitation.description,
+        }
+      : null,
     roleCode: role ? String(getAttr(role, "code") || "") : "",
     roleName: role ? String(getAttr(role, "name") || "") : "",
-    invitedAt: getAttr(member, "invitedAt") || null,
+    invitedAt: serializedMember.invitedAt,
+    acceptedAt: serializedMember.acceptedAt,
+    expiresAt: invitation?.expiresAt || null,
+    isExpired: Boolean(invitation?.isExpired),
+    isActionable: Boolean(invitation?.isActionable),
     store: store
       ? {
           id: Number(getAttr(store, "id")),
@@ -320,6 +511,24 @@ router.post("/invitations/:memberId/accept", requireAuth, async (req, res) => {
       );
     }
 
+    if (currentStatus === SELLER_TEAM_PERSISTENCE_STATUS.REMOVED) {
+      return buildTeamMutationError(
+        res,
+        409,
+        "INVITATION_ALREADY_DECLINED",
+        "This invitation has already been declined or closed."
+      );
+    }
+
+    if (isSellerInvitationExpired(getAttr(member, "invitedAt"))) {
+      return buildTeamMutationError(
+        res,
+        409,
+        "INVITATION_EXPIRED",
+        "This invitation has expired. Ask the store owner or admin to send it again."
+      );
+    }
+
     if (currentStatus !== SELLER_TEAM_PERSISTENCE_STATUS.INVITED) {
       return buildTeamMutationError(
         res,
@@ -387,6 +596,14 @@ router.post("/invitations/:memberId/accept", requireAuth, async (req, res) => {
         member: serializeStoreMember(refreshed),
         store: refreshed ? serializeInvitationRow(refreshed).store : null,
         auditLogId: Number((auditLog as any)?.id || 0) || null,
+        invitation: {
+          previousState: "PENDING",
+          nextState: "ACCEPTED",
+        },
+        membershipTransition: {
+          from: SELLER_TEAM_PERSISTENCE_STATUS.INVITED,
+          to: SELLER_TEAM_PERSISTENCE_STATUS.ACTIVE,
+        },
         acceptedAt,
       },
     });
@@ -465,6 +682,15 @@ router.post("/invitations/:memberId/decline", requireAuth, async (req, res) => {
       );
     }
 
+    if (isSellerInvitationExpired(getAttr(member, "invitedAt"))) {
+      return buildTeamMutationError(
+        res,
+        409,
+        "INVITATION_EXPIRED",
+        "This invitation has expired. Ask the store owner or admin to send it again."
+      );
+    }
+
     if (currentStatus !== SELLER_TEAM_PERSISTENCE_STATUS.INVITED) {
       return buildTeamMutationError(
         res,
@@ -531,6 +757,14 @@ router.post("/invitations/:memberId/decline", requireAuth, async (req, res) => {
         member: serializeStoreMember(refreshed),
         store: refreshed ? serializeInvitationRow(refreshed).store : null,
         auditLogId: Number((auditLog as any)?.id || 0) || null,
+        invitation: {
+          previousState: "PENDING",
+          nextState: "DECLINED",
+        },
+        membershipTransition: {
+          from: SELLER_TEAM_PERSISTENCE_STATUS.INVITED,
+          to: SELLER_TEAM_PERSISTENCE_STATUS.REMOVED,
+        },
         removedAt,
       },
     });
@@ -683,6 +917,17 @@ router.get(
           ],
         }),
       ]);
+      const serializedRoles = roles.map(serializeRole);
+      const manageableRoleOptions = serializedRoles.filter((role) =>
+        canAssignRole({
+          actorRoleCode: sellerAccess.roleCode,
+          nextRoleCode: role.code,
+        })
+      );
+      const capabilities = buildTeamCapabilities({
+        sellerAccess,
+        manageableRoleOptions,
+      });
 
       const removedMemberIds = members
         .filter(
@@ -711,6 +956,7 @@ router.get(
             isOwner: Boolean(sellerAccess.isOwner),
             memberId: sellerAccess.memberId,
             storeRoleId: sellerAccess.storeRoleId,
+            capabilities,
           },
           summary: {
             totalMembers: members.length,
@@ -733,9 +979,10 @@ router.get(
               removedSource: removedMeta?.source || null,
               removedSourceLabel: getRemovedSourceLabel(removedMeta?.source),
               lastRemovalAction: removedMeta?.action || null,
+              governance: buildMemberGovernance({ sellerAccess, member }),
             };
           }),
-          roles: roles.map(serializeRole),
+          roles: serializedRoles,
         },
       });
     } catch (error) {
@@ -966,7 +1213,10 @@ router.post(
         );
       }
 
-      if (currentStatus === SELLER_TEAM_PERSISTENCE_STATUS.INVITED) {
+      if (
+        currentStatus === SELLER_TEAM_PERSISTENCE_STATUS.INVITED &&
+        !isSellerInvitationExpired(getAttr(member, "invitedAt"))
+      ) {
         return buildTeamMutationError(
           res,
           409,
@@ -984,12 +1234,19 @@ router.post(
         );
       }
 
-      if (currentStatus !== SELLER_TEAM_PERSISTENCE_STATUS.REMOVED) {
+      const canReissueExpiredInvite =
+        currentStatus === SELLER_TEAM_PERSISTENCE_STATUS.INVITED &&
+        isSellerInvitationExpired(getAttr(member, "invitedAt"));
+
+      if (
+        currentStatus !== SELLER_TEAM_PERSISTENCE_STATUS.REMOVED &&
+        !canReissueExpiredInvite
+      ) {
         return buildTeamMutationError(
           res,
           409,
           "MEMBER_STATUS_TRANSITION_FORBIDDEN",
-          "Only removed memberships can be re-invited in this phase."
+          "Only removed or expired invited memberships can be re-issued in this phase."
         );
       }
 
@@ -1015,7 +1272,7 @@ router.post(
         action: SELLER_TEAM_AUDIT_ACTIONS.TEAM_MEMBER_REINVITE,
         beforeState: {
           roleCode: currentRoleCode,
-          status: SELLER_TEAM_PERSISTENCE_STATUS.REMOVED,
+          status: currentStatus,
         },
         afterState: {
           roleCode,
@@ -1678,6 +1935,7 @@ router.get(
         success: true,
         data: {
           member: serializeStoreMember(member),
+          statusContract: SELLER_TEAM_STATUS_CONTRACT,
           lifecycle: {
             invitedAt: getAttr(member, "invitedAt") || null,
             acceptedAt: getAttr(member, "acceptedAt") || null,

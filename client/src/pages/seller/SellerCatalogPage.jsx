@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { Boxes, EyeOff, Package, Search, Store, Tag } from "lucide-react";
 import { getSellerProducts } from "../../api/sellerProducts.ts";
+import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
 
 const cardClass =
   "rounded-[24px] border border-stone-200 bg-white p-5 shadow-[0_16px_36px_-28px_rgba(28,25,23,0.28)]";
@@ -60,6 +61,15 @@ const formatDateTime = (value) =>
       }).format(new Date(value))
     : "-";
 
+const getStatusTone = (status) =>
+  status === "active" ? "emerald" : status === "draft" ? "amber" : "stone";
+
+const getVisibilityTone = (visibility) => {
+  if (visibility?.storefrontVisible) return "emerald";
+  if (visibility?.isPublished) return "amber";
+  return "rose";
+};
+
 export default function SellerCatalogPage() {
   const { storeId } = useParams();
   const { sellerContext } = useOutletContext() || {};
@@ -84,13 +94,21 @@ export default function SellerCatalogPage() {
     const items = productsQuery.data?.items || [];
     const publishedCount = items.filter((item) => item.published).length;
     const privateCount = items.length - publishedCount;
+    const storefrontReadyCount = items.filter((item) => item.visibility?.storefrontVisible).length;
+    const publishedHiddenCount = publishedCount - storefrontReadyCount;
     const draftCount = items.filter((item) => item.status === "draft").length;
+    const inactiveCount = items.filter((item) => item.status === "inactive").length;
     return {
       publishedCount,
       privateCount,
+      storefrontReadyCount,
+      publishedHiddenCount,
       draftCount,
+      inactiveCount,
     };
   }, [productsQuery.data]);
+
+  const hasActiveFilters = Boolean(filters.keyword.trim() || filters.status || filters.published);
 
   const handleFilterChange = (key, value) => {
     setFilters((current) => ({
@@ -119,15 +137,14 @@ export default function SellerCatalogPage() {
   }
 
   if (productsQuery.isError) {
-    const statusCode = Number(productsQuery.error?.response?.status || 0);
     return (
       <section className={cardClass}>
         <p className="text-sm text-rose-600">
-          {statusCode === 404
-            ? "Store not found."
-            : productsQuery.error?.response?.data?.message ||
-              productsQuery.error?.message ||
-              "Failed to load seller products."}
+          {getSellerRequestErrorMessage(productsQuery.error, {
+            permissionMessage:
+              "Your current seller access does not include catalog visibility.",
+            fallbackMessage: "Failed to load seller products.",
+          })}
         </p>
       </section>
     );
@@ -161,7 +178,7 @@ export default function SellerCatalogPage() {
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Visible Rows"
           value={String(pagination.total || 0)}
@@ -169,15 +186,21 @@ export default function SellerCatalogPage() {
           Icon={Package}
         />
         <StatCard
-          label="Published In Page"
+          label="Published Flag On"
           value={String(productStats.publishedCount)}
-          hint={`Private/unpublished in page: ${productStats.privateCount}`}
+          hint={`Private or unpublished in page: ${productStats.privateCount}`}
           Icon={Store}
         />
         <StatCard
-          label="Draft In Page"
-          value={String(productStats.draftCount)}
-          hint="Draft products remain visible to seller operators."
+          label="Storefront Ready"
+          value={String(productStats.storefrontReadyCount)}
+          hint={`Published but still blocked by status: ${productStats.publishedHiddenCount}`}
+          Icon={Tag}
+        />
+        <StatCard
+          label="Draft / Inactive"
+          value={String(productStats.draftCount + productStats.inactiveCount)}
+          hint={`Draft: ${productStats.draftCount} · Inactive: ${productStats.inactiveCount}`}
           Icon={EyeOff}
         />
       </section>
@@ -217,16 +240,16 @@ export default function SellerCatalogPage() {
 
           <label className="space-y-2">
             <span className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
-              Publish
+              Publish Flag
             </span>
             <select
               value={filters.published}
               onChange={(event) => handleFilterChange("published", event.target.value)}
               className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-900 outline-none"
             >
-              <option value="">All visibility</option>
-              <option value="true">Published</option>
-              <option value="false">Private</option>
+              <option value="">All publish states</option>
+              <option value="true">Published flag on</option>
+              <option value="false">Published flag off</option>
             </select>
           </label>
 
@@ -255,7 +278,8 @@ export default function SellerCatalogPage() {
           <div>
             <h3 className="text-lg font-semibold text-stone-950">Store Products</h3>
             <p className="mt-1 text-sm text-stone-500">
-              Read-only seller list view. Product detail read lane is now available.
+              Read-only seller list scoped by active store. Status controls storefront eligibility,
+              while the publish flag controls whether the product can ever surface publicly.
             </p>
           </div>
           <Badge tone="amber">Read-only</Badge>
@@ -304,19 +328,25 @@ export default function SellerCatalogPage() {
                     </div>
                   </div>
                   <div>
-                    <Badge tone={item.status === "active" ? "emerald" : item.status === "draft" ? "amber" : "stone"}>
-                      {item.status.toUpperCase()}
-                    </Badge>
-                  </div>
-                  <div>
-                    <Badge tone={item.published ? "sky" : "rose"}>
-                      {item.visibility?.label || (item.published ? "Published" : "Private")}
+                    <Badge tone={getStatusTone(item.statusMeta?.code || item.status)}>
+                      {item.statusMeta?.label || String(item.status || "draft").toUpperCase()}
                     </Badge>
                     <p className="mt-2 text-xs text-stone-500">
-                      {item.visibility?.storefrontVisible
-                        ? "Currently visible in storefront filters."
-                        : "Not public in storefront right now."}
+                      {item.statusMeta?.storefrontEligible
+                        ? "Eligible for storefront when publish is on."
+                        : "Blocked from storefront until status becomes active."}
                     </p>
+                  </div>
+                  <div>
+                    <Badge tone={getVisibilityTone(item.visibility)}>
+                      {item.visibility?.publishLabel || item.visibility?.label || (item.published ? "Published" : "Private")}
+                    </Badge>
+                    <p className="mt-2 text-xs text-stone-500">
+                      {item.visibility?.storefrontLabel || "Hidden from storefront"}
+                    </p>
+                    {item.visibility?.storefrontReason ? (
+                      <p className="mt-1 text-xs text-stone-400">{item.visibility.storefrontReason}</p>
+                    ) : null}
                   </div>
                   <div>
                     <p className="font-semibold text-stone-950">
@@ -351,9 +381,15 @@ export default function SellerCatalogPage() {
           </div>
         ) : (
           <div className="mt-5 rounded-3xl border border-dashed border-stone-300 bg-stone-50 px-5 py-10 text-center">
-            <p className="text-lg font-semibold text-stone-950">No products found for this store</p>
+            <p className="text-lg font-semibold text-stone-950">
+              {hasActiveFilters
+                ? "No products match the current seller filters"
+                : "No products found for this store"}
+            </p>
             <p className="mt-2 text-sm leading-6 text-stone-600">
-              Try widening the filters, or confirm whether this store already has catalog rows.
+              {hasActiveFilters
+                ? "Try widening the keyword, status, or publish filters for this store."
+                : "Confirm whether this store already owns product rows in the current workspace."}
             </p>
           </div>
         )}

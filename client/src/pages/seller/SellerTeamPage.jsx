@@ -21,6 +21,7 @@ import {
   updateSellerStoreMemberRole,
   updateSellerStoreMemberStatus,
 } from "../../api/sellerTeam.ts";
+import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
 
 const cardClass =
   "rounded-[24px] border border-stone-200 bg-white p-5 shadow-[0_16px_36px_-28px_rgba(28,25,23,0.28)]";
@@ -72,14 +73,20 @@ function getRemovedSourceHint(member) {
   return "Closed membership row. Check lifecycle history for the latest removal event.";
 }
 
+function getInvitationHint(member) {
+  if (member?.status !== "INVITED") return null;
+  return (
+    member?.invitation?.description ||
+    "This membership is waiting for the invited user to respond from the account invitation lane."
+  );
+}
+
 export default function SellerTeamPage() {
   const { storeId } = useParams();
   const queryClient = useQueryClient();
   const { sellerContext } = useOutletContext() || {};
   const permissionKeys = sellerContext?.access?.permissionKeys || [];
-  const canViewTeam =
-    permissionKeys.includes("STORE_MEMBERS_MANAGE") ||
-    permissionKeys.includes("STORE_ROLES_MANAGE");
+  const canViewTeam = permissionKeys.includes("STORE_MEMBERS_MANAGE");
   const canManageMembers = permissionKeys.includes("STORE_MEMBERS_MANAGE");
   const canManageRoles = permissionKeys.includes("STORE_ROLES_MANAGE");
   const actorRoleCode = sellerContext?.access?.roleCode || "";
@@ -427,15 +434,14 @@ export default function SellerTeamPage() {
   }
 
   if (teamQuery.isError) {
-    const statusCode = Number(teamQuery.error?.response?.status || 0);
     return (
       <section className={cardClass}>
         <p className="text-sm text-rose-600">
-          {statusCode === 404
-            ? "Store not found."
-            : teamQuery.error?.response?.data?.message ||
-              teamQuery.error?.message ||
-              "Failed to load seller team summary."}
+          {getSellerRequestErrorMessage(teamQuery.error, {
+            permissionMessage:
+              "Your current seller access does not include the team workspace shell.",
+            fallbackMessage: "Failed to load seller team summary.",
+          })}
         </p>
       </section>
     );
@@ -443,6 +449,7 @@ export default function SellerTeamPage() {
 
   const team = teamQuery.data;
   const members = Array.isArray(team?.members) ? team.members : [];
+  const teamCapabilities = team?.currentAccess?.capabilities || {};
   const statusTone = (status) => {
     if (status === "ACTIVE") return "emerald";
     if (status === "INVITED") return "amber";
@@ -467,10 +474,10 @@ export default function SellerTeamPage() {
             </h2>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-stone-600">
               This page now supports direct attach, first-time invite, removed-member
-              re-invite, and operational remove. Remove closes an active or disabled membership
-              with <code className="mx-1">REMOVED</code> while preserving the row for a future
-              re-invite. Email automation, restore-general flow, owner transfer, and advanced
-              lifecycle actions remain closed.
+              re-invite, expired-invite re-issue, and operational remove. Remove closes an active
+              or disabled membership with <code className="mx-1">REMOVED</code> while preserving
+              the row for a future re-invite. Email automation, restore-general flow, owner
+              transfer, and advanced lifecycle actions remain closed.
             </p>
             <p className="mt-2 text-xs font-medium uppercase tracking-[0.2em] text-stone-500">
               Phase 1 status contract: {statusContract.active} / {statusContract.disabled}
@@ -537,6 +544,11 @@ export default function SellerTeamPage() {
               <dd className="mt-2 text-base font-semibold text-stone-900">
                 {team?.currentAccess?.membershipStatus || "-"}
               </dd>
+              <p className="mt-2 text-xs text-stone-500">
+                {teamCapabilities.canInviteMembers || teamCapabilities.canAttachMembers
+                  ? "This actor can open the current phase-1 member mutation lanes."
+                  : "This actor can observe the team shell, but mutation lanes stay closed."}
+              </p>
             </div>
             <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
               <dt className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
@@ -727,8 +739,11 @@ export default function SellerTeamPage() {
             </div>
             <div className="divide-y divide-stone-200 bg-white">
               {members.map((member) => {
-                const manageable = canManageTarget(member);
-                const reinvitable = canReinviteTarget(member);
+                const manageable = Boolean(
+                  member.governance?.canToggleStatus || member.governance?.canRemove
+                );
+                const reinvitable = Boolean(member.governance?.canReinvite);
+                const editableRole = Boolean(member.governance?.canEditRole);
                 const roleValue = roleDrafts[member.id] || member.roleCode;
                 const roleBusy = busyActionKey === `role:${member.id}`;
                 const statusBusy = busyActionKey === `status:${member.id}`;
@@ -750,7 +765,7 @@ export default function SellerTeamPage() {
                     </p>
                   </div>
                   <div>
-                    {(manageable || reinvitable) && canManageRoles ? (
+                    {(editableRole || reinvitable) && canManageRoles ? (
                       <div className="space-y-2">
                         <select
                           value={roleValue}
@@ -790,21 +805,30 @@ export default function SellerTeamPage() {
                           <p className="font-medium text-stone-900">{member.roleName || member.roleCode || "-"}</p>
                           {member.roleCode ? <Badge tone="stone">{member.roleCode}</Badge> : null}
                         </div>
-                        <p className="mt-1 text-xs text-stone-500">Current seller role snapshot</p>
+                        <p className="mt-1 text-xs text-stone-500">
+                          {member.role?.permissionKeys?.length
+                            ? `${member.role.permissionKeys.length} permission keys in this role snapshot`
+                            : "Current seller role snapshot"}
+                        </p>
                       </>
                     )}
                   </div>
                   <div>
                     <Badge tone={statusTone(member.status)}>
-                      {member.status}
+                      {member.statusMeta?.label || member.status}
                     </Badge>
                     <p className="mt-2 text-xs text-stone-500">
-                      {member.status === "INVITED"
-                        ? "Pending access until future acceptance flow"
-                        : member.status === "REMOVED"
-                          ? getRemovedSourceHint(member)
-                          : "Operational team status"}
+                      {member.status === "REMOVED"
+                        ? getRemovedSourceHint(member)
+                        : getInvitationHint(member) ||
+                          member.statusMeta?.description ||
+                          "Operational team status"}
                     </p>
+                    {member.status === "INVITED" && member.invitation?.expiresAt ? (
+                      <p className="mt-2 text-xs font-medium text-stone-500">
+                        Expires {formatDate(member.invitation.expiresAt)}
+                      </p>
+                    ) : null}
                     {member.status === "REMOVED" && member.removedSourceLabel ? (
                       <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-rose-700">
                         {member.removedSourceLabel}
@@ -826,7 +850,7 @@ export default function SellerTeamPage() {
                       >
                         View lifecycle
                       </Link>
-                      {manageable && canManageMembers ? (
+                      {member.governance?.canToggleStatus && canManageMembers ? (
                         <>
                           <button
                             type="button"
@@ -866,7 +890,12 @@ export default function SellerTeamPage() {
                         </button>
                       ) : (
                         <span className="text-xs text-stone-400">
-                          {member.status === "INVITED" ? "Pending" : "Protected"}
+                          {member.governance?.restrictionReason ||
+                            (member.status === "INVITED"
+                              ? member.invitation?.state === "EXPIRED"
+                                ? "Invitation expired"
+                                : "Pending invitation in account lane"
+                              : "Protected")}
                         </span>
                       )}
                     </div>

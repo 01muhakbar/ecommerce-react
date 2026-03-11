@@ -29,6 +29,39 @@ const storeProfileAttributes = [
   "createdAt",
 ] as const;
 
+const editableStoreProfileFields = [
+  "name",
+  "description",
+  "logoUrl",
+  "bannerUrl",
+  "email",
+  "phone",
+  "whatsapp",
+  "websiteUrl",
+  "instagramUrl",
+  "tiktokUrl",
+  "addressLine1",
+  "addressLine2",
+  "city",
+  "province",
+  "postalCode",
+  "country",
+] as const;
+
+const readOnlyStoreProfileFields = ["id", "slug", "status", "createdAt", "updatedAt"] as const;
+
+const profileCompletenessFields = [
+  { key: "name", label: "Store name" },
+  { key: "description", label: "Store description" },
+  { key: "email", label: "Store email" },
+  { key: "phone", label: "Store phone" },
+  { key: "logoUrl", label: "Logo URL" },
+  { key: "addressLine1", label: "Address line 1" },
+  { key: "city", label: "City" },
+  { key: "province", label: "Province" },
+  { key: "country", label: "Country" },
+] as const;
+
 const normalizeNullableText = (value: unknown) => {
   if (value === undefined) return undefined;
   if (value === null) return null;
@@ -86,8 +119,68 @@ const profilePatchSchema = z
 const getAttr = (row: any, key: string) =>
   row?.getDataValue?.(key) ?? row?.get?.(key) ?? row?.dataValues?.[key];
 
-const serializeSellerStoreProfile = (store: any) => {
+const hasText = (value: unknown) => String(value || "").trim().length > 0;
+
+const buildStoreStatusMeta = (statusValue: unknown) => {
+  const code = String(statusValue || "ACTIVE").toUpperCase();
+
+  if (code === "ACTIVE") {
+    return {
+      code,
+      label: "Active",
+      tone: "success",
+      description: "Store identity is active in the current seller workspace source of truth.",
+    };
+  }
+
+  if (code === "INACTIVE") {
+    return {
+      code,
+      label: "Inactive",
+      tone: "neutral",
+      description:
+        "Store is inactive. Seller metadata can still be reviewed, but storefront behavior follows store governance.",
+    };
+  }
+
+  return {
+    code,
+    label: code.replace(/_/g, " "),
+    tone: "neutral",
+    description: "Store status is controlled by the existing store governance flow.",
+  };
+};
+
+const buildStoreProfileCompleteness = (store: any) => {
+  const missingFields = profileCompletenessFields
+    .filter((field) => !hasText(getAttr(store, field.key)))
+    .map((field) => ({
+      key: field.key,
+      label: field.label,
+    }));
+
+  const totalFields = profileCompletenessFields.length;
+  const completedFields = totalFields - missingFields.length;
+  const score = totalFields > 0 ? Math.round((completedFields / totalFields) * 100) : 0;
+
+  return {
+    score,
+    completedFields,
+    totalFields,
+    isComplete: missingFields.length === 0,
+    label: missingFields.length === 0 ? "Profile complete" : "Profile needs attention",
+    description:
+      missingFields.length === 0
+        ? "Core store identity, contact, and address fields are filled for seller operations."
+        : "Some editable store metadata is still missing. Complete it to reduce profile ambiguity across seller and storefront lanes.",
+    missingFields,
+  };
+};
+
+const serializeSellerStoreProfile = (store: any, options: { canEdit?: boolean } = {}) => {
   if (!store) return null;
+
+  const status = String(getAttr(store, "status") || "ACTIVE");
 
   return {
     id: Number(getAttr(store, "id")),
@@ -116,8 +209,20 @@ const serializeSellerStoreProfile = (store: any) => {
     province: getAttr(store, "province") ? String(getAttr(store, "province")) : null,
     postalCode: getAttr(store, "postalCode") ? String(getAttr(store, "postalCode")) : null,
     country: getAttr(store, "country") ? String(getAttr(store, "country")) : null,
-    status: String(getAttr(store, "status") || "ACTIVE"),
+    status,
     verificationStatus: null,
+    statusMeta: buildStoreStatusMeta(status),
+    governance: {
+      canView: true,
+      canEdit: Boolean(options.canEdit),
+      editableFields: [...editableStoreProfileFields],
+      readOnlyFields: [...readOnlyStoreProfileFields],
+      managedBy: "SELLER_WORKSPACE",
+      note: Boolean(options.canEdit)
+        ? "Editable metadata stays limited to seller-safe store identity fields."
+        : "This actor can review the profile, but editing remains restricted by store permissions.",
+    },
+    completeness: buildStoreProfileCompleteness(store),
     createdAt: getAttr(store, "createdAt") || null,
     updatedAt: getAttr(store, "updatedAt") || null,
   };
@@ -129,6 +234,7 @@ router.get(
   async (req, res) => {
     try {
       const storeId = Number(req.params.storeId);
+      const sellerAccess = (req as any).sellerAccess;
       const store = await Store.findByPk(storeId, {
         attributes: [...storeProfileAttributes],
       });
@@ -142,7 +248,11 @@ router.get(
 
       return res.json({
         success: true,
-        data: serializeSellerStoreProfile(store),
+        data: serializeSellerStoreProfile(store, {
+          canEdit: Array.isArray(sellerAccess?.permissionKeys)
+            ? sellerAccess.permissionKeys.includes("STORE_EDIT")
+            : false,
+        }),
       });
     } catch (error) {
       console.error("[seller/store-profile:get] error", error);
@@ -160,6 +270,7 @@ router.patch(
   async (req, res) => {
     try {
       const storeId = Number(req.params.storeId);
+      const sellerAccess = (req as any).sellerAccess;
       const parsed = profilePatchSchema.safeParse(req.body);
 
       if (!parsed.success) {
@@ -196,7 +307,11 @@ router.patch(
 
       return res.json({
         success: true,
-        data: serializeSellerStoreProfile(store),
+        data: serializeSellerStoreProfile(store, {
+          canEdit: Array.isArray(sellerAccess?.permissionKeys)
+            ? sellerAccess.permissionKeys.includes("STORE_EDIT")
+            : true,
+        }),
       });
     } catch (error) {
       console.error("[seller/store-profile:patch] error", error);

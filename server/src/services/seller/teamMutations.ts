@@ -1,4 +1,4 @@
-import { SELLER_ROLE_CODES } from "./permissionMap.js";
+import { getPermissionKeysForSellerRole, SELLER_ROLE_CODES } from "./permissionMap.js";
 import { StoreMember, StoreRole, User } from "../../models/index.js";
 
 export const SELLER_TEAM_API_STATUS = {
@@ -30,6 +30,13 @@ export const SELLER_TEAM_STATUS_CONTRACT = {
   legacyPersistenceDisabled: SELLER_TEAM_LEGACY_PERSISTENCE_STATUS.INACTIVE,
 } as const;
 
+export const SELLER_INVITATION_EXPIRY_DAYS = (() => {
+  const parsed = Number.parseInt(process.env.SELLER_INVITATION_EXPIRY_DAYS || "7", 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 7;
+})();
+
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+
 const OPERATIONAL_ROLE_CODES = new Set([
   SELLER_ROLE_CODES.CATALOG_MANAGER,
   SELLER_ROLE_CODES.MARKETING_MANAGER,
@@ -47,6 +54,41 @@ const MANAGEABLE_BY_ADMIN = OPERATIONAL_ROLE_CODES;
 
 export function getAttr(row: any, key: string) {
   return row?.getDataValue?.(key) ?? row?.get?.(key) ?? row?.dataValues?.[key];
+}
+
+function parseDateLike(value: unknown) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function getSellerInvitationExpiresAt(invitedAt: unknown) {
+  const invitedDate = parseDateLike(invitedAt);
+  if (!invitedDate) return null;
+  return new Date(invitedDate.getTime() + SELLER_INVITATION_EXPIRY_DAYS * DAY_IN_MS);
+}
+
+export function isSellerInvitationExpired(invitedAt: unknown, now = new Date()) {
+  const expiresAt = getSellerInvitationExpiresAt(invitedAt);
+  return Boolean(expiresAt && expiresAt.getTime() <= now.getTime());
+}
+
+export function serializeSellerInvitationState(member: any) {
+  const invitedAt = getAttr(member, "invitedAt") || null;
+  const expiresAt = getSellerInvitationExpiresAt(invitedAt);
+  const isExpired = isSellerInvitationExpired(invitedAt);
+
+  return {
+    state: isExpired ? "EXPIRED" : "PENDING",
+    label: isExpired ? "Expired invitation" : "Pending invitation",
+    description: isExpired
+      ? "This store invitation is no longer actionable. A store owner or admin must send it again."
+      : "This store invitation is waiting for the invited user to accept in the account lane.",
+    invitedAt,
+    expiresAt: expiresAt ? expiresAt.toISOString() : null,
+    isExpired,
+    isActionable: !isExpired,
+  };
 }
 
 export function toTeamStatus(value: unknown) {
@@ -238,21 +280,67 @@ export async function listStoreMembersForTeam(storeId: number) {
 export function serializeStoreMember(member: any) {
   const user = member?.user ?? member?.get?.("user") ?? null;
   const role = member?.role ?? member?.get?.("role") ?? null;
+  const status = toTeamStatus(getAttr(member, "status"));
+  const roleCode = role ? String(getAttr(role, "code") || "") : "";
+  const roleName = role ? String(getAttr(role, "name") || "") : "";
+  const roleDescription = role?.description ? String(getAttr(role, "description") || "") : "";
+  const invitation =
+    status === SELLER_TEAM_PERSISTENCE_STATUS.INVITED
+      ? serializeSellerInvitationState(member)
+      : null;
+
+  const statusMeta = {
+    code: status,
+    label:
+      status === SELLER_TEAM_API_STATUS.ACTIVE
+        ? "Active"
+        : status === SELLER_TEAM_API_STATUS.DISABLED
+          ? "Disabled"
+          : status === SELLER_TEAM_PERSISTENCE_STATUS.INVITED
+            ? "Invited"
+            : "Removed",
+    description:
+      status === SELLER_TEAM_API_STATUS.ACTIVE
+        ? "This membership currently has seller workspace access."
+        : status === SELLER_TEAM_API_STATUS.DISABLED
+          ? "This membership stays recorded, but seller access is disabled."
+          : status === SELLER_TEAM_PERSISTENCE_STATUS.INVITED
+            ? "This membership is waiting for invitation acceptance."
+            : "This membership is closed and cannot access the workspace.",
+    isOperational:
+      status === SELLER_TEAM_API_STATUS.ACTIVE || status === SELLER_TEAM_API_STATUS.DISABLED,
+  };
 
   return {
     id: Number(getAttr(member, "id")),
     userId: Number(getAttr(member, "userId")),
     name: user ? String(getAttr(user, "name") || "") : "",
     email: user ? String(getAttr(user, "email") || "") : "",
-    roleCode: role ? String(getAttr(role, "code") || "") : "",
-    roleName: role ? String(getAttr(role, "name") || "") : "",
-    status: toTeamStatus(getAttr(member, "status")),
+    roleCode,
+    roleName,
+    role: {
+      id: role ? Number(getAttr(role, "id")) : null,
+      code: roleCode || null,
+      name: roleName || null,
+      description: roleDescription || null,
+      isActive: role ? Boolean(getAttr(role, "isActive")) : null,
+      permissionKeys: roleCode ? getPermissionKeysForSellerRole(roleCode) : [],
+    },
+    status,
+    statusMeta,
+    invitation,
     invitedAt: getAttr(member, "invitedAt") || null,
     acceptedAt: getAttr(member, "acceptedAt") || null,
     disabledAt: getAttr(member, "disabledAt") || null,
     removedAt: getAttr(member, "removedAt") || null,
     joinedAt: getAttr(member, "createdAt") || null,
     updatedAt: getAttr(member, "updatedAt") || null,
+    lifecycle: {
+      invitedAt: getAttr(member, "invitedAt") || null,
+      acceptedAt: getAttr(member, "acceptedAt") || null,
+      disabledAt: getAttr(member, "disabledAt") || null,
+      removedAt: getAttr(member, "removedAt") || null,
+    },
   };
 }
 

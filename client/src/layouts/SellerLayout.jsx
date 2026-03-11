@@ -101,8 +101,7 @@ function SellerSidebar({ storeId, sellerContext }) {
       label: "Team",
       to: `/seller/stores/${storeId}/team`,
       Icon: Users,
-      enabled:
-        hasPermission("STORE_MEMBERS_MANAGE") || hasPermission("STORE_ROLES_MANAGE"),
+      enabled: hasPermission("STORE_MEMBERS_MANAGE"),
       implemented: true,
       description: "Read-only team shell and membership summary.",
     },

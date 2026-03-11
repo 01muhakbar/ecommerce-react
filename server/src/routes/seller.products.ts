@@ -38,6 +38,39 @@ const parseBooleanFilter = (value: unknown) => {
 
 const allowedStatuses = new Set(["active", "inactive", "draft"]);
 
+const normalizeProductStatus = (value: unknown) => {
+  const normalized = normalizeString(value).toLowerCase();
+  return allowedStatuses.has(normalized) ? normalized : "draft";
+};
+
+const serializeProductStatus = (status: string) => ({
+  code: status,
+  label: status === "active" ? "Active" : status === "inactive" ? "Inactive" : "Draft",
+  storefrontEligible: status === "active",
+});
+
+const serializeProductVisibility = (isPublished: boolean, status: string) => {
+  const storefrontVisible = isPublished && status === "active";
+
+  return {
+    isPublished,
+    storefrontVisible,
+    label: isPublished ? "Published" : "Private",
+    publishLabel: isPublished ? "Published" : "Private",
+    storefrontLabel: storefrontVisible ? "Visible in storefront" : "Hidden from storefront",
+    storefrontReason: !isPublished
+      ? "Publish flag is off, so this product stays internal to admin and seller views."
+      : storefrontVisible
+        ? "Storefront can surface this product because publish is on and status is active."
+        : "Publish is on, but the product status must be active before storefront can surface it.",
+    reasonCode: !isPublished
+      ? "UNPUBLISHED"
+      : storefrontVisible
+        ? "STOREFRONT_VISIBLE"
+        : "STATUS_NOT_ACTIVE",
+  };
+};
+
 const resolveProductPreviewImage = (product: any) => {
   const promoImagePath = normalizeString(getAttr(product, "promoImagePath"));
   if (promoImagePath) return promoImagePath;
@@ -81,7 +114,7 @@ const serializeProductListItem = (product: any) => {
       : toNumber(salePriceRaw, 0);
   const stock = toNumber(getAttr(product, "stock"));
   const isPublished = Boolean(getAttr(product, "isPublished"));
-  const status = String(getAttr(product, "status") || "draft");
+  const status = normalizeProductStatus(getAttr(product, "status"));
 
   return {
     id: toNumber(getAttr(product, "id")),
@@ -90,12 +123,9 @@ const serializeProductListItem = (product: any) => {
     slug: String(getAttr(product, "slug") || ""),
     sku: getAttr(product, "sku") ? String(getAttr(product, "sku")) : null,
     status,
+    statusMeta: serializeProductStatus(status),
     published: isPublished,
-    visibility: {
-      isPublished,
-      storefrontVisible: isPublished && status === "active",
-      label: isPublished ? "Published" : "Private",
-    },
+    visibility: serializeProductVisibility(isPublished, status),
     pricing: {
       price,
       salePrice: salePrice && salePrice > 0 ? salePrice : null,
@@ -131,7 +161,7 @@ const serializeProductDetail = (product: any) => {
     salePriceRaw === null || typeof salePriceRaw === "undefined"
       ? null
       : toNumber(salePriceRaw, 0);
-  const status = String(getAttr(product, "status") || "draft");
+  const status = normalizeProductStatus(getAttr(product, "status"));
   const isPublished = Boolean(getAttr(product, "isPublished"));
   const stock = toNumber(getAttr(product, "stock"));
   const variations = normalizeJsonValue(getAttr(product, "variations"));
@@ -145,12 +175,9 @@ const serializeProductDetail = (product: any) => {
     slug: String(getAttr(product, "slug") || ""),
     sku: getAttr(product, "sku") ? String(getAttr(product, "sku")) : null,
     status,
+    statusMeta: serializeProductStatus(status),
     published: isPublished,
-    visibility: {
-      isPublished,
-      storefrontVisible: isPublished && status === "active",
-      label: isPublished ? "Published" : "Private",
-    },
+    visibility: serializeProductVisibility(isPublished, status),
     descriptions: {
       description: getAttr(product, "description")
         ? String(getAttr(product, "description"))

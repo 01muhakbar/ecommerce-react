@@ -3,16 +3,15 @@ import { Link, useOutletContext, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   Boxes,
-  EyeOff,
   FileText,
   ImageIcon,
   Layers3,
   Package,
   ShieldCheck,
-  Tag,
   Wallet,
 } from "lucide-react";
 import { getSellerProductDetail } from "../../api/sellerProducts.ts";
+import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
 
 const cardClass =
   "rounded-[24px] border border-stone-200 bg-white p-5 shadow-[0_16px_36px_-28px_rgba(28,25,23,0.28)]";
@@ -70,6 +69,15 @@ const formatDateTime = (value) =>
 
 const prettyJson = (value) => JSON.stringify(value, null, 2);
 
+const getStatusTone = (status) =>
+  status === "active" ? "emerald" : status === "draft" ? "amber" : "stone";
+
+const getVisibilityTone = (visibility) => {
+  if (visibility?.storefrontVisible) return "emerald";
+  if (visibility?.isPublished) return "amber";
+  return "rose";
+};
+
 function DetailRow({ label, value }) {
   return (
     <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
@@ -84,11 +92,13 @@ export default function SellerProductDetailPage() {
   const { sellerContext } = useOutletContext() || {};
   const permissionKeys = sellerContext?.access?.permissionKeys || [];
   const canViewProducts = permissionKeys.includes("PRODUCT_VIEW");
+  const numericProductId = Number(productId);
+  const hasValidProductId = Number.isInteger(numericProductId) && numericProductId > 0;
 
   const productQuery = useQuery({
     queryKey: ["seller", "products", "detail", storeId, productId],
     queryFn: () => getSellerProductDetail(storeId, productId),
-    enabled: Boolean(storeId) && Boolean(productId) && canViewProducts,
+    enabled: Boolean(storeId) && hasValidProductId && canViewProducts,
     retry: false,
   });
 
@@ -97,6 +107,25 @@ export default function SellerProductDetailPage() {
       <section className={cardClass}>
         <p className="text-sm text-rose-600">
           Your current seller access does not include catalog visibility.
+        </p>
+      </section>
+    );
+  }
+
+  if (!hasValidProductId) {
+    return (
+      <section className={cardClass}>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            to={`/seller/stores/${storeId}/catalog`}
+            className="inline-flex items-center gap-2 rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to catalog
+          </Link>
+        </div>
+        <p className="mt-5 text-sm text-rose-600">
+          Seller product detail needs a valid product id in the URL.
         </p>
       </section>
     );
@@ -111,7 +140,6 @@ export default function SellerProductDetailPage() {
   }
 
   if (productQuery.isError) {
-    const statusCode = Number(productQuery.error?.response?.status || 0);
     return (
       <section className={cardClass}>
         <div className="flex flex-wrap items-center gap-3">
@@ -124,19 +152,38 @@ export default function SellerProductDetailPage() {
           </Link>
         </div>
         <p className="mt-5 text-sm text-rose-600">
-          {statusCode === 404
-            ? "Product not found for this seller store."
-            : statusCode === 403
-              ? "This account cannot access the selected seller product."
-              : productQuery.error?.response?.data?.message ||
-                productQuery.error?.message ||
-                "Failed to load seller product detail."}
+          {getSellerRequestErrorMessage(productQuery.error, {
+            notFoundMessage: "Product not found for this seller store.",
+            forbiddenMessage: "This account cannot access the selected seller workspace.",
+            permissionMessage: "Your current seller access does not include catalog visibility.",
+            fallbackMessage: "Failed to load seller product detail.",
+          })}
         </p>
       </section>
     );
   }
 
   const product = productQuery.data;
+
+  if (!product) {
+    return (
+      <section className={cardClass}>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            to={`/seller/stores/${storeId}/catalog`}
+            className="inline-flex items-center gap-2 rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to catalog
+          </Link>
+        </div>
+        <p className="mt-5 text-sm text-stone-500">
+          Seller product detail is not available for this store.
+        </p>
+      </section>
+    );
+  }
+
   const assignedCategories = Array.isArray(product?.category?.assigned)
     ? product.category.assigned
     : [];
@@ -166,11 +213,14 @@ export default function SellerProductDetailPage() {
               tenant boundary. This can show private or draft rows owned by the current store.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Badge tone={product?.status === "active" ? "emerald" : product?.status === "draft" ? "amber" : "stone"}>
-                {String(product?.status || "draft").toUpperCase()}
+              <Badge tone={getStatusTone(product?.statusMeta?.code || product?.status)}>
+                {product?.statusMeta?.label || String(product?.status || "draft").toUpperCase()}
               </Badge>
-              <Badge tone={product?.published ? "sky" : "rose"}>
-                {product?.visibility?.label || (product?.published ? "Published" : "Private")}
+              <Badge tone={getVisibilityTone(product?.visibility)}>
+                {product?.visibility?.publishLabel || product?.visibility?.label || (product?.published ? "Published" : "Private")}
+              </Badge>
+              <Badge tone={product?.visibility?.storefrontVisible ? "emerald" : "stone"}>
+                {product?.visibility?.storefrontLabel || "Hidden from storefront"}
               </Badge>
               {product?.sku ? <Badge tone="stone">SKU {product.sku}</Badge> : null}
               {product?.category?.default?.name ? <Badge tone="sky">{product.category.default.name}</Badge> : null}
@@ -203,9 +253,14 @@ export default function SellerProductDetailPage() {
                 label="Pre-order"
                 value={product?.inventory?.preOrder ? `Yes${product?.inventory?.preorderDays ? ` · ${product.inventory.preorderDays} day(s)` : ""}` : "No"}
               />
+              <DetailRow label="Publish Flag" value={product?.visibility?.publishLabel || "-"} />
               <DetailRow
                 label="Storefront Visibility"
-                value={product?.visibility?.storefrontVisible ? "Visible in storefront filters" : "Not public in storefront"}
+                value={product?.visibility?.storefrontLabel || "-"}
+              />
+              <DetailRow
+                label="Storefront Reason"
+                value={product?.visibility?.storefrontReason || "-"}
               />
             </div>
           </SectionCard>
@@ -268,6 +323,7 @@ export default function SellerProductDetailPage() {
             <div className="grid gap-4 md:grid-cols-2">
               <DetailRow label="Primary Category" value={product?.category?.primary?.name || "-"} />
               <DetailRow label="Default Category" value={product?.category?.default?.name || "-"} />
+              <DetailRow label="Store Scope" value={sellerContext?.store?.name || sellerContext?.store?.slug || `Store #${product?.storeId || storeId}`} />
               <DetailRow label="Barcode" value={product?.attributes?.barcode || "-"} />
               <DetailRow label="GTIN" value={product?.attributes?.gtin || "-"} />
               <DetailRow label="Condition" value={product?.attributes?.condition || "-"} />

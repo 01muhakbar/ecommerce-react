@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { History, ShieldCheck } from "lucide-react";
 import { useOutletContext, useParams } from "react-router-dom";
 import { getSellerTeamAudit } from "../../api/sellerTeamAudit.ts";
+import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
 
 const cardClass =
   "rounded-[24px] border border-stone-200 bg-white p-5 shadow-[0_16px_36px_-28px_rgba(28,25,23,0.28)]";
@@ -73,6 +74,10 @@ function actionTone(action) {
   return "stone";
 }
 
+function formatActionOption(action) {
+  return actionLabel(action);
+}
+
 export default function SellerTeamAuditPage() {
   const { storeId } = useParams();
   const { sellerContext } = useOutletContext() || {};
@@ -124,15 +129,14 @@ export default function SellerTeamAuditPage() {
   }
 
   if (auditQuery.isError) {
-    const statusCode = Number(auditQuery.error?.response?.status || 0);
     return (
       <section className={cardClass}>
         <p className="text-sm text-rose-600">
-          {statusCode === 404
-            ? "Store not found."
-            : auditQuery.error?.response?.data?.message ||
-              auditQuery.error?.message ||
-              "Failed to load seller team audit logs."}
+          {getSellerRequestErrorMessage(auditQuery.error, {
+            permissionMessage:
+              "Your current seller access does not include the team audit viewer.",
+            fallbackMessage: "Failed to load seller team audit logs.",
+          })}
         </p>
       </section>
     );
@@ -219,7 +223,7 @@ export default function SellerTeamAuditPage() {
             >
               {actionOptions.map((action) => (
                 <option key={action || "ALL"} value={action}>
-                  {action || "All team actions"}
+                  {action ? formatActionOption(action) : "All team actions"}
                 </option>
               ))}
             </select>
@@ -254,7 +258,9 @@ export default function SellerTeamAuditPage() {
                   className="grid grid-cols-[1.1fr_1fr_1fr_1.4fr_0.9fr] gap-3 px-4 py-4 text-sm text-stone-700"
                 >
                   <div className="space-y-2">
-                    <Badge tone={actionTone(item.action)}>{actionLabel(item.action)}</Badge>
+                    <Badge tone={item.actionMeta?.tone || actionTone(item.action)}>
+                      {item.actionMeta?.label || actionLabel(item.action)}
+                    </Badge>
                     <p className="text-xs text-stone-500">Log #{item.id}</p>
                   </div>
                   <div>
@@ -266,7 +272,9 @@ export default function SellerTeamAuditPage() {
                       {formatActor(item.target?.user)}
                     </p>
                     <p className="mt-1 text-xs text-stone-500">
-                      {item.target?.roleCode || "-"} {item.target?.memberId ? `• Member #${item.target.memberId}` : ""}
+                      {item.target?.snapshot?.roleCode || item.target?.roleCode || "-"}{" "}
+                      {item.target?.snapshot?.status ? `• ${item.target.snapshot.status}` : ""}
+                      {item.target?.memberId ? ` • Member #${item.target.memberId}` : ""}
                     </p>
                   </div>
                   <div>
@@ -294,9 +302,13 @@ export default function SellerTeamAuditPage() {
           </div>
         ) : (
           <div className="mt-5 rounded-3xl border border-dashed border-stone-300 bg-stone-50 px-5 py-10 text-center">
-            <p className="text-lg font-semibold text-stone-950">No team audit rows yet</p>
+            <p className="text-lg font-semibold text-stone-950">
+              {actionFilter ? "No team audit rows match this action filter" : "No team audit rows yet"}
+            </p>
             <p className="mt-2 text-sm leading-6 text-stone-600">
-              This viewer will fill when seller team mutations succeed and write audit logs.
+              {actionFilter
+                ? "Try widening the audit action filter for this store."
+                : "This viewer will fill when seller team mutations succeed and write audit logs."}
             </p>
           </div>
         )}

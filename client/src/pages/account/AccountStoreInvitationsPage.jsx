@@ -15,6 +15,8 @@ function Badge({ children, tone = "amber" }) {
   const toneClass =
     tone === "emerald"
       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : tone === "rose"
+        ? "border-rose-200 bg-rose-50 text-rose-700"
       : "border-amber-200 bg-amber-50 text-amber-800";
 
   return (
@@ -22,6 +24,39 @@ function Badge({ children, tone = "amber" }) {
       {children}
     </span>
   );
+}
+
+function formatDateTime(value) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("id-ID", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function getInvitationTone(item) {
+  if (item?.invitationState === "EXPIRED") return "rose";
+  return "amber";
+}
+
+function getInvitationMutationErrorMessage(error, fallbackMessage) {
+  const code = String(error?.response?.data?.code || "").toUpperCase();
+  if (code === "INVITATION_EXPIRED") {
+    return "This invitation expired. Ask the store owner or admin to send it again.";
+  }
+  if (code === "INVITATION_ALREADY_ACCEPTED") {
+    return "This invitation was already accepted. Open the seller workspace from your active stores.";
+  }
+  if (code === "INVITATION_ALREADY_DECLINED") {
+    return "This invitation was already declined or closed. A new re-invite is required before you can act again.";
+  }
+  if (code === "INVITATION_NOT_FOUND") {
+    return "Invitation not found for this account.";
+  }
+  if (code === "INVALID_MEMBER_ID") {
+    return "Invitation reference is invalid.";
+  }
+  return error?.response?.data?.message || error?.message || fallbackMessage;
 }
 
 export default function AccountStoreInvitationsPage() {
@@ -48,14 +83,15 @@ export default function AccountStoreInvitationsPage() {
         store: result?.data?.store || null,
       });
       await queryClient.invalidateQueries({ queryKey: ["seller", "invitations"] });
+      await queryClient.invalidateQueries({ queryKey: ["seller", "team"] });
     },
     onError: (error) => {
       setFeedback({
         type: "error",
-        message:
-          error?.response?.data?.message ||
-          error?.message ||
-          "Failed to accept store invitation.",
+        message: getInvitationMutationErrorMessage(
+          error,
+          "Failed to accept store invitation."
+        ),
       });
     },
     onSettled: () => {
@@ -75,14 +111,15 @@ export default function AccountStoreInvitationsPage() {
         message: result?.message || "Store invitation declined.",
       });
       await queryClient.invalidateQueries({ queryKey: ["seller", "invitations"] });
+      await queryClient.invalidateQueries({ queryKey: ["seller", "team"] });
     },
     onError: (error) => {
       setFeedback({
         type: "error",
-        message:
-          error?.response?.data?.message ||
-          error?.message ||
-          "Failed to decline store invitation.",
+        message: getInvitationMutationErrorMessage(
+          error,
+          "Failed to decline store invitation."
+        ),
       });
     },
     onSettled: () => {
@@ -93,6 +130,7 @@ export default function AccountStoreInvitationsPage() {
   const items = Array.isArray(invitationsQuery.data?.items)
     ? invitationsQuery.data.items
     : [];
+  const actionableCount = items.filter((item) => item.isActionable).length;
 
   if (invitationsQuery.isLoading) {
     return (
@@ -127,11 +165,14 @@ export default function AccountStoreInvitationsPage() {
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
               These invitations are for existing accounts only. Accepting an invitation activates
-              your seller membership for the target store. No email token flow is used in this
-              phase.
+              your seller membership for the target store. Invitations in this phase live on the
+              membership row itself, so pending, expired, accepted, and declined outcomes stay
+              aligned with seller team lifecycle and audit.
             </p>
           </div>
-          <Badge>{items.length} Pending</Badge>
+          <Badge tone={actionableCount > 0 ? "amber" : "rose"}>
+            {actionableCount} Actionable
+          </Badge>
         </div>
       </section>
 
@@ -183,10 +224,12 @@ export default function AccountStoreInvitationsPage() {
                       <h2 className="text-lg font-semibold text-slate-950">
                         {item.store?.name || "Store"}
                       </h2>
-                      <Badge>{item.status}</Badge>
+                      <Badge tone={getInvitationTone(item)}>
+                        {item.stateMeta?.label || item.invitationState || item.status}
+                      </Badge>
                     </div>
                     <p className="mt-1 text-sm text-slate-500">
-                      Role on accept:{" "}
+                      Role on action:{" "}
                       <span className="font-medium text-slate-700">
                         {item.roleName || item.roleCode}
                       </span>
@@ -217,17 +260,22 @@ export default function AccountStoreInvitationsPage() {
                         Invited At
                       </dt>
                       <dd className="mt-2 text-sm font-medium text-slate-900">
-                        {item.invitedAt ? new Date(item.invitedAt).toLocaleString() : "-"}
+                        {formatDateTime(item.invitedAt)}
                       </dd>
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                       <dt className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                         <BriefcaseBusiness className="h-3.5 w-3.5" />
-                        Access
+                        Invitation State
                       </dt>
                       <dd className="mt-2 text-sm font-medium text-slate-900">
-                        Seller workspace activates after acceptance
+                        {item.stateMeta?.description || "Seller workspace activates after acceptance"}
                       </dd>
+                      {item.expiresAt ? (
+                        <p className="mt-2 text-xs text-slate-500">
+                          Expires: {formatDateTime(item.expiresAt)}
+                        </p>
+                      ) : null}
                     </div>
                   </dl>
                 </div>
@@ -236,7 +284,7 @@ export default function AccountStoreInvitationsPage() {
                   <button
                     type="button"
                     onClick={() => acceptMutation.mutate(item.memberId)}
-                    disabled={busyActionKey !== ""}
+                    disabled={busyActionKey !== "" || !item.isActionable}
                     className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <CheckCircle2 className="h-4 w-4" />
@@ -247,7 +295,7 @@ export default function AccountStoreInvitationsPage() {
                   <button
                     type="button"
                     onClick={() => declineMutation.mutate(item.memberId)}
-                    disabled={busyActionKey !== ""}
+                    disabled={busyActionKey !== "" || !item.isActionable}
                     className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <XCircle className="h-4 w-4" />
@@ -256,8 +304,9 @@ export default function AccountStoreInvitationsPage() {
                     </span>
                   </button>
                   <p className="text-xs leading-5 text-slate-500">
-                    Decline closes this invitation for now. This phase still does not include
-                    resend or email-token acceptance.
+                    {item.isActionable
+                      ? "Decline closes this invitation for now. This phase still does not include email-token acceptance."
+                      : "This invitation is no longer actionable from the account lane. Ask the store owner or admin to send it again."}
                   </p>
                 </div>
               </div>
