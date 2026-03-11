@@ -4,47 +4,17 @@ import { Link, useOutletContext, useParams } from "react-router-dom";
 import { Boxes, EyeOff, Package, Search, Store, Tag } from "lucide-react";
 import { getSellerProducts } from "../../api/sellerProducts.ts";
 import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
-
-const cardClass =
-  "rounded-[24px] border border-stone-200 bg-white p-5 shadow-[0_16px_36px_-28px_rgba(28,25,23,0.28)]";
-
-function Badge({ children, tone = "stone" }) {
-  const toneClass =
-    tone === "emerald"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-      : tone === "amber"
-        ? "border-amber-200 bg-amber-50 text-amber-800"
-        : tone === "sky"
-          ? "border-sky-200 bg-sky-50 text-sky-700"
-          : tone === "rose"
-            ? "border-rose-200 bg-rose-50 text-rose-700"
-            : "border-stone-200 bg-stone-100 text-stone-700";
-
-  return (
-    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${toneClass}`}>
-      {children}
-    </span>
-  );
-}
-
-function StatCard({ label, value, hint, Icon }) {
-  return (
-    <article className={cardClass}>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">
-            {label}
-          </p>
-          <p className="mt-3 text-2xl font-semibold text-stone-950">{value}</p>
-          {hint ? <p className="mt-2 text-sm leading-6 text-stone-600">{hint}</p> : null}
-        </div>
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-stone-100 text-stone-700">
-          <Icon className="h-5 w-5" />
-        </div>
-      </div>
-    </article>
-  );
-}
+import {
+  sellerFieldClass,
+  sellerSecondaryButtonClass,
+  SellerWorkspaceBadge,
+  SellerWorkspaceEmptyState,
+  SellerWorkspaceFilterBar,
+  SellerWorkspacePanel,
+  SellerWorkspaceStatePanel,
+  SellerWorkspaceSectionHeader,
+  SellerWorkspaceStatCard,
+} from "../../components/seller/SellerWorkspaceFoundation.jsx";
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat("id-ID", {
@@ -120,33 +90,37 @@ export default function SellerCatalogPage() {
 
   if (!canViewProducts) {
     return (
-      <section className={cardClass}>
-        <p className="text-sm text-rose-600">
-          Your current seller access does not include catalog visibility.
-        </p>
-      </section>
+      <SellerWorkspaceStatePanel
+        title="Catalog visibility is unavailable"
+        description="Your current seller access does not include catalog visibility."
+        tone="error"
+        Icon={Package}
+      />
     );
   }
 
   if (productsQuery.isLoading) {
     return (
-      <section className={cardClass}>
-        <p className="text-sm text-stone-500">Loading store products from seller catalog...</p>
-      </section>
+      <SellerWorkspaceStatePanel
+        title="Loading seller catalog"
+        description="Loading store products from the seller catalog."
+        Icon={Package}
+      />
     );
   }
 
   if (productsQuery.isError) {
     return (
-      <section className={cardClass}>
-        <p className="text-sm text-rose-600">
-          {getSellerRequestErrorMessage(productsQuery.error, {
-            permissionMessage:
-              "Your current seller access does not include catalog visibility.",
-            fallbackMessage: "Failed to load seller products.",
-          })}
-        </p>
-      </section>
+      <SellerWorkspaceStatePanel
+        title="Failed to load seller products"
+        description={getSellerRequestErrorMessage(productsQuery.error, {
+          permissionMessage:
+            "Your current seller access does not include catalog visibility.",
+          fallbackMessage: "Failed to load seller products.",
+        })}
+        tone="error"
+        Icon={Package}
+      />
     );
   }
 
@@ -156,48 +130,44 @@ export default function SellerCatalogPage() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[26px] border border-stone-200 bg-[linear-gradient(135deg,#f5f3ff_0%,#ffffff_40%,#ecfeff_100%)] p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-stone-500">
-              Seller Catalog
-            </p>
-            <h2 className="mt-3 text-2xl font-semibold text-stone-950">
-              Read-only product list for this store
-            </h2>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-stone-600">
-              This seller-scoped list uses <code className="mx-1">Product.storeId</code> as the
-              tenant boundary. It can show non-public products owned by the current store without
-              changing admin or storefront contracts.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Badge tone="emerald">{sellerContext?.access?.roleCode || "UNKNOWN"}</Badge>
-            <Badge tone="sky">{sellerContext?.store?.slug || "store"}</Badge>
-          </div>
-        </div>
-      </section>
+      <SellerWorkspaceSectionHeader
+        eyebrow="Seller Catalog"
+        title="Read-only product list for this store"
+        description={
+          <>
+            This seller-scoped list uses <code className="mx-1">Product.storeId</code> as the
+            tenant boundary. It can show non-public products owned by the current store without
+            changing admin or storefront contracts.
+          </>
+        }
+        actions={[
+          <SellerWorkspaceBadge key="role" label={sellerContext?.access?.roleCode || "UNKNOWN"} tone="emerald" />,
+          <SellerWorkspaceBadge key="store" label={sellerContext?.store?.slug || "store"} tone="sky" />,
+        ]}
+      />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard
+        <SellerWorkspaceStatCard
           label="Visible Rows"
           value={String(pagination.total || 0)}
           hint="Tenant-scoped product rows for this store."
           Icon={Package}
         />
-        <StatCard
+        <SellerWorkspaceStatCard
           label="Published Flag On"
           value={String(productStats.publishedCount)}
           hint={`Private or unpublished in page: ${productStats.privateCount}`}
           Icon={Store}
+          tone="emerald"
         />
-        <StatCard
+        <SellerWorkspaceStatCard
           label="Storefront Ready"
           value={String(productStats.storefrontReadyCount)}
           hint={`Published but still blocked by status: ${productStats.publishedHiddenCount}`}
           Icon={Tag}
+          tone="amber"
         />
-        <StatCard
+        <SellerWorkspaceStatCard
           label="Draft / Inactive"
           value={String(productStats.draftCount + productStats.inactiveCount)}
           hint={`Draft: ${productStats.draftCount} · Inactive: ${productStats.inactiveCount}`}
@@ -205,31 +175,31 @@ export default function SellerCatalogPage() {
         />
       </section>
 
-      <section className={cardClass}>
+      <SellerWorkspaceFilterBar>
         <div className="grid gap-3 lg:grid-cols-[1.4fr_0.8fr_0.8fr_auto]">
           <label className="space-y-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
+            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
               Keyword
             </span>
-            <div className="flex items-center rounded-2xl border border-stone-200 bg-stone-50 px-3">
-              <Search className="h-4 w-4 text-stone-400" />
+            <div className="flex h-11 items-center rounded-xl border border-slate-200 bg-white px-3">
+              <Search className="h-4 w-4 text-slate-400" />
               <input
                 value={filters.keyword}
                 onChange={(event) => handleFilterChange("keyword", event.target.value)}
                 placeholder="Search name, slug, or SKU"
-                className="w-full bg-transparent px-3 py-3 text-sm text-stone-900 outline-none"
+                className="w-full bg-transparent px-3 text-sm text-slate-700 outline-none"
               />
             </div>
           </label>
 
           <label className="space-y-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
+            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
               Status
             </span>
             <select
               value={filters.status}
               onChange={(event) => handleFilterChange("status", event.target.value)}
-              className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-900 outline-none"
+              className={sellerFieldClass}
             >
               <option value="">All statuses</option>
               <option value="active">Active</option>
@@ -239,13 +209,13 @@ export default function SellerCatalogPage() {
           </label>
 
           <label className="space-y-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
+            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
               Publish Flag
             </span>
             <select
               value={filters.published}
               onChange={(event) => handleFilterChange("published", event.target.value)}
-              className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-900 outline-none"
+              className={sellerFieldClass}
             >
               <option value="">All publish states</option>
               <option value="true">Published flag on</option>
@@ -265,29 +235,29 @@ export default function SellerCatalogPage() {
                   limit: 20,
                 })
               }
-              className="rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700"
+              className={sellerSecondaryButtonClass}
             >
-              Reset
+              Clear filters
             </button>
           </div>
         </div>
-      </section>
+      </SellerWorkspaceFilterBar>
 
-      <section className={cardClass}>
+      <SellerWorkspacePanel className="p-5 sm:p-5">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-lg font-semibold text-stone-950">Store Products</h3>
-            <p className="mt-1 text-sm text-stone-500">
+            <h3 className="text-lg font-semibold text-slate-900">Store Products</h3>
+            <p className="mt-1 text-sm text-slate-500">
               Read-only seller list scoped by active store. Status controls storefront eligibility,
               while the publish flag controls whether the product can ever surface publicly.
             </p>
           </div>
-          <Badge tone="amber">Read-only</Badge>
+          <SellerWorkspaceBadge label="Read-only" tone="amber" />
         </div>
 
         {items.length > 0 ? (
-          <div className="mt-5 overflow-hidden rounded-3xl border border-stone-200">
-            <div className="grid grid-cols-[1.8fr_0.9fr_0.9fr_1fr_1fr_0.8fr] gap-3 border-b border-stone-200 bg-stone-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
+          <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="grid grid-cols-[1.8fr_0.9fr_0.9fr_1fr_1fr_0.8fr] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
               <span>Product</span>
               <span>Status</span>
               <span>Visibility</span>
@@ -295,11 +265,11 @@ export default function SellerCatalogPage() {
               <span>Stock</span>
               <span>Action</span>
             </div>
-            <div className="divide-y divide-stone-200 bg-white">
+            <div className="divide-y divide-slate-200 bg-white">
               {items.map((item) => (
                 <div
                   key={item.id}
-                  className="grid grid-cols-[1.8fr_0.9fr_0.9fr_1fr_1fr_0.8fr] gap-3 px-4 py-4 text-sm text-stone-700"
+                  className="grid grid-cols-[1.8fr_0.9fr_0.9fr_1fr_1fr_0.8fr] gap-3 px-4 py-4 text-sm text-slate-700"
                 >
                   <div className="min-w-0">
                     <div className="flex items-start gap-3">
@@ -307,69 +277,75 @@ export default function SellerCatalogPage() {
                         <img
                           src={item.mediaPreviewUrl}
                           alt={item.name}
-                          className="h-12 w-12 rounded-2xl object-cover"
+                          className="h-12 w-12 rounded-xl border border-slate-200 object-cover"
                         />
                       ) : (
-                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-stone-100 text-stone-500">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500">
                           <Boxes className="h-4 w-4" />
                         </div>
                       )}
                       <div className="min-w-0">
-                        <p className="truncate font-semibold text-stone-950">{item.name}</p>
-                        <p className="mt-1 truncate text-xs text-stone-500">{item.slug}</p>
+                        <p className="truncate font-semibold text-slate-900">{item.name}</p>
+                        <p className="mt-1 truncate text-xs text-slate-500">{item.slug}</p>
                         <div className="mt-2 flex flex-wrap gap-2">
-                          {item.sku ? <Badge tone="stone">SKU {item.sku}</Badge> : null}
-                          {item.category?.name ? <Badge tone="sky">{item.category.name}</Badge> : null}
+                          {item.sku ? <SellerWorkspaceBadge label={`SKU ${item.sku}`} /> : null}
+                          {item.category?.name ? <SellerWorkspaceBadge label={item.category.name} tone="sky" /> : null}
                         </div>
-                        <p className="mt-2 text-xs text-stone-500">
+                        <p className="mt-2 text-xs text-slate-500">
                           Updated {formatDateTime(item.updatedAt)}
                         </p>
                       </div>
                     </div>
                   </div>
                   <div>
-                    <Badge tone={getStatusTone(item.statusMeta?.code || item.status)}>
-                      {item.statusMeta?.label || String(item.status || "draft").toUpperCase()}
-                    </Badge>
-                    <p className="mt-2 text-xs text-stone-500">
+                    <SellerWorkspaceBadge
+                      label={item.statusMeta?.label || String(item.status || "draft").toUpperCase()}
+                      tone={getStatusTone(item.statusMeta?.code || item.status)}
+                    />
+                    <p className="mt-2 text-xs text-slate-500">
                       {item.statusMeta?.storefrontEligible
                         ? "Eligible for storefront when publish is on."
                         : "Blocked from storefront until status becomes active."}
                     </p>
                   </div>
                   <div>
-                    <Badge tone={getVisibilityTone(item.visibility)}>
-                      {item.visibility?.publishLabel || item.visibility?.label || (item.published ? "Published" : "Private")}
-                    </Badge>
-                    <p className="mt-2 text-xs text-stone-500">
+                    <SellerWorkspaceBadge
+                      label={
+                        item.visibility?.publishLabel ||
+                        item.visibility?.label ||
+                        (item.published ? "Published" : "Private")
+                      }
+                      tone={getVisibilityTone(item.visibility)}
+                    />
+                    <p className="mt-2 text-xs text-slate-500">
                       {item.visibility?.storefrontLabel || "Hidden from storefront"}
                     </p>
                     {item.visibility?.storefrontReason ? (
-                      <p className="mt-1 text-xs text-stone-400">{item.visibility.storefrontReason}</p>
+                      <p className="mt-1 text-xs text-slate-400">{item.visibility.storefrontReason}</p>
                     ) : null}
                   </div>
                   <div>
-                    <p className="font-semibold text-stone-950">
+                    <p className="font-semibold text-slate-900">
                       {formatCurrency(item.pricing?.effectivePrice)}
                     </p>
                     {item.pricing?.salePrice ? (
-                      <p className="mt-1 text-xs text-stone-500 line-through">
+                      <p className="mt-1 text-xs text-slate-500 line-through">
                         {formatCurrency(item.pricing.price)}
                       </p>
                     ) : (
-                      <p className="mt-1 text-xs text-stone-500">Base price</p>
+                      <p className="mt-1 text-xs text-slate-500">Base price</p>
                     )}
                   </div>
                   <div>
-                    <p className="font-semibold text-stone-950">{item.inventory?.stock ?? 0}</p>
-                    <p className="mt-1 text-xs text-stone-500">
+                    <p className="font-semibold text-slate-900">{item.inventory?.stock ?? 0}</p>
+                    <p className="mt-1 text-xs text-slate-500">
                       {item.inventory?.inStock ? "In stock" : "Out of stock"}
                     </p>
                   </div>
                   <div className="flex items-start">
                     <Link
                       to={`/seller/stores/${storeId}/catalog/${item.id}`}
-                      className="inline-flex items-center gap-2 rounded-full border border-stone-200 px-3 py-1.5 text-xs font-semibold text-stone-700 transition hover:border-stone-300 hover:bg-stone-50"
+                      className="inline-flex h-9 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
                     >
                       <Tag className="h-3.5 w-3.5" />
                       View detail
@@ -380,22 +356,25 @@ export default function SellerCatalogPage() {
             </div>
           </div>
         ) : (
-          <div className="mt-5 rounded-3xl border border-dashed border-stone-300 bg-stone-50 px-5 py-10 text-center">
-            <p className="text-lg font-semibold text-stone-950">
-              {hasActiveFilters
-                ? "No products match the current seller filters"
-                : "No products found for this store"}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-stone-600">
-              {hasActiveFilters
-                ? "Try widening the keyword, status, or publish filters for this store."
-                : "Confirm whether this store already owns product rows in the current workspace."}
-            </p>
+          <div className="mt-5">
+            <SellerWorkspaceEmptyState
+              title={
+                hasActiveFilters
+                  ? "No products match the current seller filters"
+                  : "No products found for this store"
+              }
+              description={
+                hasActiveFilters
+                  ? "Try widening the keyword, status, or publish filters for this store."
+                  : "Confirm whether this store already owns product rows in the current workspace."
+              }
+              icon={<Boxes className="h-5 w-5" />}
+            />
           </div>
         )}
 
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 pt-5">
-          <p className="text-sm text-stone-500">
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-5">
+          <p className="text-sm text-slate-500">
             Page {pagination.page} of {totalPages} · Total rows {pagination.total}
           </p>
           <div className="flex gap-2">
@@ -403,7 +382,7 @@ export default function SellerCatalogPage() {
               type="button"
               onClick={() => handleFilterChange("page", Math.max(1, filters.page - 1))}
               disabled={filters.page <= 1}
-              className="rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className={sellerSecondaryButtonClass}
             >
               Previous
             </button>
@@ -411,13 +390,13 @@ export default function SellerCatalogPage() {
               type="button"
               onClick={() => handleFilterChange("page", Math.min(totalPages, filters.page + 1))}
               disabled={filters.page >= totalPages}
-              className="rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className={sellerSecondaryButtonClass}
             >
               Next
             </button>
           </div>
         </div>
-      </section>
+      </SellerWorkspacePanel>
     </div>
   );
 }

@@ -157,6 +157,19 @@ function buildTeamCapabilities(args: {
   };
 }
 
+function getActorUserId(req: any) {
+  return Number(req?.user?.id || 0) || null;
+}
+
+function isOwnerUserTarget(args: {
+  sellerAccess: any;
+  targetUserId: number | null | undefined;
+}) {
+  const ownerUserId = Number(args.sellerAccess?.store?.ownerUserId || 0) || null;
+  const targetUserId = Number(args.targetUserId || 0) || null;
+  return ownerUserId !== null && targetUserId !== null && ownerUserId === targetUserId;
+}
+
 function buildMemberGovernance(args: {
   sellerAccess: any;
   member: any;
@@ -175,7 +188,12 @@ function buildMemberGovernance(args: {
     String(serializedMember.invitation?.state || "").toUpperCase() === "EXPIRED";
   const roleCode = String(serializedMember.roleCode || "");
   const isSelf = actorMemberId !== null && Number(serializedMember.id) === actorMemberId;
-  const isOwner = roleCode === "STORE_OWNER";
+  const isOwner =
+    roleCode === "STORE_OWNER" ||
+    isOwnerUserTarget({
+      sellerAccess: args.sellerAccess,
+      targetUserId: Number(serializedMember.userId || 0) || null,
+    });
   const manageableTarget = canManageRole({
     actorRoleCode,
     targetRoleCode: roleCode,
@@ -185,6 +203,7 @@ function buildMemberGovernance(args: {
     canManageRoles &&
     !isSelf &&
     !isOwner &&
+    currentStatus !== SELLER_TEAM_PERSISTENCE_STATUS.REMOVED &&
     manageableTarget;
   const canToggleStatus =
     canManageMembers &&
@@ -228,8 +247,10 @@ function buildMemberGovernance(args: {
   } else if (currentStatus === SELLER_TEAM_PERSISTENCE_STATUS.INVITED) {
     restrictionReason =
       "Invitation rows can still have role adjustments, but activation and removal stay closed here.";
-  } else if (currentStatus === SELLER_TEAM_PERSISTENCE_STATUS.REMOVED && !canReinvite) {
-    restrictionReason = "Removed memberships can only be reopened through re-invite when allowed.";
+  } else if (currentStatus === SELLER_TEAM_PERSISTENCE_STATUS.REMOVED) {
+    restrictionReason = canReinvite
+      ? "Removed memberships can only change role while being reopened through re-invite."
+      : "Removed memberships can only be reopened through re-invite when allowed.";
   }
 
   return {
@@ -1020,6 +1041,8 @@ router.post(
         findUserByEmail(email),
         resolveStoreRoleByCode(roleCode),
       ]);
+      const actorUserId = getActorUserId(req);
+      const targetUserId = Number((user as any)?.id || 0) || null;
 
       if (!user) {
         return buildTeamMutationError(
@@ -1032,6 +1055,24 @@ router.post(
 
       if (!targetRole) {
         return buildTeamMutationError(res, 400, "INVALID_STORE_ROLE", "Invalid seller role.");
+      }
+
+      if (isOwnerUserTarget({ sellerAccess, targetUserId })) {
+        return buildTeamMutationError(
+          res,
+          403,
+          "OWNER_MUTATION_FORBIDDEN",
+          "Store owner membership is managed through the owner bridge and cannot be invited here."
+        );
+      }
+
+      if (targetUserId !== null && actorUserId !== null && targetUserId === actorUserId) {
+        return buildTeamMutationError(
+          res,
+          403,
+          "SELF_MUTATION_FORBIDDEN",
+          "You cannot invite your own account into this store again."
+        );
       }
 
       if (
@@ -1176,8 +1217,9 @@ router.post(
 
       const currentRoleCode = String(getAttr((member as any).role, "code") || "");
       const currentStatus = String(getAttr(member, "status") || "").toUpperCase();
+      const targetUserId = Number(getAttr(member, "userId")) || null;
 
-      if (Number(getAttr(member, "userId")) === Number((req as any).user?.id)) {
+      if (targetUserId !== null && targetUserId === getActorUserId(req)) {
         return buildTeamMutationError(
           res,
           403,
@@ -1186,7 +1228,7 @@ router.post(
         );
       }
 
-      if (currentRoleCode === "STORE_OWNER") {
+      if (isOwnerUserTarget({ sellerAccess, targetUserId })) {
         return buildTeamMutationError(
           res,
           403,
@@ -1323,6 +1365,8 @@ router.post(
         findUserByEmail(email),
         resolveStoreRoleByCode(roleCode),
       ]);
+      const actorUserId = getActorUserId(req);
+      const targetUserId = Number((user as any)?.id || 0) || null;
 
       if (!user) {
         return buildTeamMutationError(res, 404, "MEMBER_EMAIL_NOT_FOUND", "No user with this email was found.");
@@ -1330,6 +1374,24 @@ router.post(
 
       if (!targetRole) {
         return buildTeamMutationError(res, 400, "INVALID_STORE_ROLE", "Invalid seller role.");
+      }
+
+      if (isOwnerUserTarget({ sellerAccess, targetUserId })) {
+        return buildTeamMutationError(
+          res,
+          403,
+          "OWNER_MUTATION_FORBIDDEN",
+          "Store owner membership is managed through the owner bridge and cannot be attached here."
+        );
+      }
+
+      if (targetUserId !== null && actorUserId !== null && targetUserId === actorUserId) {
+        return buildTeamMutationError(
+          res,
+          403,
+          "SELF_MUTATION_FORBIDDEN",
+          "You cannot attach your own account into this store again."
+        );
       }
 
       if (
@@ -1477,7 +1539,9 @@ router.patch(
 
       const currentRoleCode = String(getAttr((member as any).role, "code") || "");
       const currentStatus = toTeamStatus(getAttr(member, "status"));
-      if (Number(getAttr(member, "userId")) === Number((req as any).user?.id)) {
+      const targetUserId = Number(getAttr(member, "userId")) || null;
+
+      if (targetUserId !== null && targetUserId === getActorUserId(req)) {
         return buildTeamMutationError(
           res,
           403,
@@ -1486,12 +1550,21 @@ router.patch(
         );
       }
 
-      if (currentRoleCode === "STORE_OWNER") {
+      if (isOwnerUserTarget({ sellerAccess, targetUserId })) {
         return buildTeamMutationError(
           res,
           403,
           "OWNER_MUTATION_FORBIDDEN",
           "Store owner role cannot be changed in this phase."
+        );
+      }
+
+      if (currentStatus === SELLER_TEAM_PERSISTENCE_STATUS.REMOVED) {
+        return buildTeamMutationError(
+          res,
+          409,
+          "MEMBER_ROLE_CHANGE_REINVITE_REQUIRED",
+          "Removed memberships can only change role while being reopened through re-invite."
         );
       }
 
@@ -1589,9 +1662,10 @@ router.patch(
       const currentRoleCode = String(getAttr((member as any).role, "code") || "");
       const currentStatus = String(getAttr(member, "status") || "").toUpperCase();
       const currentApiStatus = toTeamStatus(currentStatus);
-      const actorUserId = Number((req as any).user?.id || 0) || null;
+      const actorUserId = getActorUserId(req);
+      const targetUserId = Number(getAttr(member, "userId")) || null;
 
-      if (Number(getAttr(member, "userId")) === Number(actorUserId || -1)) {
+      if (targetUserId !== null && targetUserId === Number(actorUserId || -1)) {
         return buildTeamMutationError(
           res,
           403,
@@ -1600,7 +1674,7 @@ router.patch(
         );
       }
 
-      if (currentRoleCode === "STORE_OWNER") {
+      if (isOwnerUserTarget({ sellerAccess, targetUserId })) {
         return buildTeamMutationError(
           res,
           403,
@@ -1724,7 +1798,9 @@ router.patch(
       }
 
       const currentRoleCode = String(getAttr((member as any).role, "code") || "");
-      if (Number(getAttr(member, "userId")) === Number((req as any).user?.id)) {
+      const targetUserId = Number(getAttr(member, "userId")) || null;
+
+      if (targetUserId !== null && targetUserId === getActorUserId(req)) {
         return buildTeamMutationError(
           res,
           403,
@@ -1733,7 +1809,7 @@ router.patch(
         );
       }
 
-      if (currentRoleCode === "STORE_OWNER") {
+      if (isOwnerUserTarget({ sellerAccess, targetUserId })) {
         return buildTeamMutationError(
           res,
           403,

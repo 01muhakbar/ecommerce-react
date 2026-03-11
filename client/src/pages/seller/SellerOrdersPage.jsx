@@ -4,74 +4,62 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search, ShoppingBag } from "lucide-react";
 import { getSellerSuborders, updateSellerSuborderFulfillment } from "../../api/sellerOrders.ts";
 import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
-
-const cardClass =
-  "rounded-[24px] border border-stone-200 bg-white p-5 shadow-[0_16px_36px_-28px_rgba(28,25,23,0.28)]";
+import {
+  sellerFieldClass,
+  sellerPrimaryButtonClass,
+  sellerSecondaryButtonClass,
+  SellerWorkspaceBadge,
+  SellerWorkspaceEmptyState,
+  SellerWorkspaceFilterBar,
+  SellerWorkspaceNotice,
+  SellerWorkspacePanel,
+  SellerWorkspaceStatePanel,
+  SellerWorkspaceSectionHeader,
+  SellerWorkspaceStatCard,
+} from "../../components/seller/SellerWorkspaceFoundation.jsx";
 
 const PAYMENT_STATUS_CLASS = {
-  UNPAID: "border-stone-200 bg-stone-100 text-stone-700",
-  PENDING_CONFIRMATION: "border-amber-200 bg-amber-50 text-amber-800",
-  PAID: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  FAILED: "border-rose-200 bg-rose-50 text-rose-700",
-  EXPIRED: "border-stone-300 bg-stone-200 text-stone-700",
-  CANCELLED: "border-stone-300 bg-stone-200 text-stone-700",
-  CREATED: "border-sky-200 bg-sky-50 text-sky-700",
-  REJECTED: "border-rose-200 bg-rose-50 text-rose-700",
+  UNPAID: "stone",
+  PARTIALLY_PAID: "amber",
+  PENDING_CONFIRMATION: "amber",
+  PAID: "emerald",
+  FAILED: "rose",
+  EXPIRED: "stone",
+  CANCELLED: "stone",
+  CREATED: "sky",
+  REJECTED: "rose",
 };
 
 const FULFILLMENT_STATUS_CLASS = {
-  UNFULFILLED: "border-stone-200 bg-stone-100 text-stone-700",
-  PROCESSING: "border-sky-200 bg-sky-50 text-sky-700",
-  SHIPPED: "border-indigo-200 bg-indigo-50 text-indigo-700",
-  DELIVERED: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  pending: "border-stone-200 bg-stone-100 text-stone-700",
-  paid: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  processing: "border-sky-200 bg-sky-50 text-sky-700",
-  shipped: "border-indigo-200 bg-indigo-50 text-indigo-700",
-  delivered: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  completed: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  cancelled: "border-stone-300 bg-stone-200 text-stone-700",
+  UNFULFILLED: "stone",
+  PROCESSING: "sky",
+  SHIPPED: "indigo",
+  DELIVERED: "emerald",
+  pending: "stone",
+  paid: "emerald",
+  processing: "sky",
+  shipped: "indigo",
+  delivered: "emerald",
+  completed: "emerald",
+  cancelled: "stone",
 };
 
 const CHECKOUT_MODE_CLASS = {
-  LEGACY: "border-stone-200 bg-stone-100 text-stone-700",
-  SINGLE_STORE: "border-sky-200 bg-sky-50 text-sky-700",
-  MULTI_STORE: "border-teal-200 bg-teal-50 text-teal-700",
+  LEGACY: "stone",
+  SINGLE_STORE: "sky",
+  MULTI_STORE: "teal",
 };
 
 const getStatusClass = (value, map) =>
   map[String(value || "").trim()] || map[String(value || "").toUpperCase()] ||
-  "border-stone-200 bg-stone-100 text-stone-700";
+  "stone";
 
 function StatusChip({ value, label, map = PAYMENT_STATUS_CLASS }) {
-  return (
-    <span
-      className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getStatusClass(
-        value,
-        map
-      )}`}
-    >
-      {label || String(value || "-")}
-    </span>
-  );
+  return <SellerWorkspaceBadge label={label || String(value || "-")} tone={getStatusClass(value, map)} />;
 }
 
 function InfoPill({ label, value }) {
-  return (
-    <span className="rounded-full border border-stone-200 bg-stone-100 px-3 py-1 text-xs font-semibold text-stone-700">
-      {label}: {value}
-    </span>
-  );
-}
-
-function StatCard({ label, value, hint }) {
-  return (
-    <article className={cardClass}>
-      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">{label}</p>
-      <p className="mt-3 text-2xl font-semibold text-stone-950">{value}</p>
-      {hint ? <p className="mt-2 text-sm leading-6 text-stone-600">{hint}</p> : null}
-    </article>
-  );
+  return <SellerWorkspaceBadge label={`${label}: ${value}`} />;
 }
 
 const getHasActiveFilters = ({ paymentStatus, fulfillmentStatus, keyword }) =>
@@ -230,6 +218,10 @@ export default function SellerOrdersPage() {
       const message =
         code === "INVALID_FULFILLMENT_TRANSITION"
           ? "This fulfillment step is no longer valid for the current suborder state."
+          : code === "SUBORDER_PAYMENT_NOT_SETTLED"
+            ? "This store split must be paid before seller fulfillment can move forward."
+            : code === "PARENT_ORDER_CANCELLED"
+              ? "Parent order is cancelled, so seller fulfillment can no longer move forward."
           : code === "FULFILLMENT_STATUS_ALREADY_SET"
             ? "This suborder is already on the requested fulfillment status."
             : code === "SUBORDER_NOT_FOUND"
@@ -264,45 +256,50 @@ export default function SellerOrdersPage() {
 
   if (!hasOrderPermission) {
     return (
-      <section className={cardClass}>
-        <p className="text-sm text-rose-600">
-          Your current seller access does not include order visibility.
-        </p>
-      </section>
+      <SellerWorkspaceStatePanel
+        title="Order visibility is unavailable"
+        description="Your current seller access does not include order visibility."
+        tone="error"
+        Icon={ShoppingBag}
+      />
     );
   }
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[26px] border border-stone-200 bg-[linear-gradient(135deg,#eff6ff_0%,#ffffff_52%,#fef3c7_100%)] p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-stone-500">
-              Seller Orders
-            </p>
-            <h2 className="mt-3 text-2xl font-semibold text-stone-950">
-              Seller suborder overview
-            </h2>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-stone-600">
-              This module only shows suborders belonging to the current store. All access stays
-              tenant-scoped and enforced by the backend seller access resolver.
-            </p>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500">
-              {fulfillmentGovernance?.actorHasManagePermission
-                ? `Phase 1 seller fulfillment is active here for direct suborder transitions only. It stays suborder-scoped and uses ${fulfillmentGovernance?.permissionKey || "ORDER_FULFILLMENT_MANAGE"} instead of parent order status updates.`
-                : `Seller fulfillment remains read-only for this actor. The mutation lane is reserved for roles with ${fulfillmentGovernance?.permissionKey || "ORDER_FULFILLMENT_MANAGE"}.`}
-            </p>
-          </div>
+      <SellerWorkspaceSectionHeader
+        eyebrow="Seller Orders"
+        title="Seller suborder overview"
+        description="This module only shows suborders belonging to the current store. All access stays tenant-scoped and enforced by the backend seller access resolver."
+        actions={[
+          <SellerWorkspaceBadge
+            key="mode"
+            label={fulfillmentGovernance?.actorHasManagePermission ? "Mutation open" : "Read only"}
+            tone={fulfillmentGovernance?.actorHasManagePermission ? "emerald" : "amber"}
+          />,
+          <SellerWorkspaceBadge
+            key="perm"
+            label={fulfillmentGovernance?.permissionKey || "ORDER_FULFILLMENT_MANAGE"}
+          />,
+        ]}
+      >
+        <p className="text-sm leading-6 text-slate-500">
+          {fulfillmentGovernance?.actorHasManagePermission
+            ? `Phase 1 seller fulfillment is active here for direct suborder transitions only. It stays suborder-scoped and uses ${fulfillmentGovernance?.permissionKey || "ORDER_FULFILLMENT_MANAGE"} instead of parent order status updates.`
+            : `Seller fulfillment remains read-only for this actor. The mutation lane is reserved for roles with ${fulfillmentGovernance?.permissionKey || "ORDER_FULFILLMENT_MANAGE"}.`}
+        </p>
+      </SellerWorkspaceSectionHeader>
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            <label className="text-sm">
-              <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
+      <SellerWorkspaceFilterBar>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <label className="text-sm">
+              <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
                 Payment
               </span>
               <select
                 value={paymentStatus}
                 onChange={(event) => patchSearch({ paymentStatus: event.target.value, page: 1 })}
-                className="w-full rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-700"
+                className={sellerFieldClass}
               >
                 <option value="">All</option>
                 <option value="UNPAID">UNPAID</option>
@@ -315,7 +312,7 @@ export default function SellerOrdersPage() {
             </label>
 
             <label className="text-sm">
-              <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
+              <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
                 Fulfillment
               </span>
               <select
@@ -323,7 +320,7 @@ export default function SellerOrdersPage() {
                 onChange={(event) =>
                   patchSearch({ fulfillmentStatus: event.target.value, page: 1 })
                 }
-                className="w-full rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-700"
+                className={sellerFieldClass}
               >
                 <option value="">All</option>
                 <option value="UNFULFILLED">UNFULFILLED</option>
@@ -335,61 +332,49 @@ export default function SellerOrdersPage() {
             </label>
 
             <label className="text-sm">
-              <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
+              <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
                 Search
               </span>
-              <div className="flex items-center rounded-2xl border border-stone-200 bg-white px-4">
-                <Search className="h-4 w-4 text-stone-400" />
+              <div className="flex h-11 items-center rounded-xl border border-slate-200 bg-white px-4">
+                <Search className="h-4 w-4 text-slate-400" />
                 <input
                   value={keyword}
                   onChange={(event) => patchSearch({ keyword: event.target.value, page: 1 })}
                   placeholder="Suborder or buyer"
-                  className="h-12 w-full bg-transparent px-3 text-sm outline-none"
+                  className="w-full bg-transparent px-3 text-sm text-slate-700 outline-none"
                 />
               </div>
             </label>
           </div>
-        </div>
-      </section>
+      </SellerWorkspaceFilterBar>
 
       {feedback ? (
-        <section
-          className={`rounded-[22px] border px-4 py-3 text-sm ${
-            feedback.type === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-              : "border-rose-200 bg-rose-50 text-rose-700"
-          }`}
-        >
+        <SellerWorkspaceNotice type={feedback.type === "success" ? "success" : "error"}>
           {feedback.message}
-        </section>
+        </SellerWorkspaceNotice>
       ) : null}
 
       {activeFilters.length > 0 ? (
         <div className="flex flex-wrap gap-2">
           {activeFilters.map((item) => (
-            <span
-              key={item}
-              className="rounded-full border border-stone-200 bg-stone-100 px-3 py-1 text-xs font-semibold text-stone-700"
-            >
-              {item}
-            </span>
+            <SellerWorkspaceBadge key={item} label={item} />
           ))}
         </div>
       ) : null}
 
       {!ordersQuery.isLoading && !ordersQuery.isError ? (
-        <section className={cardClass}>
+        <SellerWorkspacePanel className="p-5 sm:p-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
                 Fulfillment Governance
               </p>
-              <h3 className="mt-2 text-lg font-semibold text-stone-950">
+              <h3 className="mt-2 text-lg font-semibold text-slate-900">
                 {fulfillmentGovernance?.actorHasManagePermission
                   ? "Phase 1 seller fulfillment lane"
                   : "Fulfillment remains restricted for this actor"}
               </h3>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
                 {fulfillmentGovernance?.mutationBlockedReason ||
                   "Seller fulfillment mutations are still closed in the current workspace phase."}
               </p>
@@ -411,101 +396,98 @@ export default function SellerOrdersPage() {
             </div>
           </div>
 
-          <div className="mt-4 grid gap-3 text-sm text-stone-600 md:grid-cols-3">
-            <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
-              <p className="font-semibold text-stone-900">Safe later for seller</p>
+          <div className="mt-4 grid gap-3 text-sm text-slate-600 md:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <p className="font-semibold text-slate-900">Safe later for seller</p>
               <p className="mt-2 leading-6">
                 {formatActionList(fulfillmentGovernance?.sellerCandidateActions)}
               </p>
             </div>
-            <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
-              <p className="font-semibold text-stone-900">Read-only now</p>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <p className="font-semibold text-slate-900">Read-only now</p>
               <p className="mt-2 leading-6">
                 {formatActionList(fulfillmentGovernance?.readOnlyActions)}
               </p>
             </div>
-            <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
-              <p className="font-semibold text-stone-900">Still admin-only</p>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <p className="font-semibold text-slate-900">Still admin-only</p>
               <p className="mt-2 leading-6">
                 {formatActionList(fulfillmentGovernance?.adminOnlyActions)}
               </p>
             </div>
           </div>
-        </section>
+        </SellerWorkspacePanel>
       ) : null}
 
       {!ordersQuery.isLoading && !ordersQuery.isError ? (
         <section className="grid gap-4 md:grid-cols-3">
-          <StatCard
+          <SellerWorkspaceStatCard
             label="Visible Suborders"
             value={String(pagination.total || 0)}
             hint="Rows scoped to the active seller store only."
           />
-          <StatCard
+          <SellerWorkspaceStatCard
             label="Paid Split Orders"
             value={String(orderStats.paidCount)}
             hint={`Awaiting proof review: ${orderStats.reviewCount}`}
+            tone="emerald"
           />
-          <StatCard
+          <SellerWorkspaceStatCard
             label="Active Fulfillment"
             value={String(orderStats.activeFulfillmentCount)}
             hint="Processing or shipped suborders in the current page."
+            tone="amber"
           />
         </section>
       ) : null}
 
       {ordersQuery.isLoading ? (
-        <section className={cardClass}>
-          <p className="text-sm text-stone-500">Loading seller suborders...</p>
-        </section>
+        <SellerWorkspaceStatePanel
+          title="Loading seller suborders"
+          description="Fetching seller-scoped suborders for the active store."
+          Icon={ShoppingBag}
+        />
       ) : null}
 
       {ordersQuery.isError ? (
-        <section className={cardClass}>
-          <p className="text-sm text-rose-600">
-            {getSellerRequestErrorMessage(ordersQuery.error, {
-              permissionMessage:
-                "Your current seller access does not include order visibility.",
-              fallbackMessage: "Failed to load seller suborders.",
-            })}
-          </p>
-        </section>
+        <SellerWorkspaceStatePanel
+          title="Failed to load seller suborders"
+          description={getSellerRequestErrorMessage(ordersQuery.error, {
+            permissionMessage:
+              "Your current seller access does not include order visibility.",
+            fallbackMessage: "Failed to load seller suborders.",
+          })}
+          tone="error"
+          Icon={ShoppingBag}
+        />
       ) : null}
 
       {!ordersQuery.isLoading && !ordersQuery.isError && items.length === 0 ? (
-        <section className={cardClass}>
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-stone-100 text-stone-700">
-              <ShoppingBag className="h-5 w-5" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-stone-950">
-                {hasActiveFilters ? "No suborders match the current filters" : "No suborders found"}
-              </h3>
-              <p className="mt-1 text-sm text-stone-500">
-                {hasActiveFilters
-                  ? "Try widening payment, fulfillment, or keyword filters for this store."
-                  : "This store does not have seller-scoped suborders yet."}
-              </p>
-            </div>
-          </div>
-        </section>
+        <SellerWorkspaceEmptyState
+          title={hasActiveFilters ? "No suborders match the current filters" : "No suborders found"}
+          description={
+            hasActiveFilters
+              ? "Try widening payment, fulfillment, or keyword filters for this store."
+              : "This store does not have seller-scoped suborders yet."
+          }
+          icon={<ShoppingBag className="h-5 w-5" />}
+        />
       ) : null}
 
       {!ordersQuery.isLoading && !ordersQuery.isError && items.length > 0 ? (
         <div className="space-y-4">
           {items.map((item) => (
-            <article key={item.suborderId} className={cardClass}>
+            <SellerWorkspacePanel key={item.suborderId} className="p-5 sm:p-5">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="space-y-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
                       {item.suborderNumber}
                     </p>
-                    <h3 className="mt-2 text-xl font-semibold text-stone-950">
+                    <h3 className="mt-2 text-xl font-semibold text-slate-900">
                       Parent Order {item.order?.orderNumber || item.orderNumber}
                     </h3>
-                    <p className="mt-2 text-sm text-stone-500">{item.scope?.relationLabel}</p>
+                    <p className="mt-2 text-sm text-slate-500">{item.scope?.relationLabel}</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <StatusChip
@@ -531,24 +513,24 @@ export default function SellerOrdersPage() {
                       />
                     ) : null}
                   </div>
-                  <div className="grid gap-3 text-sm text-stone-600 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="grid gap-3 text-sm text-slate-600 sm:grid-cols-2 xl:grid-cols-4">
                     <p>
-                      <span className="font-semibold text-stone-900">Buyer:</span>{" "}
+                      <span className="font-semibold text-slate-900">Buyer:</span>{" "}
                       {item.buyer?.name || "-"}
                     </p>
                     <p>
-                      <span className="font-semibold text-stone-900">Items:</span> {item.itemCount}
+                      <span className="font-semibold text-slate-900">Items:</span> {item.itemCount}
                     </p>
                     <p>
-                      <span className="font-semibold text-stone-900">Total:</span>{" "}
+                      <span className="font-semibold text-slate-900">Total:</span>{" "}
                       {formatMoney(item.totalAmount)}
                     </p>
                     <p>
-                      <span className="font-semibold text-stone-900">Created:</span>{" "}
+                      <span className="font-semibold text-slate-900">Created:</span>{" "}
                       {formatDate(item.createdAt)}
                     </p>
                   </div>
-                  <div className="flex flex-wrap gap-2 text-xs text-stone-600">
+                  <div className="flex flex-wrap gap-2 text-xs text-slate-600">
                     <InfoPill
                       label="Parent lifecycle"
                       value={item.order?.statusMeta?.label || item.order?.status || "-"}
@@ -564,45 +546,45 @@ export default function SellerOrdersPage() {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4 text-sm text-stone-600 xl:w-[280px]">
-                  <p className="font-semibold text-stone-900">Operational Snapshot</p>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600 xl:w-[280px]">
+                  <p className="font-semibold text-slate-900">Operational Snapshot</p>
                   <p className="mt-2">
                     Suborder Payment:{" "}
-                    <span className="font-semibold text-stone-900">
+                    <span className="font-semibold text-slate-900">
                       {item.paymentStatusMeta?.label || item.paymentStatus}
                     </span>
                   </p>
                   <p className="mt-1">
                     Fulfillment:{" "}
-                    <span className="font-medium text-stone-900">
+                    <span className="font-medium text-slate-900">
                       {item.fulfillmentStatusMeta?.label || item.fulfillmentStatus}
                     </span>
                   </p>
                   <p className="mt-1">
                     Payment Record:{" "}
-                    <span className="font-medium text-stone-900">
+                    <span className="font-medium text-slate-900">
                       {item.paymentSummary?.statusMeta?.label || item.paymentSummary?.status || "-"}
                     </span>
                   </p>
                   <p className="mt-1">
                     Parent:{" "}
-                    <span className="font-medium text-stone-900">{getParentLifecycleHint(item)}</span>
+                    <span className="font-medium text-slate-900">{getParentLifecycleHint(item)}</span>
                   </p>
                   <p className="mt-1">
                     Reference:{" "}
-                    <span className="font-medium text-stone-900">
+                    <span className="font-medium text-slate-900">
                       {item.paymentSummary?.internalReference || "-"}
                     </span>
                   </p>
                   <p className="mt-1">
                     Proof Review:{" "}
-                    <span className="font-medium text-stone-900">
+                    <span className="font-medium text-slate-900">
                       {item.paymentSummary?.proof?.reviewMeta?.label ||
                         item.paymentSummary?.proof?.reviewStatus ||
                         "-"}
                     </span>
                   </p>
-                  <p className="mt-3 text-xs leading-5 text-stone-500">
+                  <p className="mt-3 text-xs leading-5 text-slate-500">
                     {getPaymentSnapshotHint(item)}
                   </p>
 
@@ -621,7 +603,7 @@ export default function SellerOrdersPage() {
                               })
                             }
                             disabled={fulfillmentMutation.isPending}
-                            className="w-full rounded-full border border-stone-300 px-4 py-2 text-xs font-semibold text-stone-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            className={sellerSecondaryButtonClass}
                           >
                             {busyActionKey === actionKey
                               ? "Saving..."
@@ -631,7 +613,7 @@ export default function SellerOrdersPage() {
                       })}
                     </div>
                   ) : (
-                    <p className="mt-4 text-xs leading-5 text-stone-500">
+                    <p className="mt-4 text-xs leading-5 text-slate-500">
                       {item.governance?.fulfillment?.mutationBlockedReason ||
                         "No fulfillment mutation is available for this suborder."}
                     </p>
@@ -639,17 +621,17 @@ export default function SellerOrdersPage() {
 
                   <Link
                     to={`/seller/stores/${storeId}/orders/${item.suborderId}`}
-                    className="mt-4 inline-flex rounded-full bg-stone-900 px-4 py-2 text-sm font-semibold text-amber-50"
+                    className={`mt-4 ${sellerPrimaryButtonClass}`}
                   >
                     View detail
                   </Link>
                 </div>
               </div>
-            </article>
+            </SellerWorkspacePanel>
           ))}
 
-          <section className="flex items-center justify-between gap-3 rounded-[22px] border border-stone-200 bg-white px-5 py-4">
-            <p className="text-sm text-stone-500">
+          <section className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+            <p className="text-sm text-slate-500">
               Page {pagination.page} of {totalPages} • {pagination.total} suborders
             </p>
             <div className="flex gap-2">
@@ -657,7 +639,7 @@ export default function SellerOrdersPage() {
                 type="button"
                 disabled={pagination.page <= 1}
                 onClick={() => patchSearch({ page: Math.max(1, pagination.page - 1) })}
-                className="rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className={sellerSecondaryButtonClass}
               >
                 Previous
               </button>
@@ -665,7 +647,7 @@ export default function SellerOrdersPage() {
                 type="button"
                 disabled={pagination.page >= totalPages}
                 onClick={() => patchSearch({ page: Math.min(totalPages, pagination.page + 1) })}
-                className="rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className={sellerSecondaryButtonClass}
               >
                 Next
               </button>

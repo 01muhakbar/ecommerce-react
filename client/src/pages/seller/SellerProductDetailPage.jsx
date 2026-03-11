@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import {
   ArrowLeft,
-  Boxes,
   FileText,
   ImageIcon,
   Layers3,
@@ -11,46 +10,16 @@ import {
   Wallet,
 } from "lucide-react";
 import { getSellerProductDetail } from "../../api/sellerProducts.ts";
+import {
+  sellerSecondaryButtonClass,
+  SellerWorkspaceBadge,
+  SellerWorkspaceDetailItem,
+  SellerWorkspaceEmptyState,
+  SellerWorkspaceNotice,
+  SellerWorkspaceSectionCard,
+  SellerWorkspaceSectionHeader,
+} from "../../components/seller/SellerWorkspaceFoundation.jsx";
 import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
-
-const cardClass =
-  "rounded-[24px] border border-stone-200 bg-white p-5 shadow-[0_16px_36px_-28px_rgba(28,25,23,0.28)]";
-
-function Badge({ children, tone = "stone" }) {
-  const toneClass =
-    tone === "emerald"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-      : tone === "amber"
-        ? "border-amber-200 bg-amber-50 text-amber-800"
-        : tone === "sky"
-          ? "border-sky-200 bg-sky-50 text-sky-700"
-          : tone === "rose"
-            ? "border-rose-200 bg-rose-50 text-rose-700"
-            : "border-stone-200 bg-stone-100 text-stone-700";
-
-  return (
-    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${toneClass}`}>
-      {children}
-    </span>
-  );
-}
-
-function SectionCard({ title, hint, Icon, children }) {
-  return (
-    <section className={cardClass}>
-      <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-stone-100 text-stone-700">
-          <Icon className="h-4 w-4" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h3 className="text-lg font-semibold text-stone-950">{title}</h3>
-          {hint ? <p className="mt-1 text-sm text-stone-500">{hint}</p> : null}
-        </div>
-      </div>
-      <div className="mt-5">{children}</div>
-    </section>
-  );
-}
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat("id-ID", {
@@ -78,15 +47,6 @@ const getVisibilityTone = (visibility) => {
   return "rose";
 };
 
-function DetailRow({ label, value }) {
-  return (
-    <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">{label}</p>
-      <p className="mt-2 text-sm font-medium text-stone-900">{value || "-"}</p>
-    </div>
-  );
-}
-
 export default function SellerProductDetailPage() {
   const { storeId, productId } = useParams();
   const { sellerContext } = useOutletContext() || {};
@@ -102,64 +62,62 @@ export default function SellerProductDetailPage() {
     retry: false,
   });
 
+  const backButton = (
+    <Link
+      key="back"
+      to={`/seller/stores/${storeId}/catalog`}
+      className={sellerSecondaryButtonClass}
+    >
+      <ArrowLeft className="h-4 w-4" />
+      Back to catalog
+    </Link>
+  );
+
   if (!canViewProducts) {
     return (
-      <section className={cardClass}>
-        <p className="text-sm text-rose-600">
-          Your current seller access does not include catalog visibility.
-        </p>
-      </section>
+      <SellerWorkspaceSectionCard
+        title="Catalog visibility is unavailable"
+        hint="Your current seller access does not include catalog visibility."
+        Icon={ShieldCheck}
+      />
     );
   }
 
   if (!hasValidProductId) {
     return (
-      <section className={cardClass}>
-        <div className="flex flex-wrap items-center gap-3">
-          <Link
-            to={`/seller/stores/${storeId}/catalog`}
-            className="inline-flex items-center gap-2 rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to catalog
-          </Link>
-        </div>
-        <p className="mt-5 text-sm text-rose-600">
-          Seller product detail needs a valid product id in the URL.
-        </p>
-      </section>
+      <SellerWorkspaceSectionCard
+        title="Seller product detail needs a valid product id"
+        hint="Open this page from the catalog list with a valid product row."
+        Icon={Package}
+        actions={backButton}
+      />
     );
   }
 
   if (productQuery.isLoading) {
     return (
-      <section className={cardClass}>
-        <p className="text-sm text-stone-500">Loading seller product detail...</p>
-      </section>
+      <SellerWorkspaceSectionCard
+        title="Loading seller product detail"
+        hint="Fetching the seller-scoped product snapshot for the active store."
+        Icon={Package}
+        actions={backButton}
+      />
     );
   }
 
   if (productQuery.isError) {
     return (
-      <section className={cardClass}>
-        <div className="flex flex-wrap items-center gap-3">
-          <Link
-            to={`/seller/stores/${storeId}/catalog`}
-            className="inline-flex items-center gap-2 rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to catalog
-          </Link>
-        </div>
-        <p className="mt-5 text-sm text-rose-600">
-          {getSellerRequestErrorMessage(productQuery.error, {
-            notFoundMessage: "Product not found for this seller store.",
-            forbiddenMessage: "This account cannot access the selected seller workspace.",
-            permissionMessage: "Your current seller access does not include catalog visibility.",
-            fallbackMessage: "Failed to load seller product detail.",
-          })}
-        </p>
-      </section>
+      <SellerWorkspaceSectionCard
+        title="Failed to load seller product detail"
+        hint={getSellerRequestErrorMessage(productQuery.error, {
+          notFoundMessage: "Product not found for this seller store.",
+          forbiddenMessage: "This account cannot access the selected seller workspace.",
+          permissionMessage: "Your current seller access does not include catalog visibility.",
+          fallbackMessage: "Failed to load seller product detail.",
+        })}
+        Icon={ShieldCheck}
+        actions={backButton}
+      />
     );
   }
 
@@ -167,20 +125,12 @@ export default function SellerProductDetailPage() {
 
   if (!product) {
     return (
-      <section className={cardClass}>
-        <div className="flex flex-wrap items-center gap-3">
-          <Link
-            to={`/seller/stores/${storeId}/catalog`}
-            className="inline-flex items-center gap-2 rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to catalog
-          </Link>
-        </div>
-        <p className="mt-5 text-sm text-stone-500">
-          Seller product detail is not available for this store.
-        </p>
-      </section>
+      <SellerWorkspaceSectionCard
+        title="Seller product detail is not available"
+        hint="This product row is not available for the current seller store."
+        Icon={Package}
+        actions={backButton}
+      />
     );
   }
 
@@ -191,230 +141,340 @@ export default function SellerProductDetailPage() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[26px] border border-stone-200 bg-[linear-gradient(135deg,#f0fdf4_0%,#ffffff_42%,#eff6ff_100%)] p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div className="flex flex-wrap items-center gap-3">
-              <Link
-                to={`/seller/stores/${storeId}/catalog`}
-                className="inline-flex items-center gap-2 rounded-full border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-700"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back to catalog
-              </Link>
-              <Badge tone="amber">Read-only</Badge>
-            </div>
-            <p className="mt-4 text-xs font-semibold uppercase tracking-[0.28em] text-stone-500">
-              Seller Product Detail
-            </p>
-            <h2 className="mt-3 text-3xl font-semibold text-stone-950">{product?.name || "Product"}</h2>
-            <p className="mt-2 text-sm text-stone-600">
-              Seller-scoped detail view using <code className="mx-1">Product.storeId</code> as the
-              tenant boundary. This can show private or draft rows owned by the current store.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Badge tone={getStatusTone(product?.statusMeta?.code || product?.status)}>
-                {product?.statusMeta?.label || String(product?.status || "draft").toUpperCase()}
-              </Badge>
-              <Badge tone={getVisibilityTone(product?.visibility)}>
-                {product?.visibility?.publishLabel || product?.visibility?.label || (product?.published ? "Published" : "Private")}
-              </Badge>
-              <Badge tone={product?.visibility?.storefrontVisible ? "emerald" : "stone"}>
-                {product?.visibility?.storefrontLabel || "Hidden from storefront"}
-              </Badge>
-              {product?.sku ? <Badge tone="stone">SKU {product.sku}</Badge> : null}
-              {product?.category?.default?.name ? <Badge tone="sky">{product.category.default.name}</Badge> : null}
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:min-w-[260px]">
-            <DetailRow label="Slug" value={product?.slug} />
-            <DetailRow label="Updated" value={formatDateTime(product?.updatedAt)} />
-          </div>
+      <SellerWorkspaceSectionHeader
+        eyebrow="Seller Product Detail"
+        title={product?.name || "Product"}
+        description="Seller-scoped detail view using Product.storeId as the tenant boundary. This can show private or draft rows owned by the current store."
+        actions={[
+          backButton,
+          <SellerWorkspaceBadge key="mode" label="Read-only" tone="amber" />,
+          <SellerWorkspaceBadge
+            key="status"
+            label={product?.statusMeta?.label || String(product?.status || "draft").toUpperCase()}
+            tone={getStatusTone(product?.statusMeta?.code || product?.status)}
+          />,
+          <SellerWorkspaceBadge
+            key="publish"
+            label={
+              product?.visibility?.publishLabel ||
+              product?.visibility?.label ||
+              (product?.published ? "Published" : "Private")
+            }
+            tone={getVisibilityTone(product?.visibility)}
+          />,
+          <SellerWorkspaceBadge
+            key="storefront"
+            label={product?.visibility?.storefrontLabel || "Hidden from storefront"}
+            tone={product?.visibility?.storefrontVisible ? "emerald" : "stone"}
+          />,
+        ]}
+      >
+        <div className="mt-1 flex flex-wrap gap-2">
+          {product?.sku ? <SellerWorkspaceBadge label={`SKU ${product.sku}`} tone="stone" /> : null}
+          {product?.category?.default?.name ? (
+            <SellerWorkspaceBadge label={product.category.default.name} tone="sky" />
+          ) : null}
         </div>
+      </SellerWorkspaceSectionHeader>
+
+      <section className="grid gap-4 xl:grid-cols-4">
+        <SellerWorkspaceDetailItem label="Slug" value={product?.slug} />
+        <SellerWorkspaceDetailItem
+          label="Updated"
+          value={formatDateTime(product?.updatedAt)}
+        />
+        <SellerWorkspaceDetailItem
+          label="Store Scope"
+          value={
+            sellerContext?.store?.name ||
+            sellerContext?.store?.slug ||
+            `Store #${product?.storeId || storeId}`
+          }
+        />
+        <SellerWorkspaceDetailItem
+          label="Visibility Reason"
+          value={product?.visibility?.storefrontReason || "-"}
+        />
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <div className="space-y-6">
-          <SectionCard
+          <SellerWorkspaceSectionCard
             title="Pricing and Inventory"
             hint="Operational summary only. No edit lane is opened here."
             Icon={Wallet}
           >
-            <div className="grid gap-4 md:grid-cols-2">
-              <DetailRow label="Effective Price" value={formatCurrency(product?.pricing?.effectivePrice)} />
-              <DetailRow label="Base Price" value={formatCurrency(product?.pricing?.price)} />
-              <DetailRow
+            <div className="grid gap-3 md:grid-cols-2">
+              <SellerWorkspaceDetailItem
+                label="Effective Price"
+                value={formatCurrency(product?.pricing?.effectivePrice)}
+              />
+              <SellerWorkspaceDetailItem
+                label="Base Price"
+                value={formatCurrency(product?.pricing?.price)}
+              />
+              <SellerWorkspaceDetailItem
                 label="Sale Price"
-                value={product?.pricing?.salePrice ? formatCurrency(product.pricing.salePrice) : "-"}
+                value={
+                  product?.pricing?.salePrice
+                    ? formatCurrency(product.pricing.salePrice)
+                    : "-"
+                }
               />
-              <DetailRow label="Stock" value={String(product?.inventory?.stock ?? 0)} />
-              <DetailRow
+              <SellerWorkspaceDetailItem
+                label="Stock"
+                value={String(product?.inventory?.stock ?? 0)}
+              />
+              <SellerWorkspaceDetailItem
                 label="Pre-order"
-                value={product?.inventory?.preOrder ? `Yes${product?.inventory?.preorderDays ? ` · ${product.inventory.preorderDays} day(s)` : ""}` : "No"}
+                value={
+                  product?.inventory?.preOrder
+                    ? `Yes${
+                        product?.inventory?.preorderDays
+                          ? ` · ${product.inventory.preorderDays} day(s)`
+                          : ""
+                      }`
+                    : "No"
+                }
               />
-              <DetailRow label="Publish Flag" value={product?.visibility?.publishLabel || "-"} />
-              <DetailRow
+              <SellerWorkspaceDetailItem
+                label="Publish Flag"
+                value={product?.visibility?.publishLabel || "-"}
+              />
+              <SellerWorkspaceDetailItem
                 label="Storefront Visibility"
                 value={product?.visibility?.storefrontLabel || "-"}
               />
-              <DetailRow
+              <SellerWorkspaceDetailItem
                 label="Storefront Reason"
                 value={product?.visibility?.storefrontReason || "-"}
               />
             </div>
-          </SectionCard>
+          </SellerWorkspaceSectionCard>
 
-          <SectionCard
+          <SellerWorkspaceSectionCard
             title="Descriptions"
             hint="Read-only text and notes as stored in the existing product representation."
             Icon={FileText}
           >
             <div className="grid gap-4">
-              <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Description</p>
-                <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-stone-700">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Description
+                </p>
+                <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">
                   {product?.descriptions?.description || "No description stored for this product."}
                 </p>
               </div>
-              <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Internal Notes</p>
-                <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-stone-700">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Internal Notes
+                </p>
+                <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">
                   {product?.descriptions?.notes || "No internal notes stored."}
                 </p>
               </div>
             </div>
-          </SectionCard>
+          </SellerWorkspaceSectionCard>
 
-          <SectionCard
+          <SellerWorkspaceSectionCard
             title="Media"
             hint="Existing media representation only. No upload or mutation lane is opened."
             Icon={ImageIcon}
           >
             <div className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <DetailRow label="Promo Image" value={product?.media?.promoImageUrl || "-"} />
-                <DetailRow label="Video URL" value={product?.media?.videoUrl || "-"} />
+              <div className="grid gap-3 md:grid-cols-2">
+                <SellerWorkspaceDetailItem
+                  label="Promo Image"
+                  value={product?.media?.promoImageUrl || "-"}
+                />
+                <SellerWorkspaceDetailItem
+                  label="Video URL"
+                  value={product?.media?.videoUrl || "-"}
+                />
               </div>
               {imageUrls.length > 0 ? (
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {imageUrls.map((imageUrl) => (
-                    <div key={imageUrl} className="overflow-hidden rounded-2xl border border-stone-200 bg-stone-50">
-                      <img src={imageUrl} alt={product?.name || "Product"} className="h-40 w-full object-cover" />
-                      <div className="border-t border-stone-200 px-3 py-2 text-xs text-stone-500">{imageUrl}</div>
+                    <div
+                      key={imageUrl}
+                      className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50"
+                    >
+                      <img
+                        src={imageUrl}
+                        alt={product?.name || "Product"}
+                        className="h-40 w-full object-cover"
+                      />
+                      <div className="border-t border-slate-200 px-3 py-2 text-xs text-slate-500">
+                        {imageUrl}
+                      </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="rounded-2xl border border-dashed border-stone-300 bg-stone-50 px-4 py-8 text-center text-sm text-stone-500">
-                  No additional images stored for this product.
-                </div>
+                <SellerWorkspaceEmptyState
+                  title="No additional images stored"
+                  description="This product does not expose extra media rows in the current seller snapshot."
+                  icon={<ImageIcon className="h-5 w-5" />}
+                />
               )}
             </div>
-          </SectionCard>
+          </SellerWorkspaceSectionCard>
         </div>
 
         <div className="space-y-6">
-          <SectionCard
+          <SellerWorkspaceSectionCard
             title="Catalog Metadata"
             hint="Safe seller-facing snapshot from the current product schema."
             Icon={Package}
           >
-            <div className="grid gap-4 md:grid-cols-2">
-              <DetailRow label="Primary Category" value={product?.category?.primary?.name || "-"} />
-              <DetailRow label="Default Category" value={product?.category?.default?.name || "-"} />
-              <DetailRow label="Store Scope" value={sellerContext?.store?.name || sellerContext?.store?.slug || `Store #${product?.storeId || storeId}`} />
-              <DetailRow label="Barcode" value={product?.attributes?.barcode || "-"} />
-              <DetailRow label="GTIN" value={product?.attributes?.gtin || "-"} />
-              <DetailRow label="Condition" value={product?.attributes?.condition || "-"} />
-              <DetailRow label="Parent SKU" value={product?.attributes?.parentSku || "-"} />
-              <DetailRow label="Weight" value={product?.attributes?.weight ? `${product.attributes.weight}` : "-"} />
-              <DetailRow
+            <div className="grid gap-3 md:grid-cols-2">
+              <SellerWorkspaceDetailItem
+                label="Primary Category"
+                value={product?.category?.primary?.name || "-"}
+              />
+              <SellerWorkspaceDetailItem
+                label="Default Category"
+                value={product?.category?.default?.name || "-"}
+              />
+              <SellerWorkspaceDetailItem
+                label="Store Scope"
+                value={
+                  sellerContext?.store?.name ||
+                  sellerContext?.store?.slug ||
+                  `Store #${product?.storeId || storeId}`
+                }
+              />
+              <SellerWorkspaceDetailItem
+                label="Barcode"
+                value={product?.attributes?.barcode || "-"}
+              />
+              <SellerWorkspaceDetailItem label="GTIN" value={product?.attributes?.gtin || "-"} />
+              <SellerWorkspaceDetailItem
+                label="Condition"
+                value={product?.attributes?.condition || "-"}
+              />
+              <SellerWorkspaceDetailItem
+                label="Parent SKU"
+                value={product?.attributes?.parentSku || "-"}
+              />
+              <SellerWorkspaceDetailItem
+                label="Weight"
+                value={
+                  product?.attributes?.weight ? `${product.attributes.weight}` : "-"
+                }
+              />
+              <SellerWorkspaceDetailItem
                 label="Dimensions"
                 value={
                   product?.attributes?.dimensions
                     ? [product.attributes.dimensions.length, product.attributes.dimensions.width, product.attributes.dimensions.height]
                         .map((value) => (value ? String(value) : null))
                         .filter(Boolean)
-                        .join(" × ") || "-"
+                        .join(" x ") || "-"
                     : "-"
                 }
               />
-              <DetailRow
+              <SellerWorkspaceDetailItem
                 label="Dangerous Product"
                 value={product?.attributes?.dangerousProduct ? "Yes" : "No"}
               />
-              <DetailRow label="YouTube Link" value={product?.attributes?.youtubeLink || "-"} />
+              <SellerWorkspaceDetailItem
+                label="YouTube Link"
+                value={product?.attributes?.youtubeLink || "-"}
+              />
             </div>
             <div className="mt-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Assigned Categories
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {assignedCategories.length > 0 ? (
                   assignedCategories.map((category) => (
-                    <Badge key={`${category.id}-${category.code || category.name}`} tone="sky">
-                      {category.name}
-                    </Badge>
+                    <SellerWorkspaceBadge
+                      key={`${category.id}-${category.code || category.name}`}
+                      label={category.name}
+                      tone="sky"
+                    />
                   ))
                 ) : (
-                  <span className="text-sm text-stone-500">No assigned categories recorded.</span>
+                  <span className="text-sm text-slate-500">
+                    No assigned categories recorded.
+                  </span>
                 )}
               </div>
             </div>
-          </SectionCard>
+          </SellerWorkspaceSectionCard>
 
-          <SectionCard
+          <SellerWorkspaceSectionCard
             title="Variants and Structured Data"
             hint="Existing JSON-based representations are exposed read-only for seller visibility."
             Icon={Layers3}
           >
             <div className="space-y-4">
-              <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Variations</p>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Variations
+                </p>
                 {product?.variations?.hasVariations ? (
-                  <pre className="mt-3 overflow-x-auto rounded-2xl bg-stone-950/95 p-4 text-xs leading-6 text-stone-100">
+                  <pre className="mt-3 overflow-x-auto rounded-2xl bg-slate-950 p-4 text-xs leading-6 text-slate-100">
                     {prettyJson(product.variations.raw)}
                   </pre>
                 ) : (
-                  <p className="mt-3 text-sm text-stone-500">No variation data stored.</p>
+                  <p className="mt-3 text-sm text-slate-500">No variation data stored.</p>
                 )}
               </div>
 
-              <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Wholesale</p>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Wholesale
+                </p>
                 {product?.wholesale?.hasWholesale ? (
-                  <pre className="mt-3 overflow-x-auto rounded-2xl bg-stone-950/95 p-4 text-xs leading-6 text-stone-100">
+                  <pre className="mt-3 overflow-x-auto rounded-2xl bg-slate-950 p-4 text-xs leading-6 text-slate-100">
                     {prettyJson(product.wholesale.raw)}
                   </pre>
                 ) : (
-                  <p className="mt-3 text-sm text-stone-500">No wholesale configuration stored.</p>
+                  <p className="mt-3 text-sm text-slate-500">
+                    No wholesale configuration stored.
+                  </p>
                 )}
               </div>
 
-              <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Tags</p>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Tags
+                </p>
                 {product?.attributes?.tags ? (
-                  <pre className="mt-3 overflow-x-auto rounded-2xl bg-stone-950/95 p-4 text-xs leading-6 text-stone-100">
+                  <pre className="mt-3 overflow-x-auto rounded-2xl bg-slate-950 p-4 text-xs leading-6 text-slate-100">
                     {prettyJson(product.attributes.tags)}
                   </pre>
                 ) : (
-                  <p className="mt-3 text-sm text-stone-500">No tag data stored.</p>
+                  <p className="mt-3 text-sm text-slate-500">No tag data stored.</p>
                 )}
               </div>
             </div>
-          </SectionCard>
+          </SellerWorkspaceSectionCard>
 
-          <SectionCard
+          <SellerWorkspaceSectionCard
             title="Timestamps"
             hint="Operational timestamps from the current product row."
             Icon={ShieldCheck}
           >
-            <div className="grid gap-4 md:grid-cols-2">
-              <DetailRow label="Created At" value={formatDateTime(product?.createdAt)} />
-              <DetailRow label="Updated At" value={formatDateTime(product?.updatedAt)} />
+            <div className="grid gap-3 md:grid-cols-2">
+              <SellerWorkspaceDetailItem
+                label="Created At"
+                value={formatDateTime(product?.createdAt)}
+              />
+              <SellerWorkspaceDetailItem
+                label="Updated At"
+                value={formatDateTime(product?.updatedAt)}
+              />
             </div>
-          </SectionCard>
+            <SellerWorkspaceNotice type="info" className="mt-4">
+              This detail page remains read-only. Seller-safe mutation lanes such as stock updates
+              are still separate from this snapshot view.
+            </SellerWorkspaceNotice>
+          </SellerWorkspaceSectionCard>
         </div>
       </section>
     </div>

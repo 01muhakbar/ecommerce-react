@@ -93,6 +93,7 @@ const parsePositiveInt = (
 
 const allowedPaymentStatuses = new Set([
   "UNPAID",
+  "PARTIALLY_PAID",
   "PENDING_CONFIRMATION",
   "PAID",
   "FAILED",
@@ -154,6 +155,8 @@ const serializePaymentStatusMeta = (status: string) => ({
       ? "Awaiting Review"
       : status === "UNPAID"
         ? "Unpaid"
+        : status === "PARTIALLY_PAID"
+          ? "Partially Paid"
         : status === "PAID"
           ? "Paid"
           : status === "FAILED"
@@ -166,6 +169,8 @@ const serializePaymentStatusMeta = (status: string) => ({
       ? "Payment proof exists and is waiting for review."
       : status === "UNPAID"
         ? "The store split has not been settled yet."
+        : status === "PARTIALLY_PAID"
+          ? "At least one store split is settled, but the full parent payment is not complete yet."
         : status === "PAID"
           ? "The store split is settled."
           : status === "FAILED"
@@ -341,12 +346,35 @@ const buildShippingSummary = (order: any) => {
 const serializeAuditState = (value?: Record<string, unknown> | null) =>
   value ? JSON.stringify(value) : null;
 
+const resolveFulfillmentTransitionBlocker = (input: {
+  orderStatus?: string | null;
+  paymentStatus?: string | null;
+}) => {
+  if (input.orderStatus === "cancelled") {
+    return {
+      code: "PARENT_ORDER_CANCELLED",
+      message: "Parent order is cancelled, so seller fulfillment can no longer move forward.",
+    };
+  }
+
+  if (input.paymentStatus !== "PAID") {
+    return {
+      code: "SUBORDER_PAYMENT_NOT_SETTLED",
+      message: "Seller fulfillment can move forward only after this store split is paid.",
+    };
+  }
+
+  return null;
+};
+
 const buildAvailableFulfillmentActions = (
   currentStatus: string | null,
-  sellerAccess: any
+  sellerAccess: any,
+  blockerCode?: string | null
 ) => {
   if (!currentStatus) return [];
   if (!sellerHasPermission(sellerAccess, ORDER_FULFILLMENT_PERMISSION)) return [];
+  if (blockerCode) return [];
 
   return Object.values(FULFILLMENT_ACTIONS)
     .filter((definition) =>
@@ -363,13 +391,21 @@ const buildAvailableFulfillmentActions = (
 
 const buildFulfillmentGovernance = (
   sellerAccess: any,
-  currentStatus: string | null = null
+  currentStatus: string | null = null,
+  options?: {
+    blockerCode?: string | null;
+    blockerMessage?: string | null;
+  }
 ) => {
   const actorHasManagePermission = sellerHasPermission(
     sellerAccess,
     ORDER_FULFILLMENT_PERMISSION
   );
-  const availableActions = buildAvailableFulfillmentActions(currentStatus, sellerAccess);
+  const availableActions = buildAvailableFulfillmentActions(
+    currentStatus,
+    sellerAccess,
+    options?.blockerCode
+  );
   const isFinal = currentStatus === "DELIVERED" || currentStatus === "CANCELLED";
 
   return {
@@ -385,6 +421,8 @@ const buildFulfillmentGovernance = (
     mutationBlockedReason: actorHasManagePermission
       ? isFinal
         ? "This suborder is already in a final fulfillment state for phase 1."
+        : options?.blockerMessage
+          ? options.blockerMessage
         : availableActions.length > 0
           ? "Phase 1 seller fulfillment allows only the next forward transition for this suborder."
           : currentStatus
@@ -523,6 +561,10 @@ const serializeListItem = (suborder: any, sellerAccess: any = null) => {
   const checkoutMode = toUpper(getAttr(order, "checkoutMode"), "LEGACY") || "LEGACY";
   const orderStatus = normalizeOrderStatus(getAttr(order, "status"));
   const parentPaymentStatus = normalizePaymentStatus(getAttr(order, "paymentStatus"));
+  const fulfillmentBlocker = resolveFulfillmentTransitionBlocker({
+    orderStatus,
+    paymentStatus,
+  });
 
   return {
     suborderId: toNumber(getAttr(suborder, "id")),
@@ -556,7 +598,10 @@ const serializeListItem = (suborder: any, sellerAccess: any = null) => {
       relationLabel: "Seller suborder for the active store only.",
     },
     governance: {
-      fulfillment: buildFulfillmentGovernance(sellerAccess, fulfillmentStatus),
+      fulfillment: buildFulfillmentGovernance(sellerAccess, fulfillmentStatus, {
+        blockerCode: fulfillmentBlocker?.code,
+        blockerMessage: fulfillmentBlocker?.message,
+      }),
     },
     buyer: {
       userId: toNumber(getAttr(order, "userId"), 0) || null,
@@ -598,6 +643,10 @@ const serializeDetail = (suborder: any, sellerAccess: any = null) => {
   const orderStatus = normalizeOrderStatus(getAttr(order, "status"));
   const parentPaymentStatus = normalizePaymentStatus(getAttr(order, "paymentStatus"));
   const checkoutMode = toUpper(getAttr(order, "checkoutMode"), "LEGACY") || "LEGACY";
+  const fulfillmentBlocker = resolveFulfillmentTransitionBlocker({
+    orderStatus,
+    paymentStatus,
+  });
 
   return {
     suborderId: toNumber(getAttr(suborder, "id")),
@@ -619,7 +668,10 @@ const serializeDetail = (suborder: any, sellerAccess: any = null) => {
       relationLabel: "This seller detail is scoped to one store-owned suborder.",
     },
     governance: {
-      fulfillment: buildFulfillmentGovernance(sellerAccess, fulfillmentStatus),
+      fulfillment: buildFulfillmentGovernance(sellerAccess, fulfillmentStatus, {
+        blockerCode: fulfillmentBlocker?.code,
+        blockerMessage: fulfillmentBlocker?.message,
+      }),
     },
     buyer: {
       userId: toNumber(getAttr(order, "userId"), 0) || null,
@@ -935,6 +987,18 @@ router.patch(
         orderStatus: normalizeOrderStatus(getAttr(order, "status")),
         orderPaymentStatus: normalizePaymentStatus(getAttr(order, "paymentStatus")),
       };
+      const transitionBlocker = resolveFulfillmentTransitionBlocker({
+        orderStatus: beforeState.orderStatus,
+        paymentStatus: beforeState.paymentStatus,
+      });
+
+      if (transitionBlocker) {
+        return res.status(409).json({
+          success: false,
+          code: transitionBlocker.code,
+          message: transitionBlocker.message,
+        });
+      }
 
       await (suborder as any).update({
         fulfillmentStatus: actionDefinition.nextStatus,

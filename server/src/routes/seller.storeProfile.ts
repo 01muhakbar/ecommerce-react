@@ -69,6 +69,24 @@ const normalizeNullableText = (value: unknown) => {
   return normalized ? normalized : null;
 };
 
+const hasForbiddenProtocol = (value: string) => {
+  try {
+    const url = new URL(value);
+    return url.protocol !== "http:" && url.protocol !== "https:";
+  } catch {
+    return true;
+  }
+};
+
+const hasAllowedHost = (value: string, hosts: string[]) => {
+  try {
+    const hostname = new URL(value).hostname.toLowerCase();
+    return hosts.some((host) => hostname === host || hostname.endsWith(`.${host}`));
+  } catch {
+    return false;
+  }
+};
+
 const nullableStringField = (max: number) =>
   z.preprocess(
     normalizeNullableText,
@@ -78,13 +96,64 @@ const nullableStringField = (max: number) =>
 const nullableUrlField = () =>
   z.preprocess(
     normalizeNullableText,
-    z.string().url().max(2048).nullable().optional()
+    z
+      .string()
+      .url()
+      .max(2048)
+      .refine((value) => !hasForbiddenProtocol(value), {
+        message: "URL must use http or https.",
+      })
+      .nullable()
+      .optional()
   );
 
 const nullableEmailField = () =>
   z.preprocess(
     normalizeNullableText,
     z.string().email().max(160).nullable().optional()
+  );
+
+const nullablePhoneField = (label: string) =>
+  z.preprocess(
+    normalizeNullableText,
+    z
+      .string()
+      .max(64)
+      .regex(/^[0-9+().\-\s]{6,64}$/, {
+        message: `${label} format is invalid.`,
+      })
+      .nullable()
+      .optional()
+  );
+
+const nullablePostalCodeField = () =>
+  z.preprocess(
+    normalizeNullableText,
+    z
+      .string()
+      .max(32)
+      .regex(/^[A-Z0-9\- ]{3,32}$/i, {
+        message: "Postal code format is invalid.",
+      })
+      .nullable()
+      .optional()
+  );
+
+const nullableSocialUrlField = (hosts: string[], label: string) =>
+  z.preprocess(
+    normalizeNullableText,
+    z
+      .string()
+      .url()
+      .max(2048)
+      .refine((value) => !hasForbiddenProtocol(value), {
+        message: "URL must use http or https.",
+      })
+      .refine((value) => hasAllowedHost(value, hosts), {
+        message: `${label} must use a valid ${label.toLowerCase()} URL.`,
+      })
+      .nullable()
+      .optional()
   );
 
 const profilePatchSchema = z
@@ -102,16 +171,16 @@ const profilePatchSchema = z
     logoUrl: nullableUrlField(),
     bannerUrl: nullableUrlField(),
     email: nullableEmailField(),
-    phone: nullableStringField(64),
-    whatsapp: nullableStringField(64),
+    phone: nullablePhoneField("Phone"),
+    whatsapp: nullablePhoneField("WhatsApp"),
     websiteUrl: nullableUrlField(),
-    instagramUrl: nullableUrlField(),
-    tiktokUrl: nullableUrlField(),
+    instagramUrl: nullableSocialUrlField(["instagram.com"], "Instagram"),
+    tiktokUrl: nullableSocialUrlField(["tiktok.com"], "TikTok"),
     addressLine1: nullableStringField(255),
     addressLine2: nullableStringField(255),
     city: nullableStringField(120),
     province: nullableStringField(120),
-    postalCode: nullableStringField(32),
+    postalCode: nullablePostalCodeField(),
     country: nullableStringField(120),
   })
   .strict();
@@ -271,11 +340,27 @@ router.patch(
     try {
       const storeId = Number(req.params.storeId);
       const sellerAccess = (req as any).sellerAccess;
+      const requestBody =
+        req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
+      const forbiddenFields = Object.keys(requestBody).filter((field) =>
+        (readOnlyStoreProfileFields as readonly string[]).includes(field)
+      );
+
+      if (forbiddenFields.length > 0) {
+        return res.status(403).json({
+          success: false,
+          code: "READ_ONLY_STORE_PROFILE_FIELDS",
+          message: "One or more read-only store fields cannot be updated from seller workspace.",
+          fields: forbiddenFields,
+        });
+      }
+
       const parsed = profilePatchSchema.safeParse(req.body);
 
       if (!parsed.success) {
         return res.status(400).json({
           success: false,
+          code: "INVALID_STORE_PROFILE_PAYLOAD",
           message: "Invalid payload.",
           errors: parsed.error.flatten(),
         });
