@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { QueryTypes } from "sequelize";
 import { sequelize } from "../models/index.js";
+import { Store } from "../models/index.js";
 import { sanitizeCustomization } from "./admin.storeCustomization.js";
 
 const router = Router();
@@ -66,9 +67,128 @@ const parseCustomization = (raw: string | null) => {
   }
 };
 
+const parseRawCustomization = (raw: string | null) => {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
 const toText = (value: unknown, fallback = "") => {
   const normalized = String(value ?? "").trim();
   return normalized || fallback;
+};
+
+const normalizeSlug = (value: unknown) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "");
+
+const publicStoreIdentityAttributes = [
+  "id",
+  "name",
+  "slug",
+  "description",
+  "logoUrl",
+  "email",
+  "phone",
+  "whatsapp",
+  "addressLine1",
+  "addressLine2",
+  "city",
+  "province",
+  "postalCode",
+  "country",
+  "updatedAt",
+] as const;
+
+const resolvePrimaryPublicStore = async () => {
+  const activeStore = await Store.findOne({
+    where: { status: "ACTIVE" } as any,
+    attributes: [...publicStoreIdentityAttributes],
+    order: [["id", "ASC"]],
+  });
+  if (activeStore) return activeStore;
+
+  return Store.findOne({
+    attributes: [...publicStoreIdentityAttributes],
+    order: [["id", "ASC"]],
+  });
+};
+
+const resolvePublicStoreBySlug = async (slug: string) => {
+  const normalizedSlug = normalizeSlug(slug);
+  if (!normalizedSlug) return null;
+
+  return Store.findOne({
+    where: {
+      slug: normalizedSlug,
+      status: "ACTIVE",
+    } as any,
+    attributes: [...publicStoreIdentityAttributes],
+  });
+};
+
+const serializePublicStoreIdentity = (store: any) => {
+  if (!store) {
+    return {
+      id: null,
+      name: "",
+      slug: "",
+      description: "",
+      logoUrl: "",
+      email: "",
+      phone: "",
+      whatsapp: "",
+      addressLine1: "",
+      addressLine2: "",
+      city: "",
+      province: "",
+      postalCode: "",
+      country: "",
+      updatedAt: "",
+    };
+  }
+
+  return {
+    id: Number(store.id),
+    name: toText(store.name),
+    slug: toText(store.slug),
+    description: toText(store.description),
+    logoUrl: toText(store.logoUrl),
+    email: toText(store.email),
+    phone: toText(store.phone),
+    whatsapp: toText(store.whatsapp),
+    addressLine1: toText(store.addressLine1),
+    addressLine2: toText(store.addressLine2),
+    city: toText(store.city),
+    province: toText(store.province),
+    postalCode: toText(store.postalCode),
+    country: toText(store.country),
+    updatedAt: store.updatedAt ? new Date(store.updatedAt).toISOString() : "",
+  };
+};
+
+const normalizeRichAboutPayload = (raw: unknown) => {
+  const source = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  const title = toText(
+    (source as any).title ?? (source as any).heading ?? (source as any).label,
+    ""
+  );
+  const body = toText(
+    (source as any).body ?? (source as any).content ?? (source as any).text ?? (source as any).description,
+    ""
+  );
+
+  return {
+    title,
+    body,
+    hasContent: Boolean(title || body),
+  };
 };
 
 const extractHeaderSettings = (
@@ -106,6 +226,111 @@ router.get("/header", async (req, res, next) => {
     return res.json({
       success: true,
       data: extractHeaderSettings(lang, sanitized, sourceRow?.updatedAt),
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// GET /api/store/customization/identity
+// Response contract: { success: true, data: { id, name, slug, description, logoUrl, email, phone, whatsapp, addressLine1, addressLine2, city, province, postalCode, country, updatedAt } }
+router.get("/identity", async (_req, res, next) => {
+  try {
+    const store = await resolvePrimaryPublicStore();
+    return res.json({
+      success: true,
+      data: serializePublicStoreIdentity(store),
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// GET /api/store/customization/identity/:slug
+// Response contract: { success: true, data: { id, name, slug, description, logoUrl, email, phone, whatsapp, addressLine1, addressLine2, city, province, postalCode, country, updatedAt } }
+router.get("/identity/:slug", async (req, res, next) => {
+  try {
+    const normalizedSlug = normalizeSlug(req.params.slug);
+    if (!normalizedSlug) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid store slug.",
+      });
+    }
+
+    const store = await resolvePublicStoreBySlug(normalizedSlug);
+    if (!store) {
+      return res.status(404).json({
+        success: false,
+        message: "Store not found.",
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: serializePublicStoreIdentity(store),
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// GET /api/store/customization/microsites/:slug/rich-about?lang=en
+// Response contract: { success: true, data: { storeSlug, lang, richAbout: { title, body, hasContent }, updatedAt } }
+router.get("/microsites/:slug/rich-about", async (req, res, next) => {
+  try {
+    await ensureStoreCustomizationsTable();
+    const normalizedSlug = normalizeSlug(req.params.slug);
+    if (!normalizedSlug) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid store slug.",
+      });
+    }
+
+    const store = await resolvePublicStoreBySlug(normalizedSlug);
+    if (!store) {
+      return res.status(404).json({
+        success: false,
+        message: "Store not found.",
+      });
+    }
+
+    const lang = normalizeLang(req.query?.lang);
+    const row = await getCustomizationRow(lang);
+    const fallbackRow = !row && lang !== "en" ? await getCustomizationRow("en") : null;
+    const sourceRow = row || fallbackRow;
+    const rawCustomization = parseRawCustomization(sourceRow?.data ?? null);
+    const micrositesSource =
+      rawCustomization &&
+      typeof rawCustomization === "object" &&
+      !Array.isArray(rawCustomization) &&
+      rawCustomization.storeMicrosites &&
+      typeof rawCustomization.storeMicrosites === "object" &&
+      !Array.isArray(rawCustomization.storeMicrosites)
+        ? rawCustomization.storeMicrosites
+        : {};
+    const storeMicrositeSource =
+      micrositesSource &&
+      typeof micrositesSource === "object" &&
+      !Array.isArray(micrositesSource) &&
+      micrositesSource[normalizedSlug] &&
+      typeof micrositesSource[normalizedSlug] === "object" &&
+      !Array.isArray(micrositesSource[normalizedSlug])
+        ? micrositesSource[normalizedSlug]
+        : {};
+    const richAbout = normalizeRichAboutPayload(
+      (storeMicrositeSource as any).richAbout ?? (storeMicrositeSource as any).about
+    );
+
+    return res.json({
+      success: true,
+      data: {
+        storeSlug: normalizedSlug,
+        lang,
+        richAbout,
+        updatedAt: sourceRow?.updatedAt ? new Date(sourceRow.updatedAt).toISOString() : "",
+      },
     });
   } catch (error) {
     return next(error);

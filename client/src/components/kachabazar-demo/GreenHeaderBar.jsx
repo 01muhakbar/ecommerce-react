@@ -23,11 +23,13 @@ export default function GreenHeaderBar({
   totalQty,
   isAuthenticated,
   onCartClick,
+  brandName = "KACHA BAZAR",
   headerLogoUrl = "",
   logoUpdatedAt = "",
   isHeaderLoading = false,
 }) {
   const logoSrc = withVersion(resolveAssetUrl(headerLogoUrl), toText(logoUpdatedAt));
+  const safeBrandName = toText(brandName, "KACHA BAZAR");
   const logoFrameClass =
     "inline-flex h-10 w-[144px] items-center sm:h-11 sm:w-[156px] md:h-12 md:w-[172px]";
 
@@ -37,15 +39,20 @@ export default function GreenHeaderBar({
         <Link
           to="/"
           className="inline-flex h-10 min-w-0 items-center gap-2 text-[13px] font-extrabold tracking-[0.08em] text-white sm:h-11 sm:gap-2.5 sm:text-[15px]"
-          aria-label="Go to homepage"
+          aria-label={`Go to ${safeBrandName} homepage`}
         >
           {logoSrc ? (
-            <span className={logoFrameClass}>
-              <img
-                src={logoSrc}
-                alt="Store logo"
-                className="max-h-full w-auto max-w-full object-contain"
-              />
+            <span className="inline-flex min-w-0 items-center gap-2 sm:gap-2.5">
+              <span className={logoFrameClass}>
+                <img
+                  src={logoSrc}
+                  alt={`${safeBrandName} logo`}
+                  className="max-h-full w-auto max-w-full object-contain"
+                />
+              </span>
+              <span className="hidden max-w-[160px] truncate text-[11px] font-semibold tracking-[0.06em] text-white/90 md:inline">
+                {safeBrandName}
+              </span>
             </span>
           ) : isHeaderLoading ? (
             <span className={`${logoFrameClass} rounded bg-white/20`} />
@@ -54,7 +61,7 @@ export default function GreenHeaderBar({
               <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/35 bg-white/10 sm:h-8 sm:w-8">
                 <Lock className="h-[15px] w-[15px] sm:h-4 sm:w-4" />
               </span>
-              <span className="truncate leading-none">KACHA BAZAR</span>
+              <span className="truncate leading-none">{safeBrandName}</span>
             </span>
           )}
         </Link>

@@ -12,6 +12,7 @@ const ORDER_STATUSES = new Set([
 
 const SUBORDER_PAYMENT_STATUSES = new Set([
   "UNPAID",
+  "PARTIALLY_PAID",
   "PENDING_CONFIRMATION",
   "PAID",
   "FAILED",
@@ -74,6 +75,8 @@ const buildSuborderPaymentMeta = (status: string) => ({
       ? "Awaiting Review"
       : status === "UNPAID"
         ? "Unpaid"
+        : status === "PARTIALLY_PAID"
+          ? "Partially Paid"
         : status === "PAID"
           ? "Paid"
           : status === "FAILED"
@@ -86,6 +89,8 @@ const buildSuborderPaymentMeta = (status: string) => ({
       ? "Payment proof exists and is waiting for review."
       : status === "UNPAID"
         ? "The store split has not been settled yet."
+        : status === "PARTIALLY_PAID"
+          ? "At least one store split is settled, but the full parent payment is not complete yet."
         : status === "PAID"
           ? "The store split is settled."
           : status === "FAILED"

@@ -1,8 +1,15 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Mail, MapPin, PhoneCall } from "lucide-react";
-import { getStoreCustomization } from "../../api/store.service.ts";
+import {
+  getStoreCustomization,
+  getStorePublicIdentity,
+} from "../../api/store.service.ts";
 import { UiEmptyState, UiErrorState } from "../../components/ui-states/index.js";
+import {
+  normalizePublicStoreIdentity,
+  resolvePreferredText,
+} from "../../utils/storePublicIdentity.ts";
 
 const DEFAULT_LANG = "en";
 const DEFAULT_CONTACT_US = {
@@ -147,9 +154,19 @@ export default function StoreContactUsPage() {
     queryFn: () => getStoreCustomization({ lang, include: "contactUs" }),
     staleTime: 60_000,
   });
+  const publicIdentityQuery = useQuery({
+    queryKey: ["store-public-identity"],
+    queryFn: getStorePublicIdentity,
+    staleTime: 60_000,
+    retry: 1,
+  });
 
   const contactUsRaw = contactQuery.data?.customization?.contactUs;
   const contactUs = useMemo(() => normalizeContactUs(contactUsRaw), [contactUsRaw]);
+  const publicIdentity = useMemo(
+    () => normalizePublicStoreIdentity(publicIdentityQuery.data),
+    [publicIdentityQuery.data]
+  );
 
   const cards = useMemo(
     () => [
@@ -157,7 +174,7 @@ export default function StoreContactUsPage() {
         ? {
             key: "email",
             title: contactUs.emailBox.title,
-            primary: contactUs.emailBox.email,
+            primary: resolvePreferredText(publicIdentity.email, contactUs.emailBox.email),
             text: contactUs.emailBox.text,
             Icon: Mail,
             iconClassName: "bg-emerald-100 text-emerald-700",
@@ -167,7 +184,7 @@ export default function StoreContactUsPage() {
         ? {
             key: "call",
             title: contactUs.callBox.title,
-            primary: contactUs.callBox.phone,
+            primary: resolvePreferredText(publicIdentity.phone, contactUs.callBox.phone),
             text: contactUs.callBox.text,
             Icon: PhoneCall,
             iconClassName: "bg-sky-100 text-sky-700",

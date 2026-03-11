@@ -163,7 +163,7 @@ export default function SellerStoreProfilePage() {
             key: "description",
             label: "Description",
             type: "textarea",
-            hint: "Lightweight public-facing summary only. No storefront customization here.",
+            hint: "Seller-managed store summary. Public storefront content pages still read store customization.",
           },
           { key: "logoUrl", label: "Logo URL", type: "url" },
           { key: "bannerUrl", label: "Banner URL", type: "url" },
@@ -209,7 +209,7 @@ export default function SellerStoreProfilePage() {
   const handleSubmit = async (event) => {
     event.preventDefault();
     setStatus(null);
-    await mutation.mutateAsync({
+    const nextPayload = {
       name: String(form.name || "").trim(),
       description: emptyToNull(form.description),
       email: emptyToNull(form.email),
@@ -226,7 +226,11 @@ export default function SellerStoreProfilePage() {
       province: emptyToNull(form.province),
       postalCode: emptyToNull(form.postalCode),
       country: emptyToNull(form.country),
-    });
+    };
+    const filteredPayload = Object.fromEntries(
+      Object.entries(nextPayload).filter(([key]) => editableFieldSet.has(key))
+    );
+    await mutation.mutateAsync(filteredPayload);
   };
 
   if (!canView) {
@@ -291,13 +295,25 @@ export default function SellerStoreProfilePage() {
   const editableFields = profile.governance?.editableFields || [];
   const readOnlyFields = profile.governance?.readOnlyFields || [];
   const missingFields = completeness.missingFields || [];
+  const contract = profile.contract || {
+    notes: [],
+    categories: {
+      editableFields,
+      readOnlyFields,
+      publicStorefrontFields: [],
+      operationalClientFields: [],
+      notSurfacedFields: [],
+    },
+    fieldMatrix: [],
+  };
+  const editableFieldSet = useMemo(() => new Set(editableFields), [editableFields]);
 
   return (
     <div className="space-y-6">
       <SellerWorkspaceSectionHeader
         eyebrow="Store Profile"
         title="Seller store profile overview"
-        description="Identity, contact, and address fields stay scoped to the active store. Editable fields are seller-managed metadata, while slug, status, and workspace ownership remain governed outside this form."
+        description="Identity, contact, and address fields stay scoped to the active store. Backend seller profile governs editability here, while current public storefront pages still rely mostly on store customization for header, contact, and content surfaces."
         actions={[
           <SellerWorkspaceBadge
             key="status"
@@ -415,6 +431,19 @@ export default function SellerStoreProfilePage() {
                 "Only seller-safe identity and contact metadata can be updated from this page."}
             </SellerWorkspaceNotice>
 
+            {contract.notes.length ? (
+              <SellerWorkspaceNotice type="warning" className="mt-4">
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em]">
+                    Current Storefront Sync
+                  </p>
+                  {contract.notes.map((note) => (
+                    <p key={note}>{note}</p>
+                  ))}
+                </div>
+              </SellerWorkspaceNotice>
+            ) : null}
+
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-800">
@@ -451,6 +480,69 @@ export default function SellerStoreProfilePage() {
                     ))
                   ) : (
                     <span className="text-sm text-slate-500">No read-only fields noted.</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-3">
+              <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-800">
+                  Public Storefront
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {contract.categories?.publicStorefrontFields?.length ? (
+                    contract.categories.publicStorefrontFields.map((field) => (
+                      <SellerWorkspaceBadge
+                        key={field}
+                        label={formatFieldName(field)}
+                        tone="sky"
+                        className="bg-white"
+                      />
+                    ))
+                  ) : (
+                    <span className="text-sm text-sky-900">
+                      No seller profile field is wired directly into current public storefront pages.
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-900">
+                  Operational Client
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {contract.categories?.operationalClientFields?.length ? (
+                    contract.categories.operationalClientFields.map((field) => (
+                      <SellerWorkspaceBadge
+                        key={field}
+                        label={formatFieldName(field)}
+                        tone="amber"
+                        className="bg-white"
+                      />
+                    ))
+                  ) : (
+                    <span className="text-sm text-amber-900">No operational client field noted.</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                  Not Surfaced
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {contract.categories?.notSurfacedFields?.length ? (
+                    contract.categories.notSurfacedFields.map((field) => (
+                      <SellerWorkspaceBadge
+                        key={field}
+                        label={formatFieldName(field)}
+                        tone="stone"
+                      />
+                    ))
+                  ) : (
+                    <span className="text-sm text-slate-500">All fields are already surfaced.</span>
                   )}
                 </div>
               </div>
@@ -516,8 +608,8 @@ export default function SellerStoreProfilePage() {
           >
             {effectiveCanEdit
               ? isEditing
-                ? "Edit mode is open for seller-safe fields only. Read-only governance still applies to store-owned identity outside this form."
-                : "Seller-safe fields can be updated here when edit mode is open."
+                ? "Edit mode is open for seller-safe fields only. Public storefront pages still mostly read store customization, not this profile contract."
+                : "Seller-safe fields can be updated here when edit mode is open. Backend governance still decides which keys can be submitted."
               : "This actor can review the store profile but cannot submit updates. Editability stays controlled by backend seller permissions for the active store."}
           </SellerWorkspaceNotice>
 
@@ -536,21 +628,31 @@ export default function SellerStoreProfilePage() {
                 </div>
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
                   {section.fields.map((field) => (
-                    <div
-                      key={field.key}
-                      className={field.type === "textarea" ? "md:col-span-2" : undefined}
-                    >
+                    (() => {
+                      const fieldEditable = editableFieldSet.has(field.key);
+                      const fieldHint = fieldEditable
+                        ? field.hint
+                        : field.hint
+                          ? `${field.hint} Locked by current backend governance.`
+                          : "Locked by current backend governance.";
+                      return (
+                        <div
+                          key={field.key}
+                          className={field.type === "textarea" ? "md:col-span-2" : undefined}
+                        >
                       <InputField
                         label={field.label}
-                        hint={field.hint}
+                        hint={fieldHint}
                         multiline={field.type === "textarea"}
                         type={field.type === "textarea" ? undefined : field.type}
                         value={form[field.key]}
                         onChange={handleChange(field.key)}
-                        readOnly={!isEditing || mutation.isPending}
-                        disabled={!isEditing || mutation.isPending}
+                        readOnly={!isEditing || mutation.isPending || !fieldEditable}
+                        disabled={!isEditing || mutation.isPending || !fieldEditable}
                       />
-                    </div>
+                        </div>
+                      );
+                    })()
                   ))}
                 </div>
               </section>

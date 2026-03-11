@@ -89,6 +89,8 @@ export const normalizeStorefrontCategoriesResponse = (payload: any) => {
     ? root.items
     : Array.isArray(root?.categories)
       ? root.categories
+      : Array.isArray(root)
+        ? root
       : Array.isArray(root?.data)
         ? root.data
         : Array.isArray(payload?.categories)
@@ -232,6 +234,8 @@ export const normalizeStorefrontProductsResponse = (payload: any) => {
     ? root.items
     : Array.isArray(root?.products)
       ? root.products
+      : Array.isArray(root)
+        ? root
       : Array.isArray(root?.data)
         ? root.data
         : Array.isArray(payload?.items)

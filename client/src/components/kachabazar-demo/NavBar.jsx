@@ -114,7 +114,7 @@ export default function NavBar({
 
         <div className="hidden shrink-0 items-center gap-5 text-[13px] text-slate-500 lg:flex">
           <span className="whitespace-nowrap">English</span>
-          <Link to="/privacy" className="transition hover:text-emerald-600">
+          <Link to="/privacy-policy" className="transition hover:text-emerald-600">
             Privacy Policy
           </Link>
           <Link to="/terms" className="transition hover:text-emerald-600">

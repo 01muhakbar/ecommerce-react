@@ -12,6 +12,7 @@ import {
   OrderItem,
   Product,
   ProductReview,
+  Store,
   User,
   sequelize,
 } from "../models/index.js";
@@ -27,6 +28,11 @@ const router = Router();
 
 const toNumber = (value: any) => (value == null ? null : Number(value));
 const normalizeCouponCode = (value: any) => String(value || "").trim().toUpperCase();
+const normalizeStoreSlug = (value: any) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "");
 const getAuthUserId = (req: Request, res: Response) => {
   const user = (req as any).user;
   const userId = Number(user?.id);
@@ -437,6 +443,7 @@ router.get(
       const limit = pageSize;
       const search = String(req.query.search || "").trim();
       const categoryParam = String(req.query.category || "").trim();
+      const storeSlug = normalizeStoreSlug(req.query.storeSlug);
 
       const where: any = {
         status: "active",
@@ -464,6 +471,30 @@ router.get(
           }
           where.categoryId = category.id;
         }
+      }
+
+      if (storeSlug) {
+        const store = await Store.findOne({
+          where: {
+            slug: storeSlug,
+            status: "ACTIVE",
+          } as any,
+          attributes: ["id"],
+        });
+
+        if (!store) {
+          return res.json({
+            data: [],
+            meta: {
+              page,
+              pageSize,
+              total: 0,
+              totalPages: 1,
+            },
+          });
+        }
+
+        where.storeId = Number((store as any).id);
       }
 
       const offset = (page - 1) * limit;
@@ -530,10 +561,28 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const rawParam = String(req.params.id || "").trim();
+      const storeSlug = normalizeStoreSlug(req.query.storeSlug);
       const isNumeric = /^\d+$/.test(rawParam);
       const where = isNumeric
         ? { id: Number(rawParam) }
         : { slug: rawParam };
+
+      if (storeSlug) {
+        const store = await Store.findOne({
+          where: {
+            slug: storeSlug,
+            status: "ACTIVE",
+          } as any,
+          attributes: ["id"],
+        });
+
+        if (!store) {
+          return res.status(404).json({ message: "Store not found." });
+        }
+
+        (where as any).storeId = Number((store as any).id);
+      }
+
       const product = await Product.findOne({
         where: {
           ...where,

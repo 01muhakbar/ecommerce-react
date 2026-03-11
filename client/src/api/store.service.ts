@@ -28,10 +28,19 @@ export type StoreProduct = {
   id: number;
   name: string;
   price: number;
+  slug?: string;
   imageUrl?: string | null;
+  originalPrice?: number | null;
+  salePrice?: number | null;
+  discountPercent?: number | null;
+  ratingAvg?: number | null;
+  reviewCount?: number | null;
+  unit?: string | null;
   categoryId?: number | null;
   category?: StoreProductCategory | null;
   stock?: number | null;
+  status?: string | null;
+  published?: boolean;
 };
 
 export type StoreProductDetail = StoreProduct & {
@@ -155,6 +164,45 @@ export type StoreHeaderCustomizationResponse = {
   data?: StoreHeaderCustomization;
 };
 
+export type PublicStoreIdentity = {
+  id: number | null;
+  name: string;
+  slug: string;
+  description: string;
+  logoUrl: string;
+  email: string;
+  phone: string;
+  whatsapp: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  province: string;
+  postalCode: string;
+  country: string;
+  updatedAt: string;
+};
+
+export type PublicStoreIdentityResponse = {
+  success: boolean;
+  data?: PublicStoreIdentity;
+};
+
+export type StoreMicrositeRichAbout = {
+  title: string;
+  body: string;
+  hasContent: boolean;
+};
+
+export type StoreMicrositeRichAboutResponse = {
+  success: boolean;
+  data?: {
+    storeSlug: string;
+    lang: string;
+    richAbout: StoreMicrositeRichAbout;
+    updatedAt: string;
+  };
+};
+
 export type PublicStoreSettings = {
   payments: {
     cashOnDeliveryEnabled: boolean;
@@ -209,12 +257,14 @@ export const fetchStoreProducts = async (params?: {
   search?: string;
   q?: string;
   category?: string | number;
+  storeSlug?: string;
   page?: number;
   limit?: number;
 }) => {
   const query = {
     search: params?.search ?? params?.q,
     category: params?.category,
+    storeSlug: params?.storeSlug,
     page: params?.page,
     limit: params?.limit,
   };
@@ -222,8 +272,14 @@ export const fetchStoreProducts = async (params?: {
   return normalizeStorefrontProductsResponse(data);
 };
 
-export const fetchStoreProductById = async (id: string | number) => {
-  const { data } = await api.get<{ data: StoreProductDetail }>(`/store/products/${id}`);
+export const fetchStoreProductById = async (
+  id: string | number,
+  params?: { storeSlug?: string }
+) => {
+  const query = params?.storeSlug ? { storeSlug: params.storeSlug } : undefined;
+  const { data } = await api.get<{ data: StoreProductDetail }>(`/store/products/${id}`, {
+    params: query,
+  });
   return normalizeStorefrontProductDetailResponse(data);
 };
 
@@ -347,6 +403,34 @@ export const getStoreHeaderCustomization = async (params?: { lang?: string }) =>
   const normalizedLang = String(params?.lang || "en").trim().toLowerCase() || "en";
   const { data } = await api.get<StoreHeaderCustomizationResponse>(
     "/store/customization/header",
+    {
+      params: { lang: normalizedLang },
+    }
+  );
+  return data;
+};
+
+export const getStorePublicIdentity = async () => {
+  const { data } = await api.get<PublicStoreIdentityResponse>("/store/customization/identity");
+  return data;
+};
+
+export const getStorePublicIdentityBySlug = async (slug: string) => {
+  const normalizedSlug = String(slug || "").trim();
+  const { data } = await api.get<PublicStoreIdentityResponse>(
+    `/store/customization/identity/${encodeURIComponent(normalizedSlug)}`
+  );
+  return data;
+};
+
+export const getStoreMicrositeRichAboutBySlug = async (
+  slug: string,
+  params?: { lang?: string }
+) => {
+  const normalizedSlug = String(slug || "").trim();
+  const normalizedLang = String(params?.lang || "en").trim().toLowerCase() || "en";
+  const { data } = await api.get<StoreMicrositeRichAboutResponse>(
+    `/store/customization/microsites/${encodeURIComponent(normalizedSlug)}/rich-about`,
     {
       params: { lang: normalizedLang },
     }

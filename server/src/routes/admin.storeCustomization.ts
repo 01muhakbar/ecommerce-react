@@ -3,7 +3,7 @@ import { QueryTypes } from "sequelize";
 import fs from "fs";
 import path from "path";
 import multer from "multer";
-import { sequelize } from "../models/index.js";
+import { sequelize, Store } from "../models/index.js";
 
 const router = Router();
 
@@ -523,6 +523,12 @@ const normalizeLang = (value: unknown) => {
   return normalized || "en";
 };
 
+const normalizeStoreSlug = (value: unknown) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "");
+
 const cloneDefaults = () => JSON.parse(JSON.stringify(DEFAULT_CUSTOMIZATION));
 
 const mergeDeep = (base: any, source: any): any => {
@@ -545,6 +551,24 @@ const mergeDeep = (base: any, source: any): any => {
 const toText = (value: unknown, fallback = "") => {
   const normalized = String(value ?? "").trim();
   return normalized || fallback;
+};
+
+const normalizeRichAboutPayload = (raw: unknown) => {
+  const source = isPlainObject(raw) ? raw : {};
+  const title = toText(
+    source.title ?? source.heading ?? source.label,
+    ""
+  );
+  const body = toText(
+    source.body ?? source.content ?? source.text ?? source.description,
+    ""
+  );
+
+  return {
+    title,
+    body,
+    hasContent: Boolean(title || body),
+  };
 };
 
 const WHATSAPP_LINK_ERROR_MESSAGE =
@@ -2161,6 +2185,84 @@ router.put("/", async (req, res, next) => {
       data: {
         lang,
         customization: payload,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// PUT /api/admin/store/customization/microsites/rich-about
+// Body: { storeSlug, language?, title?, body? }
+router.put("/microsites/rich-about", async (req, res, next) => {
+  try {
+    await ensureStoreCustomizationsTable();
+    const lang = normalizeLang(req.body?.language ?? req.query?.lang);
+    const storeSlug = normalizeStoreSlug(req.body?.storeSlug);
+
+    if (!storeSlug) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid storeSlug is required.",
+      });
+    }
+
+    const store = await Store.findOne({
+      where: { slug: storeSlug } as any,
+      attributes: ["id", "slug", "name", "status"],
+    });
+    if (!store) {
+      return res.status(404).json({
+        success: false,
+        message: "Store not found.",
+      });
+    }
+
+    const richAbout = normalizeRichAboutPayload({
+      title: req.body?.title,
+      body: req.body?.body,
+    });
+
+    const existing = await getCustomizationRow(lang);
+    const existingPayload = existing ? parseRowData(existing.data) : sanitizeCustomization({});
+    const currentMicrosites = isPlainObject(existingPayload.storeMicrosites)
+      ? existingPayload.storeMicrosites
+      : {};
+    const currentMicrosite = isPlainObject(currentMicrosites[storeSlug])
+      ? currentMicrosites[storeSlug]
+      : {};
+    const nextPayload = sanitizeCustomization({
+      ...existingPayload,
+      storeMicrosites: {
+        ...currentMicrosites,
+        [storeSlug]: {
+          ...currentMicrosite,
+          richAbout: {
+            title: richAbout.title,
+            body: richAbout.body,
+          },
+        },
+      },
+    });
+
+    await upsertCustomization(lang, nextPayload);
+    const updatedRow = await getCustomizationRow(lang);
+
+    return res.json({
+      success: true,
+      data: {
+        storeSlug,
+        lang,
+        richAbout,
+        store: {
+          id: Number(store.get("id")),
+          slug: toText(store.get("slug")),
+          name: toText(store.get("name")),
+          status: toText(store.get("status")),
+        },
+        updatedAt: updatedRow?.updatedAt
+          ? new Date(updatedRow.updatedAt).toISOString()
+          : new Date().toISOString(),
       },
     });
   } catch (error) {

@@ -17,6 +17,8 @@ import StoreContactUsPage from "./pages/store/StoreContactUsPage.jsx";
 import StorePrivacyPolicyPage from "./pages/store/StorePrivacyPolicyPage.jsx";
 import StoreTermsAndConditionsPage from "./pages/store/StoreTermsAndConditionsPage.jsx";
 import StoreFaqPage from "./pages/store/StoreFaqPage.jsx";
+import StoreMicrositePage from "./pages/store/StoreMicrositePage.jsx";
+import StoreMicrositeProductDetailPage from "./pages/store/StoreMicrositeProductDetailPage.jsx";
 import KachaBazarDemoHomePage from "./pages/store/KachaBazarDemoHomePage.jsx";
 import AdminGuard from "./components/AdminGuard.jsx";
 import AdminLayout from "./components/layouts/AdminLayout.jsx";
@@ -102,6 +104,11 @@ export default function App() {
       >
         <Routes>
           <Route path="/demo/kachabazar" element={<KachaBazarDemoHomePage />} />
+          <Route
+            path="/store/:slug/products/:productSlug"
+            element={<StoreMicrositeProductDetailPage />}
+          />
+          <Route path="/store/:slug" element={<StoreMicrositePage />} />
           <Route path="/" element={<StoreLayout />}>
             <Route index element={<KachaBazarDemoHomePage />} />
             <Route path="search" element={<StoreSearchPage />} />

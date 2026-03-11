@@ -50,6 +50,152 @@ const editableStoreProfileFields = [
 
 const readOnlyStoreProfileFields = ["id", "slug", "status", "createdAt", "updatedAt"] as const;
 
+const STOREFRONT_USAGE = {
+  PUBLIC_STOREFRONT: "PUBLIC_STOREFRONT",
+  OPERATIONAL_CLIENT: "OPERATIONAL_CLIENT",
+  NOT_SURFACED: "NOT_SURFACED",
+} as const;
+
+type StorefrontUsageKey =
+  (typeof STOREFRONT_USAGE)[keyof typeof STOREFRONT_USAGE];
+
+type StoreProfileFieldContract = {
+  key: string;
+  label: string;
+  storefrontUsage: StorefrontUsageKey;
+  notes: string;
+};
+
+const storeProfileFieldMatrix: StoreProfileFieldContract[] = [
+  {
+    key: "id",
+    label: "Store ID",
+    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
+    notes: "Internal identifier for seller and admin APIs only.",
+  },
+  {
+    key: "name",
+    label: "Store Name",
+    storefrontUsage: STOREFRONT_USAGE.OPERATIONAL_CLIENT,
+    notes:
+      "Used as store identity in seller, account, invitation, and checkout grouping flows. Public marketing pages still use store customization data.",
+  },
+  {
+    key: "slug",
+    label: "Slug",
+    storefrontUsage: STOREFRONT_USAGE.OPERATIONAL_CLIENT,
+    notes: "Used in operational store references and summaries, not as a dedicated public profile block.",
+  },
+  {
+    key: "status",
+    label: "Status",
+    storefrontUsage: STOREFRONT_USAGE.OPERATIONAL_CLIENT,
+    notes: "Used for store governance and operational summaries, not rendered as public storefront content.",
+  },
+  {
+    key: "description",
+    label: "Description",
+    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
+    notes: "Current public storefront pages do not read Store.description yet.",
+  },
+  {
+    key: "logoUrl",
+    label: "Logo URL",
+    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
+    notes: "Storefront header currently reads customization.headerLogoUrl instead of Store.logoUrl.",
+  },
+  {
+    key: "bannerUrl",
+    label: "Banner URL",
+    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
+    notes: "Storefront hero and page banners currently come from store customization.",
+  },
+  {
+    key: "email",
+    label: "Email",
+    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
+    notes: "Contact page currently reads customization.contactUs.emailBox.email instead of Store.email.",
+  },
+  {
+    key: "phone",
+    label: "Phone",
+    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
+    notes: "Header and contact sections currently read customization-managed phone fields.",
+  },
+  {
+    key: "whatsapp",
+    label: "WhatsApp",
+    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
+    notes: "Header currently reads customization.whatsAppLink instead of Store.whatsapp.",
+  },
+  {
+    key: "websiteUrl",
+    label: "Website URL",
+    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
+    notes: "No current storefront page links directly to Store.websiteUrl.",
+  },
+  {
+    key: "instagramUrl",
+    label: "Instagram URL",
+    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
+    notes: "No current storefront page links directly to Store.instagramUrl.",
+  },
+  {
+    key: "tiktokUrl",
+    label: "TikTok URL",
+    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
+    notes: "No current storefront page links directly to Store.tiktokUrl.",
+  },
+  {
+    key: "addressLine1",
+    label: "Address Line 1",
+    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
+    notes: "Contact page address still comes from store customization, not Store address fields.",
+  },
+  {
+    key: "addressLine2",
+    label: "Address Line 2",
+    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
+    notes: "Stored for seller identity but not surfaced in current storefront pages.",
+  },
+  {
+    key: "city",
+    label: "City",
+    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
+    notes: "Stored for seller identity but not surfaced in current storefront pages.",
+  },
+  {
+    key: "province",
+    label: "Province",
+    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
+    notes: "Stored for seller identity but not surfaced in current storefront pages.",
+  },
+  {
+    key: "postalCode",
+    label: "Postal Code",
+    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
+    notes: "Stored for seller identity but not surfaced in current storefront pages.",
+  },
+  {
+    key: "country",
+    label: "Country",
+    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
+    notes: "Stored for seller identity but not surfaced in current storefront pages.",
+  },
+  {
+    key: "createdAt",
+    label: "Created At",
+    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
+    notes: "Audit metadata only.",
+  },
+  {
+    key: "updatedAt",
+    label: "Updated At",
+    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
+    notes: "Audit metadata only.",
+  },
+] as const;
+
 const profileCompletenessFields = [
   { key: "name", label: "Store name" },
   { key: "description", label: "Store description" },
@@ -190,6 +336,42 @@ const getAttr = (row: any, key: string) =>
 
 const hasText = (value: unknown) => String(value || "").trim().length > 0;
 
+const editableStoreProfileFieldSet = new Set<string>(editableStoreProfileFields);
+const readOnlyStoreProfileFieldSet = new Set<string>(readOnlyStoreProfileFields);
+
+const buildStoreProfileContract = () => {
+  const fieldMatrix = storeProfileFieldMatrix.map((field) => ({
+    key: field.key,
+    label: field.label,
+    editableBySeller: editableStoreProfileFieldSet.has(field.key),
+    readOnlyForSeller: readOnlyStoreProfileFieldSet.has(field.key),
+    storefrontUsage: field.storefrontUsage,
+    notes: field.notes,
+  }));
+
+  return {
+    notes: [
+      "Backend seller profile remains the source of truth for editable fields.",
+      "Current public storefront pages still read header, contact, and content blocks from store customization instead of seller store profile fields.",
+      "Operational client flows still read limited store identity fields such as name, slug, and status.",
+    ],
+    categories: {
+      editableFields: [...editableStoreProfileFields],
+      readOnlyFields: [...readOnlyStoreProfileFields],
+      publicStorefrontFields: fieldMatrix
+        .filter((field) => field.storefrontUsage === STOREFRONT_USAGE.PUBLIC_STOREFRONT)
+        .map((field) => field.key),
+      operationalClientFields: fieldMatrix
+        .filter((field) => field.storefrontUsage === STOREFRONT_USAGE.OPERATIONAL_CLIENT)
+        .map((field) => field.key),
+      notSurfacedFields: fieldMatrix
+        .filter((field) => field.storefrontUsage === STOREFRONT_USAGE.NOT_SURFACED)
+        .map((field) => field.key),
+    },
+    fieldMatrix,
+  };
+};
+
 const buildStoreStatusMeta = (statusValue: unknown) => {
   const code = String(statusValue || "ACTIVE").toUpperCase();
 
@@ -291,6 +473,7 @@ const serializeSellerStoreProfile = (store: any, options: { canEdit?: boolean } 
         ? "Editable metadata stays limited to seller-safe store identity fields."
         : "This actor can review the profile, but editing remains restricted by store permissions.",
     },
+    contract: buildStoreProfileContract(),
     completeness: buildStoreProfileCompleteness(store),
     createdAt: getAttr(store, "createdAt") || null,
     updatedAt: getAttr(store, "updatedAt") || null,

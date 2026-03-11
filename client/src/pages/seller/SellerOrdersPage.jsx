@@ -303,6 +303,7 @@ export default function SellerOrdersPage() {
               >
                 <option value="">All</option>
                 <option value="UNPAID">UNPAID</option>
+                <option value="PARTIALLY_PAID">PARTIALLY_PAID</option>
                 <option value="PENDING_CONFIRMATION">PENDING_CONFIRMATION</option>
                 <option value="PAID">PAID</option>
                 <option value="FAILED">FAILED</option>

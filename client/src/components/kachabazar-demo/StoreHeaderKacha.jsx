@@ -4,7 +4,15 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useCartStore } from "../../store/cart.store.ts";
 import { useStoreCategories } from "../../hooks/useStoreCategories.ts";
 import { useAuth } from "../../auth/useAuth.js";
-import { getStoreHeaderCustomization } from "../../api/store.service.ts";
+import {
+  getStoreHeaderCustomization,
+  getStorePublicIdentity,
+} from "../../api/store.service.ts";
+import {
+  normalizePublicStoreIdentity,
+  resolvePreferredText,
+  toPreferredWhatsAppLink,
+} from "../../utils/storePublicIdentity.ts";
 import TopInfoBar from "./TopInfoBar.jsx";
 import GreenHeaderBar from "./GreenHeaderBar.jsx";
 import NavBar from "./NavBar.jsx";
@@ -36,11 +44,20 @@ export default function StoreHeaderKacha({ onCartClick }) {
     placeholderData: (previousData) => previousData,
     refetchOnWindowFocus: false,
   });
+  const publicIdentityQuery = useQuery({
+    queryKey: ["store-public-identity"],
+    queryFn: getStorePublicIdentity,
+    staleTime: 60_000,
+    retry: 1,
+    placeholderData: (previousData) => previousData,
+    refetchOnWindowFocus: false,
+  });
 
   const [search, setSearch] = useState("");
   const [showCategories, setShowCategories] = useState(false);
   const [showPages, setShowPages] = useState(false);
   const hasHeaderPayload = Boolean(headerQuery.data?.data);
+  const hasPublicIdentityPayload = Boolean(publicIdentityQuery.data?.data);
   const headerContent = useMemo(() => {
     const headerContentRaw = headerQuery.data?.data || {};
     if (!hasHeaderPayload) {
@@ -66,12 +83,34 @@ export default function StoreHeaderKacha({ onCartClick }) {
       updatedAt: toText(headerContentRaw.updatedAt, DEFAULT_HEADER_CONTENT.updatedAt),
     };
   }, [headerQuery.data, hasHeaderPayload]);
+  const publicIdentity = useMemo(
+    () => normalizePublicStoreIdentity(publicIdentityQuery.data),
+    [publicIdentityQuery.data]
+  );
+  const resolvedBrandName = resolvePreferredText(publicIdentity.name, "", "KACHA BAZAR");
+  const resolvedPhoneNumber = resolvePreferredText(
+    publicIdentity.phone,
+    headerContent.phoneNumber
+  );
+  const resolvedWhatsAppLink = toPreferredWhatsAppLink(
+    publicIdentity.whatsapp,
+    headerContent.whatsAppLink
+  );
+  const resolvedHeaderLogoUrl = resolvePreferredText(
+    publicIdentity.logoUrl,
+    headerContent.headerLogoUrl
+  );
+  const isIdentityLoading =
+    !hasHeaderPayload &&
+    !hasPublicIdentityPayload &&
+    (headerQuery.isFetching || publicIdentityQuery.isFetching);
   const headerVersion = useMemo(() => {
-    const parsed = Date.parse(headerContent.updatedAt);
+    const versionSource = resolvePreferredText(publicIdentity.updatedAt, headerContent.updatedAt);
+    const parsed = Date.parse(versionSource);
     return Number.isFinite(parsed)
       ? String(parsed)
-      : toText(headerContent.updatedAt);
-  }, [headerContent.updatedAt]);
+      : toText(versionSource);
+  }, [headerContent.updatedAt, publicIdentity.updatedAt]);
 
   useEffect(() => {
     const q = searchParams.get("q") ?? "";
@@ -105,9 +144,9 @@ export default function StoreHeaderKacha({ onCartClick }) {
       <div className="hidden sm:block">
         <TopInfoBar
           headerText={headerContent.headerText}
-          phoneNumber={headerContent.phoneNumber}
-          whatsAppLink={headerContent.whatsAppLink}
-          isHeaderLoading={!hasHeaderPayload && headerQuery.isFetching}
+          phoneNumber={resolvedPhoneNumber}
+          whatsAppLink={resolvedWhatsAppLink}
+          isHeaderLoading={isIdentityLoading}
         />
       </div>
       <GreenHeaderBar
@@ -117,9 +156,10 @@ export default function StoreHeaderKacha({ onCartClick }) {
         totalQty={totalQty}
         isAuthenticated={Boolean(isAuthenticated)}
         onCartClick={onCartClick}
-        headerLogoUrl={headerContent.headerLogoUrl}
+        brandName={resolvedBrandName}
+        headerLogoUrl={resolvedHeaderLogoUrl}
         logoUpdatedAt={headerVersion}
-        isHeaderLoading={!hasHeaderPayload && headerQuery.isFetching}
+        isHeaderLoading={isIdentityLoading}
       />
       <div className="hidden sm:block">
         <NavBar

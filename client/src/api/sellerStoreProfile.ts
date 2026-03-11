@@ -27,6 +27,33 @@ const normalizeMissingFields = (value: unknown) =>
         .filter((entry) => entry.key)
     : [];
 
+const STORE_PROFILE_STOREFRONT_USAGE = new Set([
+  "PUBLIC_STOREFRONT",
+  "OPERATIONAL_CLIENT",
+  "NOT_SURFACED",
+]);
+
+const normalizeStorefrontUsage = (value: unknown) => {
+  const normalized = textOrFallback(value, "NOT_SURFACED");
+  return STORE_PROFILE_STOREFRONT_USAGE.has(normalized)
+    ? normalized
+    : "NOT_SURFACED";
+};
+
+const normalizeFieldMatrix = (value: unknown) =>
+  Array.isArray(value)
+    ? value
+        .map((entry) => ({
+          key: textOrFallback((entry as any)?.key),
+          label: textOrFallback((entry as any)?.label, "Unknown field"),
+          editableBySeller: Boolean((entry as any)?.editableBySeller),
+          readOnlyForSeller: Boolean((entry as any)?.readOnlyForSeller),
+          storefrontUsage: normalizeStorefrontUsage((entry as any)?.storefrontUsage),
+          notes: textOrNull((entry as any)?.notes),
+        }))
+        .filter((entry) => entry.key)
+    : [];
+
 const normalizeStoreProfile = (payload: any) => {
   if (!payload) return null;
 
@@ -78,6 +105,21 @@ const normalizeStoreProfile = (payload: any) => {
       readOnlyFields: toStringList(payload?.governance?.readOnlyFields),
       managedBy: textOrFallback(payload?.governance?.managedBy, "SELLER_WORKSPACE"),
       note: textOrNull(payload?.governance?.note),
+    },
+    contract: {
+      notes: toStringList(payload?.contract?.notes),
+      categories: {
+        editableFields: toStringList(payload?.contract?.categories?.editableFields),
+        readOnlyFields: toStringList(payload?.contract?.categories?.readOnlyFields),
+        publicStorefrontFields: toStringList(
+          payload?.contract?.categories?.publicStorefrontFields
+        ),
+        operationalClientFields: toStringList(
+          payload?.contract?.categories?.operationalClientFields
+        ),
+        notSurfacedFields: toStringList(payload?.contract?.categories?.notSurfacedFields),
+      },
+      fieldMatrix: normalizeFieldMatrix(payload?.contract?.fieldMatrix),
     },
     completeness: {
       score,
