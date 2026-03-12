@@ -82,6 +82,18 @@ const parseBooleanFilter = (value: unknown) => {
 
 const allowedStatuses = new Set(["active", "inactive", "draft"]);
 const allowedSellerSubmissionStatuses = new Set(["none", "submitted", "needs_revision"]);
+const allowedSellerSubmissionFilters = new Set([
+  "none",
+  "submitted",
+  "needs_revision",
+  "review_queue",
+]);
+const allowedVisibilityStates = new Set([
+  "internal_only",
+  "storefront_visible",
+  "published_blocked",
+]);
+const allowedSellerBulkActions = new Set(["submit_review", "resubmit_review"]);
 
 const normalizeProductStatus = (value: unknown) => {
   const normalized = normalizeString(value).toLowerCase();
@@ -91,6 +103,32 @@ const normalizeProductStatus = (value: unknown) => {
 const normalizeSellerSubmissionStatus = (value: unknown) => {
   const normalized = normalizeString(value).toLowerCase();
   return allowedSellerSubmissionStatuses.has(normalized) ? normalized : "none";
+};
+
+const normalizeSellerSubmissionFilter = (value: unknown) => {
+  const normalized = normalizeString(value).toLowerCase();
+  return allowedSellerSubmissionFilters.has(normalized) ? normalized : "";
+};
+
+const normalizeVisibilityStateFilter = (value: unknown) => {
+  const normalized = normalizeString(value).toLowerCase();
+  return allowedVisibilityStates.has(normalized) ? normalized : "";
+};
+
+const normalizeSellerBulkAction = (value: unknown) => {
+  const normalized = normalizeString(value).toLowerCase();
+  return allowedSellerBulkActions.has(normalized) ? normalized : "";
+};
+
+const normalizePositiveIdList = (value: unknown, max = 200) => {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(
+      value
+        .map((entry) => parseOptionalPositiveId(entry))
+        .filter((entry) => entry !== null)
+    )
+  ).slice(0, max) as number[];
 };
 
 const buildProductSlugBase = (value: unknown) => {
@@ -321,14 +359,100 @@ const buildSellerSubmissionGovernance = (
   };
 };
 
-const serializeSellerSubmissionState = (product: any) => {
+const buildSellerNextActionState = (options: any = {}) => {
+  const productStatus = normalizeProductStatus(options?.productStatus);
+  const submissionStatus = normalizeSellerSubmissionStatus(options?.submissionStatus);
+  const canEditDraft = Boolean(options?.canEditDraft);
+  const canSubmit = Boolean(options?.canSubmit);
+  const canResubmit = Boolean(options?.canResubmit);
+  const visibilityState = String(options?.visibilityState || "").trim().toUpperCase();
+
+  if (submissionStatus === "submitted") {
+    return {
+      code: "WAIT_ADMIN_REVIEW",
+      label: "Waiting for Admin Review",
+      description:
+        "Admin is the next actor. Seller editing and resubmission stay locked until an admin requests revisions or publishes the final outcome.",
+    };
+  }
+
+  if (submissionStatus === "needs_revision") {
+    return {
+      code: canEditDraft ? "CONTINUE_REVISION" : "REVISION_LOCKED",
+      label: canEditDraft ? "Continue Revision" : "Revision Locked",
+      description: canResubmit
+        ? "Update the requested fields, then resubmit this draft for admin review."
+        : "Admin requested changes for this draft before it can move forward again.",
+    };
+  }
+
+  if (productStatus === "draft" && canSubmit) {
+    return {
+      code: "SUBMIT_REVIEW",
+      label: "Submit for Review",
+      description:
+        "This draft is still seller-owned. Finish the required changes, then submit it to the admin review lane.",
+    };
+  }
+
+  if (productStatus === "draft" && canEditDraft) {
+    return {
+      code: "EDIT_DRAFT",
+      label: "Edit Draft",
+      description:
+        "This draft is still inside seller authoring. Complete the remaining fields before submitting it for review.",
+    };
+  }
+
+  if (visibilityState === "STOREFRONT_VISIBLE") {
+    return {
+      code: "VISIBLE_IN_STOREFRONT",
+      label: "Visible in Storefront",
+      description:
+        "This product is already visible to customers under the current publish and lifecycle rules.",
+    };
+  }
+
+  return {
+    code: "VIEW_STATUS",
+    label: "Review Status",
+    description:
+      "No seller submission action is currently available. Review the current lifecycle and storefront visibility state.",
+  };
+};
+
+const serializeSellerSubmissionState = (
+  product: any,
+  sellerAccess: any = null,
+  options: any = {}
+) => {
   const status = normalizeSellerSubmissionStatus(getAttr(product, "sellerSubmissionStatus"));
+  const productStatus = normalizeProductStatus(options?.productStatus ?? getAttr(product, "status"));
   const submittedAt = getAttr(product, "sellerSubmittedAt") || null;
   const submittedByUserId = toNumber(getAttr(product, "sellerSubmittedByUserId"), 0) || null;
   const revisionRequestedAt = getAttr(product, "sellerRevisionRequestedAt") || null;
   const revisionRequestedByUserId =
     toNumber(getAttr(product, "sellerRevisionRequestedByUserId"), 0) || null;
   const revisionNote = nullableString(getAttr(product, "sellerRevisionNote"));
+  const authoringState =
+    options?.authoringState ??
+    buildProductAuthoringState(productStatus, sellerAccess, status);
+  const submissionGovernance =
+    options?.submissionGovernance ??
+    buildSellerSubmissionGovernance(sellerAccess, {
+      hasConcreteProduct: true,
+      productStatus,
+      submissionStatus: status,
+    });
+  const visibilityState = String(options?.visibilityState || "").trim();
+  const nextAction = buildSellerNextActionState({
+    productStatus,
+    submissionStatus: status,
+    canEditDraft: authoringState?.canEditDraft,
+    canSubmit: submissionGovernance?.canSubmitWhenEnabled,
+    canResubmit: submissionGovernance?.canResubmitWhenEnabled,
+    visibilityState,
+  });
 
   return {
     status,
@@ -351,7 +475,15 @@ const serializeSellerSubmissionState = (product: any) => {
     revisionRequestedAt,
     revisionRequestedByUserId,
     revisionNote,
+    reviewNote: revisionNote,
+    revisionReason: revisionNote,
     requiresSellerChanges: status === "needs_revision",
+    canSubmit: Boolean(submissionGovernance?.canSubmitWhenEnabled),
+    canResubmit: Boolean(submissionGovernance?.canResubmitWhenEnabled),
+    canEdit: Boolean(authoringState?.canEditDraft),
+    nextActionCode: nextAction.code,
+    nextActionLabel: nextAction.label,
+    nextActionDescription: nextAction.description,
   };
 };
 
@@ -826,7 +958,19 @@ const serializeProductListItem = (product: any, sellerAccess: any = null) => {
   const stock = toNumber(getAttr(product, "stock"));
   const isPublished = Boolean(getAttr(product, "isPublished"));
   const status = normalizeProductStatus(getAttr(product, "status"));
-  const submission = serializeSellerSubmissionState(product);
+  const visibility = serializeProductVisibility(isPublished, status);
+  const authoring = buildProductAuthoringState(status, sellerAccess, normalizeSellerSubmissionStatus(getAttr(product, "sellerSubmissionStatus")));
+  const submissionGovernance = buildSellerSubmissionGovernance(sellerAccess, {
+    hasConcreteProduct: true,
+    productStatus: status,
+    submissionStatus: getAttr(product, "sellerSubmissionStatus"),
+  });
+  const submission = serializeSellerSubmissionState(product, sellerAccess, {
+    productStatus: status,
+    authoringState: authoring,
+    submissionGovernance,
+    visibilityState: visibility.stateCode,
+  });
   const availability = serializeProductAvailability(stock);
 
   return {
@@ -838,7 +982,8 @@ const serializeProductListItem = (product: any, sellerAccess: any = null) => {
     status,
     statusMeta: serializeProductStatus(status),
     published: isPublished,
-    visibility: serializeProductVisibility(isPublished, status),
+    visibility,
+    storefrontVisibilityState: visibility.stateCode,
     availability,
     pricing: {
       price,
@@ -849,7 +994,7 @@ const serializeProductListItem = (product: any, sellerAccess: any = null) => {
       ...availability,
     },
     submission,
-    authoring: buildProductAuthoringState(status, sellerAccess, submission.status),
+    authoring,
     ownership: serializeProductOwnership(product),
     mediaPreviewUrl: resolveProductPreviewImage(product),
     category: serializeCategorySummary(category),
@@ -879,7 +1024,19 @@ const serializeProductDetail = (product: any, sellerAccess: any = null) => {
       : toNumber(salePriceRaw, 0);
   const status = normalizeProductStatus(getAttr(product, "status"));
   const isPublished = Boolean(getAttr(product, "isPublished"));
-  const submission = serializeSellerSubmissionState(product);
+  const visibility = serializeProductVisibility(isPublished, status);
+  const authoring = buildProductAuthoringState(status, sellerAccess, normalizeSellerSubmissionStatus(getAttr(product, "sellerSubmissionStatus")));
+  const submissionGovernance = buildSellerSubmissionGovernance(sellerAccess, {
+    hasConcreteProduct: true,
+    productStatus: status,
+    submissionStatus: getAttr(product, "sellerSubmissionStatus"),
+  });
+  const submission = serializeSellerSubmissionState(product, sellerAccess, {
+    productStatus: status,
+    authoringState: authoring,
+    submissionGovernance,
+    visibilityState: visibility.stateCode,
+  });
   const stock = toNumber(getAttr(product, "stock"));
   const variations = normalizeJsonValue(getAttr(product, "variations"));
   const wholesale = normalizeJsonValue(getAttr(product, "wholesale"));
@@ -898,7 +1055,8 @@ const serializeProductDetail = (product: any, sellerAccess: any = null) => {
     status,
     statusMeta: serializeProductStatus(status),
     published: isPublished,
-    visibility: serializeProductVisibility(isPublished, status),
+    visibility,
+    storefrontVisibilityState: visibility.stateCode,
     availability,
     descriptions: {
       description: getAttr(product, "description")
@@ -956,7 +1114,7 @@ const serializeProductDetail = (product: any, sellerAccess: any = null) => {
         : Boolean(wholesale && Object.keys(wholesale as Record<string, unknown>).length > 0),
       raw: wholesale,
     },
-    authoring: buildProductAuthoringState(status, sellerAccess, submission.status),
+    authoring,
     governance: buildCatalogGovernance(sellerAccess, {
       hasConcreteProduct: true,
       productStatus: status,
@@ -966,6 +1124,268 @@ const serializeProductDetail = (product: any, sellerAccess: any = null) => {
     updatedAt: getAttr(product, "updatedAt") || null,
   };
 };
+
+const buildSellerProductSummary = async (storeId: number) => {
+  const baseWhere = { storeId } as any;
+
+  const [
+    totalProducts,
+    drafts,
+    submitted,
+    needsRevision,
+    storefrontVisible,
+    publishedBlocked,
+    internalOnly,
+  ] = await Promise.all([
+    Product.count({ where: baseWhere }),
+    Product.count({ where: { ...baseWhere, status: "draft" } as any }),
+    Product.count({
+      where: { ...baseWhere, sellerSubmissionStatus: "submitted" } as any,
+    }),
+    Product.count({
+      where: { ...baseWhere, sellerSubmissionStatus: "needs_revision" } as any,
+    }),
+    Product.count({
+      where: { ...baseWhere, isPublished: true, status: "active" } as any,
+    }),
+    Product.count({
+      where: {
+        ...baseWhere,
+        isPublished: true,
+        status: { [Op.ne]: "active" },
+      } as any,
+    }),
+    Product.count({ where: { ...baseWhere, isPublished: false } as any }),
+  ]);
+
+  return {
+    totalProducts,
+    drafts,
+    submitted,
+    needsRevision,
+    storefrontVisible,
+    publishedBlocked,
+    internalOnly,
+  };
+};
+
+const parseSellerProductsFilterInput = (source: any = {}) => ({
+  keyword: normalizeString(source?.keyword),
+  status: normalizeString(source?.status).toLowerCase(),
+  published: parseBooleanFilter(source?.published),
+  submissionStatus: normalizeSellerSubmissionFilter(source?.submissionStatus),
+  visibilityState: normalizeVisibilityStateFilter(source?.visibilityState),
+});
+
+const buildSellerProductsWhere = (options: any = {}) => {
+  const andConditions: any[] = [];
+  const ids = Array.isArray(options?.ids) ? options.ids : [];
+
+  if (allowedStatuses.has(options?.status)) {
+    andConditions.push({ status: options.status });
+  }
+
+  if (typeof options?.published === "boolean") {
+    andConditions.push({ isPublished: options.published });
+  }
+
+  if (options?.submissionStatus === "review_queue") {
+    andConditions.push({
+      sellerSubmissionStatus: {
+        [Op.in]: ["submitted", "needs_revision"],
+      },
+    });
+  } else if (allowedSellerSubmissionStatuses.has(options?.submissionStatus)) {
+    andConditions.push({ sellerSubmissionStatus: options.submissionStatus });
+  }
+
+  if (options?.visibilityState === "internal_only") {
+    andConditions.push({ isPublished: false });
+  } else if (options?.visibilityState === "storefront_visible") {
+    andConditions.push({ isPublished: true }, { status: "active" });
+  } else if (options?.visibilityState === "published_blocked") {
+    andConditions.push({ isPublished: true }, { status: { [Op.ne]: "active" } });
+  }
+
+  if (options?.keyword) {
+    const likeKeyword = `%${options.keyword}%`;
+    andConditions.push({
+      [Op.or]: [
+        { name: { [Op.like]: likeKeyword } },
+        { slug: { [Op.like]: likeKeyword } },
+        { sku: { [Op.like]: likeKeyword } },
+      ],
+    });
+  }
+
+  if (ids.length > 0) {
+    andConditions.push({
+      id: {
+        [Op.in]: ids,
+      },
+    });
+  }
+
+  return {
+    storeId: Number(options?.storeId),
+    ...(andConditions.length > 0 ? { [Op.and]: andConditions } : {}),
+  };
+};
+
+const sellerProductListAttributes = [
+  "id",
+  "storeId",
+  "name",
+  "slug",
+  "sku",
+  "status",
+  "isPublished",
+  "sellerSubmissionStatus",
+  "sellerSubmittedAt",
+  "sellerSubmittedByUserId",
+  "sellerRevisionRequestedAt",
+  "sellerRevisionRequestedByUserId",
+  "sellerRevisionNote",
+  "price",
+  "salePrice",
+  "stock",
+  "promoImagePath",
+  "imagePaths",
+  "createdAt",
+  "updatedAt",
+];
+
+const sellerProductListInclude = [
+  {
+    model: Category,
+    as: "defaultCategory",
+    attributes: ["id", "name", "code"],
+    required: false,
+  },
+  {
+    model: Category,
+    as: "category",
+    attributes: ["id", "name", "code"],
+    required: false,
+  },
+];
+
+const fetchSellerProductListRows = async (where: any, options: any = {}) =>
+  Product.findAll({
+    where,
+    attributes: [...sellerProductListAttributes],
+    include: [...sellerProductListInclude],
+    order: [["updatedAt", "DESC"]],
+    ...(typeof options?.limit === "number" ? { limit: options.limit } : {}),
+    ...(typeof options?.offset === "number" ? { offset: options.offset } : {}),
+  });
+
+const toCsvCell = (value: unknown) => {
+  const text = String(value ?? "");
+  if (/[",\n]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+};
+
+const buildSellerProductsCsv = (products: any[], sellerAccess: any = null) => {
+  const header = [
+    "ID",
+    "Name",
+    "Slug",
+    "SKU",
+    "Category",
+    "Price",
+    "Sale Price",
+    "Stock",
+    "Lifecycle Status",
+    "Submission Status",
+    "Storefront Visibility",
+    "Updated At",
+  ];
+
+  const rows = products.map((product) => {
+    const item = serializeProductListItem(product, sellerAccess);
+    return [
+      item.id,
+      item.name,
+      item.slug,
+      item.sku || "",
+      item.category?.name || "",
+      item.pricing?.price ?? 0,
+      item.pricing?.salePrice ?? "",
+      item.inventory?.stock ?? 0,
+      item.statusMeta?.label || item.status,
+      item.submission?.label || "Not submitted",
+      item.visibility?.sellerLabel || item.visibility?.label || "Private",
+      item.updatedAt || "",
+    ];
+  });
+
+  return [header, ...rows].map((row) => row.map(toCsvCell).join(",")).join("\n");
+};
+
+const validateSellerBulkSubmissionAction = (product: any, action: string) => {
+  const currentStatus = normalizeProductStatus(getAttr(product, "status"));
+  const currentSubmissionStatus = normalizeSellerSubmissionStatus(
+    getAttr(product, "sellerSubmissionStatus")
+  );
+
+  if (currentStatus !== "draft") {
+    return {
+      ok: false,
+      code: "SELLER_PRODUCT_SUBMISSION_DRAFT_REQUIRED",
+      message: "Only draft products can move through seller submission bulk actions.",
+    };
+  }
+
+  if (action === "submit_review") {
+    if (currentSubmissionStatus === "submitted") {
+      return {
+        ok: false,
+        code: "SELLER_PRODUCT_ALREADY_SUBMITTED",
+        message: "This draft is already waiting for admin review.",
+      };
+    }
+
+    if (currentSubmissionStatus === "needs_revision") {
+      return {
+        ok: false,
+        code: "SELLER_PRODUCT_RESUBMISSION_REQUIRED",
+        message: "Use resubmit review for drafts that already received a revision request.",
+      };
+    }
+
+    return { ok: true };
+  }
+
+  if (action === "resubmit_review") {
+    if (currentSubmissionStatus !== "needs_revision") {
+      return {
+        ok: false,
+        code: "SELLER_PRODUCT_RESUBMISSION_STATE_INVALID",
+        message: "Only drafts in needs revision can be resubmitted for admin review.",
+      };
+    }
+
+    return { ok: true };
+  }
+
+  return {
+    ok: false,
+    code: "SELLER_PRODUCT_BULK_ACTION_INVALID",
+    message: "Unsupported seller bulk action.",
+  };
+};
+
+const buildSellerBulkSubmissionPatch = (actorUserId: number) => ({
+  sellerSubmissionStatus: "submitted",
+  sellerSubmittedAt: new Date(),
+  sellerSubmittedByUserId: actorUserId > 0 ? actorUserId : null,
+  sellerRevisionRequestedAt: null,
+  sellerRevisionRequestedByUserId: null,
+  sellerRevisionNote: null,
+});
 
 router.get(
   "/stores/:storeId/products/authoring/meta",
@@ -1269,6 +1689,188 @@ router.post(
   }
 );
 
+router.post(
+  "/stores/:storeId/products/bulk-submission",
+  requireSellerStoreAccess(["PRODUCT_EDIT"]),
+  async (req, res) => {
+    try {
+      const storeId = Number(req.params.storeId);
+      const actorUserId = Number((req as any).user?.id || 0);
+      const action = normalizeSellerBulkAction(req.body?.action);
+      const ids = normalizePositiveIdList(req.body?.ids);
+
+      if (!action) {
+        return res.status(400).json({
+          success: false,
+          code: "SELLER_PRODUCT_BULK_ACTION_INVALID",
+          message: "Seller bulk action is invalid.",
+        });
+      }
+
+      if (ids.length === 0) {
+        return res.status(400).json({
+          success: false,
+          code: "SELLER_PRODUCT_BULK_IDS_REQUIRED",
+          message: "Select at least one seller product before running a bulk action.",
+        });
+      }
+
+      const rows = await Product.findAll({
+        where: {
+          storeId,
+          id: {
+            [Op.in]: ids,
+          },
+        } as any,
+        attributes: [
+          "id",
+          "storeId",
+          "name",
+          "status",
+          "sellerSubmissionStatus",
+        ],
+      });
+      const productById = new Map(
+        rows.map((product: any) => [toNumber(getAttr(product, "id"), 0), product])
+      );
+      const results: any[] = [];
+
+      for (const id of ids) {
+        const product = productById.get(id);
+
+        if (!product) {
+          results.push({
+            id,
+            status: "failed",
+            code: "SELLER_PRODUCT_NOT_FOUND",
+            message: "Product not found for this seller store.",
+          });
+          continue;
+        }
+
+        const validation = validateSellerBulkSubmissionAction(product, action);
+        if (!validation.ok) {
+          results.push({
+            id,
+            name: String(getAttr(product, "name") || ""),
+            status: "failed",
+            code: validation.code,
+            message: validation.message,
+          });
+          continue;
+        }
+
+        await product.update(buildSellerBulkSubmissionPatch(actorUserId) as any);
+
+        results.push({
+          id,
+          name: String(getAttr(product, "name") || ""),
+          status: "success",
+          code:
+            action === "resubmit_review"
+              ? "SELLER_PRODUCT_RESUBMITTED"
+              : "SELLER_PRODUCT_SUBMITTED",
+          message:
+            action === "resubmit_review"
+              ? "Revision draft resubmitted for admin review."
+              : "Draft submitted for admin review.",
+          submissionStatus: "submitted",
+        });
+      }
+
+      const successCount = results.filter((entry) => entry.status === "success").length;
+      const failureCount = results.length - successCount;
+
+      return res.json({
+        success: true,
+        data: {
+          action,
+          actionLabel:
+            action === "resubmit_review"
+              ? "Resubmit selected revisions"
+              : "Submit selected drafts",
+          summary: {
+            requested: ids.length,
+            successCount,
+            failureCount,
+          },
+          results,
+        },
+      });
+    } catch (error) {
+      console.error("[seller/products/bulk-submission] error", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to run seller bulk submission.",
+      });
+    }
+  }
+);
+
+router.post(
+  "/stores/:storeId/products/export",
+  requireSellerStoreAccess(["PRODUCT_VIEW"]),
+  async (req, res) => {
+    try {
+      const sellerAccess = (req as any).sellerAccess;
+      const storeId = Number(req.params.storeId);
+      const idsInput = req.body?.ids;
+      const hasSelectedIds = Array.isArray(idsInput);
+      const ids = normalizePositiveIdList(idsInput, 500);
+
+      if (hasSelectedIds && ids.length === 0) {
+        return res.status(400).json({
+          success: false,
+          code: "SELLER_PRODUCT_EXPORT_IDS_REQUIRED",
+          message: "Select at least one seller product before exporting a selection.",
+        });
+      }
+
+      const filters = parseSellerProductsFilterInput(req.body?.filters);
+      const where = buildSellerProductsWhere({
+        storeId,
+        ...filters,
+        ids,
+      });
+      const rows = await fetchSellerProductListRows(where);
+
+      if (hasSelectedIds) {
+        const foundIds = new Set(
+          rows.map((product: any) => toNumber(getAttr(product, "id"), 0)).filter((id) => id > 0)
+        );
+        const missingIds = ids.filter((id) => !foundIds.has(id));
+
+        if (missingIds.length > 0) {
+          return res.status(404).json({
+            success: false,
+            code: "SELLER_PRODUCT_EXPORT_SCOPE_MISMATCH",
+            message: "One or more selected products do not belong to this seller store.",
+            missingIds,
+          });
+        }
+      }
+
+      const csv = `\uFEFF${buildSellerProductsCsv(rows, sellerAccess)}`;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const scopeLabel = hasSelectedIds ? "selected" : "filtered";
+
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="seller-products-${storeId}-${scopeLabel}-${timestamp}.csv"`
+      );
+
+      return res.status(200).send(csv);
+    } catch (error) {
+      console.error("[seller/products/export] error", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to export seller products.",
+      });
+    }
+  }
+);
+
 router.get(
   "/stores/:storeId/products",
   requireSellerStoreAccess(["PRODUCT_VIEW"]),
@@ -1282,71 +1884,98 @@ router.get(
       const keyword = normalizeString(req.query.keyword);
       const status = normalizeString(req.query.status).toLowerCase();
       const published = parseBooleanFilter(req.query.published);
-
-      const where: any = {
-        storeId,
-      };
+      const submissionStatus = normalizeSellerSubmissionFilter(req.query.submissionStatus);
+      const visibilityState = normalizeVisibilityStateFilter(req.query.visibilityState);
+      const andConditions: any[] = [];
 
       if (allowedStatuses.has(status)) {
-        where.status = status;
+        andConditions.push({ status });
       }
 
       if (published !== null) {
-        where.isPublished = published;
+        andConditions.push({ isPublished: published });
+      }
+
+      if (submissionStatus === "review_queue") {
+        andConditions.push({
+          sellerSubmissionStatus: {
+            [Op.in]: ["submitted", "needs_revision"],
+          },
+        });
+      } else if (allowedSellerSubmissionStatuses.has(submissionStatus)) {
+        andConditions.push({ sellerSubmissionStatus: submissionStatus });
+      }
+
+      if (visibilityState === "internal_only") {
+        andConditions.push({ isPublished: false });
+      } else if (visibilityState === "storefront_visible") {
+        andConditions.push({ isPublished: true }, { status: "active" });
+      } else if (visibilityState === "published_blocked") {
+        andConditions.push({ isPublished: true }, { status: { [Op.ne]: "active" } });
       }
 
       if (keyword) {
         const likeKeyword = `%${keyword}%`;
-        where[Op.or] = [
-          { name: { [Op.like]: likeKeyword } },
-          { slug: { [Op.like]: likeKeyword } },
-          { sku: { [Op.like]: likeKeyword } },
-        ];
+        andConditions.push({
+          [Op.or]: [
+            { name: { [Op.like]: likeKeyword } },
+            { slug: { [Op.like]: likeKeyword } },
+            { sku: { [Op.like]: likeKeyword } },
+          ],
+        });
       }
 
-      const result = await Product.findAndCountAll({
-        where,
-        attributes: [
-          "id",
-          "storeId",
-          "name",
-          "slug",
-          "sku",
-          "status",
-          "isPublished",
-          "sellerSubmissionStatus",
-          "sellerSubmittedAt",
-          "sellerSubmittedByUserId",
-          "sellerRevisionRequestedAt",
-          "sellerRevisionRequestedByUserId",
-          "sellerRevisionNote",
-          "price",
-          "salePrice",
-          "stock",
-          "promoImagePath",
-          "imagePaths",
-          "createdAt",
-          "updatedAt",
-        ],
-        include: [
-          {
-            model: Category,
-            as: "defaultCategory",
-            attributes: ["id", "name", "code"],
-            required: false,
-          },
-          {
-            model: Category,
-            as: "category",
-            attributes: ["id", "name", "code"],
-            required: false,
-          },
-        ],
-        order: [["updatedAt", "DESC"]],
-        limit,
-        offset,
-        distinct: true,
-      });
+      const where: any = {
+        storeId,
+        ...(andConditions.length > 0 ? { [Op.and]: andConditions } : {}),
+      };
+
+      const [result, summary] = await Promise.all([
+        Product.findAndCountAll({
+          where,
+          attributes: [
+            "id",
+            "storeId",
+            "name",
+            "slug",
+            "sku",
+            "status",
+            "isPublished",
+            "sellerSubmissionStatus",
+            "sellerSubmittedAt",
+            "sellerSubmittedByUserId",
+            "sellerRevisionRequestedAt",
+            "sellerRevisionRequestedByUserId",
+            "sellerRevisionNote",
+            "price",
+            "salePrice",
+            "stock",
+            "promoImagePath",
+            "imagePaths",
+            "createdAt",
+            "updatedAt",
+          ],
+          include: [
+            {
+              model: Category,
+              as: "defaultCategory",
+              attributes: ["id", "name", "code"],
+              required: false,
+            },
+            {
+              model: Category,
+              as: "category",
+              attributes: ["id", "name", "code"],
+              required: false,
+            },
+          ],
+          order: [["updatedAt", "DESC"]],
+          limit,
+          offset,
+          distinct: true,
+        }),
+        buildSellerProductSummary(storeId),
+      ]);
 
       return res.json({
         success: true,
@@ -1354,10 +1983,13 @@ router.get(
           items: result.rows.map((product) => serializeProductListItem(product, sellerAccess)),
           contract: buildCatalogReadContract(),
           governance: buildCatalogGovernance(sellerAccess),
+          summary,
           filters: {
             keyword,
             status: allowedStatuses.has(status) ? status : "",
             published,
+            submissionStatus,
+            visibilityState,
           },
           pagination: {
             page,

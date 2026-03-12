@@ -1,22 +1,16 @@
 import { api } from "@/api/axios";
 
-export type StaffRole =
-  | "Super Admin"
-  | "Admin"
-  | "Cashier"
-  | "CEO"
-  | "Manager"
-  | "Accountant"
-  | "Driver"
-  | "Security Guard"
-  | "Delivery Person";
+export type StaffRole = "super_admin" | "admin" | "staff" | "seller" | string;
 
 export interface StaffItem {
   id: number;
   name: string;
   email: string;
   phoneNumber?: string | null;
+  avatarUrl?: string | null;
   role: StaffRole;
+  sellerRoleCode?: string | null;
+  permissionKeys?: string[];
   isActive: boolean;
   isPublished: boolean;
   createdAt: string; // ISO
@@ -40,12 +34,44 @@ export interface StaffQuery {
   sort?: "ASC" | "DESC";
 }
 
-export interface CreateStaffPayload {
+export interface StaffMutationPayload {
   name: string;
   email: string;
+  phoneNumber?: string | null;
   role?: string;
+  sellerRoleCode?: string | null;
+  permissionKeys?: string[];
   isActive?: boolean;
-  password: string;
+  isPublished?: boolean;
+  password?: string;
+  image?: File | null;
+}
+
+const hasOwn = (payload: object, key: string) => Object.prototype.hasOwnProperty.call(payload, key);
+
+function buildStaffFormData(payload: Partial<StaffMutationPayload>) {
+  const formData = new FormData();
+  if (hasOwn(payload, "name")) formData.append("name", String(payload.name ?? ""));
+  if (hasOwn(payload, "email")) formData.append("email", String(payload.email ?? ""));
+  if (hasOwn(payload, "phoneNumber")) {
+    formData.append("phoneNumber", payload.phoneNumber == null ? "" : String(payload.phoneNumber));
+  }
+  if (hasOwn(payload, "role")) formData.append("role", String(payload.role ?? ""));
+  if (hasOwn(payload, "sellerRoleCode")) {
+    formData.append("sellerRoleCode", payload.sellerRoleCode == null ? "" : String(payload.sellerRoleCode));
+  }
+  if (Array.isArray(payload.permissionKeys)) {
+    formData.append("permissionKeys", JSON.stringify(payload.permissionKeys));
+  }
+  if (hasOwn(payload, "isActive") && typeof payload.isActive === "boolean") {
+    formData.append("isActive", String(payload.isActive));
+  }
+  if (hasOwn(payload, "isPublished") && typeof payload.isPublished === "boolean") {
+    formData.append("isPublished", String(payload.isPublished));
+  }
+  if (payload.password) formData.append("password", payload.password);
+  if (payload.image instanceof File) formData.append("image", payload.image);
+  return formData;
 }
 
 export async function fetchStaff(params: StaffQuery = {}): Promise<StaffListResponse> {
@@ -53,16 +79,16 @@ export async function fetchStaff(params: StaffQuery = {}): Promise<StaffListResp
   return data;
 }
 
-export async function createStaff(payload: CreateStaffPayload): Promise<StaffItem> {
-  const { data } = await api.post("/admin/staff", payload);
+export async function createStaff(payload: StaffMutationPayload): Promise<StaffItem> {
+  const { data } = await api.post("/admin/staff", buildStaffFormData(payload));
   return data as StaffItem;
 }
 
 export async function updateStaff(
   id: string | number,
-  payload: Partial<StaffItem> & { password?: string }
+  payload: Partial<StaffMutationPayload>
 ): Promise<StaffItem> {
-  const { data } = await api.patch(`/admin/staff/${id}`, payload);
+  const { data } = await api.patch(`/admin/staff/${id}`, buildStaffFormData(payload));
   return data as StaffItem;
 }
 

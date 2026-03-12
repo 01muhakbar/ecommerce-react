@@ -14,10 +14,8 @@ import { fetchAdminCustomers } from "../lib/adminApi.js";
 import { api } from "../api/axios.ts";
 import DeleteCouponModal from "../components/admin/coupons/DeleteCouponModal.jsx";
 import {
-  UiEmptyState,
   UiErrorState,
   UiSkeleton,
-  UiUpdatingBadge,
 } from "../components/ui-states/index.js";
 import {
   GENERIC_ERROR,
@@ -26,16 +24,13 @@ import {
 } from "../constants/uiMessages.js";
 
 const headerBtnBase =
-  "inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 text-sm font-semibold transition";
-const headerBtnOutline = `${headerBtnBase} border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50`;
-const headerBtnGreen = `${headerBtnBase} bg-emerald-600 text-white hover:bg-emerald-700`;
+  "inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 text-[11px] font-medium transition";
+const headerBtnSoft = `${headerBtnBase} bg-slate-50/80 text-slate-600 hover:bg-slate-100`;
 const fieldClass =
-  "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none";
-const statCardClass =
-  "rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-right shadow-sm";
+  "h-8 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none";
 const tableHeadCell =
-  "whitespace-nowrap px-4 py-3.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500";
-const tableCell = "px-4 py-3.5 align-middle text-sm text-slate-700";
+  "whitespace-nowrap px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500";
+const tableCell = "px-3 py-2 align-middle text-sm text-slate-700";
 
 const toText = (value) => String(value ?? "").trim();
 
@@ -114,7 +109,7 @@ function CustomerStatusBadge({ customer }) {
 
   return (
     <span
-      className={`inline-flex min-h-7 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+      className={`inline-flex min-h-5 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
         styleMap[status] || styleMap.active
       }`}
     >
@@ -217,34 +212,24 @@ export default function Customers() {
     customersQuery.error?.response?.data?.message || GENERIC_ERROR;
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-[26px] border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
-              Admin / Customers
-            </p>
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
-              Customers
-            </h1>
-            <p className="text-sm text-slate-500">Review customer accounts and profile information.</p>
+    <div className="space-y-2">
+      <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-2 shadow-sm sm:px-5">
+        <div className="flex flex-col gap-1.5">
+          <div className="space-y-0.5">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Customers</h1>
+            <p className="text-sm text-slate-500">Review customer accounts and contacts.</p>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:w-auto">
-            <div className={statCardClass}>
-              <p className="text-[11px] uppercase tracking-wide text-slate-500">Total records</p>
-              <p className="mt-1 text-lg font-semibold text-slate-900">{Number(meta.total || 0)}</p>
-            </div>
-            <div className={statCardClass}>
-              <p className="text-[11px] uppercase tracking-wide text-slate-500">Active filters</p>
-              <p className="mt-1 text-lg font-semibold text-slate-900">{activeFilterCount}</p>
-            </div>
-          </div>
+          <p className="text-[11px] text-slate-500">
+            {Number(meta.total || 0)} total
+            <span className="mx-1.5 text-slate-300">•</span>
+            {activeFilterCount} filters
+          </p>
         </div>
       </div>
 
-      <div className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="relative w-full xl:max-w-xl">
+      <div className="rounded-[20px] border border-slate-200 bg-white p-2 shadow-sm">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <div className="relative w-full min-w-[220px] flex-1 xl:max-w-[320px]">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="search"
@@ -258,10 +243,18 @@ export default function Customers() {
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
+            <button type="button" onClick={applyFilters} className={headerBtnSoft}>
+              <Filter className="h-4 w-4" />
+              Apply
+            </button>
+            <button type="button" onClick={resetFilters} className={headerBtnSoft}>
+              <RotateCcw className="h-4 w-4" />
+              Reset
+            </button>
             <button
               type="button"
-              className={headerBtnOutline}
+              className={headerBtnSoft}
               onClick={() => setNotice("Export is UI-only.")}
             >
               <Download className="h-4 w-4" />
@@ -269,29 +262,13 @@ export default function Customers() {
             </button>
             <button
               type="button"
-              className={headerBtnOutline}
+              className={headerBtnSoft}
               onClick={() => setNotice("Import is UI-only.")}
             >
               <Upload className="h-4 w-4" />
               Import
             </button>
-          </div>
-        </div>
-
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <button type="button" onClick={applyFilters} className={`${headerBtnGreen} w-full`}>
-            <Filter className="h-4 w-4" />
-            Apply
-          </button>
-
-          <button type="button" onClick={resetFilters} className={`${headerBtnOutline} w-full`}>
-            <RotateCcw className="h-4 w-4" />
-            Reset
-          </button>
-
-          <div className="flex h-11 items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-500 sm:justify-center sm:gap-3">
-            <span>{filteredItems.length} shown</span>
-            {customersQuery.isFetching ? <UiUpdatingBadge label={UPDATING} /> : null}
+            {customersQuery.isFetching ? <span className="text-[10px] text-slate-400">{UPDATING}</span> : null}
           </div>
         </div>
       </div>
@@ -315,29 +292,27 @@ export default function Customers() {
       ) : null}
 
       {!customersQuery.isLoading && !customersQuery.isError && filteredItems.length === 0 ? (
-        <UiEmptyState
-          title={NO_CUSTOMERS_FOUND}
-          description="Try another keyword or reset your search."
-        />
+        <div className="rounded-2xl border border-slate-200 bg-white px-5 py-3.5 text-center shadow-sm">
+          <p className="text-sm font-semibold text-slate-800">{NO_CUSTOMERS_FOUND}</p>
+          <p className="mt-1 text-xs text-slate-500">Try another keyword or reset your search.</p>
+        </div>
       ) : null}
 
       {!customersQuery.isLoading && !customersQuery.isError && filteredItems.length > 0 ? (
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-2 text-xs text-slate-500">
-            Showing <span className="font-semibold text-slate-700">{filteredItems.length}</span> of{" "}
-            <span className="font-semibold text-slate-700">{Number(meta.total || 0)}</span> records
+          <div className="border-b border-slate-100 bg-slate-50/70 px-3 py-1 text-[10px] text-slate-400">
+            <span className="font-semibold text-slate-700">{filteredItems.length}</span> /{" "}
+            <span className="font-semibold text-slate-700">{Number(meta.total || 0)}</span>
           </div>
-          <div className="-mx-4 w-auto overflow-x-auto px-4 pb-1 md:mx-0 md:w-full md:px-0">
-            <table className="w-full min-w-[980px] text-left text-sm">
+          <div className="-mx-3 w-auto overflow-x-auto px-3 pb-1 md:mx-0 md:w-full md:px-0">
+            <table className="w-full min-w-[700px] text-left text-sm">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className={tableHeadCell}>ID</th>
-                  <th className={tableHeadCell}>Joining Date</th>
-                  <th className={tableHeadCell}>Customer</th>
-                  <th className={tableHeadCell}>Phone</th>
-                  <th className={`${tableHeadCell} text-right`}>Orders</th>
-                  <th className={tableHeadCell}>Status</th>
-                  <th className={`${tableHeadCell} text-right`}>Actions</th>
+                  <th className={`${tableHeadCell} w-[48%] min-w-[300px]`}>Customer</th>
+                  <th className={`${tableHeadCell} w-[12%] text-right`}>Orders</th>
+                  <th className={`${tableHeadCell} w-[16%]`}>Joined</th>
+                  <th className={`${tableHeadCell} w-[12%]`}>Status</th>
+                  <th className={`${tableHeadCell} w-[8%] text-right`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -349,62 +324,68 @@ export default function Customers() {
                       key={customerId || `${getCustomerName(customer)}-${getCustomerEmail(customer)}`}
                       className="border-t border-slate-100 text-slate-700 transition hover:bg-slate-50/80"
                     >
-                      <td className={`${tableCell} font-medium tabular-nums text-slate-700`}>
-                        {getShortId(customer)}
-                      </td>
-                      <td className={`${tableCell} whitespace-nowrap text-slate-600`}>
-                        {formatJoinDate(getJoiningDate(customer))}
-                      </td>
-                      <td className={`${tableCell} max-w-[280px]`}>
+                      <td className={`${tableCell} w-[48%] max-w-[320px]`}>
                         <div className="min-w-0">
                           <p className="truncate font-semibold text-slate-900">{getCustomerName(customer)}</p>
-                          <p className="truncate text-xs text-slate-500">{getCustomerEmail(customer)}</p>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-slate-400">
+                            <span className="truncate">{getCustomerEmail(customer)}</span>
+                            {getCustomerPhone(customer) !== "-" ? (
+                              <>
+                                <span className="text-slate-300">•</span>
+                                <span>{getCustomerPhone(customer)}</span>
+                              </>
+                            ) : null}
+                            <span className="text-slate-300">•</span>
+                            <span>ID {getShortId(customer)}</span>
+                          </div>
                         </div>
                       </td>
-                      <td className={`${tableCell} text-slate-600`}>{getCustomerPhone(customer)}</td>
-                      <td className={`${tableCell} text-right font-medium tabular-nums text-slate-700`}>
+                      <td className={`${tableCell} w-[12%] text-right font-medium tabular-nums text-slate-700`}>
                         {getOrderCount(customer) ?? "-"}
                       </td>
-                      <td className={tableCell}>
+                      <td className={`${tableCell} w-[16%] whitespace-nowrap text-slate-600`}>
+                        {formatJoinDate(getJoiningDate(customer))}
+                      </td>
+                      <td className={`${tableCell} w-[12%]`}>
                         <CustomerStatusBadge customer={customer} />
                       </td>
-                      <td className={`${tableCell} text-right`}>
-                        <div className="flex items-center justify-end gap-2">
+                      <td className={`${tableCell} w-[8%] text-right`}>
+                        <div className="flex items-center justify-end gap-0.5">
                           {hasDetailRoute ? (
                             <Link
                               to={`/admin/customers/${customerId}`}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-100"
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-100"
                               aria-label={`View ${getCustomerName(customer)}`}
                             >
-                              <Search className="h-4 w-4" />
+                              <Search className="h-3.5 w-3.5" />
                             </Link>
                           ) : (
                             <button
                               type="button"
                               disabled
                               title="Customer detail is unavailable"
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 disabled:cursor-not-allowed disabled:opacity-70"
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-400 disabled:cursor-not-allowed disabled:opacity-70"
                               aria-label={`View ${getCustomerName(customer)}`}
                             >
-                              <Search className="h-4 w-4" />
+                              <Search className="h-3.5 w-3.5" />
                             </button>
                           )}
                           <button
                             type="button"
                             disabled
                             title="Edit not implemented yet"
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 disabled:cursor-not-allowed disabled:opacity-70"
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-400 disabled:cursor-not-allowed disabled:opacity-70"
                             aria-label={`Edit ${getCustomerName(customer)}`}
                           >
-                            <Pencil className="h-4 w-4" />
+                            <Pencil className="h-3.5 w-3.5" />
                           </button>
                           <button
                             type="button"
                             onClick={() => handleOpenDeleteModal(customer)}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 text-rose-600 hover:border-rose-300 hover:bg-rose-50"
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-rose-200 text-rose-600 hover:border-rose-300 hover:bg-rose-50"
                             aria-label={`Delete ${getCustomerName(customer)}`}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </div>
                       </td>
@@ -417,21 +398,21 @@ export default function Customers() {
         </div>
       ) : null}
 
-      <div className="flex items-center justify-between text-sm">
+      <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-0.5 text-[10px] shadow-sm">
         <button
           type="button"
-          className="rounded-full border border-slate-200 px-3 py-1.5 text-slate-700 disabled:opacity-50"
+          className="rounded-full border border-slate-200 px-2.5 py-1 text-slate-700 disabled:opacity-50"
           disabled={meta.page <= 1}
           onClick={() => setPage((prev) => Math.max(1, prev - 1))}
         >
           Previous
         </button>
-        <span className="text-slate-500">
+        <span className="text-[10px] text-slate-500">
           Page {meta.page} of {totalPages}
         </span>
         <button
           type="button"
-          className="rounded-full border border-slate-200 px-3 py-1.5 text-slate-700 disabled:opacity-50"
+          className="rounded-full border border-slate-200 px-2.5 py-1 text-slate-700 disabled:opacity-50"
           disabled={meta.page >= totalPages}
           onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
         >

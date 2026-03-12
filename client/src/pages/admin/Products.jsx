@@ -57,26 +57,24 @@ const REVIEW_QUEUE_FILTERS = [
 ];
 
 const btnBase =
-  "inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 text-sm font-medium leading-none transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1";
+  "inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 text-[11px] font-medium leading-none transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1";
 const btnOutline = `${btnBase} border border-slate-200 bg-white text-slate-700 hover:border-slate-300 focus-visible:ring-slate-300`;
 const btnGreen = `${btnBase} bg-emerald-600 text-white hover:bg-emerald-700 focus-visible:ring-emerald-300`;
 const btnDanger = `${btnBase} bg-rose-600 text-white hover:bg-rose-700 focus-visible:ring-rose-300`;
 const btnAmber = `${btnBase} bg-amber-500 text-white hover:bg-amber-600 focus-visible:ring-amber-300`;
+const btnSoft = `${btnBase} bg-slate-50 text-slate-600 hover:bg-slate-100 focus-visible:ring-slate-300`;
 
 const inputBase =
-  "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 transition focus:border-emerald-500 focus:outline-none";
+  "h-8 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 transition focus:border-emerald-500 focus:outline-none";
 const selectBase = `${inputBase} pr-8`;
-const statCardClass =
-  "rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-right shadow-sm";
-
 const tableHeadCell =
-  "whitespace-nowrap px-4 py-3.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500";
-const tableCell = "px-4 py-3.5 align-middle text-sm text-slate-700";
+  "whitespace-nowrap px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500";
+const tableCell = "px-3 py-2 align-middle text-sm text-slate-700";
 
 function ProductPublishedBadge({ isPublished }) {
   return (
     <span
-      className={`inline-flex min-h-7 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+      className={`inline-flex min-h-6 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
         isPublished
           ? "border-emerald-200 bg-emerald-50 text-emerald-700"
           : "border-slate-200 bg-slate-100 text-slate-600"
@@ -103,7 +101,7 @@ function ProductSellerReviewBadge({ submission }) {
 
   return (
     <span
-      className={`inline-flex min-h-7 items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${toneClass}`}
+      className={`inline-flex min-h-6 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${toneClass}`}
     >
       {submission?.label || "Not submitted"}
     </span>
@@ -112,7 +110,6 @@ function ProductSellerReviewBadge({ submission }) {
 
 function ReviewQueueCard({
   label,
-  description,
   count,
   active = false,
   onClick,
@@ -135,11 +132,12 @@ function ReviewQueueCard({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-2xl border px-4 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-sm ${toneClass}`}
+      className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition ${toneClass}`}
     >
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em]">{label}</p>
-      <p className="mt-2 text-2xl font-semibold">{count}</p>
-      <p className="mt-1 text-xs opacity-80">{description}</p>
+      <span>{label}</span>
+      <span className="rounded-full bg-white/70 px-1.5 py-0.5 text-[10px] font-semibold">
+        {count}
+      </span>
     </button>
   );
 }
@@ -159,7 +157,7 @@ const resolveAdminProductPricing = (product) => {
 
 function ProductCategoryBadge({ label }) {
   return (
-    <span className="inline-flex min-h-7 items-center rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] font-semibold text-sky-700">
+    <span className="inline-flex min-h-6 items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
       {label || "Uncategorized"}
     </span>
   );
@@ -205,6 +203,15 @@ const getProductCategoryContext = (product) => {
     selectedCount: selectedCategories.length,
   };
 };
+
+const getReviewLaneLabel = (reviewState) =>
+  reviewState === "review_queue"
+    ? "Review queue"
+    : reviewState === "submitted"
+      ? "Submitted"
+      : reviewState === "needs_revision"
+        ? "Needs revision"
+        : "All products";
 
 export default function AdminProductsPage() {
   const queryClient = useQueryClient();
@@ -740,326 +747,212 @@ export default function AdminProductsPage() {
   }, [drawerState.open]);
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-[26px] border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
-              Admin / Products
-            </p>
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
-              Products
-            </h1>
-            <p className="text-sm text-slate-500">
-              Manage product catalog, publish states, and stock visibility.
-            </p>
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <span className="inline-flex items-center rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-emerald-700">
-                Catalog Workspace
-              </span>
-              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
+    <div className="space-y-4">
+      <div className="rounded-[22px] border border-slate-200 bg-white px-4 py-2.5 shadow-sm sm:px-5">
+        <div className="flex flex-col gap-1.5">
+          <div className="space-y-0.5">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Products</h1>
+            <p className="text-sm text-slate-500">Review, publish, and maintain catalog rows.</p>
+          </div>
+          <p className="text-[11px] text-slate-500">
+            {meta.total || 0} total
+            <span className="mx-1.5 text-slate-300">•</span>
+            {activeFilterCount} filters
+            {selectedCount > 0 ? (
+              <>
+                <span className="mx-1.5 text-slate-300">•</span>
                 {selectedCount} selected
-              </span>
-              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
-                Page {meta.page} / {totalPages}
-              </span>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:w-auto">
-            <div className={statCardClass}>
-              <p className="text-[11px] uppercase tracking-wide text-slate-500">Total products</p>
-              <p className="mt-1 text-lg font-semibold text-slate-900">{meta.total || 0}</p>
-            </div>
-            <div className={statCardClass}>
-              <p className="text-[11px] uppercase tracking-wide text-slate-500">Active filters</p>
-              <p className="mt-1 text-lg font-semibold text-slate-900">{activeFilterCount}</p>
-            </div>
-          </div>
+              </>
+            ) : null}
+          </p>
         </div>
       </div>
 
-      <div className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="mb-4 flex flex-col gap-3 border-b border-slate-100 pb-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Product Controls
-            </p>
-            <h2 className="text-lg font-semibold text-slate-900">Search, filter, and act faster</h2>
-            <p className="text-sm text-slate-500">
-              Keep catalog updates organized and surface seller review work without leaving the products lane.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500">
-            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-              Visible now: {displayItems.length}
-            </span>
-            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-              Active filters: {activeFilterCount}
-            </span>
-          </div>
-        </div>
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="w-full xl:max-w-xl">
-            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-              Search catalog
-            </p>
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type="search"
-                value={draftFilters.q}
+      <div className="rounded-[22px] border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="space-y-2">
+          <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+            <div className="w-full xl:max-w-sm">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="search"
+                  value={draftFilters.q}
+                  onChange={(event) =>
+                    setDraftFilters((prev) => ({ ...prev, q: event.target.value }))
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") applyFilters();
+                  }}
+                  placeholder="Search by product name"
+                  className={`${inputBase} pl-9`}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+              <select
+                value={draftFilters.categoryId}
                 onChange={(event) =>
-                  setDraftFilters((prev) => ({ ...prev, q: event.target.value }))
+                  setDraftFilters((prev) => ({ ...prev, categoryId: event.target.value }))
                 }
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") applyFilters();
-                }}
-                placeholder="Search by product name"
-                className={`${inputBase} h-11 pl-9`}
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="mr-1 hidden text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 xl:block">
-              Quick actions
-            </div>
-            <button
-              type="button"
-              onClick={openCreateDrawer}
-              disabled={isOperationsBusy}
-              className={`${btnGreen} disabled:cursor-not-allowed disabled:opacity-60`}
-            >
-              <Plus className="h-4 w-4" />
-              Add Product
-            </button>
-
-            <button
-              type="button"
-              className={btnOutline}
-              onClick={handleExport}
-              disabled={isOperationsBusy}
-            >
-              <Download className="h-4 w-4" />
-              {isExporting ? "Exporting..." : "Export"}
-            </button>
-            <button
-              type="button"
-              className={btnOutline}
-              onClick={triggerImport}
-              disabled={isOperationsBusy}
-            >
-              <Upload className="h-4 w-4" />
-              {isImporting ? "Importing..." : "Import"}
-            </button>
-            <input
-              ref={importInputRef}
-              type="file"
-              accept=".json,application/json"
-              onChange={handleImportFile}
-              className="hidden"
-            />
-
-            <div ref={bulkMenuRef} className="relative">
+                className={`${selectBase} w-full sm:w-[138px]`}
+              >
+                <option value="">All categories</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={draftFilters.priceSort}
+                onChange={(event) =>
+                  setDraftFilters((prev) => ({ ...prev, priceSort: event.target.value }))
+                }
+                className={`${selectBase} w-full sm:w-[138px]`}
+              >
+                <option value="default">Default price</option>
+                <option value="price_asc">Price low-high</option>
+                <option value="price_desc">Price high-low</option>
+              </select>
+              <button type="button" onClick={applyFilters} className={btnOutline}>
+                <Filter className="h-4 w-4" />
+                Apply
+              </button>
+              <button type="button" onClick={resetFilters} className={btnSoft}>
+                <RotateCcw className="h-4 w-4" />
+                Reset
+              </button>
               <button
                 type="button"
-                disabled={bulkMutation.isPending}
-                onClick={() => {
-                  if (selectedIds.size === 0) {
-                    showBulkNotice({
-                      type: "error",
-                      title: "Selection required",
-                      message: "Select at least one product to open bulk actions.",
-                    });
-                    return;
-                  }
-                  setBulkMenuOpen((prev) => !prev);
-                }}
-                className={`${btnAmber} min-w-[132px] disabled:cursor-not-allowed disabled:opacity-60`}
+                onClick={openCreateDrawer}
+                disabled={isOperationsBusy}
+                className={`${btnGreen} disabled:cursor-not-allowed disabled:opacity-60`}
               >
-                Bulk Action
-                <ChevronDown className="h-3.5 w-3.5" />
+                <Plus className="h-4 w-4" />
+                Add Product
               </button>
-            {bulkMenuOpen ? (
-                <div className="absolute right-0 z-20 mt-1.5 w-48 overflow-hidden rounded-lg border border-amber-200 bg-white shadow-lg">
-                  <button
-                    type="button"
-                    onClick={() => handleBulkAction("delete_selected")}
-                    disabled={selectedIds.size === 0 || bulkMutation.isPending}
-                    className="block w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Delete Selected
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleBulkAction("publish_selected")}
-                    disabled={selectedIds.size === 0 || bulkMutation.isPending}
-                    className="block w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Publish Selected
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleBulkAction("unpublish_selected")}
-                    disabled={selectedIds.size === 0 || bulkMutation.isPending}
-                    className="block w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Unpublish Selected
-                  </button>
-                </div>
+              <button
+                type="button"
+                className={btnSoft}
+                onClick={handleExport}
+                disabled={isOperationsBusy}
+              >
+                <Download className="h-4 w-4" />
+                {isExporting ? "Exporting..." : "Export"}
+              </button>
+              <button
+                type="button"
+                className={btnSoft}
+                onClick={triggerImport}
+                disabled={isOperationsBusy}
+              >
+                <Upload className="h-4 w-4" />
+                {isImporting ? "Importing..." : "Import"}
+              </button>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".json,application/json"
+                onChange={handleImportFile}
+                className="hidden"
+              />
+
+              <div ref={bulkMenuRef} className="relative">
+                <button
+                  type="button"
+                  disabled={bulkMutation.isPending}
+                  onClick={() => {
+                    if (selectedIds.size === 0) {
+                      showBulkNotice({
+                        type: "error",
+                        title: "Selection required",
+                        message: "Select at least one product to open bulk actions.",
+                      });
+                      return;
+                    }
+                    setBulkMenuOpen((prev) => !prev);
+                  }}
+                  className={`min-w-[88px] disabled:cursor-not-allowed disabled:opacity-60 ${
+                    selectedIds.size > 0 ? btnAmber : btnOutline
+                  }`}
+                >
+                  Bulk
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+                {bulkMenuOpen ? (
+                  <div className="absolute right-0 z-20 mt-1.5 w-48 overflow-hidden rounded-lg border border-amber-200 bg-white shadow-lg">
+                    <button
+                      type="button"
+                      onClick={() => handleBulkAction("delete_selected")}
+                      disabled={selectedIds.size === 0 || bulkMutation.isPending}
+                      className="block w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Delete Selected
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleBulkAction("publish_selected")}
+                      disabled={selectedIds.size === 0 || bulkMutation.isPending}
+                      className="block w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Publish Selected
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleBulkAction("unpublish_selected")}
+                      disabled={selectedIds.size === 0 || bulkMutation.isPending}
+                      className="block w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Unpublish Selected
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
+              {selectedCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={handleDeleteSelected}
+                  disabled={
+                    selectedIds.size === 0 || deleteMutation.isPending || bulkMutation.isPending
+                  }
+                  className={`${btnDanger} disabled:cursor-not-allowed disabled:opacity-50`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </button>
               ) : null}
             </div>
-
-            <button
-              type="button"
-              onClick={handleDeleteSelected}
-              disabled={
-                selectedIds.size === 0 || deleteMutation.isPending || bulkMutation.isPending
-              }
-              className={`${btnDanger} disabled:cursor-not-allowed disabled:opacity-50`}
-            >
-              <Trash2 className="h-4 w-4" />
-              Delete
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                Review Inbox
-              </p>
-              <h3 className="text-base font-semibold text-slate-900">
-                Seller submissions that need admin attention
-              </h3>
-              <p className="text-sm text-slate-500">
-                Review state comes from the product submission domain. Publish authority stays with admin.
-              </p>
-            </div>
-            <div className="text-xs text-slate-500">
-              Current lane:{" "}
-              <span className="font-semibold text-slate-700">
-                {appliedFilters.reviewState === "review_queue"
-                  ? "Review queue"
-                  : appliedFilters.reviewState === "submitted"
-                    ? "Submitted"
-                    : appliedFilters.reviewState === "needs_revision"
-                      ? "Needs revision"
-                      : "All products"}
-              </span>
-            </div>
           </div>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
             <ReviewQueueCard
-              label="All products"
-              description="Return to the full admin catalog lane."
+              label="All"
               count={meta.total || 0}
               active={appliedFilters.reviewState === "all"}
               onClick={() => applyReviewStateFilter("all")}
             />
             <ReviewQueueCard
-              label="Review queue"
-              description="Submitted and needs-revision seller products in one lane."
+              label="Queue"
               count={reviewQueue.total}
               active={appliedFilters.reviewState === "review_queue"}
               onClick={() => applyReviewStateFilter("review_queue")}
             />
             <ReviewQueueCard
               label="Submitted"
-              description="Seller products waiting for admin review."
               count={reviewQueue.submitted}
               tone="sky"
               active={appliedFilters.reviewState === "submitted"}
               onClick={() => applyReviewStateFilter("submitted")}
             />
             <ReviewQueueCard
-              label="Needs revision"
-              description="Products sent back to seller and pending corrections."
+              label="Revision"
               count={reviewQueue.needsRevision}
               tone="amber"
               active={appliedFilters.reviewState === "needs_revision"}
               onClick={() => applyReviewStateFilter("needs_revision")}
             />
-          </div>
-        </div>
-
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
-          <div>
-            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-              Category
-            </p>
-            <select
-              value={draftFilters.categoryId}
-              onChange={(event) =>
-                setDraftFilters((prev) => ({ ...prev, categoryId: event.target.value }))
-              }
-              className={`${selectBase} h-11 w-full`}
-            >
-              <option value="">All Categories</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-              Price sort
-            </p>
-            <select
-              value={draftFilters.priceSort}
-              onChange={(event) =>
-                setDraftFilters((prev) => ({ ...prev, priceSort: event.target.value }))
-              }
-              className={`${selectBase} h-11 w-full`}
-            >
-              <option value="default">Default Price</option>
-              <option value="price_asc">Price: Low to High</option>
-              <option value="price_desc">Price: High to Low</option>
-            </select>
-          </div>
-
-          <div>
-            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-              Review state
-            </p>
-            <select
-              value={draftFilters.reviewState}
-              onChange={(event) =>
-                setDraftFilters((prev) => ({ ...prev, reviewState: event.target.value }))
-              }
-              className={`${selectBase} h-11 w-full`}
-            >
-              {REVIEW_QUEUE_FILTERS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-              Apply changes
-            </p>
-            <button type="button" onClick={applyFilters} className={`${btnGreen} w-full`}>
-              <Filter className="h-4 w-4" />
-              Apply
-            </button>
-          </div>
-
-          <div>
-            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-              Clear filters
-            </p>
-            <button type="button" onClick={resetFilters} className={`${btnOutline} w-full`}>
-              <RotateCcw className="h-4 w-4" />
-              Reset
-            </button>
           </div>
         </div>
 
@@ -1107,15 +1000,17 @@ export default function AdminProductsPage() {
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-2 text-xs text-slate-500">
-            Showing <span className="font-semibold text-slate-700">{displayItems.length}</span> of{" "}
-            <span className="font-semibold text-slate-700">{meta.total || 0}</span> products
-            <span className="ml-2 inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-              {selectedCount} selected
-            </span>
+          <div className="border-b border-slate-100 bg-slate-50/70 px-3 py-1.5 text-[10px] text-slate-500">
+            <span className="font-semibold text-slate-700">{displayItems.length}</span> /{" "}
+            <span className="font-semibold text-slate-700">{meta.total || 0}</span> rows
+            {selectedCount > 0 ? (
+              <span className="ml-2 text-slate-400">
+                {selectedCount} selected
+              </span>
+            ) : null}
           </div>
-          <div className="-mx-4 w-auto overflow-x-auto px-4 pb-1 md:mx-0 md:w-full md:px-0">
-            <table className="w-full min-w-[1120px] text-left text-sm">
+          <div className="-mx-3 w-auto overflow-x-auto px-3 pb-1 md:mx-0 md:w-full md:px-0">
+            <table className="w-full min-w-[1000px] text-left text-sm">
               <thead className="bg-slate-50">
                 <tr>
                   <th className={`${tableHeadCell} w-[4%]`}>
@@ -1127,16 +1022,16 @@ export default function AdminProductsPage() {
                       className="h-4 w-4 cursor-pointer rounded border-slate-300 text-emerald-600 focus:ring-emerald-300"
                     />
                   </th>
-                  <th className={`${tableHeadCell} w-[24%]`}>Product Name</th>
-                  <th className={`${tableHeadCell} w-[15%]`}>Category</th>
+                  <th className={`${tableHeadCell} w-[28%]`}>Product</th>
+                  <th className={`${tableHeadCell} w-[11%]`}>Category</th>
                   <th className={`${tableHeadCell} w-[9%] text-right`}>Price</th>
-                  <th className={`${tableHeadCell} w-[9%] text-right`}>Sale Price</th>
+                  <th className={`${tableHeadCell} w-[8%] text-right`}>Sale</th>
                   <th className={`${tableHeadCell} w-[7%] text-right`}>Stock</th>
-                  <th className={`${tableHeadCell} w-[9%]`}>Status</th>
-                  <th className={`${tableHeadCell} w-[13%]`}>Seller Review</th>
-                  <th className={`${tableHeadCell} w-[6%] text-center`}>View</th>
-                  <th className={`${tableHeadCell} w-[8%] text-center`}>Publish</th>
-                  <th className={`${tableHeadCell} w-[8%] text-center`}>Actions</th>
+                  <th className={`${tableHeadCell} w-[8%]`}>Status</th>
+                  <th className={`${tableHeadCell} w-[12%]`}>Seller Review</th>
+                  <th className={`${tableHeadCell} w-[5%] text-center`}>View</th>
+                  <th className={`${tableHeadCell} w-[7%] text-center`}>Publish</th>
+                  <th className={`${tableHeadCell} w-[6%] text-center`}>Actions</th>
                 </tr>
               </thead>
 
@@ -1180,9 +1075,9 @@ export default function AdminProductsPage() {
                         />
                       </td>
 
-                      <td className={`${tableCell} w-[24%]`}>
-                        <div className="flex items-center gap-3">
-                          <div className="h-12 w-12 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                      <td className={`${tableCell} w-[28%]`}>
+                        <div className="flex items-center gap-2.5">
+                          <div className="h-9 w-9 overflow-hidden rounded-lg border border-slate-200 bg-white">
                             <img
                               src={resolveThumbnail(product)}
                               alt={product.name || `#${product.id}`}
@@ -1197,71 +1092,50 @@ export default function AdminProductsPage() {
                             <div className="truncate text-sm font-semibold text-slate-900">
                               {product.name || `#${product.id}`}
                             </div>
-                            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                            <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-slate-400">
                               <span className="truncate">{product.slug || "-"}</span>
-                              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-medium text-slate-600">
-                                SKU #{product.id}
-                              </span>
+                              <span className="text-slate-300">•</span>
+                              <span>ID #{product.id}</span>
                               {pricing.hasSalePrice ? (
-                                <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">
+                                <>
+                                  <span className="text-slate-300">•</span>
+                                  <span className="text-emerald-600">
                                   On sale
-                                </span>
+                                  </span>
+                                </>
                               ) : null}
                             </div>
                           </div>
                         </div>
                       </td>
 
-                      <td className={`${tableCell} w-[15%]`}>
-                        <div className="space-y-1">
+                      <td className={`${tableCell} w-[11%]`}>
+                        <div className="space-y-0.5">
                           <ProductCategoryBadge label={categoryContext.defaultCategory?.name} />
-                          <span className="block truncate text-xs text-slate-500">
-                            Default category
-                          </span>
                           {categoryContext.relatedCategories.length > 0 ? (
-                            <div className="flex flex-wrap gap-1.5 pt-1">
-                              {categoryContext.relatedCategories.slice(0, 2).map((category) => (
-                                <span
-                                  key={`${product.id}-${category.id}`}
-                                  className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600"
-                                >
-                                  {category.name}
-                                </span>
-                              ))}
-                              {categoryContext.relatedCategories.length > 2 ? (
-                                <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600">
-                                  +{categoryContext.relatedCategories.length - 2} more
-                                </span>
-                              ) : null}
-                            </div>
-                          ) : (
-                            <span className="block truncate text-[11px] text-slate-400">
-                              {categoryContext.selectedCount > 0
-                                ? "No secondary categories"
-                                : "No categories"}
+                            <span className="text-[10px] text-slate-400">
+                              +{categoryContext.relatedCategories.length}
                             </span>
+                          ) : (
+                            <span className="block truncate text-[10px] text-slate-400">-</span>
                           )}
                         </div>
                       </td>
 
-                      <td
-                        className={`${tableCell} w-[9%] text-right font-semibold tabular-nums text-slate-900`}
-                      >
-                        <div className="space-y-1">
+                      <td className={`${tableCell} w-[9%] text-right font-semibold tabular-nums text-slate-900`}>
+                        <div className="space-y-0.5">
                           <div>{asCurrency(pricing.basePrice)}</div>
-                          <div className="text-xs font-medium text-slate-400">Base price</div>
+                          <div className="text-[10px] font-medium text-slate-400">Base</div>
                         </div>
                       </td>
 
-                      <td className={`${tableCell} w-[9%] text-right tabular-nums`}>
+                      <td className={`${tableCell} w-[8%] text-right tabular-nums`}>
                         {pricing.hasSalePrice ? (
-                          <div className="space-y-1">
+                          <div className="space-y-0.5">
                             <div className="font-semibold text-emerald-700">
                               {asCurrency(pricing.salePrice)}
                             </div>
-                            <div className="text-xs font-medium text-emerald-600">
-                              Promo live
-                            </div>
+                            <div className="text-[10px] font-medium text-emerald-600">Promo</div>
                           </div>
                         ) : (
                           <span className="text-slate-400">-</span>
@@ -1269,58 +1143,52 @@ export default function AdminProductsPage() {
                       </td>
 
                       <td className={`${tableCell} w-[7%] text-right tabular-nums`}>
-                        <div className="space-y-1">
+                        <div className="space-y-0.5">
                           <div className="font-semibold text-slate-900">{product.stock ?? 0}</div>
-                          <div className={`text-xs font-medium ${stockMeta.className}`}>
+                          <div className={`text-[10px] font-medium ${stockMeta.className}`}>
                             {stockMeta.label}
                           </div>
                         </div>
                       </td>
 
-                      <td className={`${tableCell} w-[9%]`}>
+                      <td className={`${tableCell} w-[8%]`}>
                         <ProductPublishedBadge isPublished={isPublished} />
                       </td>
 
-                      <td className={`${tableCell} w-[13%]`}>
-                        <div className="space-y-1.5">
+                      <td className={`${tableCell} w-[12%]`}>
+                        <div className="space-y-1">
                           <ProductSellerReviewBadge submission={sellerSubmission} />
                           {sellerSubmission?.status === "submitted" ? (
-                            <p className="text-[11px] text-slate-500">
-                              {publishGate?.hint ||
-                                (submittedAtLabel
-                                  ? `Waiting review since ${submittedAtLabel}`
-                                  : "Waiting review")}
+                            <p className="text-[10px] text-slate-400">
+                              {publishGate?.hint || (submittedAtLabel ? submittedAtLabel : "Waiting review")}
                             </p>
                           ) : sellerSubmission?.status === "needs_revision" ? (
-                            <p className="text-[11px] text-amber-700">
-                              {publishGate?.hint ||
-                                "Seller can edit and resubmit after corrections."}
+                            <p className="text-[10px] text-amber-600">
+                              {publishGate?.hint || "Seller revises and resubmits."}
                             </p>
                           ) : (
-                            <p className="text-[11px] text-slate-400">
-                              Outside seller submission loop.
-                            </p>
+                            <p className="text-[10px] text-slate-400">Direct row.</p>
                           )}
                         </div>
                       </td>
 
-                      <td className={`${tableCell} w-[6%] text-center`}>
+                      <td className={`${tableCell} w-[5%] text-center`}>
                         <button
                           type="button"
                           onClick={() => openViewDrawer(product.id)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
+                          className="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
                           title={reviewActionTitle}
                         >
-                          <Search className="h-4 w-4" />
+                          <Search className="h-3 w-3" />
                         </button>
                       </td>
 
-                      <td className={`${tableCell} w-[8%] text-center`}>
+                      <td className={`${tableCell} w-[7%] text-center`}>
                         <button
                           type="button"
                           onClick={() => handleTogglePublished(product)}
                           disabled={publishToggleDisabled}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                          className={`relative inline-flex h-5 w-10 items-center rounded-full transition ${
                             isPublished ? "bg-emerald-500" : "bg-slate-300"
                           } disabled:cursor-not-allowed disabled:opacity-60`}
                           aria-label={publishToggleTitle}
@@ -1328,35 +1196,32 @@ export default function AdminProductsPage() {
                           title={publishToggleTitle}
                         >
                           <span
-                            className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
                               isPublished ? "translate-x-5" : "translate-x-0.5"
                             }`}
                           />
                         </button>
                       </td>
 
-                      <td className={`${tableCell} w-[8%] text-center`}>
-                        <div className="inline-flex items-center gap-2 whitespace-nowrap">
+                      <td className={`${tableCell} w-[6%] text-center`}>
+                        <div className="inline-flex items-center gap-1 whitespace-nowrap">
                           <button
                             type="button"
                             onClick={() => openEditDrawer(product.id)}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-100"
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-100"
                             title="Edit product"
                           >
-                            <Pencil className="h-4 w-4" />
+                            <Pencil className="h-3 w-3" />
                           </button>
                           <button
                             type="button"
                             onClick={() => handleDeleteOne(product.id)}
                             disabled={deleteMutation.isPending}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 text-rose-600 hover:border-rose-300 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-rose-200 text-rose-600 hover:border-rose-300 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
                             title="Delete product"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-3 w-3" />
                           </button>
-                        </div>
-                        <div className="mt-1 text-[11px] font-medium text-slate-400">
-                          Quick edit
                         </div>
                       </td>
                     </tr>

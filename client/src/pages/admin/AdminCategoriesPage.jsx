@@ -57,23 +57,22 @@ const hasParentCategory = (category) => {
 };
 
 const btnBase =
-  "inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 text-sm font-semibold transition";
+  "inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 text-[11px] font-medium transition";
 const btnOutline = `${btnBase} border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50`;
 const btnGreen = `${btnBase} bg-emerald-600 text-white hover:bg-emerald-700`;
 const btnDanger = `${btnBase} bg-rose-600 text-white hover:bg-rose-700`;
 const btnAmber = `${btnBase} bg-amber-500 text-white hover:bg-amber-600`;
+const btnSoft = `${btnBase} bg-slate-50 text-slate-600 hover:bg-slate-100`;
 const fieldClass =
-  "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none";
-const statCardClass =
-  "rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-right shadow-sm";
+  "h-8 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none";
 const tableHeadCell =
-  "whitespace-nowrap px-4 py-3.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500";
-const tableCell = "px-4 py-3.5 align-middle text-sm text-slate-700";
+  "whitespace-nowrap px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500";
+const tableCell = "px-3 py-2 align-middle text-sm text-slate-700";
 
 function CategoryPublishedBadge({ published }) {
   return (
     <span
-      className={`inline-flex min-h-7 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+      className={`inline-flex min-h-6 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
         published
           ? "border-emerald-200 bg-emerald-50 text-emerald-700"
           : "border-slate-200 bg-slate-100 text-slate-600"
@@ -91,12 +90,13 @@ function CategoryPublishedBadge({ published }) {
 
 function CategoryTypeBadge({ isChildRow, isSubView }) {
   const label = isSubView ? "Sub Category" : isChildRow ? "Child Category" : "Parent Category";
-  const palette = isSubView || isChildRow
-    ? "border-sky-200 bg-sky-50 text-sky-700"
-    : "border-violet-200 bg-violet-50 text-violet-700";
+  const palette =
+    isSubView || isChildRow
+      ? "bg-sky-50 text-sky-600"
+      : "bg-slate-100 text-slate-500";
   return (
     <span
-      className={`inline-flex min-h-7 items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${palette}`}
+      className={`inline-flex min-h-5 items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${palette}`}
     >
       {label}
     </span>
@@ -543,14 +543,11 @@ export default function AdminCategoriesPage() {
   }, [localPreviewUrl, form.icon]);
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-[26px] border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
-              Admin / Categories
-            </p>
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+    <div className="space-y-4">
+      <div className="rounded-[22px] border border-slate-200 bg-white px-4 py-2.5 shadow-sm sm:px-5">
+        <div className="flex flex-col gap-1.5">
+          <div className="space-y-0.5">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
               {isSubView ? "Sub Categories" : "Categories"}
             </h1>
             {isSubView ? (
@@ -569,24 +566,23 @@ export default function AdminCategoriesPage() {
               <p className="text-sm text-slate-500">Organize your product catalog hierarchy.</p>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:w-auto">
-            <div className={statCardClass}>
-              <p className="text-[11px] uppercase tracking-wide text-slate-500">Total records</p>
-              <p className="mt-1 text-lg font-semibold text-slate-900">
-                {isSubView ? tableItems.length : meta.total || 0}
-              </p>
-            </div>
-            <div className={statCardClass}>
-              <p className="text-[11px] uppercase tracking-wide text-slate-500">Active filters</p>
-              <p className="mt-1 text-lg font-semibold text-slate-900">{activeFilterCount}</p>
-            </div>
-          </div>
+          <p className="text-[11px] text-slate-500">
+            {isSubView ? tableItems.length : meta.total || 0} total
+            <span className="mx-1.5 text-slate-300">•</span>
+            {activeFilterCount} filters
+            {selectedIds.length > 0 ? (
+              <>
+                <span className="mx-1.5 text-slate-300">•</span>
+                {selectedIds.length} selected
+              </>
+            ) : null}
+          </p>
         </div>
       </div>
 
       {notice?.message ? (
         <div
-          className={`rounded-xl px-4 py-2 text-sm ${
+          className={`rounded-xl px-3 py-2 text-sm ${
             notice.type === "error"
               ? "border border-rose-200 bg-rose-50 text-rose-700"
               : "border border-emerald-200 bg-emerald-50 text-emerald-700"
@@ -596,60 +592,60 @@ export default function AdminCategoriesPage() {
         </div>
       ) : null}
 
-      <div className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="mb-4 flex flex-col gap-3 border-b border-slate-100 pb-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Category Controls
-            </p>
-            <h2 className="text-lg font-semibold text-slate-900">
-              {isSubView ? "Keep child categories grouped under the right parent" : "Organize parent categories and sub category access"}
-            </h2>
-            <p className="text-sm text-slate-500">
-              {isSubView
-                ? `Review child records under ${selectedParentName} before editing or publishing them.`
-                : "Search, filter, and manage category hierarchy before opening the category drawer."}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500">
-            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-              Visible now: {tableItems.length}
-            </span>
-            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-              Selected: {selectedIds.length}
-            </span>
-            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-              {isSubView ? `Parent: ${selectedParentName}` : `Active filters: ${activeFilterCount}`}
-            </span>
-          </div>
-        </div>
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="w-full xl:max-w-xl">
-            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-              Search hierarchy
-            </p>
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type="search"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder={isSubView ? "Search sub category name" : "Search category name"}
-                className={`${fieldClass} pl-9`}
-              />
+      <div className="rounded-[22px] border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="space-y-2">
+          <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+            <div className="w-full xl:max-w-sm">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder={isSubView ? "Search sub category name" : "Search category name"}
+                  className={`${fieldClass} pl-9`}
+                />
+              </div>
             </div>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="mr-1 hidden text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 xl:block">
-              Quick actions
-            </div>
+            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+              {!isSubView ? (
+                <div className="flex h-8 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-[11px] text-slate-600">
+                  <span>{parentsOnly ? "Parents only" : "All levels"}</span>
+                  <button
+                    type="button"
+                    onClick={() => setParentsOnly((prev) => !prev)}
+                    className={`relative inline-flex h-5 w-10 items-center rounded-full transition ${
+                      parentsOnly ? "bg-emerald-500" : "bg-slate-300"
+                    }`}
+                    aria-label="Toggle parents only"
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                        parentsOnly ? "translate-x-5" : "translate-x-0.5"
+                      }`}
+                    />
+                  </button>
+                </div>
+              ) : null}
+              <button type="button" onClick={handleApplyFilters} className={btnOutline}>
+                <Filter className="h-4 w-4" />
+                Apply
+              </button>
+              <button type="button" onClick={handleResetFilters} className={btnSoft}>
+                <RotateCcw className="h-4 w-4" />
+                Reset
+              </button>
+              <button type="button" onClick={openCreate} className={btnGreen}>
+                <Plus className="h-4 w-4" />
+                Add Category
+              </button>
             {!isSubView ? (
               <>
                 <button
                   type="button"
                   onClick={() => handleDemoAction("Export")}
-                  className={btnOutline}
+                  className={btnSoft}
                 >
                   <Download className="h-4 w-4" />
                   Export
@@ -657,82 +653,36 @@ export default function AdminCategoriesPage() {
                 <button
                   type="button"
                   onClick={() => handleDemoAction("Import")}
-                  className={btnOutline}
+                  className={btnSoft}
                 >
                   <Upload className="h-4 w-4" />
                   Import
                 </button>
               </>
             ) : null}
-            <button
-              type="button"
-              onClick={() => handleDemoAction("Bulk Action")}
-              className={btnAmber}
-            >
-              <Layers3 className="h-4 w-4" />
-              Bulk Action
-            </button>
-            <button
-              type="button"
-              onClick={handleDeleteSelected}
-              className={btnDanger}
-              disabled={
-                selectedIds.length === 0 || bulkMutation.isPending || bulkMutation.isLoading
-              }
-            >
-              <Trash2 className="h-4 w-4" />
-              {bulkMutation.isPending ? "Deleting..." : "Delete"}
-            </button>
-            <button type="button" onClick={openCreate} className={btnGreen}>
-              <Plus className="h-4 w-4" />
-              Add Category
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <div>
-            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-              Apply filters
-            </p>
-            <button type="button" onClick={handleApplyFilters} className={`${btnGreen} w-full`}>
-              <Filter className="h-4 w-4" />
-              Apply
-            </button>
-          </div>
-          <div>
-            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-              Clear filters
-            </p>
-            <button type="button" onClick={handleResetFilters} className={`${btnOutline} w-full`}>
-              <RotateCcw className="h-4 w-4" />
-              Reset
-            </button>
-          </div>
-          {!isSubView ? (
-            <div>
-              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                Scope
-              </p>
-              <div className="flex h-11 items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-600 sm:justify-center sm:gap-3">
-                <span>{parentsOnly ? "Parents only" : "All category levels"}</span>
                 <button
                   type="button"
-                  onClick={() => setParentsOnly((prev) => !prev)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
-                    parentsOnly ? "bg-emerald-500" : "bg-slate-300"
-                  }`}
-                  aria-label="Toggle parents only"
+                  onClick={() => handleDemoAction("Bulk Action")}
+                  className={`${selectedIds.length > 0 ? btnAmber : btnSoft}`}
+              >
+                <Layers3 className="h-4 w-4" />
+                Bulk
+              </button>
+              {selectedIds.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={handleDeleteSelected}
+                  className={btnDanger}
+                  disabled={
+                    selectedIds.length === 0 || bulkMutation.isPending || bulkMutation.isLoading
+                  }
                 >
-                  <span
-                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
-                      parentsOnly ? "translate-x-5" : "translate-x-0.5"
-                    }`}
-                  />
+                  <Trash2 className="h-4 w-4" />
+                  {bulkMutation.isPending ? "Deleting..." : "Delete"}
                 </button>
-              </div>
+              ) : null}
             </div>
-          ) : null}
+          </div>
         </div>
       </div>
 
@@ -767,25 +717,23 @@ export default function AdminCategoriesPage() {
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-2 text-xs text-slate-500">
-            Showing <span className="font-semibold text-slate-700">{tableItems.length}</span> records
+          <div className="border-b border-slate-100 bg-slate-50/70 px-3 py-1 text-[10px] text-slate-500">
+            <span className="font-semibold text-slate-700">{tableItems.length}</span> rows
             {isSubView ? (
               <span className="text-slate-500"> under {selectedParentName}</span>
             ) : (
               <>
                 {" "}
-                of <span className="font-semibold text-slate-700">{meta.total || 0}</span>
+                / <span className="font-semibold text-slate-700">{meta.total || 0}</span>
               </>
             )}
-            <span className="ml-2 inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-              {selectedIds.length} selected
-            </span>
+            {selectedIds.length > 0 ? <span className="ml-2 text-slate-400">{selectedIds.length} selected</span> : null}
           </div>
-          <div className="-mx-4 w-auto overflow-x-auto px-4 pb-1 md:mx-0 md:w-full md:px-0">
-            <table className="w-full min-w-[980px] text-left text-sm">
+          <div className="-mx-3 w-auto overflow-x-auto px-3 pb-1 md:mx-0 md:w-full md:px-0">
+            <table className="w-full min-w-[860px] text-left text-sm">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className={`${tableHeadCell} w-12`}>
+                  <th className={`${tableHeadCell} w-[4%]`}>
                     <input
                       type="checkbox"
                       checked={allSelected}
@@ -796,12 +744,10 @@ export default function AdminCategoriesPage() {
                       className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                     />
                   </th>
-                  <th className={tableHeadCell}>ID</th>
-                  <th className={tableHeadCell}>Icon</th>
-                  <th className={tableHeadCell}>Name</th>
-                  <th className={tableHeadCell}>Description</th>
-                  <th className={tableHeadCell}>Status</th>
-                  <th className={`${tableHeadCell} text-right`}>Actions</th>
+                  <th className={`${tableHeadCell} w-[36%]`}>Category</th>
+                  <th className={`${tableHeadCell} w-[25%]`}>Description</th>
+                  <th className={`${tableHeadCell} w-[16%]`}>Status</th>
+                  <th className={`${tableHeadCell} w-[19%] text-right`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -824,7 +770,7 @@ export default function AdminCategoriesPage() {
                       key={category.id}
                       className="border-t border-slate-100 text-slate-700 transition hover:bg-slate-50/80"
                     >
-                      <td className={tableCell}>
+                      <td className={`${tableCell} w-[4%]`}>
                         <input
                           type="checkbox"
                           checked={selectedIds.includes(category.id)}
@@ -837,90 +783,78 @@ export default function AdminCategoriesPage() {
                           className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                         />
                       </td>
-                      <td className={`${tableCell} font-medium tabular-nums text-slate-700`}>
-                        <div className="space-y-1">
-                          <div>{category.code || category.id}</div>
-                          <div className="text-[11px] font-medium text-slate-400">
-                            {category.code ? `ID #${category.id}` : "Generated code"}
-                          </div>
-                        </div>
-                      </td>
-                      <td className={tableCell}>
-                        {hasImage ? (
-                          <img
-                            src={iconValue}
-                            alt={category.name}
-                            className="h-10 w-10 rounded-lg border border-slate-200 object-cover"
-                          />
-                        ) : hasEmojiIcon ? (
-                          <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-base">
-                            {iconValue}
-                          </span>
-                        ) : (
-                          <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-400">
-                            <ImageIcon className="h-4 w-4" />
-                          </span>
-                        )}
-                      </td>
-                      <td className={`${tableCell} max-w-[260px]`}>
-                        <div className="min-w-0">
+                      <td className={`${tableCell} w-[36%]`}>
+                        <div className="flex items-center gap-2.5">
+                          {hasImage ? (
+                            <img
+                              src={iconValue}
+                              alt={category.name}
+                              className="h-9 w-9 rounded-lg border border-slate-200 object-cover"
+                            />
+                          ) : hasEmojiIcon ? (
+                            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-sm">
+                              {iconValue}
+                            </span>
+                          ) : (
+                            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-400">
+                              <ImageIcon className="h-4 w-4" />
+                            </span>
+                          )}
+                          <div className="min-w-0">
                           {!isSubView && !isChildRow ? (
                             <button
                               type="button"
                               onClick={() => handleOpenSubcategories(category)}
-                              className="inline-flex items-center gap-1 text-left font-medium text-slate-900 hover:text-emerald-600"
+                              className="inline-flex items-center gap-1 text-left text-sm font-semibold text-slate-900 hover:text-emerald-600"
                             >
                               <span className="truncate">{category.name}</span>
                               <ChevronRight className="h-4 w-4 text-slate-400" />
                             </button>
                           ) : (
-                            <span className="font-medium text-slate-900">{category.name}</span>
+                            <span className="text-sm font-semibold text-slate-900">{category.name}</span>
                           )}
-                          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                            <CategoryTypeBadge isChildRow={isChildRow} isSubView={isSubView} />
-                            <span className="truncate">
-                              {isSubView || isChildRow ? `Parent: ${parentLabel}` : "Open to manage child records"}
-                            </span>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-slate-400">
+                              <span>{category.code || `ID #${category.id}`}</span>
+                              <span className="text-slate-300">•</span>
+                              <CategoryTypeBadge isChildRow={isChildRow} isSubView={isSubView} />
+                              <span className="text-slate-300">•</span>
+                              <span className="truncate">
+                                {isSubView || isChildRow ? parentLabel : "Open child records"}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </td>
-                      <td className={`${tableCell} max-w-[300px] text-slate-500`}>
-                        <div className="space-y-1">
-                          <span className="line-clamp-1">{category.description || "-"}</span>
-                          <span className="block text-[11px] font-medium text-slate-400">
-                            {isChildRow || isSubView ? "Child metadata" : "Catalog landing group"}
-                          </span>
-                        </div>
+                      <td className={`${tableCell} w-[25%] max-w-[260px] text-slate-500`}>
+                        <span className="line-clamp-2 text-sm text-slate-500">
+                          {category.description || "-"}
+                        </span>
                       </td>
-                      <td className={tableCell}>
+                      <td className={`${tableCell} w-[16%]`}>
                         <div className="flex items-center gap-2">
                           <CategoryPublishedBadge published={Boolean(category.published)} />
                           <button
                             type="button"
                             onClick={() => handleTogglePublished(category)}
                             disabled={isPublishingRow}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                            className={`relative inline-flex h-5 w-10 items-center rounded-full transition ${
                               category.published ? "bg-emerald-500" : "bg-slate-300"
                             } ${isPublishingRow ? "cursor-wait opacity-60" : ""}`}
                             aria-label={`Toggle publish for ${category.name}`}
                           >
                             <span
-                              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
+                              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
                                 category.published ? "translate-x-5" : "translate-x-0.5"
                               }`}
                             />
                           </button>
                         </div>
-                        <div className="mt-1 text-[11px] font-medium text-slate-400">
-                          {isPublishingRow
-                            ? "Updating visibility..."
-                            : category.published
-                            ? "Visible to catalog mapping"
-                            : "Hidden from active mapping"}
-                        </div>
+                        {isPublishingRow ? (
+                          <div className="mt-1 text-[10px] font-medium text-slate-400">Updating...</div>
+                        ) : null}
                       </td>
-                      <td className={`${tableCell} text-right`}>
-                        <div className="flex items-center justify-end gap-2">
+                      <td className={`${tableCell} w-[19%] text-right`}>
+                        <div className="flex items-center justify-end gap-1">
                           <button
                             type="button"
                             onClick={() => {
@@ -933,7 +867,7 @@ export default function AdminCategoriesPage() {
                                 : "Only parent categories can be viewed"
                             }
                             aria-disabled={!canOpenSubcategories}
-                            className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white transition ${
+                            className={`inline-flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200 bg-white transition ${
                               canOpenSubcategories
                                 ? "text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
                                 : "pointer-events-auto cursor-not-allowed text-slate-500 opacity-40"
@@ -945,34 +879,30 @@ export default function AdminCategoriesPage() {
                                 : `View disabled for ${category.name}`
                             }
                           >
-                            <ZoomIn className="h-4 w-4" />
+                            <ZoomIn className="h-3 w-3" />
                           </button>
                           <button
                             type="button"
                             onClick={() => openEdit(category)}
                             disabled={isRowBusy}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                             aria-label={`Edit ${category.name}`}
                           >
-                            <Pencil className="h-4 w-4" />
+                            <Pencil className="h-3 w-3" />
                           </button>
                           <button
                             type="button"
                             onClick={() => handleDeleteCategory(category)}
                             disabled={isRowBusy}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 text-rose-600 hover:border-rose-300 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-rose-200 text-rose-600 hover:border-rose-300 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
                             aria-label={`Delete ${category.name}`}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-3 w-3" />
                           </button>
                         </div>
-                        <div className="mt-1 text-[11px] font-medium text-slate-400">
-                          {isDeletingRow
-                            ? "Deleting category..."
-                            : canOpenSubcategories
-                            ? "View children or quick edit"
-                            : "Quick edit"}
-                        </div>
+                        {isDeletingRow ? (
+                          <div className="mt-1 text-[10px] font-medium text-slate-400">Deleting...</div>
+                        ) : null}
                       </td>
                     </tr>
                   );

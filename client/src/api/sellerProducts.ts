@@ -6,7 +6,11 @@ type SellerProductsQuery = {
   keyword?: string;
   status?: string;
   published?: "" | "true" | "false";
+  submissionStatus?: "" | "none" | "submitted" | "needs_revision" | "review_queue";
+  visibilityState?: "" | "internal_only" | "storefront_visible" | "published_blocked";
 };
+
+type SellerBulkSubmissionAction = "submit_review" | "resubmit_review";
 
 type SellerProductDraftPayload = {
   name: string;
@@ -28,6 +32,12 @@ const asNumber = (value: unknown, fallback = 0) => {
 };
 
 const normalizeText = (value: unknown) => String(value || "").trim();
+const normalizePositiveIds = (value: unknown, max = 200) => {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(value.map((entry) => asNumber(entry, 0)).filter((entry) => entry > 0))
+  ).slice(0, max);
+};
 
 const normalizeProductStatus = (value: unknown) => {
   const status = normalizeText(value).toLowerCase();
@@ -207,6 +217,10 @@ const normalizeProductAuthoring = (value: any) => {
 const normalizeProductSubmission = (value: any) => {
   if (!value || typeof value !== "object") return null;
 
+  const revisionNote = normalizeText(value.revisionNote) || null;
+  const reviewNote = normalizeText(value.reviewNote) || revisionNote;
+  const revisionReason = normalizeText(value.revisionReason) || reviewNote || revisionNote;
+
   return {
     status: normalizeText(value.status) || "none",
     label: normalizeText(value.label) || null,
@@ -217,8 +231,16 @@ const normalizeProductSubmission = (value: any) => {
     storefrontImpact: normalizeText(value.storefrontImpact) || null,
     revisionRequestedAt: value.revisionRequestedAt || null,
     revisionRequestedByUserId: asNumber(value.revisionRequestedByUserId, 0) || null,
-    revisionNote: normalizeText(value.revisionNote) || null,
+    revisionNote,
+    reviewNote,
+    revisionReason,
     requiresSellerChanges: Boolean(value.requiresSellerChanges),
+    canSubmit: Boolean(value.canSubmit),
+    canResubmit: Boolean(value.canResubmit),
+    canEdit: Boolean(value.canEdit),
+    nextActionCode: normalizeText(value.nextActionCode) || null,
+    nextActionLabel: normalizeText(value.nextActionLabel) || null,
+    nextActionDescription: normalizeText(value.nextActionDescription) || null,
   };
 };
 
@@ -242,6 +264,8 @@ const normalizeProductListItem = (item: any) => {
     },
     published,
     visibility: buildVisibility(published, status, item.visibility),
+    storefrontVisibilityState:
+      normalizeText(item.storefrontVisibilityState || item.visibility?.stateCode) || null,
     pricing: normalizePricing(item.pricing),
     availability: normalizeAvailability(item.availability, item.inventory),
     inventory: {
@@ -366,6 +390,16 @@ const normalizeCatalogGovernance = (governance: any) => {
   };
 };
 
+const normalizeProductSummary = (value: any) => ({
+  totalProducts: asNumber(value?.totalProducts, 0),
+  drafts: asNumber(value?.drafts, 0),
+  submitted: asNumber(value?.submitted, 0),
+  needsRevision: asNumber(value?.needsRevision, 0),
+  storefrontVisible: asNumber(value?.storefrontVisible, 0),
+  publishedBlocked: asNumber(value?.publishedBlocked, 0),
+  internalOnly: asNumber(value?.internalOnly, 0),
+});
+
 const normalizeAssignedCategories = (value: unknown) =>
   Array.isArray(value) ? value.map(normalizeCategorySummary).filter(Boolean) : [];
 
@@ -391,6 +425,8 @@ const normalizeProductDetail = (item: any) => {
     },
     published,
     visibility: buildVisibility(published, status, item.visibility),
+    storefrontVisibilityState:
+      normalizeText(item.storefrontVisibilityState || item.visibility?.stateCode) || null,
     pricing: normalizePricing(item.pricing),
     availability: normalizeAvailability(item.availability, item.inventory),
     inventory: {
@@ -431,6 +467,8 @@ export const getSellerProducts = async (
       keyword: query.keyword || undefined,
       status: query.status || undefined,
       published: query.published || undefined,
+      submissionStatus: query.submissionStatus || undefined,
+      visibilityState: query.visibilityState || undefined,
     },
   });
   const payload = data?.data ?? null;
@@ -440,6 +478,7 @@ export const getSellerProducts = async (
     ...payload,
     contract: payload.contract && typeof payload.contract === "object" ? payload.contract : null,
     governance: normalizeCatalogGovernance(payload.governance),
+    summary: normalizeProductSummary(payload.summary),
     items: Array.isArray(payload.items)
       ? payload.items.map(normalizeProductListItem).filter(Boolean)
       : [],
@@ -448,6 +487,91 @@ export const getSellerProducts = async (
       limit: asNumber(payload.pagination?.limit, asNumber(query.limit, 20)),
       total: asNumber(payload.pagination?.total, 0),
     },
+  };
+};
+
+export const exportSellerProducts = async (
+  storeId: number | string,
+  options: {
+    ids?: number[];
+    filters?: SellerProductsQuery;
+  } = {}
+) => {
+  try {
+    const response = await api.post(
+      `/seller/stores/${storeId}/products/export`,
+      {
+        ...(Array.isArray(options.ids) ? { ids: normalizePositiveIds(options.ids, 500) } : {}),
+        filters: options.filters || {},
+      },
+      {
+        responseType: "blob",
+      }
+    );
+    const disposition = String(response.headers?.["content-disposition"] || "");
+    const filenameMatch = disposition.match(/filename="?(?<filename>[^"]+)"?/i);
+
+    return {
+      blob: response.data as Blob,
+      filename: filenameMatch?.groups?.filename || `seller-products-${storeId}.csv`,
+    };
+  } catch (error: any) {
+    const blob = error?.response?.data;
+    if (blob instanceof Blob) {
+      let payload = null;
+
+      try {
+        const text = await blob.text();
+        payload = JSON.parse(text);
+      } catch {
+        // Fall through to the original transport error.
+      }
+
+      if (payload && typeof payload === "object") {
+        const nextError = new Error(
+          normalizeText(payload?.message) || "Failed to export seller products."
+        ) as Error & { response?: any };
+        (nextError as any).response = {
+          ...error?.response,
+          data: payload,
+        };
+        throw nextError;
+      }
+    }
+
+    throw error;
+  }
+};
+
+export const bulkSubmitSellerProductsForReview = async (
+  storeId: number | string,
+  action: SellerBulkSubmissionAction,
+  ids: number[]
+) => {
+  const { data } = await api.post(`/seller/stores/${storeId}/products/bulk-submission`, {
+    action,
+    ids: normalizePositiveIds(ids),
+  });
+
+  const payload = data?.data ?? null;
+  return {
+    action: normalizeText(payload?.action),
+    actionLabel: normalizeText(payload?.actionLabel),
+    summary: {
+      requested: asNumber(payload?.summary?.requested, 0),
+      successCount: asNumber(payload?.summary?.successCount, 0),
+      failureCount: asNumber(payload?.summary?.failureCount, 0),
+    },
+    results: Array.isArray(payload?.results)
+      ? payload.results.map((entry: any) => ({
+          id: asNumber(entry?.id, 0),
+          name: normalizeText(entry?.name) || null,
+          status: normalizeText(entry?.status) || "failed",
+          code: normalizeText(entry?.code) || null,
+          message: normalizeText(entry?.message) || null,
+          submissionStatus: normalizeText(entry?.submissionStatus) || null,
+        }))
+      : [],
   };
 };
 

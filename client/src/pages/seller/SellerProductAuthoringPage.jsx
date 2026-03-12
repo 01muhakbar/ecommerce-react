@@ -225,6 +225,9 @@ const getAuthoringErrorMessage = (error, mode = "create") => {
   );
 };
 
+const getSubmissionReason = (submission) =>
+  submission?.reviewNote || submission?.revisionReason || submission?.revisionNote || null;
+
 function ProductField({ label, hint, multiline = false, disabled = false, ...props }) {
   const inputClasses = multiline ? sellerTextareaClass : sellerFieldClass;
 
@@ -308,6 +311,7 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
   const submissionGovernance = governance?.submissionGovernance ?? null;
   const detailAuthoring = productQuery.data?.authoring ?? null;
   const submission = productQuery.data?.submission ?? null;
+  const submissionReason = getSubmissionReason(submission);
   const categoryReference = metaQuery.data?.references?.categories || [];
   const categoryTree = useMemo(() => buildCategoryTree(categoryReference), [categoryReference]);
   const selectedCategories = useMemo(
@@ -320,7 +324,13 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
   const defaultCategoryOptions = selectedCategories;
   const canCreateDraft = Boolean(authoringGovernance?.canCreateDraft);
   const canEditDraft = Boolean(detailAuthoring?.canEditDraft);
-  const canSubmitForReview = Boolean(isEditMode && submissionGovernance?.canSubmitWhenEnabled);
+  const canSubmitForReview = Boolean(
+    isEditMode &&
+      (submission?.canSubmit ||
+        submission?.canResubmit ||
+        submissionGovernance?.canSubmitWhenEnabled)
+  );
+  const isNeedsRevision = submission?.status === "needs_revision";
   const isBusy = metaQuery.isLoading || (isEditMode && productQuery.isLoading);
   const canManageMedia = Array.isArray(fieldGovernance?.sellerEditableNow)
     ? fieldGovernance.sellerEditableNow.includes("imageUrls")
@@ -669,10 +679,18 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
     <div className="space-y-6">
       <SellerWorkspaceSectionHeader
         eyebrow="Seller Catalog"
-        title={isEditMode ? "Edit seller draft" : "Create seller draft"}
+        title={
+          isEditMode
+            ? isNeedsRevision
+              ? "Continue seller revision"
+              : "Edit seller draft"
+            : "Create seller draft"
+        }
         description={
           isEditMode
-            ? "Update the draft-safe seller fields opened in phase 2. Publish and broader governance-heavy actions remain outside this lane."
+            ? isNeedsRevision
+              ? "Admin requested revisions for this draft. Update the allowed seller fields, then resubmit it for review when the requested changes are complete."
+              : "Update the draft-safe seller fields opened in phase 2. Publish and broader governance-heavy actions remain outside this lane."
             : "Create a store-scoped draft with core seller-owned fields such as categories, pricing, and stock while publish stays admin-owned."
         }
         actions={[
@@ -702,7 +720,7 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
         <SellerWorkspaceNotice type="info">{authoringGovernance.note}</SellerWorkspaceNotice>
       ) : null}
 
-      {submission?.status === "needs_revision" ? (
+      {isNeedsRevision ? (
         <SellerWorkspaceNotice type="warning">
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-[0.18em]">
@@ -712,15 +730,59 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
               Admin reopened this draft for corrections. Update the allowed seller fields, then
               resubmit it for review when ready.
             </p>
-            {submission?.revisionNote ? <p>{submission.revisionNote}</p> : null}
+            {submissionReason ? <p>{submissionReason}</p> : null}
           </div>
         </SellerWorkspaceNotice>
       ) : null}
 
+      {isEditMode ? (
+        <SellerWorkspaceSectionCard
+          title="Submission context"
+          hint="Use this state panel to understand the current revision lane before editing or resubmitting."
+          Icon={ShieldCheck}
+        >
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <SellerWorkspaceDetailItem
+              label="Submission Status"
+              value={submission?.label || "Not submitted"}
+              hint={submission?.reviewState || "NOT_SUBMITTED"}
+            />
+            <SellerWorkspaceDetailItem
+              label="Revision Reason"
+              value={submissionReason || "No revision request recorded."}
+              hint={
+                isNeedsRevision
+                  ? "Address this request before resubmitting."
+                  : "This stays empty until admin sends the draft back for changes."
+              }
+            />
+            <SellerWorkspaceDetailItem
+              label="Storefront Visibility"
+              value={productQuery.data?.visibility?.storefrontLabel || "Hidden from storefront"}
+              hint={productQuery.data?.visibility?.storefrontReason || "-"}
+            />
+            <SellerWorkspaceDetailItem
+              label="Next Recommended Action"
+              value={submission?.nextActionLabel || "Edit Draft"}
+              hint={
+                submission?.nextActionDescription ||
+                "Keep editing the seller-owned draft fields before submitting this product."
+              }
+            />
+          </div>
+        </SellerWorkspaceSectionCard>
+      ) : null}
+
       <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <SellerWorkspaceSectionCard
-          title={isEditMode ? "Draft authoring form" : "New draft form"}
-          hint="Phase 2 opens core seller-managed draft fields without exposing publish or admin-owned controls."
+          title={
+            isEditMode ? (isNeedsRevision ? "Revision form" : "Draft authoring form") : "New draft form"
+          }
+          hint={
+            isNeedsRevision
+              ? "Only the seller-managed draft fields are reopened here. Complete the requested corrections, then resubmit for admin review."
+              : "Phase 2 opens core seller-managed draft fields without exposing publish or admin-owned controls."
+          }
           Icon={isEditMode ? Save : Plus}
         >
           <form className="space-y-5" onSubmit={handleSubmit}>
@@ -933,10 +995,14 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
                 {isEditMode ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
                 {mutation.isPending
                   ? isEditMode
-                    ? "Saving draft..."
+                    ? isNeedsRevision
+                      ? "Saving revision..."
+                      : "Saving draft..."
                     : "Creating draft..."
                   : isEditMode
-                    ? "Save Draft"
+                    ? isNeedsRevision
+                      ? "Save Revision"
+                      : "Save Draft"
                     : "Create Draft"}
               </button>
               {canSubmitForReview ? (

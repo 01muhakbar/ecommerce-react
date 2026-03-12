@@ -1,23 +1,47 @@
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Boxes, EyeOff, Package, Plus, Search, Store, Tag } from "lucide-react";
-import { getSellerProducts } from "../../api/sellerProducts.ts";
+import {
+  Boxes,
+  Download,
+  Filter,
+  Package,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Search,
+  Send,
+} from "lucide-react";
+import {
+  bulkSubmitSellerProductsForReview,
+  exportSellerProducts,
+  getSellerProducts,
+  submitSellerProductDraftForReview,
+} from "../../api/sellerProducts.ts";
 import { resolveAssetUrl } from "../../lib/assetUrl.js";
 import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
 import { useSellerWorkspaceRoute } from "../../utils/sellerWorkspaceRoute.js";
 import {
   sellerFieldClass,
+  sellerPrimaryButtonClass,
   sellerSecondaryButtonClass,
+  sellerTableWrapClass,
   SellerWorkspaceBadge,
   SellerWorkspaceEmptyState,
-  SellerWorkspaceFilterBar,
   SellerWorkspaceNotice,
   SellerWorkspacePanel,
-  SellerWorkspaceStatePanel,
   SellerWorkspaceSectionHeader,
-  SellerWorkspaceStatCard,
+  SellerWorkspaceStatePanel,
 } from "../../components/seller/SellerWorkspaceFoundation.jsx";
+
+const DEFAULT_FILTERS = {
+  keyword: "",
+  status: "",
+  submissionStatus: "",
+  visibilityState: "",
+  page: 1,
+  limit: 20,
+};
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat("id-ID", {
@@ -34,74 +58,518 @@ const formatDateTime = (value) =>
       }).format(new Date(value))
     : "-";
 
-const getStatusTone = (status) =>
-  status === "active" ? "emerald" : status === "draft" ? "amber" : "stone";
-
 const getVisibilityTone = (visibility) => {
   if (visibility?.stateCode === "STOREFRONT_VISIBLE") return "emerald";
   if (visibility?.stateCode === "PUBLISHED_BLOCKED") return "amber";
   return "stone";
 };
 
-const getAvailabilityTone = (availability) => {
-  if (availability?.stateCode === "PREORDER") return "sky";
-  if (availability?.stateCode === "IN_STOCK") return "emerald";
-  return "amber";
-};
-
 const getSubmissionTone = (status) =>
   status === "submitted" ? "sky" : status === "needs_revision" ? "amber" : "stone";
 
-export default function SellerCatalogPage() {
-  const { sellerContext, workspaceStoreId: storeId, workspaceRoutes } =
-    useSellerWorkspaceRoute();
-  const permissionKeys = sellerContext?.access?.permissionKeys || [];
-  const canViewProducts = permissionKeys.includes("PRODUCT_VIEW");
-  const [filters, setFilters] = useState({
-    keyword: "",
-    status: "",
-    published: "",
-    page: 1,
-    limit: 20,
+const buildActiveFilterCount = (filters) =>
+  [
+    filters.keyword?.trim(),
+    filters.status,
+    filters.submissionStatus,
+    filters.visibilityState,
+  ].filter(Boolean).length;
+
+const downloadBlobFile = (filename, blob) => {
+  const href = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = href;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(href);
+};
+
+function ReviewQueueCard({
+  label,
+  count,
+  tone = "slate",
+  active = false,
+  onClick,
+}) {
+  const toneClass =
+    tone === "sky"
+      ? active
+        ? "border-sky-300 bg-sky-50 text-sky-900"
+        : "border-sky-200 bg-white text-sky-800"
+      : tone === "amber"
+        ? active
+          ? "border-amber-300 bg-amber-50 text-amber-900"
+          : "border-amber-200 bg-white text-amber-800"
+        : tone === "emerald"
+          ? active
+            ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+            : "border-emerald-200 bg-white text-emerald-800"
+          : active
+            ? "border-slate-300 bg-slate-50 text-slate-900"
+            : "border-slate-200 bg-white text-slate-800";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-medium transition ${toneClass}`}
+    >
+      <span>{label}</span>
+      <span className="rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-semibold">{count}</span>
+    </button>
+  );
+}
+
+function CompactSummaryItem({ label, value, tone = "slate" }) {
+  const toneClass =
+    tone === "amber"
+      ? "border-amber-200 bg-amber-50 text-amber-900"
+      : tone === "sky"
+        ? "border-sky-200 bg-sky-50 text-sky-900"
+        : tone === "emerald"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+          : "border-slate-200 bg-white text-slate-900";
+
+  return (
+    <div className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs ${toneClass}`}>
+      <span className="font-medium opacity-75">{label}</span>
+      <span className="text-sm font-semibold">{value}</span>
+    </div>
+  );
+}
+
+const getSubmissionActionErrorMessage = (error) => {
+  const code = String(error?.response?.data?.code || "").trim().toUpperCase();
+  const message = String(error?.response?.data?.message || "").trim();
+
+  if (code === "SELLER_PRODUCT_SUBMISSION_DRAFT_REQUIRED") {
+    return "Only draft products can be submitted for review.";
+  }
+
+  if (code === "SELLER_PRODUCT_ALREADY_SUBMITTED") {
+    return "This draft is already submitted for review.";
+  }
+
+  return (
+    message ||
+    getSellerRequestErrorMessage(error, {
+      permissionMessage: "Your current seller access does not include seller draft submission.",
+      fallbackMessage: "Failed to submit seller draft for review.",
+    })
+  );
+};
+
+const getCurrentLaneLabel = (filters) => {
+  if (filters.submissionStatus === "review_queue") return "Review queue";
+  if (filters.submissionStatus === "submitted") return "Submitted";
+  if (filters.submissionStatus === "needs_revision") return "Needs revision";
+  if (filters.status === "draft") return "Draft";
+  if (filters.visibilityState === "storefront_visible") return "Storefront visible";
+  if (filters.visibilityState === "published_blocked") return "Published blocked";
+  return "All products";
+};
+
+const getSubmissionReason = (submission) =>
+  submission?.reviewNote || submission?.revisionReason || submission?.revisionNote || null;
+
+const compactActionButtonClass =
+  "inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60";
+const compactPrimaryActionButtonClass =
+  "inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-slate-900 px-3 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60";
+const compactTableHeadClass =
+  "px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500";
+const compactTableCellClass = "px-3 py-2.5 align-top text-sm text-slate-700";
+const compactTextLinkClass =
+  "inline-flex h-8 items-center whitespace-nowrap px-1 text-xs font-semibold text-slate-500 transition hover:text-slate-900";
+
+const getCompactStockLabel = (item) => {
+  const stock = Number(item?.inventory?.stock ?? item?.availability?.stock ?? 0);
+  if (stock <= 0) return "Out";
+  if (stock <= 10) return "Low";
+  return "Ready";
+};
+
+const getCompactSubmissionHint = (item) => {
+  if (item?.submission?.status === "submitted") return "Waiting admin";
+  if (item?.submission?.status === "needs_revision") return "Revise and resubmit";
+  return item?.submission?.hasSubmission ? "In review flow" : "Ready to submit";
+};
+
+const getCompactSubmissionLabel = (item) => {
+  if (item?.submission?.status === "submitted") return "Submitted";
+  if (item?.submission?.status === "needs_revision") return "Revision";
+  return "Draft";
+};
+
+const getCompactVisibilityLabel = (item) =>
+  item?.visibility?.storefrontVisible
+    ? "Visible"
+    : item?.visibility?.stateCode === "PUBLISHED_BLOCKED"
+      ? "Blocked"
+      : "Internal";
+
+const getCompactLifecycleLabel = (item) => {
+  const status = String(item?.statusMeta?.code || item?.status || "").toLowerCase();
+  if (status === "active") return "Active";
+  if (status === "inactive") return "Inactive";
+  return "Draft";
+};
+
+const BULK_ACTION_OPTIONS = [
+  {
+    value: "submit_review",
+    label: "Submit selected drafts",
+    description: "Only draft products that have not been submitted yet.",
+  },
+  {
+    value: "resubmit_review",
+    label: "Resubmit selected revisions",
+    description: "Only draft products currently in needs revision.",
+  },
+];
+
+const isItemEligibleForBulkAction = (item, action) => {
+  if (!item || action === "") return false;
+
+  if (action === "submit_review") {
+    return (
+      item.status === "draft" &&
+      item.submission?.status === "none" &&
+      Boolean(item.submission?.canSubmit)
+    );
+  }
+
+  if (action === "resubmit_review") {
+    return (
+      item.status === "draft" &&
+      item.submission?.status === "needs_revision" &&
+      Boolean(item.submission?.canResubmit)
+    );
+  }
+
+  return false;
+};
+
+const getBulkActionErrorMessage = (error) =>
+  getSellerRequestErrorMessage(error, {
+    permissionMessage:
+      "Your current seller access does not include seller bulk submission actions.",
+    fallbackMessage: "Failed to run seller bulk action.",
   });
 
+export default function SellerCatalogPage({ variant = "catalog" }) {
+  const queryClient = useQueryClient();
+  const { workspaceStoreId: storeId, workspaceRoutes, sellerContext } = useSellerWorkspaceRoute();
+  const permissionKeys = sellerContext?.access?.permissionKeys || [];
+  const canViewProducts = permissionKeys.includes("PRODUCT_VIEW");
+  const canCreateProducts = permissionKeys.includes("PRODUCT_CREATE");
+  const canEditProducts = permissionKeys.includes("PRODUCT_EDIT");
+  const [draftFilters, setDraftFilters] = useState(DEFAULT_FILTERS);
+  const [appliedFilters, setAppliedFilters] = useState(DEFAULT_FILTERS);
+  const [actionNotice, setActionNotice] = useState(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [bulkAction, setBulkAction] = useState("");
+  const [submittingProductId, setSubmittingProductId] = useState(null);
+  const isLanding = variant === "landing";
+
   const productsQuery = useQuery({
-    queryKey: ["seller", "products", storeId, filters],
-    queryFn: () => getSellerProducts(storeId, filters),
+    queryKey: ["seller", "products", storeId, appliedFilters],
+    queryFn: () => getSellerProducts(storeId, appliedFilters),
     enabled: Boolean(storeId) && canViewProducts,
     retry: false,
   });
 
-  const productStats = useMemo(() => {
+  const submitMutation = useMutation({
+    mutationFn: (productId) => submitSellerProductDraftForReview(storeId, productId),
+    onMutate: (productId) => {
+      setSubmittingProductId(Number(productId));
+      setActionNotice(null);
+    },
+    onSuccess: async (data, productId) => {
+      setActionNotice({
+        type: "success",
+        message:
+          data?.submission?.status === "submitted"
+            ? "Draft is now waiting for admin review. Seller publish remains admin-owned."
+            : "Seller draft submitted.",
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["seller", "products", storeId] }),
+        queryClient.invalidateQueries({
+          queryKey: ["seller", "products", "detail", storeId, productId],
+        }),
+      ]);
+    },
+    onError: (error) => {
+      setActionNotice({
+        type: "error",
+        message: getSubmissionActionErrorMessage(error),
+      });
+    },
+    onSettled: () => {
+      setSubmittingProductId(null);
+    },
+  });
+
+  const bulkMutation = useMutation({
+    mutationFn: ({ action, ids }) => bulkSubmitSellerProductsForReview(storeId, action, ids),
+    onMutate: () => {
+      setActionNotice(null);
+    },
+    onSuccess: async (data, variables) => {
+      const skippedCount = Number(variables?.skippedCount || 0);
+      const successCount = Number(data?.summary?.successCount || 0);
+      const failureCount = Number(data?.summary?.failureCount || 0) + skippedCount;
+      const failedRows = Array.isArray(data?.results)
+        ? data.results.filter((entry) => entry.status === "failed").slice(0, 4)
+        : [];
+
+      setSelectedIds((current) => {
+        const successfulIds = new Set(
+          (Array.isArray(data?.results) ? data.results : [])
+            .filter((entry) => entry.status === "success")
+            .map((entry) => Number(entry.id))
+        );
+
+        if (successfulIds.size === 0) return current;
+        return new Set([...current].filter((id) => !successfulIds.has(Number(id))));
+      });
+      setBulkAction("");
+      setActionNotice({
+        type:
+          successCount > 0 && failureCount > 0
+            ? "warning"
+            : successCount > 0
+              ? "success"
+              : "error",
+        title: data?.actionLabel || "Bulk action",
+        message:
+          successCount > 0
+            ? `${successCount} product(s) moved into the seller submission lane. Admin remains the final reviewer.`
+            : "No selected products were eligible for that seller bulk action.",
+        details: [
+          skippedCount > 0
+            ? `${skippedCount} selected row(s) were skipped in the workspace because their current state does not match the chosen action.`
+            : null,
+          ...failedRows.map(
+            (entry) =>
+              `${entry?.name || `Product #${entry?.id}`}: ${entry?.message || "Bulk action failed."}`
+          ),
+        ].filter(Boolean),
+        meta:
+          failureCount > 0
+            ? `${failureCount} row(s) were rejected because the current state or store boundary was invalid.`
+            : null,
+      });
+      await queryClient.invalidateQueries({ queryKey: ["seller", "products", storeId] });
+    },
+    onError: (error) => {
+      setActionNotice({
+        type: "error",
+        message: getBulkActionErrorMessage(error),
+      });
+    },
+  });
+
+  const summary = useMemo(() => {
+    const apiSummary = productsQuery.data?.summary;
+    if (apiSummary) return apiSummary;
+
     const items = productsQuery.data?.items || [];
-    const storefrontReadyCount = items.filter(
-      (item) => item.visibility?.stateCode === "STOREFRONT_VISIBLE"
-    ).length;
-    const publishedBlockedCount = items.filter(
-      (item) => item.visibility?.stateCode === "PUBLISHED_BLOCKED"
-    ).length;
-    const internalOnlyCount = items.filter(
-      (item) => item.visibility?.stateCode === "INTERNAL_ONLY"
-    ).length;
-    const draftCount = items.filter((item) => item.status === "draft").length;
-    const inactiveCount = items.filter((item) => item.status === "inactive").length;
     return {
-      storefrontReadyCount,
-      publishedBlockedCount,
-      internalOnlyCount,
-      draftCount,
-      inactiveCount,
+      totalProducts: items.length,
+      drafts: items.filter((item) => item.status === "draft").length,
+      submitted: items.filter((item) => item.submission?.status === "submitted").length,
+      needsRevision: items.filter((item) => item.submission?.status === "needs_revision").length,
+      storefrontVisible: items.filter(
+        (item) => item.visibility?.stateCode === "STOREFRONT_VISIBLE"
+      ).length,
+      publishedBlocked: items.filter(
+        (item) => item.visibility?.stateCode === "PUBLISHED_BLOCKED"
+      ).length,
+      internalOnly: items.filter((item) => item.visibility?.stateCode === "INTERNAL_ONLY").length,
     };
   }, [productsQuery.data]);
 
-  const hasActiveFilters = Boolean(filters.keyword.trim() || filters.status || filters.published);
+  const items = productsQuery.data?.items || [];
+  const pagination = productsQuery.data?.pagination || { page: 1, limit: 20, total: 0 };
+  const contractNotes = Array.isArray(productsQuery.data?.contract?.notes)
+    ? productsQuery.data.contract.notes
+    : [];
+  const catalogGovernance = productsQuery.data?.governance ?? null;
+  const authoringGovernance = catalogGovernance?.authoring ?? null;
+  const totalPages = Math.max(
+    1,
+    Math.ceil(Number(pagination.total || 0) / Number(pagination.limit || 20))
+  );
+  const activeFilterCount = buildActiveFilterCount(appliedFilters);
+  const itemIds = useMemo(
+    () => items.map((item) => Number(item.id)).filter((id) => id > 0),
+    [items]
+  );
+  const itemMap = useMemo(
+    () =>
+      new Map(items.map((item) => [Number(item.id), item]).filter(([id]) => Number(id) > 0)),
+    [items]
+  );
+  const selectedIdList = useMemo(
+    () => [...selectedIds].map((id) => Number(id)).filter((id) => id > 0),
+    [selectedIds]
+  );
+  const selectedCount = selectedIdList.length;
+  const allVisibleSelected = itemIds.length > 0 && itemIds.every((id) => selectedIds.has(id));
+  const selectedEligibleIds = useMemo(
+    () =>
+      selectedIdList.filter((id) => isItemEligibleForBulkAction(itemMap.get(id), bulkAction)),
+    [bulkAction, itemMap, selectedIdList]
+  );
+  const skippedSelectionCount =
+    bulkAction && selectedCount > 0 ? selectedCount - selectedEligibleIds.length : 0;
 
-  const handleFilterChange = (key, value) => {
-    setFilters((current) => ({
+  useEffect(() => {
+    setSelectedIds((current) => {
+      const allowed = new Set(itemIds);
+      const next = [...current].filter((id) => allowed.has(Number(id)));
+      if (next.length === current.size) return current;
+      return new Set(next);
+    });
+  }, [itemIds]);
+
+  const applyFilters = () => {
+    setAppliedFilters((current) => ({
       ...current,
-      [key]: value,
-      page: key === "page" ? value : 1,
+      keyword: String(draftFilters.keyword || "").trim(),
+      status: String(draftFilters.status || ""),
+      submissionStatus: String(draftFilters.submissionStatus || ""),
+      visibilityState: String(draftFilters.visibilityState || ""),
+      page: 1,
     }));
+  };
+
+  const resetFilters = () => {
+    setDraftFilters(DEFAULT_FILTERS);
+    setAppliedFilters(DEFAULT_FILTERS);
+  };
+
+  const updatePage = (page) => {
+    setDraftFilters((current) => ({ ...current, page }));
+    setAppliedFilters((current) => ({ ...current, page }));
+  };
+
+  const applyQuickLane = (nextPartial) => {
+    const nextDraft = {
+      ...draftFilters,
+      ...nextPartial,
+      page: 1,
+    };
+    const nextApplied = {
+      ...appliedFilters,
+      ...nextPartial,
+      page: 1,
+    };
+    setDraftFilters(nextDraft);
+    setAppliedFilters(nextApplied);
+  };
+
+  const handleExport = async () => {
+    if (!storeId) return;
+    setIsExporting(true);
+    setActionNotice(null);
+
+    try {
+      const exportPayload = await exportSellerProducts(storeId, {
+        filters: {
+          keyword: appliedFilters.keyword,
+          status: appliedFilters.status,
+          submissionStatus: appliedFilters.submissionStatus,
+          visibilityState: appliedFilters.visibilityState,
+        },
+      });
+      downloadBlobFile(exportPayload.filename, exportPayload.blob);
+      setActionNotice({
+        type: "success",
+        message: "Exported the current seller product result set for this store.",
+      });
+    } catch (error) {
+      setActionNotice({
+        type: "error",
+        message:
+          error?.message || "Failed to export seller products for the active workspace.",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportSelected = async () => {
+    if (!storeId || selectedCount === 0) return;
+    setIsExporting(true);
+    setActionNotice(null);
+
+    try {
+      const exportPayload = await exportSellerProducts(storeId, {
+        ids: selectedIdList,
+      });
+      downloadBlobFile(exportPayload.filename, exportPayload.blob);
+      setActionNotice({
+        type: "success",
+        message: `Exported ${selectedCount} selected seller product row(s).`,
+      });
+    } catch (error) {
+      setActionNotice({
+        type: "error",
+        message:
+          error?.message || "Failed to export the selected seller product rows.",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const toggleSelectedId = (productId) => {
+    const id = Number(productId);
+    if (!Number.isFinite(id) || id <= 0) return;
+
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectVisible = () => {
+    if (itemIds.length === 0) return;
+
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (itemIds.every((id) => next.has(id))) {
+        itemIds.forEach((id) => next.delete(id));
+      } else {
+        itemIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+    setBulkAction("");
+  };
+
+  const handleApplyBulkAction = () => {
+    if (!canEditProducts || !bulkAction || selectedEligibleIds.length === 0) return;
+    bulkMutation.mutate({
+      action: bulkAction,
+      ids: selectedEligibleIds,
+      skippedCount: skippedSelectionCount,
+    });
   };
 
   if (!canViewProducts) {
@@ -118,8 +586,8 @@ export default function SellerCatalogPage() {
   if (productsQuery.isLoading) {
     return (
       <SellerWorkspaceStatePanel
-        title="Loading seller catalog"
-        description="Loading store products from the seller catalog."
+        title="Loading seller products"
+        description="Loading the seller-scoped product workspace for the active store."
         Icon={Package}
       />
     );
@@ -130,8 +598,7 @@ export default function SellerCatalogPage() {
       <SellerWorkspaceStatePanel
         title="Failed to load seller products"
         description={getSellerRequestErrorMessage(productsQuery.error, {
-          permissionMessage:
-            "Your current seller access does not include catalog visibility.",
+          permissionMessage: "Your current seller access does not include catalog visibility.",
           fallbackMessage: "Failed to load seller products.",
         })}
         tone="error"
@@ -140,349 +607,511 @@ export default function SellerCatalogPage() {
     );
   }
 
-  const items = productsQuery.data?.items || [];
-  const pagination = productsQuery.data?.pagination || { page: 1, limit: 20, total: 0 };
-  const contractNotes = Array.isArray(productsQuery.data?.contract?.notes)
-    ? productsQuery.data.contract.notes
-    : [];
-  const catalogGovernance = productsQuery.data?.governance ?? null;
-  const authoringGovernance = catalogGovernance?.authoring ?? null;
-  const totalPages = Math.max(1, Math.ceil(Number(pagination.total || 0) / Number(pagination.limit || 20)));
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <SellerWorkspaceSectionHeader
-        eyebrow="Seller Catalog"
-        title="Product catalog for this store"
-        description={
-          <>
-            This seller-scoped catalog uses <code className="mx-1">Product.storeId</code> as the
-            tenant boundary. Draft authoring now opens seller-safe core fields such as categories,
-            pricing, and stock, while public visibility still follows the existing storefront rule:
-            <code className="mx-1">published + active</code>.
-          </>
-        }
-        actions={[
-          catalogGovernance?.canCreate ? (
-            <Link
-              key="create"
-              to={workspaceRoutes.productCreate()}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
-            >
+        eyebrow={null}
+        title="Products"
+        description={null}
+        actions={
+          canCreateProducts ? (
+            <Link to={workspaceRoutes.productCreate()} className={sellerPrimaryButtonClass}>
               <Plus className="h-4 w-4" />
-              New Draft
+              Add Product
             </Link>
-          ) : null,
-          <SellerWorkspaceBadge key="role" label={sellerContext?.access?.roleCode || "UNKNOWN"} tone="emerald" />,
-          <SellerWorkspaceBadge key="store" label={sellerContext?.store?.slug || "store"} tone="sky" />,
-          <SellerWorkspaceBadge
-            key="mode"
-            label={
-              authoringGovernance?.phaseLabel ||
-              (catalogGovernance?.mode === "READ_ONLY_PHASE_1" ? "Read-only" : "Catalog access")
-            }
-            tone="amber"
-          />,
-        ]}
-      />
+          ) : null
+        }
+      >
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <span>{getCurrentLaneLabel(appliedFilters)}</span>
+          {activeFilterCount > 0 ? (
+            <>
+              <span className="text-slate-300">/</span>
+              <span>{activeFilterCount} filters</span>
+            </>
+          ) : null}
+        </div>
+      </SellerWorkspaceSectionHeader>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SellerWorkspaceStatCard
-          label="Visible Rows"
-          value={String(pagination.total || 0)}
-          hint="Tenant-scoped product rows for this store."
-          Icon={Package}
-        />
-        <SellerWorkspaceStatCard
-          label="Storefront Visible"
-          value={String(productStats.storefrontReadyCount)}
-          hint="Published and active, so public product queries can return these rows."
-          Icon={Store}
-          tone="emerald"
-        />
-        <SellerWorkspaceStatCard
-          label="Published Blocked"
-          value={String(productStats.publishedBlockedCount)}
-          hint="Publish flag is on, but status is not active yet."
-          Icon={Tag}
-          tone="amber"
-        />
-        <SellerWorkspaceStatCard
-          label="Internal Only"
-          value={String(productStats.internalOnlyCount)}
-          hint={`Draft: ${productStats.draftCount} · Inactive: ${productStats.inactiveCount}`}
-          Icon={EyeOff}
-        />
-      </section>
+      {actionNotice ? (
+        <SellerWorkspaceNotice type={actionNotice.type}>
+          <div className="space-y-1.5">
+            {actionNotice.title ? (
+              <p className="text-xs font-semibold uppercase tracking-[0.14em]">
+                {actionNotice.title}
+              </p>
+            ) : null}
+            <p>{actionNotice.message}</p>
+            {Array.isArray(actionNotice.details) && actionNotice.details.length > 0 ? (
+              <div className="space-y-1 text-xs">
+                {actionNotice.details.map((detail) => (
+                  <p key={detail}>{detail}</p>
+                ))}
+              </div>
+            ) : null}
+            {actionNotice.meta ? <p className="text-xs opacity-80">{actionNotice.meta}</p> : null}
+          </div>
+        </SellerWorkspaceNotice>
+      ) : null}
 
-      <SellerWorkspaceFilterBar>
-        <div className="grid gap-3 lg:grid-cols-[1.4fr_0.8fr_0.8fr_auto]">
-          <label className="space-y-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-              Keyword
-            </span>
-            <div className="flex h-11 items-center rounded-xl border border-slate-200 bg-white px-3">
-              <Search className="h-4 w-4 text-slate-400" />
+      <SellerWorkspacePanel className="p-4">
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <CompactSummaryItem label="Total" value={String(summary.totalProducts)} />
+            <CompactSummaryItem label="Live" value={String(summary.storefrontVisible)} tone="emerald" />
+          </div>
+
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
-                value={filters.keyword}
-                onChange={(event) => handleFilterChange("keyword", event.target.value)}
+                type="search"
+                value={draftFilters.keyword}
+                onChange={(event) =>
+                  setDraftFilters((current) => ({
+                    ...current,
+                    keyword: event.target.value,
+                  }))
+                }
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") applyFilters();
+                }}
                 placeholder="Search name, slug, or SKU"
-                className="w-full bg-transparent px-3 text-sm text-slate-700 outline-none"
+                className={`${sellerFieldClass} h-9 pl-9`}
               />
             </div>
-          </label>
-
-          <label className="space-y-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-              Status
-            </span>
-            <select
-              value={filters.status}
-              onChange={(event) => handleFilterChange("status", event.target.value)}
-              className={sellerFieldClass}
-            >
-              <option value="">All statuses</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-              <option value="draft">Draft</option>
-            </select>
-          </label>
-
-          <label className="space-y-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-              Publish Flag
-            </span>
-            <select
-              value={filters.published}
-              onChange={(event) => handleFilterChange("published", event.target.value)}
-              className={sellerFieldClass}
-            >
-              <option value="">All publish states</option>
-              <option value="true">Published flag on</option>
-              <option value="false">Published flag off</option>
-            </select>
-          </label>
-
-          <div className="flex items-end justify-end">
-            <button
-              type="button"
-              onClick={() =>
-                setFilters({
-                  keyword: "",
-                  status: "",
-                  published: "",
-                  page: 1,
-                  limit: 20,
-                })
-              }
-              className={sellerSecondaryButtonClass}
-            >
-              Clear filters
-            </button>
-          </div>
-        </div>
-      </SellerWorkspaceFilterBar>
-
-      <SellerWorkspacePanel className="p-5 sm:p-5">
-        {contractNotes.length ? (
-          <SellerWorkspaceNotice type="info" className="mb-5">
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em]">
-                Catalog Read Contract
-              </p>
-              {contractNotes.map((note) => (
-                <p key={note}>{note}</p>
-              ))}
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              <select
+                value={draftFilters.status}
+                onChange={(event) =>
+                  setDraftFilters((current) => ({
+                    ...current,
+                    status: event.target.value,
+                  }))
+                }
+                className={`${sellerFieldClass} h-9 w-full sm:w-[132px]`}
+              >
+                <option value="">All status</option>
+                <option value="draft">Draft</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+              <select
+                value={draftFilters.submissionStatus}
+                onChange={(event) =>
+                  setDraftFilters((current) => ({
+                    ...current,
+                    submissionStatus: event.target.value,
+                  }))
+                }
+                className={`${sellerFieldClass} h-9 w-full sm:w-[150px]`}
+              >
+                <option value="">All submission</option>
+                <option value="none">Not submitted</option>
+                <option value="submitted">Submitted</option>
+                <option value="needs_revision">Needs revision</option>
+                <option value="review_queue">Review queue</option>
+              </select>
+              <select
+                value={draftFilters.visibilityState}
+                onChange={(event) =>
+                  setDraftFilters((current) => ({
+                    ...current,
+                    visibilityState: event.target.value,
+                  }))
+                }
+                className={`${sellerFieldClass} h-9 w-full sm:w-[150px]`}
+              >
+                <option value="">All visibility</option>
+                <option value="internal_only">Internal only</option>
+                <option value="storefront_visible">Storefront visible</option>
+                <option value="published_blocked">Published blocked</option>
+              </select>
+              <button type="button" onClick={applyFilters} className={sellerPrimaryButtonClass}>
+                <Filter className="h-4 w-4" />
+                Apply
+              </button>
+              <button type="button" onClick={resetFilters} className={sellerSecondaryButtonClass}>
+                <RotateCcw className="h-4 w-4" />
+                Reset
+              </button>
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={isExporting || bulkMutation.isPending}
+                className={sellerSecondaryButtonClass}
+              >
+                <Download className="h-4 w-4" />
+                {isExporting ? "Exporting..." : "Export"}
+              </button>
             </div>
-          </SellerWorkspaceNotice>
-        ) : null}
+          </div>
 
+          <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+              <ReviewQueueCard
+                label="All"
+                count={summary.totalProducts}
+                active={
+                  !appliedFilters.status &&
+                  !appliedFilters.submissionStatus &&
+                  !appliedFilters.visibilityState
+                }
+                onClick={() =>
+                  applyQuickLane({
+                    status: "",
+                    submissionStatus: "",
+                    visibilityState: "",
+                  })
+                }
+              />
+              <ReviewQueueCard
+                label="Draft"
+                count={summary.drafts}
+                tone="amber"
+                active={appliedFilters.status === "draft"}
+                onClick={() =>
+                  applyQuickLane({
+                    status: "draft",
+                    submissionStatus: "",
+                    visibilityState: "",
+                  })
+                }
+              />
+              <ReviewQueueCard
+                label="Submitted"
+                count={summary.submitted}
+                tone="sky"
+                active={appliedFilters.submissionStatus === "submitted"}
+                onClick={() =>
+                  applyQuickLane({
+                    status: "",
+                    submissionStatus: "submitted",
+                    visibilityState: "",
+                  })
+                }
+              />
+              <ReviewQueueCard
+                label="Revision"
+                count={summary.needsRevision}
+                tone="amber"
+                active={appliedFilters.submissionStatus === "needs_revision"}
+                onClick={() =>
+                  applyQuickLane({
+                    status: "",
+                    submissionStatus: "needs_revision",
+                    visibilityState: "",
+                  })
+                }
+              />
+              <ReviewQueueCard
+                label="Visible"
+                count={summary.storefrontVisible}
+                tone="emerald"
+                active={appliedFilters.visibilityState === "storefront_visible"}
+                onClick={() =>
+                  applyQuickLane({
+                    status: "",
+                    submissionStatus: "",
+                    visibilityState: "storefront_visible",
+                  })
+                }
+              />
+              <ReviewQueueCard
+                label="Blocked"
+                count={summary.publishedBlocked}
+                tone="amber"
+                active={appliedFilters.visibilityState === "published_blocked"}
+                onClick={() =>
+                  applyQuickLane({
+                    status: "",
+                    submissionStatus: "",
+                    visibilityState: "published_blocked",
+                  })
+                }
+              />
+          </div>
+
+          {authoringGovernance?.note || catalogGovernance?.note || contractNotes.length > 0 ? (
+            <details className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              <summary className="cursor-pointer list-none font-semibold text-slate-700">
+                Workspace rules
+              </summary>
+              <div className="mt-2 space-y-2">
+                {authoringGovernance?.note || catalogGovernance?.note ? (
+                  <p>{authoringGovernance?.note || catalogGovernance?.note}</p>
+                ) : null}
+                {contractNotes.map((note) => (
+                  <p key={note}>{note}</p>
+                ))}
+              </div>
+            </details>
+          ) : null}
+        </div>
+      </SellerWorkspacePanel>
+
+      <SellerWorkspacePanel className="p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-lg font-semibold text-slate-900">Store Products</h3>
-            <p className="mt-1 text-sm text-slate-500">
-              Seller-scoped catalog for the active store. Draft authoring now covers safe seller
-              fields such as categories, pricing, stock, and a minimal image set, while publish
-              and broader admin-governed controls stay outside this lane.
-            </p>
+            <h3 className="text-base font-semibold text-slate-900">Product list</h3>
+            <p className="mt-1 text-xs text-slate-500">{pagination.total} rows</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {catalogGovernance?.canCreate ? (
-              <Link to={workspaceRoutes.productCreate()} className={sellerSecondaryButtonClass}>
-                <Plus className="h-4 w-4" />
-                Create Draft
-              </Link>
-            ) : null}
-            <SellerWorkspaceBadge
-              label={
-                authoringGovernance?.phaseLabel ||
-                (catalogGovernance?.mode === "READ_ONLY_PHASE_1" ? "Read-only" : "Catalog access")
-              }
-              tone="amber"
-            />
-          </div>
+          {bulkAction && skippedSelectionCount > 0 ? (
+            <span className="text-xs text-amber-700">{skippedSelectionCount} skipped</span>
+          ) : null}
         </div>
 
-        {authoringGovernance?.note || catalogGovernance?.note ? (
-          <SellerWorkspaceNotice type="warning" className="mt-5">
-            {authoringGovernance?.note || catalogGovernance?.note}
-          </SellerWorkspaceNotice>
-        ) : null}
-
         {items.length > 0 ? (
-          <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="grid grid-cols-[1.8fr_1fr_1fr_1fr_1fr_0.8fr] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <span>Product</span>
-              <span>Status</span>
-              <span>Public State</span>
-              <span>Price</span>
-              <span>Availability</span>
-              <span>Action</span>
-            </div>
-            <div className="divide-y divide-slate-200 bg-white">
-              {items.map((item) => (
-                <div
-                  key={item.id}
-                  className="grid grid-cols-[1.8fr_1fr_1fr_1fr_1fr_0.8fr] gap-3 px-4 py-4 text-sm text-slate-700"
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-start gap-3">
-                      {item.mediaPreviewUrl ? (
-                        <img
-                          src={resolveAssetUrl(item.mediaPreviewUrl)}
-                          alt={item.name}
-                          className="h-12 w-12 rounded-xl border border-slate-200 object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500">
-                          <Boxes className="h-4 w-4" />
-                        </div>
-                      )}
-                      <div className="min-w-0">
-                        <Link
-                          to={workspaceRoutes.productDetail(item.id)}
-                          className="truncate font-semibold text-slate-900 hover:text-emerald-600"
-                        >
-                          {item.name}
-                        </Link>
-                        <p className="mt-1 truncate text-xs text-slate-500">{item.slug}</p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {item.sku ? <SellerWorkspaceBadge label={`SKU ${item.sku}`} /> : null}
-                          {item.category?.name ? <SellerWorkspaceBadge label={item.category.name} tone="sky" /> : null}
-                        </div>
-                        <p className="mt-2 text-xs text-slate-500">
-                          Updated {formatDateTime(item.updatedAt)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <SellerWorkspaceBadge
-                      label={item.statusMeta?.label || String(item.status || "draft").toUpperCase()}
-                      tone={getStatusTone(item.statusMeta?.code || item.status)}
-                    />
-                    {item.submission?.label ? (
-                      <div className="mt-2">
-                        <SellerWorkspaceBadge
-                          label={item.submission.label}
-                          tone={getSubmissionTone(item.submission.status)}
-                        />
-                      </div>
+          <div className="mt-3">
+            <div className="mb-2 flex flex-col gap-2 border-b border-slate-100 pb-2 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                {selectedCount > 0 ? (
+                  <>
+                    <span className="font-medium text-slate-700">{selectedCount} selected</span>
+                    {bulkAction && skippedSelectionCount > 0 ? (
+                      <span className="text-amber-700">{skippedSelectionCount} skipped</span>
                     ) : null}
-                    <p className="mt-2 text-xs text-slate-500">
-                      {item.statusMeta?.operationalMeaning ||
-                        (item.statusMeta?.storefrontEligible
-                          ? "Eligible for storefront when publish is on."
-                          : "Blocked from storefront until status becomes active.")}
-                    </p>
-                    {item.submission?.status === "submitted" ? (
-                      <p className="mt-1 text-xs text-slate-400">
-                        Waiting for review. Seller draft editing is locked in this phase.
-                      </p>
-                    ) : item.submission?.status === "needs_revision" ? (
-                      <p className="mt-1 text-xs text-amber-600">
-                        Revision requested. Seller editing is reopened for correction and resubmission.
-                      </p>
-                    ) : null}
-                  </div>
-                  <div>
-                    <SellerWorkspaceBadge
-                      label={
-                        item.visibility?.sellerLabel ||
-                        item.visibility?.publishLabel ||
-                        item.visibility?.label ||
-                        "Private to seller and admin"
-                      }
-                      tone={getVisibilityTone(item.visibility)}
-                    />
-                    <p className="mt-2 text-xs text-slate-500">
-                      {item.visibility?.storefrontLabel || "Hidden from storefront"}
-                    </p>
-                    {item.visibility?.sellerHint ? (
-                      <p className="mt-1 text-xs text-slate-400">{item.visibility.sellerHint}</p>
-                    ) : null}
-                  </div>
-                  <div>
-                    <p className="font-semibold text-slate-900">
-                      {formatCurrency(item.pricing?.effectivePrice)}
-                    </p>
-                    {item.pricing?.salePrice ? (
-                      <p className="mt-1 text-xs text-slate-500 line-through">
-                        {formatCurrency(item.pricing.price)}
-                      </p>
-                    ) : (
-                      <p className="mt-1 text-xs text-slate-500">Base price</p>
-                    )}
-                  </div>
-                  <div>
-                    <SellerWorkspaceBadge
-                      label={item.availability?.label || "Availability unknown"}
-                      tone={getAvailabilityTone(item.availability)}
-                    />
-                    <p className="mt-1 text-xs text-slate-500">
-                      Stock {item.inventory?.stock ?? item.availability?.stock ?? 0}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-400">
-                      {item.availability?.storefrontReason ||
-                        "Availability is informational only for the current public query."}
-                    </p>
-                  </div>
-                  <div className="flex items-start">
-                    {item.authoring?.canEditDraft ? (
-                      <Link
-                        to={workspaceRoutes.productEdit(item.id)}
-                        className="inline-flex h-9 items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
-                      >
-                        <Tag className="h-3.5 w-3.5" />
-                        Edit draft
-                      </Link>
-                    ) : (
-                      <Link
-                        to={workspaceRoutes.productDetail(item.id)}
-                        className="inline-flex h-9 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
-                      >
-                        <Tag className="h-3.5 w-3.5" />
-                        View detail
-                      </Link>
-                    )}
-                  </div>
+                  </>
+                ) : !canEditProducts ? (
+                  <span>View only</span>
+                ) : (
+                  <span>Bulk select</span>
+                )}
+              </div>
+              {selectedCount > 0 ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={bulkAction}
+                    onChange={(event) => setBulkAction(event.target.value)}
+                    className={`${sellerFieldClass} h-9 w-full min-w-[190px] xl:w-[220px]`}
+                    disabled={bulkMutation.isPending || !canEditProducts}
+                  >
+                    <option value="">Choose bulk action</option>
+                    {BULK_ACTION_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleApplyBulkAction}
+                    disabled={
+                      bulkMutation.isPending ||
+                      !canEditProducts ||
+                      !bulkAction ||
+                      selectedEligibleIds.length === 0
+                    }
+                    className={compactPrimaryActionButtonClass}
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    {bulkMutation.isPending ? "Applying..." : "Apply"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportSelected}
+                    disabled={isExporting}
+                    className={compactActionButtonClass}
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    {isExporting ? "Exporting..." : "Export"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearSelection}
+                    className={compactActionButtonClass}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Clear
+                  </button>
                 </div>
-              ))}
+              ) : null}
+            </div>
+
+            <div className={`${sellerTableWrapClass} overflow-x-auto`}>
+              <table className="w-full min-w-[980px] text-left">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className={`${compactTableHeadClass} w-[4%]`}>
+                      <input
+                        type="checkbox"
+                        aria-label="Select visible seller products"
+                        checked={allVisibleSelected}
+                        onChange={toggleSelectVisible}
+                        className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                    </th>
+                    <th className={`${compactTableHeadClass} w-[31%]`}>Product</th>
+                    <th className={`${compactTableHeadClass} w-[13%]`}>Category</th>
+                    <th className={`${compactTableHeadClass} w-[10%] text-right`}>Price</th>
+                    <th className={`${compactTableHeadClass} w-[9%] text-right`}>Sale</th>
+                    <th className={`${compactTableHeadClass} w-[8%]`}>Stock</th>
+                    <th className={`${compactTableHeadClass} w-[12%]`}>Submission</th>
+                    <th className={`${compactTableHeadClass} w-[7%]`}>Visibility</th>
+                    <th className={`${compactTableHeadClass} w-[10%]`}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 bg-white">
+                  {items.map((item) => {
+                    const canEditDraft = Boolean(item.authoring?.canEditDraft && canEditProducts);
+                    const canSubmit =
+                      canEditProducts &&
+                      item.status === "draft" &&
+                      Boolean(item.submission?.canSubmit || item.submission?.canResubmit);
+                    const isSubmitting = submitMutation.isPending && submittingProductId === item.id;
+                    const submissionReason = getSubmissionReason(item.submission);
+                    const waitingForAdmin = item.submission?.status === "submitted";
+                    const needsRevision = item.submission?.status === "needs_revision";
+
+                    return (
+                      <tr key={item.id}>
+                        <td className={`${compactTableCellClass} align-top`}>
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${item.name}`}
+                            checked={selectedIds.has(Number(item.id))}
+                            onChange={() => toggleSelectedId(item.id)}
+                            className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                          />
+                        </td>
+                        <td className={compactTableCellClass}>
+                          <div className="flex items-start gap-3">
+                            {item.mediaPreviewUrl ? (
+                              <img
+                                src={resolveAssetUrl(item.mediaPreviewUrl)}
+                                alt={item.name}
+                                className="h-12 w-12 rounded-xl border border-slate-200 object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-400">
+                                <Boxes className="h-4 w-4" />
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <Link
+                                to={workspaceRoutes.productDetail(item.id)}
+                                className="line-clamp-2 text-sm font-semibold text-slate-900 hover:text-emerald-600"
+                              >
+                                {item.name}
+                              </Link>
+                              <p className="mt-1 truncate text-xs text-slate-500">
+                                {item.slug}
+                                {item.sku ? ` · SKU ${item.sku}` : ""}
+                              </p>
+                              <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                                <span>{getCompactLifecycleLabel(item)}</span>
+                                <span>•</span>
+                                <span>Updated {formatDateTime(item.updatedAt)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className={compactTableCellClass}>
+                          <span className="text-sm text-slate-700">
+                            {item.category?.name || "Uncategorized"}
+                          </span>
+                        </td>
+                        <td className={`${compactTableCellClass} text-right font-semibold text-slate-900`}>
+                          {formatCurrency(item.pricing?.price)}
+                        </td>
+                        <td className={`${compactTableCellClass} text-right`}>
+                          {item.pricing?.salePrice ? (
+                            <span className="font-semibold text-emerald-700">
+                              {formatCurrency(item.pricing.salePrice)}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">No sale</span>
+                          )}
+                        </td>
+                        <td className={compactTableCellClass}>
+                          <p className="font-medium text-slate-900">
+                            {item.inventory?.stock ?? item.availability?.stock ?? 0}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">{getCompactStockLabel(item)}</p>
+                        </td>
+                        <td className={compactTableCellClass}>
+                          <SellerWorkspaceBadge
+                            label={getCompactSubmissionLabel(item)}
+                            tone={getSubmissionTone(item.submission?.status)}
+                            className="px-2.5 py-1 text-[11px]"
+                          />
+                          <p className="mt-1 text-xs text-slate-500">{getCompactSubmissionHint(item)}</p>
+                          {submissionReason ? (
+                            <p className="mt-1 line-clamp-2 text-xs text-amber-700">{submissionReason}</p>
+                          ) : null}
+                        </td>
+                        <td className={compactTableCellClass}>
+                          <SellerWorkspaceBadge
+                            label={getCompactVisibilityLabel(item)}
+                            tone={getVisibilityTone(item.visibility)}
+                            className="px-2.5 py-1 text-[11px]"
+                          />
+                        </td>
+                        <td className={`${compactTableCellClass} whitespace-nowrap`}>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {canSubmit ? (
+                              <button
+                                type="button"
+                                onClick={() => submitMutation.mutate(item.id)}
+                                disabled={isSubmitting}
+                                className={compactPrimaryActionButtonClass}
+                              >
+                                <Send className="h-3.5 w-3.5" />
+                                {isSubmitting ? "Submitting..." : needsRevision ? "Resubmit" : "Submit"}
+                              </button>
+                            ) : canEditDraft ? (
+                              <Link
+                                to={workspaceRoutes.productEdit(item.id)}
+                                className={compactPrimaryActionButtonClass}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                                {needsRevision ? "Revise" : "Edit"}
+                              </Link>
+                            ) : waitingForAdmin ? (
+                              <span className="text-xs font-medium text-sky-700">
+                                Waiting admin
+                              </span>
+                            ) : item.visibility?.storefrontVisible ? (
+                              <span className="text-xs font-medium text-emerald-700">
+                                Live
+                              </span>
+                            ) : null}
+                            {(canSubmit || canEditDraft || waitingForAdmin || item.visibility?.storefrontVisible) ? (
+                              <Link
+                                to={workspaceRoutes.productDetail(item.id)}
+                                className={compactTextLinkClass}
+                              >
+                                Open
+                              </Link>
+                            ) : (
+                              <Link
+                                to={workspaceRoutes.productDetail(item.id)}
+                                className={compactPrimaryActionButtonClass}
+                              >
+                                Open
+                              </Link>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         ) : (
           <div className="mt-5">
             <SellerWorkspaceEmptyState
               title={
-                hasActiveFilters
+                activeFilterCount > 0
                   ? "No products match the current seller filters"
                   : "No products found for this store"
               }
               description={
-                hasActiveFilters
-                  ? "Try widening the keyword, status, or publish filters for this store."
-                  : catalogGovernance?.canCreate
-                    ? "Create the first seller draft for this store, or confirm whether this workspace already owns product rows."
+                activeFilterCount > 0
+                  ? "Try widening lifecycle, submission, visibility, or keyword filters."
+                  : canCreateProducts
+                    ? "Create the first draft product for this seller store."
                     : "Confirm whether this store already owns product rows in the current workspace."
               }
               icon={<Boxes className="h-5 w-5" />}
@@ -497,16 +1126,16 @@ export default function SellerCatalogPage() {
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => handleFilterChange("page", Math.max(1, filters.page - 1))}
-              disabled={filters.page <= 1}
+              onClick={() => updatePage(Math.max(1, appliedFilters.page - 1))}
+              disabled={appliedFilters.page <= 1}
               className={sellerSecondaryButtonClass}
             >
               Previous
             </button>
             <button
               type="button"
-              onClick={() => handleFilterChange("page", Math.min(totalPages, filters.page + 1))}
-              disabled={filters.page >= totalPages}
+              onClick={() => updatePage(Math.min(totalPages, appliedFilters.page + 1))}
+              disabled={appliedFilters.page >= totalPages}
               className={sellerSecondaryButtonClass}
             >
               Next

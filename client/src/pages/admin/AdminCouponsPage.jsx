@@ -22,10 +22,8 @@ import AddCouponDrawer from "../../components/admin/coupons/AddCouponDrawer.jsx"
 import DeleteCouponModal from "../../components/admin/coupons/DeleteCouponModal.jsx";
 import EditCouponDrawer from "../../components/admin/coupons/EditCouponDrawer.jsx";
 import {
-  UiEmptyState,
   UiErrorState,
   UiSkeleton,
-  UiUpdatingBadge,
 } from "../../components/ui-states/index.js";
 import {
   GENERIC_ERROR,
@@ -34,18 +32,17 @@ import {
 } from "../../constants/uiMessages.js";
 
 const headerBtnBase =
-  "inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 text-sm font-semibold transition";
+  "inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 text-[11px] font-medium transition";
 const headerBtnOutline = `${headerBtnBase} border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50`;
-const headerBtnAmber = `${headerBtnBase} bg-amber-500 text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60`;
+const headerBtnSoft = `${headerBtnBase} bg-slate-50/80 text-slate-600 hover:bg-slate-100`;
+const headerBtnAmber = `${headerBtnBase} border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60`;
 const headerBtnDanger = `${headerBtnBase} bg-rose-600 text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60`;
 const headerBtnGreen = `${headerBtnBase} bg-emerald-600 text-white hover:bg-emerald-700`;
 const fieldClass =
-  "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none";
-const statCardClass =
-  "rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-right shadow-sm";
+  "h-8 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none";
 const tableHeadCell =
-  "whitespace-nowrap px-4 py-3.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500";
-const tableCell = "px-4 py-3.5 align-middle text-sm text-slate-700";
+  "whitespace-nowrap px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500";
+const tableCell = "px-3 py-2 align-middle text-sm text-slate-700";
 
 const toText = (value) => String(value ?? "").trim();
 
@@ -126,7 +123,7 @@ function CouponStatusBadge({ status }) {
 
   return (
     <span
-      className={`inline-flex min-h-7 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${styles}`}
+      className={`inline-flex min-h-5 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${styles}`}
     >
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotClass}`} />
       {status?.label || "Active"}
@@ -138,13 +135,13 @@ function CouponDiscountTypeBadge({ coupon }) {
   const isPercent = coupon?.discountType === "percent";
   return (
     <span
-      className={`inline-flex min-h-7 items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+      className={`inline-flex min-h-5 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
         isPercent
-          ? "border-violet-200 bg-violet-50 text-violet-700"
-          : "border-sky-200 bg-sky-50 text-sky-700"
+          ? "border-violet-200/80 bg-violet-50/80 text-violet-700"
+          : "border-sky-200/80 bg-sky-50/80 text-sky-700"
       }`}
     >
-      {isPercent ? "Percent" : "Fixed amount"}
+      {isPercent ? "Percent" : "Fixed"}
     </span>
   );
 }
@@ -506,63 +503,30 @@ export default function AdminCouponsPage() {
         "This coupon will be removed from the promotion list and can no longer be used at checkout.";
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-[26px] border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
-              Admin / Coupons
-            </p>
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
-              Coupons
-            </h1>
-            <p className="text-sm text-slate-500">
-              Create discounts and manage campaign validity for checkout.
-            </p>
+    <div className="space-y-2.5">
+      <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-2 shadow-sm sm:px-5">
+        <div className="flex flex-col gap-1.5">
+          <div className="space-y-0.5">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Coupons</h1>
+            <p className="text-sm text-slate-500">Manage discount codes and checkout validity.</p>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:w-auto">
-            <div className={statCardClass}>
-              <p className="text-[11px] uppercase tracking-wide text-slate-500">Total records</p>
-              <p className="mt-1 text-lg font-semibold text-slate-900">{meta.total || 0}</p>
-            </div>
-            <div className={statCardClass}>
-              <p className="text-[11px] uppercase tracking-wide text-slate-500">Active filters</p>
-              <p className="mt-1 text-lg font-semibold text-slate-900">{activeFilterCount}</p>
-            </div>
-          </div>
+          <p className="text-[11px] text-slate-500">
+            {meta.total || 0} total
+            <span className="mx-1.5 text-slate-300">•</span>
+            {activeFilterCount} filters
+            {selectedIds.size > 0 ? (
+              <>
+                <span className="mx-1.5 text-slate-300">•</span>
+                {selectedIds.size} selected
+              </>
+            ) : null}
+          </p>
         </div>
       </div>
 
-      <div className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="mb-4 flex flex-col gap-3 border-b border-slate-100 pb-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Promotion Controls
-            </p>
-            <h2 className="text-lg font-semibold text-slate-900">
-              Review discount value, active window, and checkout visibility before editing campaigns
-            </h2>
-            <p className="text-sm text-slate-500">
-              Search active promotions, verify validity dates, and open coupon drawers only after the campaign context is clear.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500">
-            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-              Visible now: {items.length}
-            </span>
-            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-              Selected: {selectedIds.size}
-            </span>
-            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-              Active filters: {activeFilterCount}
-            </span>
-          </div>
-        </div>
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="w-full xl:max-w-xl">
-            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-              Search promotion
-            </p>
+      <div className="rounded-[20px] border border-slate-200 bg-white p-2 shadow-sm">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <div className="w-full min-w-[220px] flex-1 xl:max-w-[320px]">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
@@ -577,23 +541,27 @@ export default function AdminCouponsPage() {
               />
             </div>
           </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="mr-1 hidden text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 xl:block">
-              Quick actions
-            </div>
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
+            <button type="button" onClick={applyFilters} className={headerBtnSoft}>
+              <Filter className="h-4 w-4" />
+              Apply
+            </button>
+            <button type="button" onClick={resetFilters} className={headerBtnSoft}>
+              <RotateCcw className="h-4 w-4" />
+              Reset
+            </button>
             <button
               type="button"
-              className={headerBtnOutline}
-              onClick={() => setNotice("Export is UI-only.")}
+              className={headerBtnSoft}
+              onClick={() => showNotice("Export is UI-only.")}
             >
               <Download className="h-4 w-4" />
               Export
             </button>
             <button
               type="button"
-              className={headerBtnOutline}
-              onClick={() => setNotice("Import is UI-only.")}
+              className={headerBtnSoft}
+              onClick={() => showNotice("Import is UI-only.")}
             >
               <Upload className="h-4 w-4" />
               Import
@@ -602,11 +570,11 @@ export default function AdminCouponsPage() {
             <div ref={bulkMenuRef} className="relative">
               <button
                 type="button"
-                className={headerBtnAmber}
+                className={selectedIds.size > 0 ? headerBtnAmber : headerBtnSoft}
                 disabled={selectedIds.size === 0 || isDeletePending}
                 onClick={() => setBulkMenuOpen((prev) => !prev)}
               >
-                Bulk Action
+                Bulk
                 <ChevronDown className="h-3.5 w-3.5" />
               </button>
               {bulkMenuOpen ? (
@@ -629,41 +597,23 @@ export default function AdminCouponsPage() {
               ) : null}
             </div>
 
-            <button
-              type="button"
-              className={headerBtnDanger}
-              disabled={selectedIds.size === 0 || isDeletePending}
-              onClick={handleDeleteSelected}
-            >
-              <Trash2 className="h-4 w-4" />
-              Delete
-            </button>
+            {selectedIds.size > 0 ? (
+              <button
+                type="button"
+                className={headerBtnDanger}
+                disabled={selectedIds.size === 0 || isDeletePending}
+                onClick={handleDeleteSelected}
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete
+              </button>
+            ) : null}
 
             <button type="button" onClick={openCreate} className={headerBtnGreen}>
               <Plus className="h-4 w-4" />
               Add Coupon
             </button>
-          </div>
-        </div>
-
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <button type="button" onClick={applyFilters} className={`${headerBtnGreen} w-full`}>
-            <Filter className="h-4 w-4" />
-            Apply
-          </button>
-
-          <button type="button" onClick={resetFilters} className={`${headerBtnOutline} w-full`}>
-            <RotateCcw className="h-4 w-4" />
-            Reset
-          </button>
-
-          <div className="flex h-11 items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-500 sm:justify-center sm:gap-3">
-            {selectedIds.size > 0 ? (
-              <span>{selectedIds.size} selected</span>
-            ) : (
-              <span>No selection</span>
-            )}
-            {couponsQuery.isFetching ? <UiUpdatingBadge label={UPDATING} /> : null}
+            {couponsQuery.isFetching ? <span className="text-[10px] text-slate-400">{UPDATING}</span> : null}
           </div>
         </div>
       </div>
@@ -693,39 +643,35 @@ export default function AdminCouponsPage() {
       ) : null}
 
       {!couponsQuery.isLoading && !couponsQuery.isError && items.length === 0 ? (
-        <UiEmptyState
-          title={NO_COUPONS_FOUND}
-          description={
-            appliedSearch
+        <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 text-center shadow-sm">
+          <p className="text-sm font-semibold text-slate-800">{NO_COUPONS_FOUND}</p>
+          <p className="mt-1 text-xs text-slate-500">
+            {appliedSearch
               ? "No campaigns match the current search. Try another code or reset filters."
-              : "Create your first coupon to start applying checkout discounts."
-          }
-          actions={
-            <button
-              type="button"
-              onClick={openCreate}
-              className="inline-flex h-10 items-center justify-center rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
-            >
-              Add Coupon
-            </button>
-          }
-        />
+              : "Create your first coupon to enable checkout discounts."}
+          </p>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="mt-2.5 inline-flex h-8 items-center justify-center rounded-lg bg-emerald-600 px-3 text-[11px] font-medium text-white hover:bg-emerald-700"
+          >
+            Add Coupon
+          </button>
+        </div>
       ) : null}
 
       {!couponsQuery.isLoading && !couponsQuery.isError && items.length > 0 ? (
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-2 text-xs text-slate-500">
-            Showing <span className="font-semibold text-slate-700">{items.length}</span> of{" "}
-            <span className="font-semibold text-slate-700">{meta.total || 0}</span> records
-            <span className="ml-2 inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-              {selectedIds.size} selected
-            </span>
+          <div className="border-b border-slate-100 bg-slate-50/70 px-3 py-1 text-[10px] text-slate-400">
+            <span className="font-semibold text-slate-700">{items.length}</span> /{" "}
+            <span className="font-semibold text-slate-700">{meta.total || 0}</span>
+            {selectedIds.size > 0 ? <span className="ml-2 text-slate-400">{selectedIds.size} selected</span> : null}
           </div>
-          <div className="-mx-4 w-auto overflow-x-auto px-4 pb-1 md:mx-0 md:w-full md:px-0">
-            <table className="w-full min-w-[980px] text-left text-sm">
+          <div className="-mx-3 w-auto overflow-x-auto px-3 pb-1 md:mx-0 md:w-full md:px-0">
+            <table className="w-full min-w-[720px] text-left text-sm">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className={`${tableHeadCell} w-12`}>
+                  <th className={`${tableHeadCell} w-[4%]`}>
                     <input
                       type="checkbox"
                       checked={allSelected}
@@ -733,14 +679,11 @@ export default function AdminCouponsPage() {
                       className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                     />
                   </th>
-                  <th className={`${tableHeadCell} min-w-[220px]`}>Campaign Name</th>
-                  <th className={`${tableHeadCell} min-w-[120px]`}>Code</th>
-                  <th className={`${tableHeadCell} min-w-[110px] text-right`}>Discount</th>
-                  <th className={`${tableHeadCell} min-w-[110px]`}>Published</th>
-                  <th className={`${tableHeadCell} min-w-[130px]`}>Start Date</th>
-                  <th className={`${tableHeadCell} min-w-[130px]`}>End Date</th>
-                  <th className={`${tableHeadCell} min-w-[110px]`}>Status</th>
-                  <th className={`${tableHeadCell} min-w-[120px] text-right`}>Actions</th>
+                  <th className={`${tableHeadCell} w-[36%] min-w-[240px]`}>Coupon</th>
+                  <th className={`${tableHeadCell} w-[17%] text-right`}>Discount</th>
+                  <th className={`${tableHeadCell} w-[20%]`}>Validity</th>
+                  <th className={`${tableHeadCell} w-[15%] min-w-[180px]`}>Status</th>
+                  <th className={`${tableHeadCell} w-[8%] text-right`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -758,7 +701,7 @@ export default function AdminCouponsPage() {
                       key={coupon.id}
                       className="border-t border-slate-100 text-slate-700 transition hover:bg-slate-50/80"
                     >
-                      <td className={tableCell}>
+                      <td className={`${tableCell} w-[4%]`}>
                         <input
                           type="checkbox"
                           checked={selectedIds.has(id)}
@@ -767,117 +710,96 @@ export default function AdminCouponsPage() {
                         />
                       </td>
 
-                      <td className={tableCell}>
+                      <td className={`${tableCell} w-[36%]`}>
                         <div className="flex items-center gap-3">
-                          <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-sm font-semibold text-emerald-700">
+                          <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-semibold text-emerald-700">
                             {initial}
                           </span>
                           <div className="min-w-0 max-w-[220px]">
-                            <p className="truncate text-sm font-semibold text-slate-900">{campaignName}</p>
-                            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                              <CouponDiscountTypeBadge coupon={coupon} />
-                              <span className="truncate">
-                                Code: <span className="font-medium text-slate-600">{coupon.code || "-"}</span>
-                              </span>
+                            <p className="truncate text-sm font-semibold text-slate-900">{coupon.code || "-"}</p>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-slate-400">
+                              <span className="truncate">{campaignName}</span>
                             </div>
                           </div>
                         </div>
                       </td>
 
-                      <td className={`${tableCell} max-w-[140px] truncate`}>
-                        <div className="space-y-1">
-                          <div className="font-medium text-slate-900">{coupon.code || "-"}</div>
-                          <div className="text-[11px] font-medium text-slate-400">
-                            {coupon?.minimumAmount
-                              ? `Min order ${formatCurrency(Number(coupon.minimumAmount || 0))}`
-                              : "No minimum order"}
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className={`${tableCell} text-right`}>
-                        <div className="space-y-1">
+                      <td className={`${tableCell} w-[17%] text-right`}>
+                        <div className="space-y-0.5">
                           <div className="font-semibold tabular-nums text-slate-900">
                             {formatDiscount(coupon)}
                           </div>
-                          <div className="text-[11px] font-medium text-slate-400">
-                            {coupon.discountType === "percent"
-                              ? "Applied as percentage"
-                              : "Applied as currency discount"}
+                          <div className="flex flex-col items-end gap-0.5">
+                            <CouponDiscountTypeBadge coupon={coupon} />
+                            <span className="text-[10px] text-slate-400">
+                              {coupon?.minimumAmount
+                                ? `Min ${formatCurrency(Number(coupon.minimumAmount || 0))}`
+                                : "No min"}
+                            </span>
                           </div>
                         </div>
                       </td>
 
-                      <td className={tableCell}>
+                      <td className={`${tableCell} w-[20%] whitespace-nowrap`}>
+                        <div className="space-y-0.5">
+                          <div className="font-medium text-slate-900">
+                            {formatDateLabel(startDate)} - {formatDateLabel(endDate)}
+                          </div>
+                          {endDate ? (
+                            <div className="text-[10px] text-slate-400">Ends {formatDateLabel(endDate)}</div>
+                          ) : null}
+                        </div>
+                      </td>
+
+                      <td className={`${tableCell} w-[15%]`}>
                         <div className="space-y-1">
-                          <button
-                            type="button"
-                            onClick={() => handleTogglePublished(coupon)}
-                            disabled={togglingIds.has(id)}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
-                              published ? "bg-emerald-500" : "bg-slate-300"
-                            } disabled:cursor-not-allowed disabled:opacity-60`}
-                            aria-label={`Toggle publish for ${campaignName}`}
-                          >
-                            <span
-                              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
-                                published ? "translate-x-5" : "translate-x-0.5"
-                              }`}
-                            />
-                          </button>
-                          <div className="text-[11px] font-medium text-slate-400">
-                            {published ? "Visible at checkout" : "Hidden from checkout"}
+                          <div className="flex items-center justify-between gap-2">
+                            <CouponStatusBadge status={status} />
+                            <button
+                              type="button"
+                              onClick={() => handleTogglePublished(coupon)}
+                              disabled={togglingIds.has(id)}
+                              className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition ${
+                                published ? "bg-emerald-500" : "bg-slate-300"
+                              } disabled:cursor-not-allowed disabled:opacity-60`}
+                              aria-label={`Toggle publish for ${campaignName}`}
+                            >
+                              <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                                  published ? "translate-x-4" : "translate-x-0.5"
+                                }`}
+                              />
+                            </button>
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            {togglingIds.has(id)
+                              ? UPDATING
+                              : published
+                                ? "Live"
+                                : "Hidden"}
                           </div>
                         </div>
                       </td>
 
-                      <td className={`${tableCell} whitespace-nowrap`}>
-                        <div className="space-y-1">
-                          <div className="font-medium text-slate-900">{formatDateLabel(startDate)}</div>
-                          <div className="text-[11px] font-medium text-slate-400">Starts</div>
-                        </div>
-                      </td>
-
-                      <td className={`${tableCell} whitespace-nowrap`}>
-                        <div className="space-y-1">
-                          <div className="font-medium text-slate-900">{formatDateLabel(endDate)}</div>
-                          <div className="text-[11px] font-medium text-slate-400">Ends</div>
-                        </div>
-                      </td>
-
-                      <td className={tableCell}>
-                        <div className="space-y-1">
-                          <CouponStatusBadge status={status} />
-                          <div className="text-[11px] font-medium text-slate-400">
-                            {status.tone === "expired"
-                              ? "Review end date or publish state"
-                              : "Eligible for live checkout use"}
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className={`${tableCell} text-right`}>
-                        <div className="flex items-center justify-end gap-2">
+                      <td className={`${tableCell} w-[8%] text-right`}>
+                        <div className="flex items-center justify-end gap-1">
                           <button
                             type="button"
                             onClick={() => openEdit(coupon)}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-100"
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-100"
                             aria-label={`Edit ${coupon.code || campaignName}`}
                           >
-                            <Pencil className="h-4 w-4" />
+                            <Pencil className="h-3.5 w-3.5" />
                           </button>
                           <button
                             type="button"
                             onClick={() => handleDeleteOne(coupon)}
                             disabled={isDeletePending}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 text-rose-600 hover:border-rose-300 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-rose-200 text-rose-600 hover:border-rose-300 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
                             aria-label={`Delete ${coupon.code || campaignName}`}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-3.5 w-3.5" />
                           </button>
-                        </div>
-                        <div className="mt-1 text-[11px] font-medium text-slate-400">
-                          Edit or remove campaign
                         </div>
                       </td>
                     </tr>
@@ -889,21 +811,21 @@ export default function AdminCouponsPage() {
         </div>
       ) : null}
 
-      <div className="flex items-center justify-between text-sm">
+      <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-1 text-[11px] shadow-sm">
         <button
           type="button"
-          className="rounded-full border border-slate-200 px-3 py-1.5 text-slate-700 disabled:opacity-50"
+          className="rounded-full border border-slate-200 px-2.5 py-1 text-slate-700 disabled:opacity-50"
           disabled={meta.page <= 1}
           onClick={() => setPage((prev) => Math.max(1, prev - 1))}
         >
           Previous
         </button>
-        <span className="text-slate-500">
+        <span className="text-[10px] text-slate-500">
           Page {meta.page} of {totalPages}
         </span>
         <button
           type="button"
-          className="rounded-full border border-slate-200 px-3 py-1.5 text-slate-700 disabled:opacity-50"
+          className="rounded-full border border-slate-200 px-2.5 py-1 text-slate-700 disabled:opacity-50"
           disabled={meta.page >= totalPages}
           onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
         >

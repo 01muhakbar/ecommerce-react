@@ -87,6 +87,9 @@ const getSubmissionErrorMessage = (error) => {
   );
 };
 
+const getSubmissionReason = (submission) =>
+  submission?.reviewNote || submission?.revisionReason || submission?.revisionNote || null;
+
 export default function SellerProductDetailPage() {
   const queryClient = useQueryClient();
   const { productId } = useParams();
@@ -217,26 +220,36 @@ export default function SellerProductDetailPage() {
   const productAuthoring = product?.authoring ?? null;
   const submission = product?.submission ?? null;
   const submissionGovernance = catalogGovernance?.submissionGovernance ?? null;
-  const canSubmitForReview = Boolean(submissionGovernance?.canSubmitWhenEnabled);
+  const canSubmitForReview = Boolean(
+    submission?.canSubmit || submission?.canResubmit || submissionGovernance?.canSubmitWhenEnabled
+  );
+  const canEditDraft = Boolean(productAuthoring?.canEditDraft);
+  const revisionReason = getSubmissionReason(submission);
+  const isSubmitted = submission?.status === "submitted";
+  const isNeedsRevision = submission?.status === "needs_revision";
+  const isStorefrontVisible = Boolean(product?.visibility?.storefrontVisible);
+  const editActionLabel = isNeedsRevision ? "Continue Revision" : "Edit Draft";
   const submitButtonLabel =
-    submission?.status === "needs_revision" ? "Resubmit for Review" : "Submit for Review";
+    submission?.canResubmit || submission?.status === "needs_revision"
+      ? "Resubmit for Review"
+      : "Submit for Review";
 
   return (
     <div className="space-y-6">
       <SellerWorkspaceSectionHeader
         eyebrow="Seller Product Detail"
         title={product?.name || "Product"}
-        description="Seller-scoped detail view using Product.storeId as the tenant boundary. Status comes from Product.status and public visibility follows the existing storefront rule: published plus active."
+        description="Seller-scoped lifecycle view for this product: check submission state, read revision guidance, confirm storefront visibility, and follow the next valid seller action without crossing into admin-only review authority."
         actions={[
           backButton,
-          productAuthoring?.canEditDraft ? (
+          canEditDraft ? (
             <Link
               key="edit"
               to={workspaceRoutes.productEdit(product.id)}
               className={sellerSecondaryButtonClass}
             >
               <Save className="h-4 w-4" />
-              Edit Draft
+              {editActionLabel}
             </Link>
           ) : null,
           canSubmitForReview ? (
@@ -253,6 +266,14 @@ export default function SellerProductDetailPage() {
               <Send className="h-4 w-4" />
               {submitMutation.isPending ? "Submitting..." : submitButtonLabel}
             </button>
+          ) : isSubmitted ? (
+            <SellerWorkspaceBadge
+              key="waiting"
+              label="Waiting for admin review"
+              tone="sky"
+            />
+          ) : isStorefrontVisible ? (
+            <SellerWorkspaceBadge key="live" label="Live in storefront" tone="emerald" />
           ) : null,
           <SellerWorkspaceBadge
             key="mode"
@@ -314,6 +335,95 @@ export default function SellerProductDetailPage() {
         <SellerWorkspaceNotice type={submitStatus.type}>{submitStatus.message}</SellerWorkspaceNotice>
       ) : null}
 
+      {isSubmitted ? (
+        <SellerWorkspaceNotice type="info">
+          Admin is now reviewing this product. Seller editing stays locked until admin publishes the
+          final outcome or sends the draft back with a revision request.
+        </SellerWorkspaceNotice>
+      ) : null}
+
+      {isNeedsRevision ? (
+        <SellerWorkspaceNotice type="warning">
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em]">
+              Revision requested
+            </p>
+            <p>
+              Admin sent this product back for correction. Continue the revision, update the allowed
+              fields, then resubmit it for review.
+            </p>
+            {revisionReason ? <p>{revisionReason}</p> : null}
+          </div>
+        </SellerWorkspaceNotice>
+      ) : null}
+
+      <SellerWorkspaceSectionCard
+        title="Submission lifecycle"
+        hint="Use this panel to understand the current seller submission state, the storefront outcome, and the next valid action."
+        Icon={Send}
+        actions={
+          canEditDraft || canSubmitForReview
+            ? [
+                canEditDraft ? (
+                  <Link
+                    key="lifecycle-edit"
+                    to={workspaceRoutes.productEdit(product.id)}
+                    className={sellerSecondaryButtonClass}
+                  >
+                    <Save className="h-4 w-4" />
+                    {editActionLabel}
+                  </Link>
+                ) : null,
+                canSubmitForReview ? (
+                  <button
+                    key="lifecycle-submit"
+                    type="button"
+                    onClick={() => {
+                      setSubmitStatus(null);
+                      submitMutation.mutate();
+                    }}
+                    disabled={submitMutation.isPending}
+                    className={sellerPrimaryButtonClass}
+                  >
+                    <Send className="h-4 w-4" />
+                    {submitMutation.isPending ? "Submitting..." : submitButtonLabel}
+                  </button>
+                ) : null,
+              ].filter(Boolean)
+            : null
+        }
+      >
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <SellerWorkspaceDetailItem
+            label="Submission Status"
+            value={submission?.label || "Not submitted"}
+            hint={submission?.reviewState || "NOT_SUBMITTED"}
+          />
+          <SellerWorkspaceDetailItem
+            label="Revision Reason"
+            value={revisionReason || "No revision request recorded."}
+            hint={
+              isNeedsRevision
+                ? "Address this note before resubmitting."
+                : "This stays empty until admin sends the product back for changes."
+            }
+          />
+          <SellerWorkspaceDetailItem
+            label="Storefront Visibility"
+            value={product?.visibility?.storefrontLabel || "Hidden from storefront"}
+            hint={product?.visibility?.storefrontReason || "-"}
+          />
+          <SellerWorkspaceDetailItem
+            label="Next Recommended Action"
+            value={submission?.nextActionLabel || "Review product status"}
+            hint={
+              submission?.nextActionDescription ||
+              "No seller submission action is currently available for this product."
+            }
+          />
+        </div>
+      </SellerWorkspaceSectionCard>
+
       <section className="grid gap-4 xl:grid-cols-4">
         <SellerWorkspaceDetailItem label="Slug" value={product?.slug} />
         <SellerWorkspaceDetailItem
@@ -337,8 +447,8 @@ export default function SellerProductDetailPage() {
       </section>
 
       <SellerWorkspaceSectionCard
-        title="Review handoff"
-        hint="Seller submission state is explicit and does not change publish visibility. Submitted drafts remain non-public until admin governance takes the next step."
+        title="Submission timeline"
+        hint="Seller submission state does not publish the product by itself. Admin remains the final review and publish authority."
         Icon={Send}
       >
         {submissionGovernance?.note ? (
@@ -355,13 +465,13 @@ export default function SellerProductDetailPage() {
             {submissionGovernance.note}
           </SellerWorkspaceNotice>
         ) : null}
-        {submission?.revisionNote ? (
+        {revisionReason ? (
           <SellerWorkspaceNotice type="warning" className="mb-4">
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-[0.18em]">
                 Revision Note
               </p>
-              <p>{submission.revisionNote}</p>
+              <p>{revisionReason}</p>
             </div>
           </SellerWorkspaceNotice>
         ) : null}
@@ -406,10 +516,8 @@ export default function SellerProductDetailPage() {
             label="Submit Action"
             value={
               canSubmitForReview
-                ? submission?.status === "needs_revision"
-                  ? "Resubmit available"
-                  : "Available now"
-                : "Not available"
+                ? submitButtonLabel
+                : submission?.nextActionLabel || "Not available"
             }
           />
           <SellerWorkspaceDetailItem
