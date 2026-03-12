@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useOutletContext, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CreditCard, PackageSearch, Truck } from "lucide-react";
 import {
@@ -16,6 +16,7 @@ import {
   SellerWorkspaceSectionHeader,
 } from "../../components/seller/SellerWorkspaceFoundation.jsx";
 import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
+import { useSellerWorkspaceRoute } from "../../utils/sellerWorkspaceRoute.js";
 
 const PAYMENT_STATUS_TONE = {
   UNPAID: "stone",
@@ -83,9 +84,10 @@ function StatusChip({ value, label, map = PAYMENT_STATUS_TONE }) {
 }
 
 export default function SellerOrderDetailPage() {
-  const { storeId, suborderId } = useParams();
+  const { suborderId } = useParams();
   const queryClient = useQueryClient();
-  const { sellerContext } = useOutletContext() || {};
+  const { sellerContext, workspaceStoreId: storeId, workspaceRoutes } =
+    useSellerWorkspaceRoute();
   const [feedback, setFeedback] = useState(null);
   const hasOrderPermission = sellerContext?.access?.permissionKeys?.includes("ORDER_VIEW");
   const numericSuborderId = Number(suborderId);
@@ -142,7 +144,7 @@ export default function SellerOrderDetailPage() {
   const backButton = (
     <Link
       key="back"
-      to={`/seller/stores/${storeId}/orders`}
+      to={workspaceRoutes.orders()}
       className={sellerSecondaryButtonClass}
     >
       <ArrowLeft className="h-4 w-4" />

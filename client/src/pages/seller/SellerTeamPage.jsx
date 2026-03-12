@@ -11,7 +11,7 @@ import {
   UserPlus,
   UserMinus,
 } from "lucide-react";
-import { Link, useOutletContext, useParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   createSellerStoreMember,
   getSellerTeamSummary,
@@ -38,6 +38,7 @@ import {
   SellerWorkspaceStatCard,
 } from "../../components/seller/SellerWorkspaceFoundation.jsx";
 import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
+import { useSellerWorkspaceRoute } from "../../utils/sellerWorkspaceRoute.js";
 
 function getRemovedSourceHint(member) {
   if (member?.status !== "REMOVED") return null;
@@ -77,9 +78,12 @@ function getLifecycleMeaning(member) {
 }
 
 export default function SellerTeamPage() {
-  const { storeId } = useParams();
+  const {
+    sellerContext,
+    workspaceStoreId: storeId,
+    workspaceRoutes,
+  } = useSellerWorkspaceRoute();
   const queryClient = useQueryClient();
-  const { sellerContext } = useOutletContext() || {};
   const permissionKeys = sellerContext?.access?.permissionKeys || [];
   const canViewTeam = permissionKeys.includes("STORE_MEMBERS_MANAGE");
   const canManageMembers = permissionKeys.includes("STORE_MEMBERS_MANAGE");
@@ -858,7 +862,7 @@ export default function SellerTeamPage() {
                   <div className="flex items-start">
                     <div className="flex flex-col items-start gap-2">
                       <Link
-                        to={`/seller/stores/${storeId}/team/${member.id}`}
+                        to={workspaceRoutes.memberLifecycle(member.id)}
                         className="text-xs font-semibold text-slate-700 underline"
                       >
                         View lifecycle

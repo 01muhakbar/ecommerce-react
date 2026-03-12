@@ -26,8 +26,35 @@ import ProductForm from "./ProductForm.jsx";
 import ProductPreviewDrawer from "./ProductPreviewDrawer.jsx";
 
 const FALLBACK_THUMBNAIL = "/demo/placeholder-product.svg";
-const DEFAULT_FILTERS = { q: "", categoryId: "", priceSort: "default" };
+const DEFAULT_FILTERS = {
+  q: "",
+  categoryId: "",
+  priceSort: "default",
+  reviewState: "all",
+};
 const MAX_IMPORT_FILE_SIZE = 2 * 1024 * 1024;
+const REVIEW_QUEUE_FILTERS = [
+  {
+    value: "all",
+    label: "All products",
+    description: "Return to the full catalog list.",
+  },
+  {
+    value: "review_queue",
+    label: "Review queue",
+    description: "Show seller products waiting review or revision follow-up.",
+  },
+  {
+    value: "submitted",
+    label: "Submitted",
+    description: "Show seller products currently waiting for admin review.",
+  },
+  {
+    value: "needs_revision",
+    label: "Needs revision",
+    description: "Show products that were sent back to seller for fixes.",
+  },
+];
 
 const btnBase =
   "inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 text-sm font-medium leading-none transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1";
@@ -62,6 +89,58 @@ function ProductPublishedBadge({ isPublished }) {
       />
       {isPublished ? "Published" : "Draft"}
     </span>
+  );
+}
+
+function ProductSellerReviewBadge({ submission }) {
+  const status = submission?.status || "none";
+  const toneClass =
+    status === "submitted"
+      ? "border-sky-200 bg-sky-50 text-sky-700"
+      : status === "needs_revision"
+        ? "border-amber-200 bg-amber-50 text-amber-800"
+        : "border-slate-200 bg-slate-50 text-slate-500";
+
+  return (
+    <span
+      className={`inline-flex min-h-7 items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${toneClass}`}
+    >
+      {submission?.label || "Not submitted"}
+    </span>
+  );
+}
+
+function ReviewQueueCard({
+  label,
+  description,
+  count,
+  active = false,
+  onClick,
+  tone = "slate",
+}) {
+  const toneClass =
+    tone === "sky"
+      ? active
+        ? "border-sky-300 bg-sky-50 text-sky-900"
+        : "border-sky-200 bg-white text-sky-800"
+      : tone === "amber"
+        ? active
+          ? "border-amber-300 bg-amber-50 text-amber-900"
+          : "border-amber-200 bg-white text-amber-800"
+        : active
+          ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+          : "border-slate-200 bg-white text-slate-800";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-2xl border px-4 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-sm ${toneClass}`}
+    >
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em]">{label}</p>
+      <p className="mt-2 text-2xl font-semibold">{count}</p>
+      <p className="mt-1 text-xs opacity-80">{description}</p>
+    </button>
   );
 }
 
@@ -160,12 +239,23 @@ export default function AdminProductsPage() {
       limit,
       q: appliedFilters.q || undefined,
       categoryId: appliedFilters.categoryId || undefined,
+      sellerSubmissionStatus:
+        appliedFilters.reviewState && appliedFilters.reviewState !== "all"
+          ? appliedFilters.reviewState
+          : undefined,
     }),
     [page, limit, appliedFilters]
   );
 
   const productsQuery = useQuery({
-    queryKey: ["admin-products", page, limit, appliedFilters.q, appliedFilters.categoryId],
+    queryKey: [
+      "admin-products",
+      page,
+      limit,
+      appliedFilters.q,
+      appliedFilters.categoryId,
+      appliedFilters.reviewState,
+    ],
     queryFn: () => fetchAdminProducts(params),
     keepPreviousData: true,
   });
@@ -202,8 +292,35 @@ export default function AdminProductsPage() {
   const activeFilterCount =
     (appliedFilters.q ? 1 : 0) +
     (appliedFilters.categoryId ? 1 : 0) +
-    (appliedFilters.priceSort && appliedFilters.priceSort !== "default" ? 1 : 0);
+    (appliedFilters.priceSort && appliedFilters.priceSort !== "default" ? 1 : 0) +
+    (appliedFilters.reviewState && appliedFilters.reviewState !== "all" ? 1 : 0);
   const selectedCount = selectedIds.size;
+
+  const derivedReviewQueue = useMemo(() => {
+    return items.reduce(
+      (acc, product) => {
+        const status = String(product?.sellerSubmission?.status || "none");
+        if (status === "submitted") acc.submitted += 1;
+        if (status === "needs_revision") acc.needsRevision += 1;
+        return acc;
+      },
+      { submitted: 0, needsRevision: 0 }
+    );
+  }, [items]);
+
+  const reviewQueue = useMemo(() => {
+    const metaReviewQueue = productsQuery.data?.meta?.reviewQueue;
+    const submitted = Number(metaReviewQueue?.submitted ?? derivedReviewQueue.submitted);
+    const needsRevision = Number(
+      metaReviewQueue?.needsRevision ?? derivedReviewQueue.needsRevision
+    );
+    return {
+      submitted,
+      needsRevision,
+      total: Number(metaReviewQueue?.total ?? submitted + needsRevision),
+      activeFilter: metaReviewQueue?.activeFilter ?? null,
+    };
+  }, [productsQuery.data?.meta?.reviewQueue, derivedReviewQueue]);
 
   const displayItems = useMemo(() => {
     const sorted = [...items];
@@ -267,6 +384,7 @@ export default function AdminProductsPage() {
       q: String(draftFilters.q || "").trim(),
       categoryId: String(draftFilters.categoryId || ""),
       priceSort: String(draftFilters.priceSort || "default"),
+      reviewState: String(draftFilters.reviewState || "all"),
     });
     setPage(1);
   };
@@ -274,6 +392,15 @@ export default function AdminProductsPage() {
   const resetFilters = () => {
     setDraftFilters(DEFAULT_FILTERS);
     setAppliedFilters(DEFAULT_FILTERS);
+    setPage(1);
+    setSelectedIds(new Set());
+    setBulkMenuOpen(false);
+  };
+
+  const applyReviewStateFilter = (reviewState) => {
+    const nextReviewState = String(reviewState || "all");
+    setDraftFilters((prev) => ({ ...prev, reviewState: nextReviewState }));
+    setAppliedFilters((prev) => ({ ...prev, reviewState: nextReviewState }));
     setPage(1);
     setSelectedIds(new Set());
     setBulkMenuOpen(false);
@@ -292,6 +419,10 @@ export default function AdminProductsPage() {
       const response = await exportAdminProducts({
         q: appliedFilters.q,
         categoryId: appliedFilters.categoryId,
+        sellerSubmissionStatus:
+          appliedFilters.reviewState && appliedFilters.reviewState !== "all"
+            ? appliedFilters.reviewState
+            : undefined,
       });
       const blob = await response.blob();
       const objectUrl = window.URL.createObjectURL(blob);
@@ -655,7 +786,7 @@ export default function AdminProductsPage() {
             </p>
             <h2 className="text-lg font-semibold text-slate-900">Search, filter, and act faster</h2>
             <p className="text-sm text-slate-500">
-              Keep catalog updates organized before opening the product drawer.
+              Keep catalog updates organized and surface seller review work without leaving the products lane.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500">
@@ -793,7 +924,68 @@ export default function AdminProductsPage() {
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div className="space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                Review Inbox
+              </p>
+              <h3 className="text-base font-semibold text-slate-900">
+                Seller submissions that need admin attention
+              </h3>
+              <p className="text-sm text-slate-500">
+                Review state comes from the product submission domain. Publish authority stays with admin.
+              </p>
+            </div>
+            <div className="text-xs text-slate-500">
+              Current lane:{" "}
+              <span className="font-semibold text-slate-700">
+                {appliedFilters.reviewState === "review_queue"
+                  ? "Review queue"
+                  : appliedFilters.reviewState === "submitted"
+                    ? "Submitted"
+                    : appliedFilters.reviewState === "needs_revision"
+                      ? "Needs revision"
+                      : "All products"}
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <ReviewQueueCard
+              label="All products"
+              description="Return to the full admin catalog lane."
+              count={meta.total || 0}
+              active={appliedFilters.reviewState === "all"}
+              onClick={() => applyReviewStateFilter("all")}
+            />
+            <ReviewQueueCard
+              label="Review queue"
+              description="Submitted and needs-revision seller products in one lane."
+              count={reviewQueue.total}
+              active={appliedFilters.reviewState === "review_queue"}
+              onClick={() => applyReviewStateFilter("review_queue")}
+            />
+            <ReviewQueueCard
+              label="Submitted"
+              description="Seller products waiting for admin review."
+              count={reviewQueue.submitted}
+              tone="sky"
+              active={appliedFilters.reviewState === "submitted"}
+              onClick={() => applyReviewStateFilter("submitted")}
+            />
+            <ReviewQueueCard
+              label="Needs revision"
+              description="Products sent back to seller and pending corrections."
+              count={reviewQueue.needsRevision}
+              tone="amber"
+              active={appliedFilters.reviewState === "needs_revision"}
+              onClick={() => applyReviewStateFilter("needs_revision")}
+            />
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
           <div>
             <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
               Category
@@ -828,6 +1020,25 @@ export default function AdminProductsPage() {
               <option value="default">Default Price</option>
               <option value="price_asc">Price: Low to High</option>
               <option value="price_desc">Price: High to Low</option>
+            </select>
+          </div>
+
+          <div>
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Review state
+            </p>
+            <select
+              value={draftFilters.reviewState}
+              onChange={(event) =>
+                setDraftFilters((prev) => ({ ...prev, reviewState: event.target.value }))
+              }
+              className={`${selectBase} h-11 w-full`}
+            >
+              {REVIEW_QUEUE_FILTERS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -904,7 +1115,7 @@ export default function AdminProductsPage() {
             </span>
           </div>
           <div className="-mx-4 w-auto overflow-x-auto px-4 pb-1 md:mx-0 md:w-full md:px-0">
-            <table className="w-full min-w-[980px] text-left text-sm">
+            <table className="w-full min-w-[1120px] text-left text-sm">
               <thead className="bg-slate-50">
                 <tr>
                   <th className={`${tableHeadCell} w-[4%]`}>
@@ -921,7 +1132,8 @@ export default function AdminProductsPage() {
                   <th className={`${tableHeadCell} w-[9%] text-right`}>Price</th>
                   <th className={`${tableHeadCell} w-[9%] text-right`}>Sale Price</th>
                   <th className={`${tableHeadCell} w-[7%] text-right`}>Stock</th>
-                  <th className={`${tableHeadCell} w-[10%]`}>Status</th>
+                  <th className={`${tableHeadCell} w-[9%]`}>Status</th>
+                  <th className={`${tableHeadCell} w-[13%]`}>Seller Review</th>
                   <th className={`${tableHeadCell} w-[6%] text-center`}>View</th>
                   <th className={`${tableHeadCell} w-[8%] text-center`}>Publish</th>
                   <th className={`${tableHeadCell} w-[8%] text-center`}>Actions</th>
@@ -935,6 +1147,23 @@ export default function AdminProductsPage() {
                   const stockMeta = getStockMeta(product.stock);
                   const pricing = resolveAdminProductPricing(product);
                   const categoryContext = getProductCategoryContext(product);
+                  const sellerSubmission = product?.sellerSubmission || null;
+                  const publishGate = sellerSubmission?.publishGate || null;
+                  const submittedAtLabel = sellerSubmission?.submittedAt
+                    ? new Intl.DateTimeFormat("id-ID", {
+                        dateStyle: "medium",
+                      }).format(new Date(sellerSubmission.submittedAt))
+                    : null;
+                  const reviewActionTitle = sellerSubmission?.hasSubmission
+                    ? "Open review preview"
+                    : "View product";
+                  const publishToggleDisabled =
+                    publishingIds.has(Number(product.id)) ||
+                    (!isPublished && publishGate && publishGate.canUseListToggle === false);
+                  const publishToggleTitle =
+                    !isPublished && publishGate?.hint
+                      ? publishGate.hint
+                      : "Toggle published";
 
                   return (
                     <tr
@@ -1048,8 +1277,31 @@ export default function AdminProductsPage() {
                         </div>
                       </td>
 
-                      <td className={`${tableCell} w-[10%]`}>
+                      <td className={`${tableCell} w-[9%]`}>
                         <ProductPublishedBadge isPublished={isPublished} />
+                      </td>
+
+                      <td className={`${tableCell} w-[13%]`}>
+                        <div className="space-y-1.5">
+                          <ProductSellerReviewBadge submission={sellerSubmission} />
+                          {sellerSubmission?.status === "submitted" ? (
+                            <p className="text-[11px] text-slate-500">
+                              {publishGate?.hint ||
+                                (submittedAtLabel
+                                  ? `Waiting review since ${submittedAtLabel}`
+                                  : "Waiting review")}
+                            </p>
+                          ) : sellerSubmission?.status === "needs_revision" ? (
+                            <p className="text-[11px] text-amber-700">
+                              {publishGate?.hint ||
+                                "Seller can edit and resubmit after corrections."}
+                            </p>
+                          ) : (
+                            <p className="text-[11px] text-slate-400">
+                              Outside seller submission loop.
+                            </p>
+                          )}
+                        </div>
                       </td>
 
                       <td className={`${tableCell} w-[6%] text-center`}>
@@ -1057,7 +1309,7 @@ export default function AdminProductsPage() {
                           type="button"
                           onClick={() => openViewDrawer(product.id)}
                           className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
-                          title="View product"
+                          title={reviewActionTitle}
                         >
                           <Search className="h-4 w-4" />
                         </button>
@@ -1067,12 +1319,13 @@ export default function AdminProductsPage() {
                         <button
                           type="button"
                           onClick={() => handleTogglePublished(product)}
-                          disabled={publishingIds.has(Number(product.id))}
+                          disabled={publishToggleDisabled}
                           className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
                             isPublished ? "bg-emerald-500" : "bg-slate-300"
                           } disabled:cursor-not-allowed disabled:opacity-60`}
-                          aria-label="Toggle published"
+                          aria-label={publishToggleTitle}
                           aria-busy={publishingIds.has(Number(product.id))}
+                          title={publishToggleTitle}
                         >
                           <span
                             className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${

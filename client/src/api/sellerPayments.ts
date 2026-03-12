@@ -65,24 +65,71 @@ export type SellerSuborderListResponse = {
       slug: string;
       status: string;
     } | null;
+    governance?: {
+      canView: boolean;
+      canReview: boolean;
+      activeStoreId: number | null;
+      roleCode: string;
+      permissionKeys: string[];
+      mutationAllowedRoleCodes: string[];
+      note: string;
+    } | null;
     filters: string[];
     items: SellerSuborderReviewItem[];
   };
 };
 
-export const fetchSellerSuborders = async (paymentStatus: string) => {
-  const { data } = await api.get<SellerSuborderListResponse>("/seller/suborders", {
-    params: { paymentStatus },
+export const fetchSellerSuborders = async (
+  paymentStatus: string,
+  options: { storeId?: number | string | null } = {}
+) => {
+  const storeId = options.storeId != null ? String(options.storeId).trim() : "";
+  const endpoint = storeId
+    ? `/seller/stores/${encodeURIComponent(storeId)}/payment-review/suborders`
+    : "/seller/suborders";
+  const params = storeId ? { paymentStatus } : { paymentStatus, storeId: storeId || undefined };
+  const { data } = await api.get<SellerSuborderListResponse>(endpoint, {
+    params,
   });
-  return data?.data ?? { store: null, filters: [], items: [] };
+  return data?.data ?? { store: null, governance: null, filters: [], items: [] };
+};
+
+export const getSellerPaymentReviewSuborders = async (
+  storeId: number | string,
+  paymentStatus: string
+) => {
+  const { data } = await api.get<SellerSuborderListResponse>(
+    `/seller/stores/${encodeURIComponent(String(storeId))}/payment-review/suborders`,
+    {
+      params: { paymentStatus },
+    }
+  );
+  return data?.data ?? { store: null, governance: null, filters: [], items: [] };
 };
 
 export const reviewSellerPayment = async (
   paymentId: string | number,
+  payload: { action: "APPROVE" | "REJECT"; note?: string | null },
+  options: { storeId?: number | string | null } = {}
+) => {
+  const storeId = options.storeId != null ? String(options.storeId).trim() : "";
+  const endpoint = storeId
+    ? `/seller/stores/${encodeURIComponent(storeId)}/payments/${encodeURIComponent(String(paymentId))}/review`
+    : `/seller/payments/${encodeURIComponent(String(paymentId))}/review`;
+  const { data } = await api.patch<{ success: boolean; data: SellerSuborderReviewItem }>(
+    endpoint,
+    payload
+  );
+  return data?.data ?? null;
+};
+
+export const reviewSellerStorePayment = async (
+  storeId: number | string,
+  paymentId: string | number,
   payload: { action: "APPROVE" | "REJECT"; note?: string | null }
 ) => {
   const { data } = await api.patch<{ success: boolean; data: SellerSuborderReviewItem }>(
-    `/seller/payments/${encodeURIComponent(String(paymentId))}/review`,
+    `/seller/stores/${encodeURIComponent(String(storeId))}/payments/${encodeURIComponent(String(paymentId))}/review`,
     payload
   );
   return data?.data ?? null;

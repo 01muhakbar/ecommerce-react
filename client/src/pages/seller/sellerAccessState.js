@@ -1,7 +1,7 @@
 export function getSellerRequestErrorMessage(
   error,
   {
-    invalidStoreMessage = "Seller workspace needs a valid store id in the URL.",
+    invalidStoreMessage = "Seller workspace needs a valid store slug in the URL.",
     notFoundMessage = "Store not found.",
     forbiddenMessage = "This account cannot access the selected seller workspace.",
     permissionMessage = "Your current seller access does not include this seller module.",
@@ -12,7 +12,7 @@ export function getSellerRequestErrorMessage(
   const code = String(error?.response?.data?.code || "").trim();
   const apiMessage = String(error?.response?.data?.message || "").trim();
 
-  if (status === 400 && code === "INVALID_STORE_ID") {
+  if (status === 400 && (code === "INVALID_STORE_ID" || code === "INVALID_STORE_SLUG")) {
     return invalidStoreMessage;
   }
 

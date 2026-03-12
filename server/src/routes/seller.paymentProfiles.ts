@@ -243,9 +243,11 @@ const buildPaymentProfileReadModel = (profile: any, sellerAccess: any = null) =>
     nextStep,
     boundaries: {
       readinessVsPaymentHistory:
-        "Payment readiness only describes whether the store payment destination is complete, reviewed, and active. It does not describe buyer payment proof history or order settlement outcomes.",
+        "Payment readiness only describes whether the store payment destination is complete, reviewed, and active. It does not describe buyer payment proof history, order settlement outcomes, or seller payout balance.",
       paymentHistoryLane:
         "Buyer payment proofs and payment history stay in the seller order and payment review lanes, not in this payment profile readiness snapshot.",
+      payoutLane:
+        "No seller payout, balance, withdrawal, or settlement statement lane is exposed from this snapshot yet.",
       sellerWorkspaceMode:
         "Seller workspace remains read-only for this payment profile snapshot. Changes still belong to the existing account or admin lane.",
     },

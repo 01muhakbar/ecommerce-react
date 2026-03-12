@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Link, NavLink, Outlet, useLocation, useParams } from "react-router-dom";
+import { Link, Navigate, NavLink, Outlet, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   BadgeCheck,
@@ -14,12 +14,22 @@ import {
   TicketPercent,
   Users,
 } from "lucide-react";
-import { getSellerWorkspaceContext } from "../api/sellerWorkspace.ts";
+import {
+  getSellerWorkspaceContext,
+  getSellerWorkspaceContextBySlug,
+} from "../api/sellerWorkspace.ts";
 import {
   sellerShellPageClass,
   SellerWorkspaceBadge,
   SellerWorkspacePanel,
 } from "../components/seller/SellerWorkspaceFoundation.jsx";
+import {
+  buildSellerWorkspacePath,
+  createSellerWorkspaceRoutes,
+  isLegacySellerStoreIdParam,
+  normalizeSellerStoreParam,
+  replaceSellerWorkspaceStorePath,
+} from "../utils/sellerWorkspaceRoute.js";
 
 const getErrorMessage = (error, fallback) =>
   error?.response?.data?.message || error?.message || fallback;
@@ -72,14 +82,21 @@ const getSellerPageMeta = (pathname) => {
   if (pathname.endsWith("/orders")) {
     return {
       title: "Orders",
-      subtitle: "Store-owned suborders, payment state, and fulfillment controls.",
+      subtitle: "Store-owned suborders, payment state, and fulfillment controls for seller operations.",
+    };
+  }
+
+  if (pathname.endsWith("/payment-review")) {
+    return {
+      title: "Payment Review",
+      subtitle: "Store-scoped finance review lane for buyer payment proofs in the active seller workspace.",
     };
   }
 
   if (pathname.endsWith("/payment-profile")) {
     return {
-      title: "Payment Profile",
-      subtitle: "Operational payment snapshot for the active seller store.",
+      title: "Payment Setup",
+      subtitle: "Store-scoped finance setup snapshot and admin review readiness for the active seller store.",
     };
   }
 
@@ -118,9 +135,10 @@ function SellerShellState({ title, description, tone = "neutral", children }) {
   );
 }
 
-function SellerSidebar({ storeId, sellerContext }) {
+function SellerSidebar({ storeSlug, sellerContext }) {
   const permissionKeys = sellerContext?.access?.permissionKeys || [];
   const hasPermission = (permissionKey) => permissionKeys.includes(permissionKey);
+  const sellerRoutes = createSellerWorkspaceRoutes(storeSlug);
 
   const navSections = [
     {
@@ -128,7 +146,7 @@ function SellerSidebar({ storeId, sellerContext }) {
       items: [
         {
           label: "Overview",
-          to: `/seller/stores/${storeId}`,
+          to: sellerRoutes.home(),
           Icon: LayoutDashboard,
           enabled: hasPermission("STORE_VIEW"),
           implemented: true,
@@ -136,7 +154,7 @@ function SellerSidebar({ storeId, sellerContext }) {
         },
         {
           label: "Store Profile",
-          to: `/seller/stores/${storeId}/profile`,
+          to: sellerRoutes.profile(),
           Icon: Store,
           enabled: hasPermission("STORE_VIEW"),
           implemented: true,
@@ -149,27 +167,45 @@ function SellerSidebar({ storeId, sellerContext }) {
       items: [
         {
           label: "Catalog",
-          to: `/seller/stores/${storeId}/catalog`,
+          to: sellerRoutes.catalog(),
           Icon: Package,
           enabled: hasPermission("PRODUCT_VIEW"),
           implemented: true,
           meta: "Seller read model",
         },
+      ],
+    },
+    {
+      title: "Operations",
+      items: [
         {
           label: "Orders",
-          to: `/seller/stores/${storeId}/orders`,
+          to: sellerRoutes.orders(),
           Icon: ShoppingBag,
           enabled: hasPermission("ORDER_VIEW"),
           implemented: true,
           meta: "Suborder operations",
         },
+      ],
+    },
+    {
+      title: "Finance",
+      items: [
         {
-          label: "Payment Profile",
-          to: `/seller/stores/${storeId}/payment-profile`,
+          label: "Payment Review",
+          to: sellerRoutes.paymentReview(),
+          Icon: BadgeCheck,
+          enabled: hasPermission("ORDER_VIEW") && hasPermission("PAYMENT_STATUS_VIEW"),
+          implemented: true,
+          meta: "Buyer proof review lane",
+        },
+        {
+          label: "Payment Setup",
+          to: sellerRoutes.paymentProfile(),
           Icon: CreditCard,
           enabled: hasPermission("PAYMENT_PROFILE_VIEW"),
           implemented: true,
-          meta: "Read-only snapshot",
+          meta: "Read-only setup snapshot",
         },
       ],
     },
@@ -178,7 +214,7 @@ function SellerSidebar({ storeId, sellerContext }) {
       items: [
         {
           label: "Team",
-          to: `/seller/stores/${storeId}/team`,
+          to: sellerRoutes.team(),
           Icon: Users,
           enabled: hasPermission("STORE_MEMBERS_MANAGE"),
           implemented: true,
@@ -186,7 +222,7 @@ function SellerSidebar({ storeId, sellerContext }) {
         },
         {
           label: "Team Audit",
-          to: `/seller/stores/${storeId}/team/audit`,
+          to: sellerRoutes.teamAudit(),
           Icon: History,
           enabled: hasPermission("AUDIT_LOG_VIEW"),
           implemented: true,
@@ -252,7 +288,7 @@ function SellerSidebar({ storeId, sellerContext }) {
                   <NavLink
                     key={item.label}
                     to={item.to}
-                    end={item.to === `/seller/stores/${storeId}`}
+                    end={item.to === sellerRoutes.home()}
                     className={({ isActive }) =>
                       joinClassNames(
                         "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition",
@@ -321,7 +357,7 @@ function SellerSidebar({ storeId, sellerContext }) {
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900">
           <p className="font-semibold">Bridge Phase</p>
           <p className="mt-2 leading-6 text-amber-800">
-            Tenant access is live. Write-heavy seller lanes remain intentionally narrow.
+            Tenant access is live. Seller operations and finance lanes remain intentionally narrow while the workspace baseline is stabilized.
           </p>
         </div>
       </div>
@@ -330,33 +366,48 @@ function SellerSidebar({ storeId, sellerContext }) {
 }
 
 export default function SellerLayout() {
-  const { storeId } = useParams();
-  const { pathname } = useLocation();
-  const numericStoreId = Number(storeId);
+  const { storeSlug } = useParams();
+  const { pathname, search, hash } = useLocation();
+  const normalizedStoreSlug = normalizeSellerStoreParam(storeSlug);
+  const isLegacyIdRoute = isLegacySellerStoreIdParam(normalizedStoreSlug);
 
   const sellerContextQuery = useQuery({
-    queryKey: ["seller", "workspace", "context", numericStoreId],
-    queryFn: () => getSellerWorkspaceContext(numericStoreId),
-    enabled: Number.isInteger(numericStoreId) && numericStoreId > 0,
+    queryKey: [
+      "seller",
+      "workspace",
+      "context",
+      isLegacyIdRoute ? "legacy-id" : "slug",
+      normalizedStoreSlug,
+    ],
+    queryFn: () =>
+      isLegacyIdRoute
+        ? getSellerWorkspaceContext(normalizedStoreSlug)
+        : getSellerWorkspaceContextBySlug(normalizedStoreSlug),
+    enabled: Boolean(normalizedStoreSlug),
     retry: false,
   });
 
   const sellerContext = sellerContextQuery.data;
+  const canonicalStoreSlug =
+    normalizeSellerStoreParam(sellerContext?.store?.slug) || normalizedStoreSlug;
+  const canonicalStoreId = Number(sellerContext?.store?.id || 0) || null;
   const pageMeta = getSellerPageMeta(pathname);
 
   const contextValue = useMemo(
     () => ({
       sellerContext,
+      workspaceStoreId: canonicalStoreId,
+      workspaceStoreSlug: canonicalStoreSlug,
       refetchSellerContext: sellerContextQuery.refetch,
     }),
-    [sellerContext, sellerContextQuery.refetch]
+    [canonicalStoreId, canonicalStoreSlug, sellerContext, sellerContextQuery.refetch]
   );
 
-  if (!Number.isInteger(numericStoreId) || numericStoreId <= 0) {
+  if (!normalizedStoreSlug) {
     return (
       <SellerShellState
         title="Invalid Store"
-        description="Seller workspace needs a valid store id in the URL."
+        description="Seller workspace needs a valid store slug in the URL."
         tone="danger"
       />
     );
@@ -367,6 +418,15 @@ export default function SellerLayout() {
       <SellerShellState
         title="Loading Seller Workspace"
         description="Resolving store context and seller access from the backend."
+      />
+    );
+  }
+
+  if (sellerContext && canonicalStoreSlug && normalizedStoreSlug !== canonicalStoreSlug) {
+    return (
+      <Navigate
+        to={`${replaceSellerWorkspaceStorePath(pathname, canonicalStoreSlug)}${search}${hash}`}
+        replace
       />
     );
   }
@@ -447,7 +507,7 @@ export default function SellerLayout() {
 
   return (
     <div className={`layout ${sellerShellPageClass}`}>
-      <SellerSidebar storeId={numericStoreId} sellerContext={sellerContext} />
+      <SellerSidebar storeSlug={canonicalStoreSlug} sellerContext={sellerContext} />
 
       <div className="layout__content min-w-0 flex-1 bg-slate-100">
         <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
@@ -508,7 +568,7 @@ export default function SellerLayout() {
                 <div className="flex flex-wrap gap-2">
                   <SellerWorkspaceBadge label={sellerContext?.store?.slug || "store"} />
                   <SellerWorkspaceBadge
-                    label={`${numericStoreId || "-"} store id`}
+                    label={canonicalStoreId ? `Store #${canonicalStoreId}` : "Store"}
                     className="bg-slate-50"
                   />
                 </div>

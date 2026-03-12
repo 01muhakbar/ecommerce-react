@@ -31,10 +31,26 @@ const formatDateTime = (value) => {
   return date.toLocaleString();
 };
 
+const normalizeScopeOptions = (error) => {
+  const stores = error?.response?.data?.stores;
+  if (!Array.isArray(stores)) return [];
+  return stores
+    .map((store) => ({
+      id: Number(store?.id || 0),
+      name: String(store?.name || "").trim() || "Store",
+      slug: String(store?.slug || "").trim() || null,
+      roleCode: String(store?.roleCode || "").trim() || "-",
+      isOwner: Boolean(store?.isOwner),
+      canReview: Boolean(store?.canReview),
+    }))
+    .filter((store) => Number.isInteger(store.id) && store.id > 0);
+};
+
 export default function AccountStorePaymentReviewPage({ mode = "account" }) {
   const queryClient = useQueryClient();
   const [activeFilter, setActiveFilter] = useState("PENDING_CONFIRMATION");
   const [notes, setNotes] = useState({});
+  const [selectedStoreId, setSelectedStoreId] = useState(null);
   const isAdminMode = mode === "admin";
   const contextLabel = isAdminMode ? "Online Store" : "Seller Workspace";
   const backToStorePayment = isAdminMode
@@ -42,12 +58,16 @@ export default function AccountStorePaymentReviewPage({ mode = "account" }) {
     : "/user/store-payment-profile";
 
   const reviewQuery = useQuery({
-    queryKey: ["seller", "suborders", activeFilter],
-    queryFn: () => fetchSellerSuborders(activeFilter),
+    queryKey: ["seller", "suborders", "review", activeFilter, selectedStoreId || "legacy"],
+    queryFn: () =>
+      fetchSellerSuborders(activeFilter, {
+        storeId: selectedStoreId,
+      }),
   });
 
   const reviewMutation = useMutation({
-    mutationFn: ({ paymentId, payload }) => reviewSellerPayment(paymentId, payload),
+    mutationFn: ({ paymentId, payload, storeId }) =>
+      reviewSellerPayment(paymentId, payload, { storeId }),
     onSuccess: async (_, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["seller", "suborders"] }),
@@ -58,10 +78,11 @@ export default function AccountStorePaymentReviewPage({ mode = "account" }) {
     },
   });
 
-  const handleReview = async (paymentId, action) => {
+  const handleReview = async (paymentId, action, storeId) => {
     const note = String(notes[paymentId] || "").trim();
     await reviewMutation.mutateAsync({
       paymentId,
+      storeId: storeId || selectedStoreId || null,
       payload: {
         action,
         note: note || null,
@@ -78,17 +99,47 @@ export default function AccountStorePaymentReviewPage({ mode = "account" }) {
   }
 
   if (reviewQuery.isError) {
+    const storeScopeOptions = normalizeScopeOptions(reviewQuery.error);
+    const needsStoreScope =
+      String(reviewQuery.error?.response?.data?.code || "").toUpperCase() ===
+      "SELLER_STORE_SCOPE_REQUIRED";
+
     return (
-      <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-        {reviewQuery.error?.response?.data?.message ||
-          reviewQuery.error?.message ||
-          "Failed to load seller payment reviews."}
+      <div className="space-y-4">
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+          {reviewQuery.error?.response?.data?.message ||
+            reviewQuery.error?.message ||
+            "Failed to load seller payment reviews."}
+        </div>
+        {needsStoreScope && storeScopeOptions.length > 0 ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <p className="text-sm font-semibold text-slate-900">Select store scope</p>
+            <p className="mt-1 text-sm text-slate-500">
+              This legacy review page needs an explicit store scope before loading payment proofs.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-3">
+              {storeScopeOptions.map((store) => (
+                <button
+                  key={store.id}
+                  type="button"
+                  onClick={() => setSelectedStoreId(store.id)}
+                  className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                >
+                  {store.name} • {store.roleCode}
+                  {store.canReview ? "" : " • Read only"}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
     );
   }
 
-  const data = reviewQuery.data || { store: null, items: [] };
+  const data = reviewQuery.data || { store: null, governance: null, items: [] };
   const store = data.store;
+  const governance = data.governance || null;
+  const actorCanReview = Boolean(governance?.canReview);
   const items = Array.isArray(data.items) ? data.items : [];
 
   if (!store) {
@@ -123,6 +174,32 @@ export default function AccountStorePaymentReviewPage({ mode = "account" }) {
         </span>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+          Scope: {store.name}
+        </span>
+        {governance?.roleCode ? (
+          <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+            Role: {governance.roleCode}
+          </span>
+        ) : null}
+        {selectedStoreId ? (
+          <button
+            type="button"
+            onClick={() => setSelectedStoreId(null)}
+            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            Clear scope
+          </button>
+        ) : null}
+      </div>
+
+      {governance?.note ? (
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+          {governance.note}
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap gap-2">
         {FILTERS.map((filter) => (
           <button
@@ -152,6 +229,7 @@ export default function AccountStorePaymentReviewPage({ mode = "account" }) {
           const payment = entry.payment;
           const proof = payment?.proof;
           const reviewLocked =
+            !actorCanReview ||
             !payment?.id ||
             String(payment?.status || "").toUpperCase() !== "PENDING_CONFIRMATION" ||
             String(proof?.reviewStatus || "").toUpperCase() !== "PENDING";
@@ -340,7 +418,7 @@ export default function AccountStorePaymentReviewPage({ mode = "account" }) {
                       <button
                         type="button"
                         disabled={reviewLocked || isMutating}
-                        onClick={() => handleReview(payment?.id, "APPROVE")}
+                        onClick={() => handleReview(payment?.id, "APPROVE", entry.storeId)}
                         className="inline-flex h-11 items-center justify-center rounded-full bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {isMutating ? "Saving..." : "Approve"}
@@ -348,7 +426,7 @@ export default function AccountStorePaymentReviewPage({ mode = "account" }) {
                       <button
                         type="button"
                         disabled={reviewLocked || isMutating}
-                        onClick={() => handleReview(payment?.id, "REJECT")}
+                        onClick={() => handleReview(payment?.id, "REJECT", entry.storeId)}
                         className="inline-flex h-11 items-center justify-center rounded-full border border-rose-200 px-5 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {isMutating ? "Saving..." : "Reject"}
@@ -357,9 +435,15 @@ export default function AccountStorePaymentReviewPage({ mode = "account" }) {
 
                     {reviewLocked ? (
                       <p className="mt-3 text-sm text-slate-500">
-                        Review actions are available only while payment is in{" "}
-                        <span className="font-semibold text-slate-900">PENDING_CONFIRMATION</span>{" "}
-                        with a pending proof.
+                        {actorCanReview
+                          ? (
+                              <>
+                                Review actions are available only while payment is in{" "}
+                                <span className="font-semibold text-slate-900">PENDING_CONFIRMATION</span>{" "}
+                                with a pending proof.
+                              </>
+                            )
+                          : "This seller role can view payment review data, but mutation remains read-only for this store scope."}
                       </p>
                     ) : null}
                   </div>

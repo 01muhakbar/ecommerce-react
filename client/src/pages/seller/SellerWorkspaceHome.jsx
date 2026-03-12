@@ -118,7 +118,7 @@ export default function SellerWorkspaceHome() {
             <div>
               <h3 className="text-lg font-semibold text-slate-900">Access Summary</h3>
               <p className="text-sm text-slate-500">
-                Directly sourced from `GET /api/seller/stores/:storeId/context`
+                Directly sourced from the seller workspace context resolver
               </p>
             </div>
           </div>

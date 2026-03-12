@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { History, ShieldCheck } from "lucide-react";
-import { useOutletContext, useParams } from "react-router-dom";
 import { getSellerTeamAudit } from "../../api/sellerTeamAudit.ts";
 import {
   sellerFieldClass,
@@ -15,6 +14,7 @@ import {
   SellerWorkspaceStatCard,
 } from "../../components/seller/SellerWorkspaceFoundation.jsx";
 import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
+import { useSellerWorkspaceRoute } from "../../utils/sellerWorkspaceRoute.js";
 
 function formatActor(user) {
   if (!user) return "System";
@@ -70,8 +70,7 @@ function formatActionOption(action) {
 }
 
 export default function SellerTeamAuditPage() {
-  const { storeId } = useParams();
-  const { sellerContext } = useOutletContext() || {};
+  const { sellerContext, workspaceStoreId: storeId } = useSellerWorkspaceRoute();
   const permissionKeys = sellerContext?.access?.permissionKeys || [];
   const canViewAudit = permissionKeys.includes("AUDIT_LOG_VIEW");
   const [actionFilter, setActionFilter] = useState("");

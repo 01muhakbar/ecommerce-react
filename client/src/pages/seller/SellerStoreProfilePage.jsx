@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Globe, ImageIcon, MapPin, Save, ShieldCheck, Store } from "lucide-react";
-import { useOutletContext, useParams } from "react-router-dom";
 import {
   getSellerStoreProfile,
   updateSellerStoreProfile,
@@ -20,6 +19,7 @@ import {
   SellerWorkspaceSectionHeader,
 } from "../../components/seller/SellerWorkspaceFoundation.jsx";
 import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
+import { useSellerWorkspaceRoute } from "../../utils/sellerWorkspaceRoute.js";
 
 const emptyToNull = (value) => {
   const normalized = String(value || "").trim();
@@ -102,9 +102,12 @@ function InputField({ label, hint, multiline = false, disabled = false, ...props
 }
 
 export default function SellerStoreProfilePage() {
-  const { storeId } = useParams();
   const queryClient = useQueryClient();
-  const { sellerContext, refetchSellerContext } = useOutletContext() || {};
+  const {
+    sellerContext,
+    workspaceStoreId: storeId,
+    refetchSellerContext,
+  } = useSellerWorkspaceRoute();
   const permissionKeys = sellerContext?.access?.permissionKeys || [];
   const canView = permissionKeys.includes("STORE_VIEW");
   const fallbackCanEdit = permissionKeys.includes("STORE_EDIT");

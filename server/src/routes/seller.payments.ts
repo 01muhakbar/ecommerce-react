@@ -2,6 +2,7 @@ import { Op } from "sequelize";
 import { Router } from "express";
 import { z } from "zod";
 import requireAuth from "../middleware/requireAuth.js";
+import requireSellerStoreAccess from "../middleware/requireSellerStoreAccess.js";
 import {
   Order,
   Payment,
@@ -34,10 +35,14 @@ const ALLOWED_PAYMENT_FILTERS = new Set([
   "REJECTED",
   "UNPAID",
 ]);
-const LEGACY_PAYMENT_REVIEW_REQUIRED_PERMISSIONS = [
+const SELLER_PAYMENT_REVIEW_VIEW_REQUIRED_PERMISSIONS = [
   "ORDER_VIEW",
   "PAYMENT_STATUS_VIEW",
 ] as const;
+const SELLER_PAYMENT_REVIEW_MUTATION_ALLOWED_ROLE_CODES = new Set([
+  SELLER_ROLE_CODES.STORE_OWNER,
+  SELLER_ROLE_CODES.STORE_ADMIN,
+]);
 
 const getAuthUser = (req: any) => {
   const userId = Number(req?.user?.id);
@@ -73,16 +78,29 @@ const sendSellerAccessError = (
     ...(payload.extras || {}),
   });
 
-const canAccessLegacySellerPaymentReview = (access: any) => {
-  const hasRequiredPermissions = LEGACY_PAYMENT_REVIEW_REQUIRED_PERMISSIONS.every((permission) =>
+const canViewSellerPaymentReview = (access: any) =>
+  SELLER_PAYMENT_REVIEW_VIEW_REQUIRED_PERMISSIONS.every((permission) =>
     sellerHasPermission(access, permission)
   );
 
-  if (!hasRequiredPermissions) return false;
-  return (
-    Boolean(access?.isOwner) || String(access?.roleCode || "") === SELLER_ROLE_CODES.STORE_ADMIN
-  );
+const canMutateSellerPaymentReview = (access: any) => {
+  if (!canViewSellerPaymentReview(access)) return false;
+  const roleCode = String(access?.roleCode || "").trim();
+  if (Boolean(access?.isOwner)) return true;
+  return SELLER_PAYMENT_REVIEW_MUTATION_ALLOWED_ROLE_CODES.has(roleCode as any);
 };
+
+const buildSellerPaymentReviewGovernance = (access: any) => ({
+  canView: canViewSellerPaymentReview(access),
+  canReview: canMutateSellerPaymentReview(access),
+  activeStoreId: toNumber(access?.store?.id || access?.storeId, 0) || null,
+  roleCode: String(access?.roleCode || ""),
+  permissionKeys: Array.isArray(access?.permissionKeys) ? [...access.permissionKeys] : [],
+  mutationAllowedRoleCodes: [...SELLER_PAYMENT_REVIEW_MUTATION_ALLOWED_ROLE_CODES],
+  note: canMutateSellerPaymentReview(access)
+    ? "Seller payment review mutation is active for this store scope."
+    : "Seller payment review stays read-only for this role. Mutation remains limited to STORE_OWNER or STORE_ADMIN.",
+});
 
 const resolveLegacySellerPaymentReviewAccess = async (input: {
   userId: number | null;
@@ -117,7 +135,7 @@ const resolveLegacySellerPaymentReviewAccess = async (input: {
       return accessResult;
     }
 
-    if (!canAccessLegacySellerPaymentReview(accessResult.data)) {
+    if (!canViewSellerPaymentReview(accessResult.data)) {
       return {
         ok: false as const,
         status: 403,
@@ -134,9 +152,9 @@ const resolveLegacySellerPaymentReviewAccess = async (input: {
 
   const accessContexts = await listSellerAccessContexts({
     userId,
-    requiredPermissions: [...LEGACY_PAYMENT_REVIEW_REQUIRED_PERMISSIONS],
+    requiredPermissions: [...SELLER_PAYMENT_REVIEW_VIEW_REQUIRED_PERMISSIONS],
   });
-  const eligibleAccessContexts = accessContexts.filter(canAccessLegacySellerPaymentReview);
+  const eligibleAccessContexts = accessContexts.filter(canViewSellerPaymentReview);
 
   if (eligibleAccessContexts.length === 0) {
     return {
@@ -175,6 +193,7 @@ const resolveLegacySellerPaymentReviewAccess = async (input: {
         slug: String(access.store?.slug || ""),
         roleCode: String(access.roleCode || ""),
         isOwner: Boolean(access.isOwner),
+        canReview: canMutateSellerPaymentReview(access),
       })),
     },
   };
@@ -398,6 +417,73 @@ const loadSellerPayment = async (paymentId: number) =>
     ],
   });
 
+const listSellerPaymentReviewSuborders = async (storeId: number, statuses: string[]) =>
+  Suborder.findAll({
+    where: {
+      storeId,
+      paymentStatus: { [Op.in]: statuses },
+    },
+    attributes: [
+      "id",
+      "orderId",
+      "suborderNumber",
+      "storeId",
+      "totalAmount",
+      "paymentStatus",
+      "fulfillmentStatus",
+      "paidAt",
+      "createdAt",
+    ],
+    include: sellerListInclude,
+    order: [["createdAt", "DESC"]],
+  });
+
+const buildSellerPaymentReviewListPayload = (input: {
+  access: any;
+  filters: string[];
+  items: any[];
+}) => ({
+  store: {
+    id: toNumber(input.access?.store?.id || input.access?.storeId, 0) || null,
+    name: String(input.access?.store?.name || ""),
+    slug: String(input.access?.store?.slug || ""),
+    status: String(input.access?.store?.status || "ACTIVE"),
+  },
+  filters: input.filters,
+  items: input.items.map(serializeSellerSuborder),
+  governance: buildSellerPaymentReviewGovernance(input.access),
+});
+
+const loadSellerPaymentReviewList = async (input: {
+  access: any;
+  paymentStatus: unknown;
+}) => {
+  const statuses = normalizeStatuses(input.paymentStatus);
+  const scopedStoreId = Number(input.access?.store?.id || input.access?.storeId || 0);
+  const items = await listSellerPaymentReviewSuborders(scopedStoreId, statuses);
+  return buildSellerPaymentReviewListPayload({
+    access: input.access,
+    filters: statuses,
+    items,
+  });
+};
+
+const resolveSellerPaymentScope = (payment: any) => {
+  const paymentStore = (payment as any)?.store ?? payment?.get?.("store") ?? null;
+  const suborder = (payment as any)?.suborder ?? payment?.get?.("suborder") ?? null;
+  const paymentStoreId = toNumber(getAttr(paymentStore, "id"), 0);
+  const suborderStoreId = toNumber(getAttr(suborder, "storeId"), 0);
+  const scopedStoreId = suborderStoreId || paymentStoreId;
+
+  return {
+    paymentStore,
+    suborder,
+    paymentStoreId,
+    suborderStoreId,
+    scopedStoreId,
+  };
+};
+
 router.use(requireAuth);
 
 router.get("/suborders", async (req, res) => {
@@ -419,40 +505,12 @@ router.get("/suborders", async (req, res) => {
       return sendSellerAccessError(res, accessResult);
     }
 
-    const statuses = normalizeStatuses(req.query.paymentStatus);
-    const scopedStoreId = Number(accessResult.data.store.id);
-    const items = await Suborder.findAll({
-      where: {
-        storeId: scopedStoreId,
-        paymentStatus: { [Op.in]: statuses },
-      },
-      attributes: [
-        "id",
-        "orderId",
-        "suborderNumber",
-        "storeId",
-        "totalAmount",
-        "paymentStatus",
-        "fulfillmentStatus",
-        "paidAt",
-        "createdAt",
-      ],
-      include: sellerListInclude,
-      order: [["createdAt", "DESC"]],
-    });
-
     return res.json({
       success: true,
-      data: {
-        store: {
-          id: toNumber(accessResult.data.store.id),
-          name: String(accessResult.data.store.name || ""),
-          slug: String(accessResult.data.store.slug || ""),
-          status: String(accessResult.data.store.status || "ACTIVE"),
-        },
-        filters: statuses,
-        items: items.map(serializeSellerSuborder),
-      },
+      data: await loadSellerPaymentReviewList({
+        access: accessResult.data,
+        paymentStatus: req.query.paymentStatus,
+      }),
     });
   } catch (error) {
     console.error("[seller/suborders] error", error);
@@ -463,7 +521,29 @@ router.get("/suborders", async (req, res) => {
   }
 });
 
-router.patch("/payments/:paymentId/review", async (req, res) => {
+router.get(
+  "/stores/:storeId/payment-review/suborders",
+  requireSellerStoreAccess([...SELLER_PAYMENT_REVIEW_VIEW_REQUIRED_PERMISSIONS]),
+  async (req: any, res) => {
+    try {
+      return res.json({
+        success: true,
+        data: await loadSellerPaymentReviewList({
+          access: req.sellerAccess,
+          paymentStatus: req.query.paymentStatus,
+        }),
+      });
+    } catch (error) {
+      console.error("[seller/stores/payment-review/suborders] error", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to load seller payments.",
+      });
+    }
+  }
+);
+
+const handleSellerPaymentReview = async (req: any, res: any, options: { requireRouteStoreScope: boolean }) => {
   try {
     const authUser = getAuthUser(req);
     if (!authUser.id) {
@@ -502,11 +582,8 @@ router.patch("/payments/:paymentId/review", async (req, res) => {
       });
     }
 
-    const paymentStore = (payment as any)?.store ?? payment?.get?.("store") ?? null;
-    const suborder = (payment as any)?.suborder ?? payment?.get?.("suborder") ?? null;
-    const paymentStoreId = toNumber(getAttr(paymentStore, "id"), 0);
-    const suborderStoreId = toNumber(getAttr(suborder, "storeId"), 0);
-    const scopedStoreId = suborderStoreId || paymentStoreId;
+    const { suborder, paymentStoreId, suborderStoreId, scopedStoreId } =
+      resolveSellerPaymentScope(payment);
 
     if (!isValidPositiveInt(scopedStoreId)) {
       return sendSellerAccessError(res, {
@@ -528,15 +605,47 @@ router.patch("/payments/:paymentId/review", async (req, res) => {
       });
     }
 
-    const accessResult = await resolveSellerAccess({
-      storeId: scopedStoreId,
-      userId: authUser.id,
-    });
-    if (!accessResult.ok) {
-      return sendSellerAccessError(res, accessResult);
+    const routeStoreId =
+      options.requireRouteStoreScope || isValidPositiveInt(req.params?.storeId)
+        ? Number(req.params?.storeId)
+        : null;
+
+    if (options.requireRouteStoreScope) {
+      if (!isValidPositiveInt(routeStoreId)) {
+        return sendSellerAccessError(res, {
+          status: 400,
+          code: "INVALID_STORE_ID",
+          message: "Invalid store id.",
+        });
+      }
+
+      if (Number(routeStoreId) !== scopedStoreId) {
+        return sendSellerAccessError(res, {
+          status: 404,
+          code: "SELLER_PAYMENT_OUTSIDE_STORE_SCOPE",
+          message: "Payment not found for the requested seller store scope.",
+        });
+      }
     }
 
-    if (!canAccessLegacySellerPaymentReview(accessResult.data)) {
+    const access = req.sellerAccess
+      ? req.sellerAccess
+      : await (async () => {
+          const accessResult = await resolveSellerAccess({
+            storeId: scopedStoreId,
+            userId: authUser.id,
+          });
+          if (!accessResult.ok) {
+            return accessResult;
+          }
+          return accessResult.data;
+        })();
+
+    if ("ok" in (access as any) && !(access as any).ok) {
+      return sendSellerAccessError(res, access as any);
+    }
+
+    if (!canMutateSellerPaymentReview(access)) {
       return sendSellerAccessError(res, {
         status: 403,
         code: "SELLER_PAYMENT_REVIEW_FORBIDDEN",
@@ -684,6 +793,16 @@ router.patch("/payments/:paymentId/review", async (req, res) => {
       message: "Failed to review seller payment.",
     });
   }
-});
+};
+
+router.patch("/payments/:paymentId/review", async (req, res) =>
+  handleSellerPaymentReview(req, res, { requireRouteStoreScope: false })
+);
+
+router.patch(
+  "/stores/:storeId/payments/:paymentId/review",
+  requireSellerStoreAccess([...SELLER_PAYMENT_REVIEW_VIEW_REQUIRED_PERMISSIONS]),
+  async (req, res) => handleSellerPaymentReview(req, res, { requireRouteStoreScope: true })
+);
 
 export default router;

@@ -16,6 +16,12 @@ export interface ProductAttributes {
   defaultCategoryId?: number | null;
   status: "active" | "inactive" | "draft";
   isPublished: boolean;
+  sellerSubmissionStatus?: "none" | "submitted" | "needs_revision";
+  sellerSubmittedAt?: Date | null;
+  sellerSubmittedByUserId?: number | null;
+  sellerRevisionRequestedAt?: Date | null;
+  sellerRevisionRequestedByUserId?: number | null;
+  sellerRevisionNote?: string | null;
   description?: string;
   promoImagePath?: string;
   imagePaths?: string[];
@@ -40,7 +46,19 @@ export interface ProductAttributes {
 
 type ProductCreationAttributes = Optional<
   ProductAttributes,
-  "id" | "sku" | "status" | "categoryId" | "description" | "barcode" | "gtin"
+  | "id"
+  | "sku"
+  | "status"
+  | "categoryId"
+  | "description"
+  | "barcode"
+  | "gtin"
+  | "sellerSubmissionStatus"
+  | "sellerSubmittedAt"
+  | "sellerSubmittedByUserId"
+  | "sellerRevisionRequestedAt"
+  | "sellerRevisionRequestedByUserId"
+  | "sellerRevisionNote"
 >;
 
 class Product
@@ -62,6 +80,12 @@ class Product
   declare defaultCategoryId?: number | null;
   declare status: "active" | "inactive" | "draft";
   declare isPublished: boolean;
+  declare sellerSubmissionStatus?: "none" | "submitted" | "needs_revision";
+  declare sellerSubmittedAt?: Date | null;
+  declare sellerSubmittedByUserId?: number | null;
+  declare sellerRevisionRequestedAt?: Date | null;
+  declare sellerRevisionRequestedByUserId?: number | null;
+  declare sellerRevisionNote?: string | null;
   declare description?: string;
   declare promoImagePath?: string;
   declare imagePaths?: string[];
@@ -204,6 +228,45 @@ class Product
           allowNull: false,
           defaultValue: false,
           field: "published",
+        },
+        sellerSubmissionStatus: {
+          type: DataTypes.ENUM("none", "submitted", "needs_revision"),
+          allowNull: false,
+          defaultValue: "none",
+          field: "seller_submission_status",
+        },
+        sellerSubmittedAt: {
+          type: DataTypes.DATE,
+          allowNull: true,
+          field: "seller_submitted_at",
+        },
+        sellerSubmittedByUserId: {
+          type: DataTypes.INTEGER.UNSIGNED,
+          allowNull: true,
+          field: "seller_submitted_by_user_id",
+          references: {
+            model: "users",
+            key: "id",
+          },
+        },
+        sellerRevisionRequestedAt: {
+          type: DataTypes.DATE,
+          allowNull: true,
+          field: "seller_revision_requested_at",
+        },
+        sellerRevisionRequestedByUserId: {
+          type: DataTypes.INTEGER.UNSIGNED,
+          allowNull: true,
+          field: "seller_revision_requested_by_user_id",
+          references: {
+            model: "users",
+            key: "id",
+          },
+        },
+        sellerRevisionNote: {
+          type: DataTypes.TEXT,
+          allowNull: true,
+          field: "seller_revision_note",
         },
         createdAt: {
           type: DataTypes.DATE,

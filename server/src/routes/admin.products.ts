@@ -59,6 +59,182 @@ const toBooleanOrUndefined = (value: unknown) => {
   }
   return undefined;
 };
+
+const normalizeSellerSubmissionStatus = (value: unknown) => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "submitted") return "submitted";
+  if (normalized === "needs_revision") return "needs_revision";
+  return "none";
+};
+
+const normalizeAdminSellerSubmissionFilter = (value: unknown) => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "submitted") return "submitted";
+  if (normalized === "needs_revision") return "needs_revision";
+  if (normalized === "review_queue") return "review_queue";
+  return null;
+};
+
+const getPlainAttr = (entity: any, key: string) =>
+  entity?.get ? entity.get(key) : entity?.[key];
+
+const getProductSellerSubmissionStatus = (product: any) =>
+  normalizeSellerSubmissionStatus(getPlainAttr(product, "sellerSubmissionStatus"));
+
+const getProductLifecycleStatus = (product: any) =>
+  String(getPlainAttr(product, "status") || "draft").trim().toLowerCase();
+
+const buildClearedSellerSubmissionPatch = () => ({
+  sellerSubmissionStatus: "none",
+  sellerSubmittedAt: null,
+  sellerSubmittedByUserId: null,
+  sellerRevisionRequestedAt: null,
+  sellerRevisionRequestedByUserId: null,
+  sellerRevisionNote: null,
+});
+
+const resolveAdminPublishGate = (plain: any) => {
+  const submissionStatus = normalizeSellerSubmissionStatus(plain?.sellerSubmissionStatus);
+  const lifecycleStatus = String(plain?.status || "draft").trim().toLowerCase();
+
+  if (submissionStatus === "submitted") {
+    return {
+      canUseListToggle: false,
+      canPublishFromReview: true,
+      requiresFinalReviewOutcome: true,
+      willClearSubmissionState: true,
+      nextLifecycleStatus: lifecycleStatus === "active" ? "active" : "active",
+      reasonCode: "REVIEW_SUBMITTED",
+      hint: "Open review preview to publish this seller submission as the final admin outcome.",
+    };
+  }
+
+  if (submissionStatus === "needs_revision") {
+    return {
+      canUseListToggle: false,
+      canPublishFromReview: false,
+      requiresFinalReviewOutcome: false,
+      willClearSubmissionState: false,
+      nextLifecycleStatus: lifecycleStatus,
+      reasonCode: "REVISION_PENDING",
+      hint: "This product is waiting for seller revisions and cannot be published yet.",
+    };
+  }
+
+  return {
+    canUseListToggle: true,
+    canPublishFromReview: true,
+    requiresFinalReviewOutcome: false,
+    willClearSubmissionState: false,
+    nextLifecycleStatus: lifecycleStatus,
+    reasonCode: null,
+    hint: null,
+  };
+};
+
+const assertAdminPublishAllowed = (
+  product: any,
+  options: {
+    nextPublished: boolean;
+    route: "toggle" | "update" | "bulk";
+    nextStatus?: string | undefined;
+  }
+) => {
+  if (!options.nextPublished) {
+    return {
+      patch: null,
+      sellerSubmissionStatus: getProductSellerSubmissionStatus(product),
+    };
+  }
+
+  const sellerSubmissionStatus = getProductSellerSubmissionStatus(product);
+  if (sellerSubmissionStatus === "needs_revision") {
+    const error = new Error(
+      "Products in needs revision cannot be published until the seller resubmits for review."
+    ) as Error & { status?: number };
+    error.status = 409;
+    throw error;
+  }
+
+  if (options.route === "bulk" && sellerSubmissionStatus !== "none") {
+    const error = new Error(
+      "Bulk publish is disabled for seller review products. Open the review drawer and publish each reviewed product individually."
+    ) as Error & { status?: number };
+    error.status = 409;
+    throw error;
+  }
+
+  if (sellerSubmissionStatus === "submitted") {
+    const effectiveStatus =
+      typeof options.nextStatus === "string" && options.nextStatus.trim()
+        ? options.nextStatus.trim().toLowerCase()
+        : getProductLifecycleStatus(product) === "active"
+          ? "active"
+          : "active";
+
+    if (effectiveStatus !== "active") {
+      const error = new Error(
+        "Submitted seller products must move to active before they can be published."
+      ) as Error & { status?: number };
+      error.status = 409;
+      throw error;
+    }
+
+    return {
+      patch: {
+        status: "active",
+        ...buildClearedSellerSubmissionPatch(),
+      },
+      sellerSubmissionStatus,
+    };
+  }
+
+  return {
+    patch: null,
+    sellerSubmissionStatus,
+  };
+};
+
+const serializeAdminSellerSubmission = (plain: any) => {
+  const status = normalizeSellerSubmissionStatus(plain?.sellerSubmissionStatus);
+  const publishGate = resolveAdminPublishGate(plain);
+  return {
+    status,
+    label:
+      status === "submitted"
+        ? "Submitted for review"
+        : status === "needs_revision"
+          ? "Needs revision"
+          : "Not submitted",
+    hasSubmission: status !== "none",
+    submittedAt: plain?.sellerSubmittedAt ?? null,
+    submittedByUserId:
+      typeof plain?.sellerSubmittedByUserId === "number"
+        ? plain.sellerSubmittedByUserId
+        : plain?.sellerSubmittedByUserId
+          ? Number(plain.sellerSubmittedByUserId)
+          : null,
+    reviewState:
+      status === "submitted"
+        ? "PENDING_REVIEW"
+        : status === "needs_revision"
+          ? "NEEDS_REVISION"
+          : "NOT_SUBMITTED",
+    revisionRequestedAt: plain?.sellerRevisionRequestedAt ?? null,
+    revisionRequestedByUserId:
+      typeof plain?.sellerRevisionRequestedByUserId === "number"
+        ? plain.sellerRevisionRequestedByUserId
+        : plain?.sellerRevisionRequestedByUserId
+          ? Number(plain.sellerRevisionRequestedByUserId)
+          : null,
+    revisionNote:
+      plain?.sellerRevisionNote === null || typeof plain?.sellerRevisionNote === "undefined"
+        ? null
+        : String(plain.sellerRevisionNote).trim() || null,
+    requiresSellerChanges: status === "needs_revision",
+    publishGate,
+  };
+};
 const normalizeImportedSalePrice = (salePrice: unknown, basePrice: number) => {
   if (salePrice === null) return null;
   if (typeof salePrice === "undefined" || salePrice === "") return undefined;
@@ -71,6 +247,9 @@ const normalizeImportedSalePrice = (salePrice: unknown, basePrice: number) => {
 const buildProductsWhere = (query: Request["query"]) => {
   const q = String(asSingle(query.q) ?? "").trim();
   const categoryIdParam = String(asSingle(query.categoryId) ?? "").trim();
+  const sellerSubmissionFilter = normalizeAdminSellerSubmissionFilter(
+    asSingle(query.sellerSubmissionStatus)
+  );
   const where: any = {};
   const categoryFilterId = parseOptionalPositiveId(categoryIdParam);
 
@@ -81,7 +260,15 @@ const buildProductsWhere = (query: Request["query"]) => {
     ];
   }
 
-  return { where, q, categoryIdParam, categoryFilterId };
+  if (sellerSubmissionFilter === "submitted" || sellerSubmissionFilter === "needs_revision") {
+    where.sellerSubmissionStatus = sellerSubmissionFilter;
+  } else if (sellerSubmissionFilter === "review_queue") {
+    where.sellerSubmissionStatus = {
+      [Op.in]: ["submitted", "needs_revision"],
+    };
+  }
+
+  return { where, q, categoryIdParam, categoryFilterId, sellerSubmissionFilter };
 };
 
 const toAdminCategorySummary = (category: any) => {
@@ -307,6 +494,7 @@ const toAdminProductListItem = (product: any) => {
     unit,
     stock: plain?.stock ?? 0,
     status: plain?.status ?? "draft",
+    sellerSubmission: serializeAdminSellerSubmission(plain),
     published:
       typeof plain?.published !== "undefined"
         ? Boolean(plain.published)
@@ -348,6 +536,7 @@ const toAdminProductDetail = (product: any) => {
     salePrice: priceFields.salePrice,
     stock: plain?.stock ?? 0,
     status: plain?.status ?? "draft",
+    sellerSubmission: serializeAdminSellerSubmission(plain),
     published:
       typeof plain?.published !== "undefined"
         ? Boolean(plain.published)
@@ -384,6 +573,7 @@ const toAdminProductExportItem = (product: any) => {
     salePrice: detail.salePrice,
     stock: detail.stock,
     status: detail.status,
+    sellerSubmission: detail.sellerSubmission,
     published: detail.published,
     categoryId: detail.categoryId,
     defaultCategoryId: detail.defaultCategoryId,
@@ -693,6 +883,15 @@ const updateSchema = createSchema.partial();
 const updatePublishedSchema = z.object({
   published: z.boolean(),
 });
+
+const requestRevisionSchema = z.object({
+  note: z
+    .string()
+    .trim()
+    .max(1000, "Revision note must be 1000 characters or fewer.")
+    .nullable()
+    .optional(),
+});
 const bulkActionSchema = z.object({
   action: z.enum(["delete", "publish", "unpublish"]),
   ids: z.array(z.coerce.number().int().positive()).min(1),
@@ -706,47 +905,75 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
       50,
       Math.max(1, parseInt(String(req.query.limit || req.query.pageSize || "10"), 10))
     );
-    const { where, categoryFilterId } = buildProductsWhere(req.query);
+    const { where, categoryFilterId, sellerSubmissionFilter } = buildProductsWhere(req.query);
 
     const offset = (page - 1) * limit;
+    const reviewQueueWhere = { ...where };
+    delete reviewQueueWhere.sellerSubmissionStatus;
 
-    const { rows, count } = await Product.findAndCountAll({
-      where,
-      attributes: [
-        "id",
-        "name",
-        "slug",
-        "price",
-        "salePrice",
-        "stock",
-        "status",
-        "published",
-        "categoryId",
-        "defaultCategoryId",
-        "promoImagePath",
-        "imagePaths",
-        "tags",
-        "createdAt",
-        "updatedAt",
-        [
-          sequelize.literal(
-            "(SELECT ROUND(AVG(pr.rating), 1) FROM product_reviews pr WHERE pr.product_id = Product.id)"
-          ),
-          "ratingAvg",
+    const [reviewSubmittedCount, reviewNeedsRevisionCount, { rows, count }] = await Promise.all([
+      Product.count({
+        where: {
+          ...reviewQueueWhere,
+          sellerSubmissionStatus: "submitted",
+        } as any,
+        include: buildAdminProductIncludes(categoryFilterId),
+        distinct: true,
+        col: "id",
+      }),
+      Product.count({
+        where: {
+          ...reviewQueueWhere,
+          sellerSubmissionStatus: "needs_revision",
+        } as any,
+        include: buildAdminProductIncludes(categoryFilterId),
+        distinct: true,
+        col: "id",
+      }),
+      Product.findAndCountAll({
+        where,
+        attributes: [
+          "id",
+          "name",
+          "slug",
+          "price",
+          "salePrice",
+          "stock",
+          "status",
+          "sellerSubmissionStatus",
+          "sellerSubmittedAt",
+          "sellerSubmittedByUserId",
+          "sellerRevisionRequestedAt",
+          "sellerRevisionRequestedByUserId",
+          "sellerRevisionNote",
+          "published",
+          "categoryId",
+          "defaultCategoryId",
+          "promoImagePath",
+          "imagePaths",
+          "tags",
+          "createdAt",
+          "updatedAt",
+          [
+            sequelize.literal(
+              "(SELECT ROUND(AVG(pr.rating), 1) FROM product_reviews pr WHERE pr.product_id = Product.id)"
+            ),
+            "ratingAvg",
+          ],
+          [
+            sequelize.literal(
+              "(SELECT COUNT(*) FROM product_reviews pr WHERE pr.product_id = Product.id)"
+            ),
+            "reviewCount",
+          ],
         ],
-        [
-          sequelize.literal(
-            "(SELECT COUNT(*) FROM product_reviews pr WHERE pr.product_id = Product.id)"
-          ),
-          "reviewCount",
-        ],
-      ],
-      include: buildAdminProductIncludes(categoryFilterId),
-      distinct: true,
-      limit,
-      offset,
-      order: [["createdAt", "DESC"]],
-    });
+        include: buildAdminProductIncludes(categoryFilterId),
+        distinct: true,
+        limit,
+        offset,
+        order: [["createdAt", "DESC"]],
+      }),
+    ]);
 
     res.json({
       data: rows.map(toAdminProductListItem),
@@ -755,6 +982,12 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
         limit,
         total: count,
         totalPages: Math.max(1, Math.ceil(count / limit)),
+        reviewQueue: {
+          submitted: Number(reviewSubmittedCount || 0),
+          needsRevision: Number(reviewNeedsRevisionCount || 0),
+          total: Number(reviewSubmittedCount || 0) + Number(reviewNeedsRevisionCount || 0),
+          activeFilter: sellerSubmissionFilter || null,
+        },
       },
     });
   } catch (err) {
@@ -764,7 +997,8 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
 
 router.get("/export", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { where, q, categoryIdParam, categoryFilterId } = buildProductsWhere(req.query);
+    const { where, q, categoryIdParam, categoryFilterId, sellerSubmissionFilter } =
+      buildProductsWhere(req.query);
     const rows = await Product.findAll({
       where,
       attributes: [
@@ -778,6 +1012,12 @@ router.get("/export", async (req: Request, res: Response, next: NextFunction) =>
         "salePrice",
         "stock",
         "status",
+        "sellerSubmissionStatus",
+        "sellerSubmittedAt",
+        "sellerSubmittedByUserId",
+        "sellerRevisionRequestedAt",
+        "sellerRevisionRequestedByUserId",
+        "sellerRevisionNote",
         "published",
         "categoryId",
         "defaultCategoryId",
@@ -798,6 +1038,7 @@ router.get("/export", async (req: Request, res: Response, next: NextFunction) =>
       filters: {
         q: q || null,
         categoryId: categoryIdParam || null,
+        sellerSubmissionStatus: sellerSubmissionFilter || null,
       },
       items: rows.map(toAdminProductExportItem),
     };
@@ -967,6 +1208,9 @@ router.post(
         },
       });
     } catch (err) {
+      if ((err as any)?.status === 409) {
+        return res.status(409).json({ message: (err as any).message });
+      }
       next(err);
     }
   }
@@ -990,6 +1234,23 @@ router.post(
         affected = await Product.destroy({ where: { id: { [Op.in]: uniqueIds } } as any });
       } else {
         const nextPublished = action === "publish";
+        if (nextPublished) {
+          const reviewBoundProducts = await Product.findAll({
+            where: {
+              id: { [Op.in]: uniqueIds },
+              sellerSubmissionStatus: { [Op.in]: ["submitted", "needs_revision"] },
+            } as any,
+            attributes: ["id", "sellerSubmissionStatus"],
+          });
+
+          reviewBoundProducts.forEach((product) => {
+            assertAdminPublishAllowed(product, {
+              nextPublished,
+              route: "bulk",
+            });
+          });
+        }
+
         const [updatedCount] = await Product.update(
           { isPublished: nextPublished } as any,
           { where: { id: { [Op.in]: uniqueIds } } as any }
@@ -1077,6 +1338,9 @@ router.post(
       if ((err as any)?.status === 400) {
         return res.status(400).json({ message: (err as any).message });
       }
+      if ((err as any)?.status === 409) {
+        return res.status(409).json({ message: (err as any).message });
+      }
       if ((err as any)?.name === "SequelizeUniqueConstraintError") {
         return res.status(409).json({ message: "Slug already exists" });
       }
@@ -1136,7 +1400,17 @@ router.patch(
         patch.imagePaths = body.imageUrl ? [body.imageUrl] : [];
       }
       if (body.status !== undefined) patch.status = body.status;
-      if (body.published !== undefined) patch.isPublished = body.published;
+      if (body.published !== undefined) {
+        const publishGatePatch = assertAdminPublishAllowed(product, {
+          nextPublished: body.published,
+          route: "update",
+          nextStatus: typeof body.status === "string" ? body.status : undefined,
+        });
+        patch.isPublished = body.published;
+        if (publishGatePatch.patch) {
+          Object.assign(patch, publishGatePatch.patch);
+        }
+      }
       if (body.slug !== undefined) {
         const normalizedSlug = String(body.slug || "").trim();
         if (normalizedSlug) patch.slug = slugify(normalizedSlug);
@@ -1170,6 +1444,57 @@ router.patch(
 );
 
 router.patch(
+  "/:id/revision-request",
+  requireAdmin,
+  async (req: Request<{ id: string }>, res: Response, next: NextFunction) => {
+    try {
+      const idNum = parseId(req.params.id);
+      if (!idNum) return res.status(400).json({ message: "Invalid id" });
+
+      const { note } = requestRevisionSchema.parse(req.body);
+      const product = await Product.findByPk(idNum, {
+        include: buildAdminProductIncludes(null),
+      });
+      if (!product) return res.status(404).json({ message: "Not found" });
+
+      const currentSubmissionStatus = normalizeSellerSubmissionStatus(
+        (product as any).get?.("sellerSubmissionStatus") ?? (product as any).sellerSubmissionStatus
+      );
+
+      if (currentSubmissionStatus !== "submitted") {
+        return res.status(409).json({
+          message: "Only submitted seller products can be moved into revision.",
+        });
+      }
+
+      const updated = await sequelize.transaction(async (transaction) => {
+        await product.update(
+          {
+            sellerSubmissionStatus: "needs_revision",
+            sellerRevisionRequestedAt: new Date(),
+            sellerRevisionRequestedByUserId: (req as any).user?.id ?? null,
+            sellerRevisionNote: note ?? null,
+          } as any,
+          { transaction }
+        );
+
+        return Product.findByPk(idNum, {
+          include: buildAdminProductIncludes(null),
+          transaction,
+        });
+      });
+
+      return res.json({ data: updated });
+    } catch (err) {
+      if ((err as any)?.name === "ZodError") {
+        return res.status(400).json({ message: (err as any).issues?.[0]?.message || "Invalid payload" });
+      }
+      next(err);
+    }
+  }
+);
+
+router.patch(
   "/:id/published",
   requireAdmin,
   async (req: Request<{ id: string }>, res: Response, next: NextFunction) => {
@@ -1181,16 +1506,33 @@ router.patch(
       const product = await Product.findByPk(idNum);
       if (!product) return res.status(404).json({ message: "Not found" });
 
-      await product.update({ isPublished: published } as any);
+      const publishGatePatch = assertAdminPublishAllowed(product, {
+        nextPublished: published,
+        route: "toggle",
+      });
+
+      await product.update(
+        {
+          isPublished: published,
+          ...(publishGatePatch.patch || {}),
+        } as any
+      );
       return res.json({
         data: {
           id: idNum,
           published: Boolean(
             product.get?.("published") ?? product.get?.("isPublished") ?? published
           ),
+          status: String(product.get?.("status") ?? product.status ?? ""),
+          sellerSubmission: serializeAdminSellerSubmission(
+            product.get?.({ plain: true }) ?? product
+          ),
         },
       });
     } catch (err) {
+      if ((err as any)?.status === 409) {
+        return res.status(409).json({ message: (err as any).message });
+      }
       next(err);
     }
   }

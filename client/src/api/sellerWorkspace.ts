@@ -21,3 +21,10 @@ export const getSellerWorkspaceContext = async (storeId: number | string) => {
   const { data } = await api.get(`/seller/stores/${storeId}/context`);
   return (data?.data ?? null) as SellerWorkspaceContext | null;
 };
+
+export const getSellerWorkspaceContextBySlug = async (storeSlug: string) => {
+  const { data } = await api.get(
+    `/seller/stores/slug/${encodeURIComponent(String(storeSlug || "").trim())}/context`
+  );
+  return (data?.data ?? null) as SellerWorkspaceContext | null;
+};

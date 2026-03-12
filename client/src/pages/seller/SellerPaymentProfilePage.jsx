@@ -1,4 +1,3 @@
-import { useOutletContext, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { BadgeCheck, CreditCard, ImageIcon, ShieldAlert } from "lucide-react";
 import { getSellerPaymentProfile } from "../../api/sellerPaymentProfile.ts";
@@ -11,6 +10,7 @@ import {
   SellerWorkspaceSectionHeader,
 } from "../../components/seller/SellerWorkspaceFoundation.jsx";
 import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
+import { useSellerWorkspaceRoute } from "../../utils/sellerWorkspaceRoute.js";
 
 const formatDate = (value) => {
   if (!value) return "-";
@@ -23,8 +23,7 @@ const formatDate = (value) => {
 };
 
 export default function SellerPaymentProfilePage() {
-  const { storeId } = useParams();
-  const { sellerContext } = useOutletContext() || {};
+  const { sellerContext, workspaceStoreId: storeId } = useSellerWorkspaceRoute();
   const hasPermission = sellerContext?.access?.permissionKeys?.includes("PAYMENT_PROFILE_VIEW");
 
   const profileQuery = useQuery({
@@ -37,8 +36,8 @@ export default function SellerPaymentProfilePage() {
   if (!hasPermission) {
     return (
       <SellerWorkspaceSectionCard
-        title="Payment profile access is unavailable"
-        hint="Your current seller access does not include payment profile visibility."
+        title="Payment setup access is unavailable"
+        hint="Your current seller access does not include seller finance setup visibility."
         Icon={ShieldAlert}
       />
     );
@@ -47,8 +46,8 @@ export default function SellerPaymentProfilePage() {
   if (profileQuery.isLoading) {
     return (
       <SellerWorkspaceSectionCard
-        title="Loading seller payment profile"
-        hint="Fetching the current store payment snapshot."
+        title="Loading payment setup"
+        hint="Fetching the current store finance setup snapshot."
         Icon={CreditCard}
       />
     );
@@ -57,11 +56,11 @@ export default function SellerPaymentProfilePage() {
   if (profileQuery.isError) {
     return (
       <SellerWorkspaceSectionCard
-        title="Failed to load seller payment profile"
+        title="Failed to load payment setup"
         hint={getSellerRequestErrorMessage(profileQuery.error, {
           permissionMessage:
-            "Your current seller access does not include payment profile visibility.",
-          fallbackMessage: "Failed to load seller payment profile.",
+            "Your current seller access does not include seller finance setup visibility.",
+          fallbackMessage: "Failed to load seller payment setup.",
         })}
         Icon={ShieldAlert}
       />
@@ -75,9 +74,9 @@ export default function SellerPaymentProfilePage() {
     return (
       <div className="space-y-6">
         <SellerWorkspaceSectionHeader
-          eyebrow="Payment Profile"
-          title="No payment profile configured yet"
-          description="The active store does not have a payment profile snapshot yet. Seller workspace stays read-only here and relies on the existing account or admin-managed onboarding lane."
+          eyebrow="Finance Setup"
+          title="No payment setup configured yet"
+          description="The active store does not have a payment setup snapshot yet. Seller workspace stays read-only here and relies on the existing account or admin-managed onboarding lane."
           actions={[<SellerWorkspaceBadge key="mode" label="Read-only snapshot" tone="stone" />]}
         />
 
@@ -126,9 +125,9 @@ export default function SellerPaymentProfilePage() {
   return (
     <div className="space-y-6">
       <SellerWorkspaceSectionHeader
-        eyebrow="Payment Profile"
-        title="Seller payment profile overview"
-        description="This page exposes a store-scoped payment readiness snapshot only. It explains profile completeness and admin review status, and it does not represent buyer payment history or order payment proof outcomes."
+        eyebrow="Finance Setup"
+        title="Seller payment setup overview"
+        description="This page exposes a store-scoped finance setup snapshot only. It explains payment readiness and admin review status, and it does not represent buyer payment history, order settlement outcomes, or seller payout balance."
         actions={[
           <SellerWorkspaceBadge
             key="snapshot"
@@ -333,6 +332,11 @@ export default function SellerPaymentProfilePage() {
             <SellerWorkspaceNotice type="info" className="mt-4">
               {boundaries.paymentHistoryLane ||
                 "Buyer payment proofs and payment history stay in separate seller payment review and order lanes."}
+            </SellerWorkspaceNotice>
+
+            <SellerWorkspaceNotice type="info" className="mt-4">
+              {boundaries.payoutLane ||
+                "Seller payout summary, withdrawal history, and settlement statements are not exposed from this finance setup snapshot yet."}
             </SellerWorkspaceNotice>
           </SellerWorkspaceSectionCard>
         </div>

@@ -1,7 +1,11 @@
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Edit2, X } from "lucide-react";
-import { getAdminProduct } from "../../lib/adminApi.js";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CheckCircle2, Edit2, MessageSquareWarning, Send, X } from "lucide-react";
+import {
+  getAdminProduct,
+  requestAdminProductRevision,
+  updateAdminProductPublished,
+} from "../../lib/adminApi.js";
 import { moneyIDR } from "../../utils/money.js";
 import { resolveAssetUrl } from "../../lib/assetUrl.js";
 
@@ -258,6 +262,10 @@ const getProductCategoryContext = (product) => {
 };
 
 export default function ProductPreviewDrawer({ productId, onClose, onEdit }) {
+  const queryClient = useQueryClient();
+  const [revisionNote, setRevisionNote] = useState("");
+  const [revisionStatus, setRevisionStatus] = useState(null);
+  const [publishStatus, setPublishStatus] = useState(null);
   const detailQuery = useQuery({
     queryKey: ["admin-product-preview", productId],
     queryFn: () => getAdminProduct(productId),
@@ -282,6 +290,78 @@ export default function ProductPreviewDrawer({ productId, onClose, onEdit }) {
     () => buildVariants(product, displayTags, imageUrl),
     [product, displayTags, imageUrl]
   );
+  const sellerSubmission = product?.sellerSubmission || null;
+  const publishGate = sellerSubmission?.publishGate || null;
+  const canRequestRevision = sellerSubmission?.status === "submitted";
+  const canPublishReviewOutcome =
+    Boolean(publishGate?.canPublishFromReview) && !published;
+
+  useEffect(() => {
+    setRevisionNote(String(sellerSubmission?.revisionNote || ""));
+    setRevisionStatus(null);
+  }, [sellerSubmission?.revisionNote, productId]);
+
+  useEffect(() => {
+    setPublishStatus(null);
+  }, [productId]);
+
+  const revisionMutation = useMutation({
+    mutationFn: () => requestAdminProductRevision(productId, revisionNote),
+    onSuccess: async (response) => {
+      setRevisionStatus({
+        type: "success",
+        message: "Seller revision requested. The product is reopened for seller corrections.",
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["admin-products"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin-product", productId] }),
+        queryClient.invalidateQueries({ queryKey: ["admin-product-preview", productId] }),
+        queryClient.invalidateQueries({ queryKey: ["seller", "products"] }),
+      ]);
+      if (response?.data) {
+        queryClient.setQueryData(["admin-product-preview", productId], { data: response.data });
+      }
+    },
+    onError: (error) => {
+      setRevisionStatus({
+        type: "error",
+        message:
+          error?.response?.data?.message || "Failed to request seller revision for this product.",
+      });
+    },
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: () => updateAdminProductPublished(productId, true),
+    onSuccess: async () => {
+      setPublishStatus({
+        type: "success",
+        message:
+          "Product published as the final admin review outcome. Seller submission state has been cleared.",
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["admin-products"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin-product", productId] }),
+        queryClient.invalidateQueries({ queryKey: ["admin-product-preview", productId] }),
+        queryClient.invalidateQueries({ queryKey: ["seller", "products"] }),
+      ]);
+    },
+    onError: (error) => {
+      setPublishStatus({
+        type: "error",
+        message:
+          error?.response?.data?.message ||
+          "Failed to publish this seller product from the review lane.",
+      });
+    },
+  });
+
+  const submissionToneClass =
+    sellerSubmission?.status === "submitted"
+      ? "bg-sky-100 text-sky-700"
+      : sellerSubmission?.status === "needs_revision"
+        ? "bg-amber-100 text-amber-800"
+        : "bg-slate-100 text-slate-600";
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
@@ -378,6 +458,116 @@ export default function ProductPreviewDrawer({ productId, onClose, onEdit }) {
                   <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
                     QUANTITY: {asNumber(product.stock)}
                   </span>
+                  <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${submissionToneClass}`}>
+                    {sellerSubmission?.label || "Not submitted"}
+                  </span>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                        Seller Review Loop
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-slate-800">
+                        {sellerSubmission?.reviewState || "NOT_SUBMITTED"}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {publishGate?.hint ||
+                          "Submitted products can be sent back as needs revision. Publish authority stays with admin."}
+                      </p>
+                    </div>
+                    {sellerSubmission?.submittedAt ? (
+                      <div className="text-right text-xs text-slate-500">
+                        <p>Submitted at</p>
+                        <p className="mt-1 font-medium text-slate-700">
+                          {new Intl.DateTimeFormat("id-ID", {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          }).format(new Date(sellerSubmission.submittedAt))}
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {sellerSubmission?.revisionNote ? (
+                    <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
+                      <p className="text-xs font-semibold uppercase tracking-[0.08em]">
+                        Current Revision Note
+                      </p>
+                      <p className="mt-2 whitespace-pre-wrap">{sellerSubmission.revisionNote}</p>
+                    </div>
+                  ) : null}
+
+                  {revisionStatus ? (
+                    <div
+                      className={`mt-4 rounded-xl border px-3 py-3 text-sm ${
+                        revisionStatus.type === "error"
+                          ? "border-rose-200 bg-rose-50 text-rose-700"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      }`}
+                    >
+                      {revisionStatus.message}
+                    </div>
+                  ) : null}
+
+                  {publishStatus ? (
+                    <div
+                      className={`mt-4 rounded-xl border px-3 py-3 text-sm ${
+                        publishStatus.type === "error"
+                          ? "border-rose-200 bg-rose-50 text-rose-700"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      }`}
+                    >
+                      {publishStatus.message}
+                    </div>
+                  ) : null}
+
+                  {canRequestRevision ? (
+                    <div className="mt-4 space-y-3">
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => publishMutation.mutate()}
+                          disabled={publishMutation.isPending || !canPublishReviewOutcome}
+                          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <CheckCircle2 className="h-4 w-4" />
+                          {publishMutation.isPending ? "Publishing..." : "Publish as Final Outcome"}
+                        </button>
+                        <span className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
+                          Publish will clear the seller submission review state.
+                        </span>
+                      </div>
+                      <label className="block">
+                        <span className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                          Revision Note
+                        </span>
+                        <textarea
+                          value={revisionNote}
+                          onChange={(event) => setRevisionNote(event.target.value)}
+                          maxLength={1000}
+                          rows={4}
+                          className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 focus:border-amber-400 focus:outline-none"
+                          placeholder="Explain what seller needs to correct before resubmission."
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => revisionMutation.mutate()}
+                        disabled={revisionMutation.isPending}
+                        className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <MessageSquareWarning className="h-4 w-4" />
+                        {revisionMutation.isPending ? "Requesting..." : "Request Revision"}
+                      </button>
+                    </div>
+                  ) : sellerSubmission?.status === "needs_revision" ? (
+                    <div className="mt-4 inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                      <Send className="h-4 w-4" />
+                      Seller can edit and resubmit this product again. Publish stays locked until resubmission.
+                    </div>
+                  ) : null}
                 </div>
 
                 <div>

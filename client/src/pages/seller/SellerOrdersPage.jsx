@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
-import { Link, useOutletContext, useParams, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search, ShoppingBag } from "lucide-react";
 import { getSellerSuborders, updateSellerSuborderFulfillment } from "../../api/sellerOrders.ts";
 import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
+import { useSellerWorkspaceRoute } from "../../utils/sellerWorkspaceRoute.js";
 import {
   sellerFieldClass,
   sellerPrimaryButtonClass,
@@ -154,9 +155,9 @@ const formatTransitionLabel = (status) =>
     .toLowerCase();
 
 export default function SellerOrdersPage() {
-  const { storeId } = useParams();
+  const { sellerContext, workspaceStoreId: storeId, workspaceRoutes } =
+    useSellerWorkspaceRoute();
   const queryClient = useQueryClient();
-  const { sellerContext } = useOutletContext() || {};
   const [searchParams, setSearchParams] = useSearchParams();
   const [feedback, setFeedback] = useState(null);
   const [busyActionKey, setBusyActionKey] = useState("");
@@ -662,7 +663,7 @@ export default function SellerOrdersPage() {
                   )}
 
                   <Link
-                    to={`/seller/stores/${storeId}/orders/${item.suborderId}`}
+                    to={workspaceRoutes.orderDetail(item.suborderId)}
                     className={`mt-4 ${sellerPrimaryButtonClass}`}
                   >
                     View detail

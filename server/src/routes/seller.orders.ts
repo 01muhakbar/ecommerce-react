@@ -953,17 +953,11 @@ router.get(
         });
       }
 
+      const serializedDetail = serializeDetail(suborder, req.sellerAccess);
+
       return res.json({
         success: true,
-        data: {
-          ...serializeDetail(suborder, req.sellerAccess),
-          governance: {
-            fulfillment: buildFulfillmentGovernance(
-              req.sellerAccess,
-              normalizeFulfillmentStatus(getAttr(suborder, "fulfillmentStatus"))
-            ),
-          },
-        },
+        data: serializedDetail,
       });
     } catch (error) {
       console.error("[seller/orders/detail] error", error);

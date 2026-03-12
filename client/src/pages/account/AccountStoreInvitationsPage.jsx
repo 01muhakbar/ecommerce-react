@@ -7,6 +7,7 @@ import {
   declineSellerInvitation,
   getSellerInvitations,
 } from "../../api/sellerInvitations.ts";
+import { createSellerWorkspaceRoutes } from "../../utils/sellerWorkspaceRoute.js";
 
 const cardClass =
   "rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_14px_36px_-28px_rgba(15,23,42,0.35)]";
@@ -186,9 +187,9 @@ export default function AccountStoreInvitationsPage() {
         >
           <div className="flex flex-wrap items-center gap-2">
             <span>{feedback.message}</span>
-            {feedback.type === "success" && feedback.store?.id ? (
+            {feedback.type === "success" && (feedback.store?.slug || feedback.store?.id) ? (
               <Link
-                to={`/seller/stores/${feedback.store.id}`}
+                to={createSellerWorkspaceRoutes(feedback.store).home()}
                 className="inline-flex items-center gap-1 font-semibold underline"
               >
                 Open workspace

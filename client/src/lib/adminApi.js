@@ -158,6 +158,7 @@ export const exportAdminProducts = async (params = {}) => {
     Object.entries({
       q: params?.q || undefined,
       categoryId: params?.categoryId || undefined,
+      sellerSubmissionStatus: params?.sellerSubmissionStatus || undefined,
     }).filter(([, value]) => value !== undefined && value !== null && value !== "")
   ).toString();
   const endpoint = query ? `/api/admin/products/export?${query}` : "/api/admin/products/export";
@@ -193,6 +194,13 @@ export const updateAdminProduct = async (id, payload) => {
 export const updateAdminProductPublished = async (id, published) => {
   const { data } = await adminApi.patch(`/admin/products/${id}/published`, {
     published: Boolean(published),
+  });
+  return data;
+};
+
+export const requestAdminProductRevision = async (id, note) => {
+  const { data } = await adminApi.patch(`/admin/products/${id}/revision-request`, {
+    note: typeof note === "string" ? note : null,
   });
   return data;
 };

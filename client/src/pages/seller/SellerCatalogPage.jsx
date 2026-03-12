@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useOutletContext, useParams } from "react-router-dom";
-import { Boxes, EyeOff, Package, Search, Store, Tag } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Boxes, EyeOff, Package, Plus, Search, Store, Tag } from "lucide-react";
 import { getSellerProducts } from "../../api/sellerProducts.ts";
+import { resolveAssetUrl } from "../../lib/assetUrl.js";
 import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
+import { useSellerWorkspaceRoute } from "../../utils/sellerWorkspaceRoute.js";
 import {
   sellerFieldClass,
   sellerSecondaryButtonClass,
@@ -47,9 +49,12 @@ const getAvailabilityTone = (availability) => {
   return "amber";
 };
 
+const getSubmissionTone = (status) =>
+  status === "submitted" ? "sky" : status === "needs_revision" ? "amber" : "stone";
+
 export default function SellerCatalogPage() {
-  const { storeId } = useParams();
-  const { sellerContext } = useOutletContext() || {};
+  const { sellerContext, workspaceStoreId: storeId, workspaceRoutes } =
+    useSellerWorkspaceRoute();
   const permissionKeys = sellerContext?.access?.permissionKeys || [];
   const canViewProducts = permissionKeys.includes("PRODUCT_VIEW");
   const [filters, setFilters] = useState({
@@ -140,24 +145,44 @@ export default function SellerCatalogPage() {
   const contractNotes = Array.isArray(productsQuery.data?.contract?.notes)
     ? productsQuery.data.contract.notes
     : [];
+  const catalogGovernance = productsQuery.data?.governance ?? null;
+  const authoringGovernance = catalogGovernance?.authoring ?? null;
   const totalPages = Math.max(1, Math.ceil(Number(pagination.total || 0) / Number(pagination.limit || 20)));
 
   return (
     <div className="space-y-6">
       <SellerWorkspaceSectionHeader
         eyebrow="Seller Catalog"
-        title="Read-only product list for this store"
+        title="Product catalog for this store"
         description={
           <>
-            This seller-scoped list uses <code className="mx-1">Product.storeId</code> as the
-            tenant boundary. Status comes from <code className="mx-1">Product.status</code> and
-            public visibility comes from the existing storefront rule:
+            This seller-scoped catalog uses <code className="mx-1">Product.storeId</code> as the
+            tenant boundary. Draft authoring now opens seller-safe core fields such as categories,
+            pricing, and stock, while public visibility still follows the existing storefront rule:
             <code className="mx-1">published + active</code>.
           </>
         }
         actions={[
+          catalogGovernance?.canCreate ? (
+            <Link
+              key="create"
+              to={workspaceRoutes.productCreate()}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              <Plus className="h-4 w-4" />
+              New Draft
+            </Link>
+          ) : null,
           <SellerWorkspaceBadge key="role" label={sellerContext?.access?.roleCode || "UNKNOWN"} tone="emerald" />,
           <SellerWorkspaceBadge key="store" label={sellerContext?.store?.slug || "store"} tone="sky" />,
+          <SellerWorkspaceBadge
+            key="mode"
+            label={
+              authoringGovernance?.phaseLabel ||
+              (catalogGovernance?.mode === "READ_ONLY_PHASE_1" ? "Read-only" : "Catalog access")
+            }
+            tone="amber"
+          />,
         ]}
       />
 
@@ -276,13 +301,33 @@ export default function SellerCatalogPage() {
           <div>
             <h3 className="text-lg font-semibold text-slate-900">Store Products</h3>
             <p className="mt-1 text-sm text-slate-500">
-              Read-only seller list scoped by active store. Each row now shows the operational
-              status, the public visibility outcome, and whether stock only affects availability or
-              also affects public listing.
+              Seller-scoped catalog for the active store. Draft authoring now covers safe seller
+              fields such as categories, pricing, stock, and a minimal image set, while publish
+              and broader admin-governed controls stay outside this lane.
             </p>
           </div>
-          <SellerWorkspaceBadge label="Read-only" tone="amber" />
+          <div className="flex flex-wrap gap-2">
+            {catalogGovernance?.canCreate ? (
+              <Link to={workspaceRoutes.productCreate()} className={sellerSecondaryButtonClass}>
+                <Plus className="h-4 w-4" />
+                Create Draft
+              </Link>
+            ) : null}
+            <SellerWorkspaceBadge
+              label={
+                authoringGovernance?.phaseLabel ||
+                (catalogGovernance?.mode === "READ_ONLY_PHASE_1" ? "Read-only" : "Catalog access")
+              }
+              tone="amber"
+            />
+          </div>
         </div>
+
+        {authoringGovernance?.note || catalogGovernance?.note ? (
+          <SellerWorkspaceNotice type="warning" className="mt-5">
+            {authoringGovernance?.note || catalogGovernance?.note}
+          </SellerWorkspaceNotice>
+        ) : null}
 
         {items.length > 0 ? (
           <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -304,7 +349,7 @@ export default function SellerCatalogPage() {
                     <div className="flex items-start gap-3">
                       {item.mediaPreviewUrl ? (
                         <img
-                          src={item.mediaPreviewUrl}
+                          src={resolveAssetUrl(item.mediaPreviewUrl)}
                           alt={item.name}
                           className="h-12 w-12 rounded-xl border border-slate-200 object-cover"
                         />
@@ -314,7 +359,12 @@ export default function SellerCatalogPage() {
                         </div>
                       )}
                       <div className="min-w-0">
-                        <p className="truncate font-semibold text-slate-900">{item.name}</p>
+                        <Link
+                          to={workspaceRoutes.productDetail(item.id)}
+                          className="truncate font-semibold text-slate-900 hover:text-emerald-600"
+                        >
+                          {item.name}
+                        </Link>
                         <p className="mt-1 truncate text-xs text-slate-500">{item.slug}</p>
                         <div className="mt-2 flex flex-wrap gap-2">
                           {item.sku ? <SellerWorkspaceBadge label={`SKU ${item.sku}`} /> : null}
@@ -331,12 +381,29 @@ export default function SellerCatalogPage() {
                       label={item.statusMeta?.label || String(item.status || "draft").toUpperCase()}
                       tone={getStatusTone(item.statusMeta?.code || item.status)}
                     />
+                    {item.submission?.label ? (
+                      <div className="mt-2">
+                        <SellerWorkspaceBadge
+                          label={item.submission.label}
+                          tone={getSubmissionTone(item.submission.status)}
+                        />
+                      </div>
+                    ) : null}
                     <p className="mt-2 text-xs text-slate-500">
                       {item.statusMeta?.operationalMeaning ||
                         (item.statusMeta?.storefrontEligible
                           ? "Eligible for storefront when publish is on."
                           : "Blocked from storefront until status becomes active.")}
                     </p>
+                    {item.submission?.status === "submitted" ? (
+                      <p className="mt-1 text-xs text-slate-400">
+                        Waiting for review. Seller draft editing is locked in this phase.
+                      </p>
+                    ) : item.submission?.status === "needs_revision" ? (
+                      <p className="mt-1 text-xs text-amber-600">
+                        Revision requested. Seller editing is reopened for correction and resubmission.
+                      </p>
+                    ) : null}
                   </div>
                   <div>
                     <SellerWorkspaceBadge
@@ -381,13 +448,23 @@ export default function SellerCatalogPage() {
                     </p>
                   </div>
                   <div className="flex items-start">
-                    <Link
-                      to={`/seller/stores/${storeId}/catalog/${item.id}`}
-                      className="inline-flex h-9 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
-                    >
-                      <Tag className="h-3.5 w-3.5" />
-                      View detail
-                    </Link>
+                    {item.authoring?.canEditDraft ? (
+                      <Link
+                        to={workspaceRoutes.productEdit(item.id)}
+                        className="inline-flex h-9 items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
+                      >
+                        <Tag className="h-3.5 w-3.5" />
+                        Edit draft
+                      </Link>
+                    ) : (
+                      <Link
+                        to={workspaceRoutes.productDetail(item.id)}
+                        className="inline-flex h-9 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                      >
+                        <Tag className="h-3.5 w-3.5" />
+                        View detail
+                      </Link>
+                    )}
                   </div>
                 </div>
               ))}
@@ -404,7 +481,9 @@ export default function SellerCatalogPage() {
               description={
                 hasActiveFilters
                   ? "Try widening the keyword, status, or publish filters for this store."
-                  : "Confirm whether this store already owns product rows in the current workspace."
+                  : catalogGovernance?.canCreate
+                    ? "Create the first seller draft for this store, or confirm whether this workspace already owns product rows."
+                    : "Confirm whether this store already owns product rows in the current workspace."
               }
               icon={<Boxes className="h-5 w-5" />}
             />

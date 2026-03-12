@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { History, ShieldCheck, UserRound } from "lucide-react";
-import { Link, useOutletContext, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { getSellerStoreMemberLifecycle } from "../../api/sellerTeam.ts";
 import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
+import { useSellerWorkspaceRoute } from "../../utils/sellerWorkspaceRoute.js";
 
 const cardClass =
   "rounded-[24px] border border-stone-200 bg-white p-5 shadow-[0_16px_36px_-28px_rgba(28,25,23,0.28)]";
@@ -114,8 +115,12 @@ function actionTone(action) {
 }
 
 export default function SellerMemberLifecyclePage() {
-  const { storeId, memberId } = useParams();
-  const { sellerContext } = useOutletContext() || {};
+  const { memberId } = useParams();
+  const {
+    sellerContext,
+    workspaceStoreId: storeId,
+    workspaceRoutes,
+  } = useSellerWorkspaceRoute();
   const permissionKeys = sellerContext?.access?.permissionKeys || [];
   const canViewLifecycle = permissionKeys.includes("STORE_MEMBERS_MANAGE");
   const numericMemberId = Number(memberId);
@@ -227,7 +232,7 @@ export default function SellerMemberLifecyclePage() {
 
         <div className="mt-5">
           <Link
-            to={`/seller/stores/${storeId}/team`}
+            to={workspaceRoutes.team()}
             className="text-sm font-semibold text-stone-700 underline"
           >
             Back to team

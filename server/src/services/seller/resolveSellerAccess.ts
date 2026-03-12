@@ -187,6 +187,41 @@ export async function resolveSellerAccess(input: {
   };
 }
 
+export async function resolveSellerAccessBySlug(input: {
+  storeSlug: string;
+  userId: number | null | undefined;
+}): Promise<ResolveResult> {
+  const storeSlug = String(input.storeSlug || "").trim();
+
+  if (!storeSlug) {
+    return {
+      ok: false,
+      status: 400,
+      code: "INVALID_STORE_SLUG",
+      message: "Invalid store slug.",
+    };
+  }
+
+  const store = await Store.findOne({
+    where: { slug: storeSlug } as any,
+    attributes: [...storeAttributes],
+  });
+
+  if (!store) {
+    return {
+      ok: false,
+      status: 404,
+      code: "STORE_NOT_FOUND",
+      message: "Store not found.",
+    };
+  }
+
+  return resolveSellerAccess({
+    storeId: Number((store as any).id),
+    userId: input.userId,
+  });
+}
+
 export async function listSellerAccessContexts(input: {
   userId: number | null | undefined;
   requiredPermissions?: string[];

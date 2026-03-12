@@ -8,6 +8,18 @@ type SellerProductsQuery = {
   published?: "" | "true" | "false";
 };
 
+type SellerProductDraftPayload = {
+  name: string;
+  description?: string | null;
+  sku?: string | null;
+  categoryIds?: number[];
+  defaultCategoryId?: number | null;
+  price?: number;
+  salePrice?: number | null;
+  stock?: number;
+  imageUrls?: string[];
+};
+
 const PRODUCT_STATUSES = new Set(["active", "inactive", "draft"]);
 
 const asNumber = (value: unknown, fallback = 0) => {
@@ -139,6 +151,24 @@ const normalizeCategorySummary = (category: any) => {
   };
 };
 
+const normalizeCategoryReference = (category: any) => {
+  if (!category || typeof category !== "object") return null;
+
+  const id = asNumber(category.id, 0);
+  const name = normalizeText(category.name);
+  const code = normalizeText(category.code);
+
+  if (!id && !name && !code) return null;
+
+  return {
+    id: id || null,
+    name: name || "-",
+    code: code || null,
+    parentId: asNumber(category.parentId ?? category.parent_id, 0) || null,
+    published: Boolean(category.published ?? true),
+  };
+};
+
 const normalizePricing = (pricing: any) => {
   const price = asNumber(pricing?.price, 0);
   const salePriceValue = Number(pricing?.salePrice);
@@ -159,6 +189,36 @@ const normalizeInventory = (inventory: any) => {
     inStock: stock > 0,
     preOrder: Boolean(inventory?.preOrder),
     preorderDays: inventory?.preorderDays ? asNumber(inventory.preorderDays, 0) || null : null,
+  };
+};
+
+const normalizeProductAuthoring = (value: any) => {
+  if (!value || typeof value !== "object") return null;
+
+  return {
+    canEditDraft: Boolean(value.canEditDraft),
+    editBlockedReason: normalizeText(value.editBlockedReason) || null,
+    allowedStatuses: Array.isArray(value.allowedStatuses)
+      ? value.allowedStatuses.map((entry: unknown) => normalizeText(entry)).filter(Boolean)
+      : [],
+  };
+};
+
+const normalizeProductSubmission = (value: any) => {
+  if (!value || typeof value !== "object") return null;
+
+  return {
+    status: normalizeText(value.status) || "none",
+    label: normalizeText(value.label) || null,
+    hasSubmission: Boolean(value.hasSubmission),
+    submittedAt: value.submittedAt || null,
+    submittedByUserId: asNumber(value.submittedByUserId, 0) || null,
+    reviewState: normalizeText(value.reviewState) || null,
+    storefrontImpact: normalizeText(value.storefrontImpact) || null,
+    revisionRequestedAt: value.revisionRequestedAt || null,
+    revisionRequestedByUserId: asNumber(value.revisionRequestedByUserId, 0) || null,
+    revisionNote: normalizeText(value.revisionNote) || null,
+    requiresSellerChanges: Boolean(value.requiresSellerChanges),
   };
 };
 
@@ -188,9 +248,121 @@ const normalizeProductListItem = (item: any) => {
       ...normalizeInventory(item.inventory),
       ...normalizeAvailability(item.availability, item.inventory),
     },
+    authoring: normalizeProductAuthoring(item.authoring),
+    submission: normalizeProductSubmission(item.submission),
     category: normalizeCategorySummary(item.category),
     ownership: item.ownership && typeof item.ownership === "object" ? item.ownership : null,
     mediaPreviewUrl: normalizeText(item.mediaPreviewUrl) || null,
+  };
+};
+
+const normalizeCatalogGovernance = (governance: any) => {
+  if (!governance || typeof governance !== "object") return null;
+
+  return {
+    mode: normalizeText(governance.mode) || "READ_ONLY_PHASE_1",
+    roleCode: normalizeText(governance.roleCode) || null,
+    canCreate: Boolean(governance.canCreate),
+    canEdit: Boolean(governance.canEdit),
+    canDelete: Boolean(governance.canDelete),
+    canPublish: Boolean(governance.canPublish),
+    canManagePricing: Boolean(governance.canManagePricing),
+    canManageInventory: Boolean(governance.canManageInventory),
+    sourceOfTruth: normalizeText(governance.sourceOfTruth) || null,
+    note: normalizeText(governance.note) || null,
+    authoring:
+      governance.authoring && typeof governance.authoring === "object"
+        ? {
+            phase: normalizeText(governance.authoring.phase) || null,
+            phaseLabel: normalizeText(governance.authoring.phaseLabel) || null,
+            writeLaneActive: Boolean(governance.authoring.writeLaneActive),
+            recommendedPhase1:
+              normalizeText(governance.authoring.recommendedPhase1) || null,
+            legacySellerRoutesPresent: Boolean(
+              governance.authoring.legacySellerRoutesPresent
+            ),
+            legacySellerRoutesMounted: Boolean(
+              governance.authoring.legacySellerRoutesMounted
+            ),
+            canCreateDraft: Boolean(governance.authoring.canCreateDraft),
+            canEditDraft: Boolean(governance.authoring.canEditDraft),
+            editBlockedReason:
+              normalizeText(governance.authoring.editBlockedReason) || null,
+            allowedWriteStatuses: Array.isArray(governance.authoring.allowedWriteStatuses)
+              ? governance.authoring.allowedWriteStatuses
+                  .map((value: unknown) => normalizeText(value))
+                  .filter(Boolean)
+              : [],
+            note: normalizeText(governance.authoring.note) || null,
+          }
+        : null,
+    submissionGovernance:
+      governance.submissionGovernance &&
+      typeof governance.submissionGovernance === "object"
+        ? {
+            status: normalizeText(governance.submissionGovernance.status) || "none",
+            reviewState:
+              normalizeText(governance.submissionGovernance.reviewState) || null,
+            canSubmitWhenEnabled: Boolean(
+              governance.submissionGovernance.canSubmitWhenEnabled
+            ),
+            canResubmitWhenEnabled: Boolean(
+              governance.submissionGovernance.canResubmitWhenEnabled
+            ),
+            canEditAfterSubmit: Boolean(
+              governance.submissionGovernance.canEditAfterSubmit
+            ),
+            editLockAppliesWhenSubmitted: Boolean(
+              governance.submissionGovernance.editLockAppliesWhenSubmitted
+            ),
+            sellerCanPublish: Boolean(governance.submissionGovernance.sellerCanPublish),
+            requiresSellerChanges: Boolean(
+              governance.submissionGovernance.requiresSellerChanges
+            ),
+            note: normalizeText(governance.submissionGovernance.note) || null,
+          }
+        : null,
+    statusGovernance:
+      governance.statusGovernance && typeof governance.statusGovernance === "object"
+        ? {
+            productStatuses: Array.isArray(governance.statusGovernance.productStatuses)
+              ? governance.statusGovernance.productStatuses
+                  .map((value: unknown) => normalizeText(value))
+                  .filter(Boolean)
+              : [],
+            publishFlag:
+              normalizeText(governance.statusGovernance.publishFlag) || null,
+            sellerStateTransitionsActive: Boolean(
+              governance.statusGovernance.sellerStateTransitionsActive
+            ),
+            note: normalizeText(governance.statusGovernance.note) || null,
+          }
+        : null,
+    fieldGovernance:
+      governance.fieldGovernance && typeof governance.fieldGovernance === "object"
+        ? {
+            sellerEditableNow: Array.isArray(governance.fieldGovernance.sellerEditableNow)
+              ? governance.fieldGovernance.sellerEditableNow
+                  .map((value: unknown) => normalizeText(value))
+                  .filter(Boolean)
+              : [],
+            sellerReadOnly: Array.isArray(governance.fieldGovernance.sellerReadOnly)
+              ? governance.fieldGovernance.sellerReadOnly
+                  .map((value: unknown) => normalizeText(value))
+                  .filter(Boolean)
+              : [],
+            adminOwned: Array.isArray(governance.fieldGovernance.adminOwned)
+              ? governance.fieldGovernance.adminOwned
+                  .map((value: unknown) => normalizeText(value))
+                  .filter(Boolean)
+              : [],
+            deferred: Array.isArray(governance.fieldGovernance.deferred)
+              ? governance.fieldGovernance.deferred
+                  .map((value: unknown) => normalizeText(value))
+                  .filter(Boolean)
+              : [],
+          }
+        : null,
   };
 };
 
@@ -225,7 +397,10 @@ const normalizeProductDetail = (item: any) => {
       ...normalizeInventory(item.inventory),
       ...normalizeAvailability(item.availability, item.inventory),
     },
+    authoring: normalizeProductAuthoring(item.authoring),
+    submission: normalizeProductSubmission(item.submission),
     ownership: item.ownership && typeof item.ownership === "object" ? item.ownership : null,
+    governance: normalizeCatalogGovernance(item.governance),
     category: {
       primary: normalizeCategorySummary(category.primary),
       default: normalizeCategorySummary(category.default),
@@ -264,6 +439,7 @@ export const getSellerProducts = async (
   return {
     ...payload,
     contract: payload.contract && typeof payload.contract === "object" ? payload.contract : null,
+    governance: normalizeCatalogGovernance(payload.governance),
     items: Array.isArray(payload.items)
       ? payload.items.map(normalizeProductListItem).filter(Boolean)
       : [],
@@ -281,4 +457,97 @@ export const getSellerProductDetail = async (
 ) => {
   const { data } = await api.get(`/seller/stores/${storeId}/products/${productId}`);
   return normalizeProductDetail(data?.data ?? null);
+};
+
+export const getSellerProductAuthoringMeta = async (storeId: number | string) => {
+  const { data } = await api.get(`/seller/stores/${storeId}/products/authoring/meta`);
+  const payload = data?.data ?? null;
+  if (!payload || typeof payload !== "object") return null;
+
+  return {
+    governance: normalizeCatalogGovernance(payload.governance),
+    draftDefaults:
+      payload.draftDefaults && typeof payload.draftDefaults === "object"
+        ? {
+            status: normalizeProductStatus(payload.draftDefaults.status),
+            published: Boolean(payload.draftDefaults.published),
+            submissionStatus: normalizeText(payload.draftDefaults.submissionStatus) || "none",
+            name: normalizeText(payload.draftDefaults.name),
+            description: normalizeText(payload.draftDefaults.description),
+            sku: normalizeText(payload.draftDefaults.sku),
+            categoryIds: Array.isArray(payload.draftDefaults.categoryIds)
+              ? payload.draftDefaults.categoryIds
+                  .map((value: unknown) => asNumber(value, 0))
+                  .filter((value: number) => value > 0)
+              : [],
+            defaultCategoryId:
+              asNumber(payload.draftDefaults.defaultCategoryId, 0) || null,
+            price: asNumber(payload.draftDefaults.price, 0),
+            salePrice:
+              payload.draftDefaults.salePrice === null ||
+              typeof payload.draftDefaults.salePrice === "undefined"
+                ? null
+                : asNumber(payload.draftDefaults.salePrice, 0),
+            stock: asNumber(payload.draftDefaults.stock, 0),
+            imageUrls: Array.isArray(payload.draftDefaults.imageUrls)
+              ? payload.draftDefaults.imageUrls
+                  .map((value: unknown) => normalizeText(value))
+                  .filter(Boolean)
+              : [],
+          }
+        : null,
+    references:
+      payload.references && typeof payload.references === "object"
+        ? {
+            categories: Array.isArray(payload.references.categories)
+              ? payload.references.categories
+                  .map(normalizeCategoryReference)
+                  .filter(Boolean)
+              : [],
+          }
+        : { categories: [] },
+  };
+};
+
+export const createSellerProductDraft = async (
+  storeId: number | string,
+  payload: SellerProductDraftPayload
+) => {
+  const { data } = await api.post(`/seller/stores/${storeId}/products/drafts`, payload);
+  return normalizeProductDetail(data?.data ?? null);
+};
+
+export const updateSellerProductDraft = async (
+  storeId: number | string,
+  productId: number | string,
+  payload: SellerProductDraftPayload
+) => {
+  const { data } = await api.patch(
+    `/seller/stores/${storeId}/products/${productId}/draft`,
+    payload
+  );
+  return normalizeProductDetail(data?.data ?? null);
+};
+
+export const submitSellerProductDraftForReview = async (
+  storeId: number | string,
+  productId: number | string
+) => {
+  const { data } = await api.post(
+    `/seller/stores/${storeId}/products/${productId}/submit-review`
+  );
+  return normalizeProductDetail(data?.data ?? null);
+};
+
+export const uploadSellerProductImage = async (file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await api.post<{ data?: { url?: string } }>("/upload", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  const url = normalizeText(data?.data?.url);
+  if (!url) {
+    throw new Error("Upload succeeded without URL.");
+  }
+  return url;
 };
