@@ -231,8 +231,16 @@ export default function SellerTeamAuditPage() {
                 >
                   <div className="space-y-2">
                     <SellerWorkspaceBadge
-                      label={item.actionMeta?.label || actionLabel(item.action)}
-                      tone={item.actionMeta?.tone || actionTone(item.action)}
+                      label={
+                        item.readModel?.title ||
+                        item.actionMeta?.label ||
+                        actionLabel(item.action)
+                      }
+                      tone={
+                        item.readModel?.tone ||
+                        item.actionMeta?.tone ||
+                        actionTone(item.action)
+                      }
                     />
                     <p className="text-xs text-slate-500">Log #{item.id}</p>
                   </div>
@@ -252,13 +260,15 @@ export default function SellerTeamAuditPage() {
                   </div>
                   <div>
                     <p className="font-medium text-slate-900">
-                      {summarizeDelta(item.beforeState, item.afterState)}
+                      {item.readModel?.changeSummary ||
+                        summarizeDelta(item.beforeState, item.afterState)}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
-                      Before: {item.beforeState ? JSON.stringify(item.beforeState) : "-"}
+                      {item.readModel?.summary ||
+                        "Seller team mutation recorded in the tenant-scoped audit trail."}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
-                      After: {item.afterState ? JSON.stringify(item.afterState) : "-"}
+                      Category: {item.readModel?.category || "AUDIT"}
                     </p>
                   </div>
                   <div className="text-xs text-slate-500">

@@ -29,6 +29,9 @@ export type StoreProduct = {
   name: string;
   price: number;
   slug?: string;
+  routeSlug?: string | null;
+  productHref?: string | null;
+  sku?: string | null;
   imageUrl?: string | null;
   originalPrice?: number | null;
   salePrice?: number | null;
@@ -39,6 +42,11 @@ export type StoreProduct = {
   categoryId?: number | null;
   category?: StoreProductCategory | null;
   stock?: number | null;
+  preOrder?: boolean;
+  preorderDays?: number | null;
+  weight?: number | null;
+  condition?: string | null;
+  variations?: any;
   status?: string | null;
   published?: boolean;
 };
@@ -47,6 +55,34 @@ export type StoreProductDetail = StoreProduct & {
   slug?: string;
   description?: string | null;
   salePrice?: number | null;
+  sellerInfo?: StorefrontProductSellerInfo | null;
+};
+
+export type StorefrontProductSellerInfo = {
+  storeId: number | null;
+  name: string;
+  slug: string;
+  logoUrl: string | null;
+  shortDescription: string | null;
+  status?: {
+    code: string;
+    label: string;
+    tone: string;
+  } | null;
+  productCount: number | null;
+  ratingAverage: number | null;
+  ratingCount: number | null;
+  followerCount: number | null;
+  responseRate: number | null;
+  responseTimeLabel: string | null;
+  joinedAt: string | null;
+  canVisitStore: boolean;
+  visitStoreHref: string | null;
+  canChat: boolean;
+  chatMode: "enabled" | "contact_fallback" | "disabled";
+  chatHref: string | null;
+  chatLabel: string;
+  chatHelper: string | null;
 };
 
 export type StoreCoupon = {
@@ -157,6 +193,11 @@ export type StoreHeaderCustomization = {
   whatsAppLink: string;
   headerLogoUrl: string;
   updatedAt: string;
+  contract?: {
+    authoritativeFields?: Record<string, string>;
+    fallbackOrder?: Record<string, string[]>;
+    notes?: string[];
+  };
 };
 
 export type StoreHeaderCustomizationResponse = {
@@ -179,7 +220,31 @@ export type PublicStoreIdentity = {
   province: string;
   postalCode: string;
   country: string;
+  createdAt?: string;
   updatedAt: string;
+  summary?: {
+    status?: {
+      code?: string;
+      label?: string;
+      tone?: string;
+    };
+    productCount?: number | null;
+    ratingAverage?: number | null;
+    ratingCount?: number | null;
+    followerCount?: number | null;
+    responseRate?: number | null;
+    responseTimeLabel?: string | null;
+    joinedAt?: string;
+    chatMode?: "enabled" | "contact_fallback" | "disabled";
+    canChat?: boolean;
+    canContact?: boolean;
+  };
+  contract?: {
+    authoritativeSource?: string;
+    sellerOwnedFields?: string[];
+    adminManagedSurfaces?: string[];
+    notes?: string[];
+  };
 };
 
 export type PublicStoreIdentityResponse = {
@@ -193,12 +258,24 @@ export type StoreMicrositeRichAbout = {
   hasContent: boolean;
 };
 
+export type EffectiveStoreMicrositeRichAbout = {
+  title: string;
+  body: string;
+  source: string;
+};
+
 export type StoreMicrositeRichAboutResponse = {
   success: boolean;
   data?: {
     storeSlug: string;
     lang: string;
     richAbout: StoreMicrositeRichAbout;
+    effective?: EffectiveStoreMicrositeRichAbout;
+    contract?: {
+      authoritativeSource?: string;
+      fallbackOrder?: Record<string, string[]>;
+      notes?: string[];
+    };
     updatedAt: string;
   };
 };

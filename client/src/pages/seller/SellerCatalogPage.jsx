@@ -10,6 +10,7 @@ import {
   SellerWorkspaceBadge,
   SellerWorkspaceEmptyState,
   SellerWorkspaceFilterBar,
+  SellerWorkspaceNotice,
   SellerWorkspacePanel,
   SellerWorkspaceStatePanel,
   SellerWorkspaceSectionHeader,
@@ -35,9 +36,15 @@ const getStatusTone = (status) =>
   status === "active" ? "emerald" : status === "draft" ? "amber" : "stone";
 
 const getVisibilityTone = (visibility) => {
-  if (visibility?.storefrontVisible) return "emerald";
-  if (visibility?.isPublished) return "amber";
-  return "rose";
+  if (visibility?.stateCode === "STOREFRONT_VISIBLE") return "emerald";
+  if (visibility?.stateCode === "PUBLISHED_BLOCKED") return "amber";
+  return "stone";
+};
+
+const getAvailabilityTone = (availability) => {
+  if (availability?.stateCode === "PREORDER") return "sky";
+  if (availability?.stateCode === "IN_STOCK") return "emerald";
+  return "amber";
 };
 
 export default function SellerCatalogPage() {
@@ -62,17 +69,21 @@ export default function SellerCatalogPage() {
 
   const productStats = useMemo(() => {
     const items = productsQuery.data?.items || [];
-    const publishedCount = items.filter((item) => item.published).length;
-    const privateCount = items.length - publishedCount;
-    const storefrontReadyCount = items.filter((item) => item.visibility?.storefrontVisible).length;
-    const publishedHiddenCount = publishedCount - storefrontReadyCount;
+    const storefrontReadyCount = items.filter(
+      (item) => item.visibility?.stateCode === "STOREFRONT_VISIBLE"
+    ).length;
+    const publishedBlockedCount = items.filter(
+      (item) => item.visibility?.stateCode === "PUBLISHED_BLOCKED"
+    ).length;
+    const internalOnlyCount = items.filter(
+      (item) => item.visibility?.stateCode === "INTERNAL_ONLY"
+    ).length;
     const draftCount = items.filter((item) => item.status === "draft").length;
     const inactiveCount = items.filter((item) => item.status === "inactive").length;
     return {
-      publishedCount,
-      privateCount,
       storefrontReadyCount,
-      publishedHiddenCount,
+      publishedBlockedCount,
+      internalOnlyCount,
       draftCount,
       inactiveCount,
     };
@@ -126,6 +137,9 @@ export default function SellerCatalogPage() {
 
   const items = productsQuery.data?.items || [];
   const pagination = productsQuery.data?.pagination || { page: 1, limit: 20, total: 0 };
+  const contractNotes = Array.isArray(productsQuery.data?.contract?.notes)
+    ? productsQuery.data.contract.notes
+    : [];
   const totalPages = Math.max(1, Math.ceil(Number(pagination.total || 0) / Number(pagination.limit || 20)));
 
   return (
@@ -136,8 +150,9 @@ export default function SellerCatalogPage() {
         description={
           <>
             This seller-scoped list uses <code className="mx-1">Product.storeId</code> as the
-            tenant boundary. It can show non-public products owned by the current store without
-            changing admin or storefront contracts.
+            tenant boundary. Status comes from <code className="mx-1">Product.status</code> and
+            public visibility comes from the existing storefront rule:
+            <code className="mx-1">published + active</code>.
           </>
         }
         actions={[
@@ -154,22 +169,22 @@ export default function SellerCatalogPage() {
           Icon={Package}
         />
         <SellerWorkspaceStatCard
-          label="Published Flag On"
-          value={String(productStats.publishedCount)}
-          hint={`Private or unpublished in page: ${productStats.privateCount}`}
+          label="Storefront Visible"
+          value={String(productStats.storefrontReadyCount)}
+          hint="Published and active, so public product queries can return these rows."
           Icon={Store}
           tone="emerald"
         />
         <SellerWorkspaceStatCard
-          label="Storefront Ready"
-          value={String(productStats.storefrontReadyCount)}
-          hint={`Published but still blocked by status: ${productStats.publishedHiddenCount}`}
+          label="Published Blocked"
+          value={String(productStats.publishedBlockedCount)}
+          hint="Publish flag is on, but status is not active yet."
           Icon={Tag}
           tone="amber"
         />
         <SellerWorkspaceStatCard
-          label="Draft / Inactive"
-          value={String(productStats.draftCount + productStats.inactiveCount)}
+          label="Internal Only"
+          value={String(productStats.internalOnlyCount)}
           hint={`Draft: ${productStats.draftCount} · Inactive: ${productStats.inactiveCount}`}
           Icon={EyeOff}
         />
@@ -244,12 +259,26 @@ export default function SellerCatalogPage() {
       </SellerWorkspaceFilterBar>
 
       <SellerWorkspacePanel className="p-5 sm:p-5">
+        {contractNotes.length ? (
+          <SellerWorkspaceNotice type="info" className="mb-5">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em]">
+                Catalog Read Contract
+              </p>
+              {contractNotes.map((note) => (
+                <p key={note}>{note}</p>
+              ))}
+            </div>
+          </SellerWorkspaceNotice>
+        ) : null}
+
         <div className="flex items-center justify-between gap-3">
           <div>
             <h3 className="text-lg font-semibold text-slate-900">Store Products</h3>
             <p className="mt-1 text-sm text-slate-500">
-              Read-only seller list scoped by active store. Status controls storefront eligibility,
-              while the publish flag controls whether the product can ever surface publicly.
+              Read-only seller list scoped by active store. Each row now shows the operational
+              status, the public visibility outcome, and whether stock only affects availability or
+              also affects public listing.
             </p>
           </div>
           <SellerWorkspaceBadge label="Read-only" tone="amber" />
@@ -257,19 +286,19 @@ export default function SellerCatalogPage() {
 
         {items.length > 0 ? (
           <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="grid grid-cols-[1.8fr_0.9fr_0.9fr_1fr_1fr_0.8fr] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <div className="grid grid-cols-[1.8fr_1fr_1fr_1fr_1fr_0.8fr] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
               <span>Product</span>
               <span>Status</span>
-              <span>Visibility</span>
+              <span>Public State</span>
               <span>Price</span>
-              <span>Stock</span>
+              <span>Availability</span>
               <span>Action</span>
             </div>
             <div className="divide-y divide-slate-200 bg-white">
               {items.map((item) => (
                 <div
                   key={item.id}
-                  className="grid grid-cols-[1.8fr_0.9fr_0.9fr_1fr_1fr_0.8fr] gap-3 px-4 py-4 text-sm text-slate-700"
+                  className="grid grid-cols-[1.8fr_1fr_1fr_1fr_1fr_0.8fr] gap-3 px-4 py-4 text-sm text-slate-700"
                 >
                   <div className="min-w-0">
                     <div className="flex items-start gap-3">
@@ -303,25 +332,27 @@ export default function SellerCatalogPage() {
                       tone={getStatusTone(item.statusMeta?.code || item.status)}
                     />
                     <p className="mt-2 text-xs text-slate-500">
-                      {item.statusMeta?.storefrontEligible
-                        ? "Eligible for storefront when publish is on."
-                        : "Blocked from storefront until status becomes active."}
+                      {item.statusMeta?.operationalMeaning ||
+                        (item.statusMeta?.storefrontEligible
+                          ? "Eligible for storefront when publish is on."
+                          : "Blocked from storefront until status becomes active.")}
                     </p>
                   </div>
                   <div>
                     <SellerWorkspaceBadge
                       label={
+                        item.visibility?.sellerLabel ||
                         item.visibility?.publishLabel ||
                         item.visibility?.label ||
-                        (item.published ? "Published" : "Private")
+                        "Private to seller and admin"
                       }
                       tone={getVisibilityTone(item.visibility)}
                     />
                     <p className="mt-2 text-xs text-slate-500">
                       {item.visibility?.storefrontLabel || "Hidden from storefront"}
                     </p>
-                    {item.visibility?.storefrontReason ? (
-                      <p className="mt-1 text-xs text-slate-400">{item.visibility.storefrontReason}</p>
+                    {item.visibility?.sellerHint ? (
+                      <p className="mt-1 text-xs text-slate-400">{item.visibility.sellerHint}</p>
                     ) : null}
                   </div>
                   <div>
@@ -337,9 +368,16 @@ export default function SellerCatalogPage() {
                     )}
                   </div>
                   <div>
-                    <p className="font-semibold text-slate-900">{item.inventory?.stock ?? 0}</p>
+                    <SellerWorkspaceBadge
+                      label={item.availability?.label || "Availability unknown"}
+                      tone={getAvailabilityTone(item.availability)}
+                    />
                     <p className="mt-1 text-xs text-slate-500">
-                      {item.inventory?.inStock ? "In stock" : "Out of stock"}
+                      Stock {item.inventory?.stock ?? item.availability?.stock ?? 0}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-400">
+                      {item.availability?.storefrontReason ||
+                        "Availability is informational only for the current public query."}
                     </p>
                   </div>
                   <div className="flex items-start">

@@ -5,9 +5,9 @@ const textOrNull = (value: unknown) => {
   return normalized ? normalized : null;
 };
 
-const textOrFallback = (value: unknown, fallback = "") => {
+const textOrFallback = (value: unknown, fallback = "", secondaryFallback = "") => {
   const normalized = String(value || "").trim();
-  return normalized || fallback;
+  return normalized || fallback || secondaryFallback;
 };
 
 const normalizeMissingFields = (value: unknown) =>
@@ -19,6 +19,84 @@ const normalizeMissingFields = (value: unknown) =>
         }))
         .filter((entry) => entry.key)
     : [];
+
+const normalizeReadModel = (payload: any) => {
+  const completeness = payload?.readModel?.completeness || {};
+  return {
+    primaryStatus: {
+      code: textOrFallback(payload?.readModel?.primaryStatus?.code, payload?.readiness?.code, "PENDING_ADMIN_REVIEW"),
+      label: textOrFallback(payload?.readModel?.primaryStatus?.label, payload?.readiness?.label, "Pending admin review"),
+      tone: textOrFallback(payload?.readModel?.primaryStatus?.tone, payload?.readiness?.tone, "warning"),
+      description:
+        textOrNull(payload?.readModel?.primaryStatus?.description) ||
+        textOrNull(payload?.readiness?.description),
+    },
+    reviewStatus: {
+      code: textOrFallback(
+        payload?.readModel?.reviewStatus?.code,
+        payload?.verificationMeta?.code || payload?.verificationStatus,
+        "PENDING"
+      ),
+      label: textOrFallback(
+        payload?.readModel?.reviewStatus?.label,
+        payload?.verificationMeta?.label,
+        "Pending review"
+      ),
+      tone: textOrFallback(
+        payload?.readModel?.reviewStatus?.tone,
+        payload?.verificationMeta?.tone,
+        "warning"
+      ),
+      description:
+        textOrNull(payload?.readModel?.reviewStatus?.description) ||
+        textOrNull(payload?.verificationMeta?.description),
+      authority: textOrFallback(payload?.readModel?.reviewStatus?.authority, "ADMIN"),
+      reviewedAt: payload?.readModel?.reviewStatus?.reviewedAt || payload?.verifiedAt || null,
+      reviewedBy: payload?.readModel?.reviewStatus?.reviewedBy
+        ? {
+            id: Number(payload.readModel.reviewStatus.reviewedBy.id || 0) || null,
+            name: textOrFallback(payload.readModel.reviewStatus.reviewedBy.name),
+            email: textOrNull(payload.readModel.reviewStatus.reviewedBy.email),
+          }
+        : null,
+    },
+    completeness: {
+      completedFields: Number(
+        completeness?.completedFields ??
+          payload?.readiness?.completedFields ??
+          0
+      ),
+      totalFields: Number(
+        completeness?.totalFields ??
+          payload?.readiness?.totalFields ??
+          0
+      ),
+      allRequiredPresent:
+        completeness?.allRequiredPresent !== undefined
+          ? Boolean(completeness.allRequiredPresent)
+          : normalizeMissingFields(completeness?.missingFields ?? payload?.readiness?.missingFields)
+              .length === 0,
+      missingFields: normalizeMissingFields(
+        completeness?.missingFields ?? payload?.readiness?.missingFields
+      ),
+      requiredFields: normalizeMissingFields(completeness?.requiredFields),
+    },
+    nextStep: {
+      code: textOrFallback(payload?.readModel?.nextStep?.code, "WAIT_ADMIN_REVIEW"),
+      label: textOrFallback(payload?.readModel?.nextStep?.label, "Wait for admin review"),
+      lane: textOrFallback(payload?.readModel?.nextStep?.lane, "ADMIN_REVIEW"),
+      actor: textOrFallback(payload?.readModel?.nextStep?.actor, "ADMIN"),
+      description: textOrNull(payload?.readModel?.nextStep?.description),
+    },
+    boundaries: {
+      readinessVsPaymentHistory: textOrNull(
+        payload?.readModel?.boundaries?.readinessVsPaymentHistory
+      ),
+      paymentHistoryLane: textOrNull(payload?.readModel?.boundaries?.paymentHistoryLane),
+      sellerWorkspaceMode: textOrNull(payload?.readModel?.boundaries?.sellerWorkspaceMode),
+    },
+  };
+};
 
 const normalizeSellerPaymentProfile = (payload: any) => {
   if (!payload) return null;
@@ -67,6 +145,7 @@ const normalizeSellerPaymentProfile = (payload: any) => {
       totalFields,
       missingFields,
     },
+    readModel: normalizeReadModel(payload),
     governance: {
       canView: payload?.governance?.canView !== false,
       canEdit: Boolean(payload?.governance?.canEdit),

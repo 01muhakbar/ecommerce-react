@@ -121,11 +121,146 @@ const buildPaymentProfileReadiness = (profile: any) => {
   };
 };
 
-const serializeSellerPaymentProfile = (profile: any, options: { store?: any } = {}) => {
+const buildPaymentProfileReadModel = (profile: any, sellerAccess: any = null) => {
+  const readiness = buildPaymentProfileReadiness(profile);
+  const verificationStatus = String(getAttr(profile, "verificationStatus") || "PENDING").toUpperCase();
+  const verificationMeta = buildVerificationMeta(verificationStatus);
+  const reviewedAt = getAttr(profile, "verifiedAt") || null;
+  const verifiedByAdmin = profile?.verifiedByAdmin ?? profile?.get?.("verifiedByAdmin") ?? null;
+  const actorIsOwner = Boolean(sellerAccess?.isOwner);
+
+  let primaryStatus = {
+    code: "PENDING_ADMIN_REVIEW",
+    label: "Pending admin review",
+    tone: "warning",
+    description:
+      "Required payment destination fields are present, but admin review still decides whether the store is ready for payment operations.",
+  };
+  let nextStep = {
+    code: "WAIT_ADMIN_REVIEW",
+    label: "Wait for admin review",
+    lane: "ADMIN_REVIEW",
+    actor: "ADMIN",
+    description:
+      "No seller action is exposed in seller workspace while this payment profile is still under admin review.",
+  };
+
+  if (readiness.isIncomplete) {
+    primaryStatus = {
+      code: "NEEDS_ACTION",
+      label: "Needs action",
+      tone: "warning",
+      description:
+        "Required payment destination fields are still incomplete, so the store is not ready for payment operations yet.",
+    };
+    nextStep = {
+      code: "COMPLETE_PROFILE",
+      label: actorIsOwner ? "Complete profile in account lane" : "Ask owner or admin to complete profile",
+      lane: actorIsOwner ? "ACCOUNT_PAYMENT_PROFILE" : "ACCOUNT_ADMIN",
+      actor: actorIsOwner ? "SELLER_OWNER" : "STORE_OWNER_OR_ADMIN",
+      description: actorIsOwner
+        ? "Complete the missing payment profile fields through the existing account payment profile form, then wait for admin review."
+        : "Seller workspace is read-only here. The store owner or admin must complete the payment profile through the existing account or admin lane.",
+    };
+  } else if (verificationStatus === "REJECTED") {
+    primaryStatus = {
+      code: "NEEDS_ACTION",
+      label: "Needs action",
+      tone: "danger",
+      description:
+        "Admin review rejected this payment profile. The seller should treat the profile as not ready until the snapshot is corrected and re-submitted.",
+    };
+    nextStep = {
+      code: "UPDATE_AND_RESUBMIT",
+      label: actorIsOwner ? "Update profile in account lane" : "Ask owner or admin to update profile",
+      lane: actorIsOwner ? "ACCOUNT_PAYMENT_PROFILE" : "ACCOUNT_ADMIN",
+      actor: actorIsOwner ? "SELLER_OWNER" : "STORE_OWNER_OR_ADMIN",
+      description: actorIsOwner
+        ? "Update the payment profile through the existing account payment profile form. Saving there re-submits the profile for admin review."
+        : "Seller workspace is read-only here. The store owner or admin must update the payment profile through the existing account or admin lane before review can restart.",
+    };
+  } else if (readiness.isReady) {
+    primaryStatus = {
+      code: "READY",
+      label: "Ready for payment operations",
+      tone: "success",
+      description:
+        "The payment profile is complete, approved, and active for store payment operations.",
+    };
+    nextStep = {
+      code: "NO_ACTION_REQUIRED",
+      label: "No action required",
+      lane: "MONITOR_ONLY",
+      actor: "SELLER",
+      description:
+        "Seller can monitor this snapshot here. Buyer payment proof review and order payment events stay on separate payment lanes.",
+    };
+  } else if (readiness.code === "INACTIVE") {
+    primaryStatus = {
+      code: "INACTIVE",
+      label: "Inactive",
+      tone: "neutral",
+      description:
+        "The profile exists but is not active for payment operations yet, even though the required fields are present.",
+    };
+    nextStep = {
+      code: "FOLLOW_EXISTING_REVIEW_LANE",
+      label: actorIsOwner ? "Follow up in account or admin lane" : "Ask owner or admin to follow up",
+      lane: "ACCOUNT_ADMIN",
+      actor: actorIsOwner ? "SELLER_OWNER_OR_ADMIN" : "STORE_OWNER_OR_ADMIN",
+      description:
+        "Seller workspace does not expose activation controls. Follow the existing account or admin-managed flow to understand why activation is still blocked.",
+    };
+  }
+
+  return {
+    primaryStatus,
+    reviewStatus: {
+      code: verificationStatus,
+      label: verificationMeta.label,
+      tone: verificationMeta.tone,
+      description: verificationMeta.description,
+      authority: "ADMIN",
+      reviewedAt,
+      reviewedBy: verifiedByAdmin
+        ? {
+            id: Number(getAttr(verifiedByAdmin, "id") || 0) || null,
+            name: String(getAttr(verifiedByAdmin, "name") || ""),
+            email: getAttr(verifiedByAdmin, "email") ? String(getAttr(verifiedByAdmin, "email")) : null,
+          }
+        : null,
+    },
+    completeness: {
+      completedFields: readiness.completedFields,
+      totalFields: readiness.totalFields,
+      allRequiredPresent: readiness.missingFields.length === 0,
+      missingFields: readiness.missingFields,
+      requiredFields: requiredPaymentProfileFields.map((field) => ({
+        key: field.key,
+        label: field.label,
+      })),
+    },
+    nextStep,
+    boundaries: {
+      readinessVsPaymentHistory:
+        "Payment readiness only describes whether the store payment destination is complete, reviewed, and active. It does not describe buyer payment proof history or order settlement outcomes.",
+      paymentHistoryLane:
+        "Buyer payment proofs and payment history stay in the seller order and payment review lanes, not in this payment profile readiness snapshot.",
+      sellerWorkspaceMode:
+        "Seller workspace remains read-only for this payment profile snapshot. Changes still belong to the existing account or admin lane.",
+    },
+  };
+};
+
+const serializeSellerPaymentProfile = (
+  profile: any,
+  options: { store?: any; sellerAccess?: any } = {}
+) => {
   if (!profile) return null;
 
   const verificationStatus = String(getAttr(profile, "verificationStatus") || "PENDING");
   const isActive = Boolean(getAttr(profile, "isActive"));
+  const readModel = buildPaymentProfileReadModel(profile, options.sellerAccess);
 
   return {
     id: Number(getAttr(profile, "id")),
@@ -145,6 +280,7 @@ const serializeSellerPaymentProfile = (profile: any, options: { store?: any } = 
     verificationMeta: buildVerificationMeta(verificationStatus),
     activityMeta: buildActivityMeta(isActive),
     readiness: buildPaymentProfileReadiness(profile),
+    readModel,
     governance: {
       canView: true,
       canEdit: false,
@@ -204,12 +340,20 @@ router.get(
           "createdAt",
           "updatedAt",
         ],
+        include: [
+          {
+            association: "verifiedByAdmin",
+            attributes: ["id", "name", "email"],
+            required: false,
+          },
+        ],
       });
 
       return res.json({
         success: true,
         data: serializeSellerPaymentProfile(profile, {
           store: sellerAccess?.store || null,
+          sellerAccess,
         }),
       });
     } catch (error) {

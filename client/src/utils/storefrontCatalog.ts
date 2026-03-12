@@ -31,6 +31,54 @@ const toBoolean = (value: unknown, fallback = true) => {
 
 const coerceArray = (value: unknown) => (Array.isArray(value) ? value : []);
 
+const normalizeSellerInfo = (rawSellerInfo: any) => {
+  if (!rawSellerInfo || typeof rawSellerInfo !== "object") return null;
+
+  const status =
+    rawSellerInfo.status && typeof rawSellerInfo.status === "object"
+      ? {
+          code: toText(rawSellerInfo.status.code || rawSellerInfo.status.label || "ACTIVE"),
+          label: toText(rawSellerInfo.status.label || rawSellerInfo.status.code || "Active store"),
+          tone: toText(rawSellerInfo.status.tone || "success"),
+        }
+      : null;
+
+  const chatModeRaw = toText(rawSellerInfo.chatMode || "disabled").toLowerCase();
+  const chatMode =
+    chatModeRaw === "enabled" || chatModeRaw === "contact_fallback"
+      ? chatModeRaw
+      : "disabled";
+
+  return {
+    storeId: toNumberOrNull(rawSellerInfo.storeId),
+    name: toText(rawSellerInfo.name) || "Store",
+    slug: toText(rawSellerInfo.slug),
+    logoUrl: toText(rawSellerInfo.logoUrl) || null,
+    shortDescription: toText(rawSellerInfo.shortDescription) || null,
+    status,
+    productCount: toNumberOrNull(rawSellerInfo.productCount),
+    ratingAverage: toNumberOrNull(rawSellerInfo.ratingAverage),
+    ratingCount: toNumberOrNull(rawSellerInfo.ratingCount) ?? 0,
+    followerCount: toNumberOrNull(rawSellerInfo.followerCount),
+    responseRate: toNumberOrNull(rawSellerInfo.responseRate),
+    responseTimeLabel: toText(rawSellerInfo.responseTimeLabel) || null,
+    joinedAt: rawSellerInfo.joinedAt || null,
+    canVisitStore: Boolean(rawSellerInfo.canVisitStore),
+    visitStoreHref: toText(rawSellerInfo.visitStoreHref) || null,
+    canChat: Boolean(rawSellerInfo.canChat),
+    chatMode,
+    chatHref: toText(rawSellerInfo.chatHref) || null,
+    chatLabel:
+      toText(rawSellerInfo.chatLabel) ||
+      (chatMode === "enabled"
+        ? "Chat Toko"
+        : chatMode === "contact_fallback"
+          ? "Hubungi Toko"
+          : "Chat segera hadir"),
+    chatHelper: toText(rawSellerInfo.chatHelper) || null,
+  };
+};
+
 const normalizeCategoryRef = (rawCategory: any) => {
   if (!rawCategory || typeof rawCategory !== "object") return null;
   const id = rawCategory?.id ?? rawCategory?._id ?? null;
@@ -188,11 +236,18 @@ export const normalizeStorefrontProduct = (rawProduct: any) => {
     true
   );
   const status = toText(rawProduct?.status) || (published ? "active" : "draft");
+  const preorderDays = toNumberOrNull(rawProduct?.preorderDays);
 
   return {
     ...rawProduct,
     id,
     slug,
+    routeSlug: toText(rawProduct?.routeSlug || slug) || null,
+    productHref:
+      toText(rawProduct?.productHref) ||
+      (toText(rawProduct?.routeSlug || slug)
+        ? `/product/${encodeURIComponent(toText(rawProduct?.routeSlug || slug))}`
+        : null),
     name,
     title: name,
     description: rawProduct?.description ?? null,
@@ -214,7 +269,13 @@ export const normalizeStorefrontProduct = (rawProduct: any) => {
     category,
     subcategoryId: rawProduct?.subcategoryId ?? subcategory?.id ?? null,
     subcategory,
+    sku: toText(rawProduct?.sku) || null,
     stock: toNumberOrNull(rawProduct?.stock),
+    preOrder: Boolean(rawProduct?.preOrder),
+    preorderDays,
+    weight: toNumberOrNull(rawProduct?.weight),
+    condition: toText(rawProduct?.condition) || null,
+    variations: rawProduct?.variations ?? null,
     published,
     status,
     rating: ratingAvg,
@@ -287,6 +348,7 @@ export const normalizeStorefrontProductDetailResponse = (payload: any) => {
         (root && typeof root === "object" ? root.description : null) ??
         null,
       reviews: Array.isArray(root?.reviews) ? root.reviews : normalized?.reviews ?? [],
+      sellerInfo: normalizeSellerInfo(root?.sellerInfo),
     },
   };
 };

@@ -13,7 +13,25 @@ export type NormalizedPublicStoreIdentity = {
   province: string;
   postalCode: string;
   country: string;
+  createdAt: string;
   updatedAt: string;
+  summary: {
+    status: {
+      code: string;
+      label: string;
+      tone: string;
+    };
+    productCount: number | null;
+    ratingAverage: number | null;
+    ratingCount: number;
+    followerCount: number | null;
+    responseRate: number | null;
+    responseTimeLabel: string;
+    joinedAt: string;
+    chatMode: "enabled" | "contact_fallback" | "disabled";
+    canChat: boolean;
+    canContact: boolean;
+  };
 };
 
 const toText = (value: unknown, fallback = "") => {
@@ -52,7 +70,39 @@ export const normalizePublicStoreIdentity = (
     province: toText(source.province),
     postalCode: toText(source.postalCode),
     country: toText(source.country),
+    createdAt: toText(source.createdAt),
     updatedAt: toText(source.updatedAt),
+    summary: {
+      status: {
+        code: toText((source as any)?.summary?.status?.code, "UNKNOWN"),
+        label: toText((source as any)?.summary?.status?.label, "Unavailable"),
+        tone: toText((source as any)?.summary?.status?.tone, "neutral"),
+      },
+      productCount: Number.isFinite(Number((source as any)?.summary?.productCount))
+        ? Number((source as any)?.summary?.productCount)
+        : null,
+      ratingAverage: Number.isFinite(Number((source as any)?.summary?.ratingAverage))
+        ? Number((source as any)?.summary?.ratingAverage)
+        : null,
+      ratingCount: Number.isFinite(Number((source as any)?.summary?.ratingCount))
+        ? Number((source as any)?.summary?.ratingCount)
+        : 0,
+      followerCount: Number.isFinite(Number((source as any)?.summary?.followerCount))
+        ? Number((source as any)?.summary?.followerCount)
+        : null,
+      responseRate: Number.isFinite(Number((source as any)?.summary?.responseRate))
+        ? Number((source as any)?.summary?.responseRate)
+        : null,
+      responseTimeLabel: toText((source as any)?.summary?.responseTimeLabel),
+      joinedAt: toText((source as any)?.summary?.joinedAt, toText(source.createdAt)),
+      chatMode: ["enabled", "contact_fallback"].includes(
+        toText((source as any)?.summary?.chatMode).toLowerCase()
+      )
+        ? ((source as any).summary.chatMode as "enabled" | "contact_fallback")
+        : "disabled",
+      canChat: Boolean((source as any)?.summary?.canChat),
+      canContact: Boolean((source as any)?.summary?.canContact),
+    },
   };
 };
 

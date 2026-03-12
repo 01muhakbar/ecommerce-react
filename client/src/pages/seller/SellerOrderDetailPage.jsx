@@ -223,19 +223,19 @@ export default function SellerOrderDetailPage() {
       <SellerWorkspaceSectionHeader
         eyebrow="Seller Order Detail"
         title={detail.suborderNumber}
-        description={`Parent order ${detail.order?.orderNumber || "-"} · ${detail.scope?.relationLabel}`}
+        description={`Parent order ${detail.order?.orderNumber || "-"} · ${detail.scope?.relationLabel} · items and totals stay scoped to this store split.`}
         actions={[
           backButton,
           <StatusChip
             key="payment"
             value={detail.paymentStatus}
-            label={`Suborder ${detail.paymentStatusMeta?.label || detail.paymentStatus}`}
+            label={`Store split ${detail.readModel?.paymentState?.label || detail.paymentStatusMeta?.label || detail.paymentStatus}`}
             map={PAYMENT_STATUS_TONE}
           />,
           <StatusChip
             key="fulfillment"
             value={detail.fulfillmentStatus}
-            label={`Fulfillment ${detail.fulfillmentStatusMeta?.label || detail.fulfillmentStatus}`}
+            label={`Seller ${detail.readModel?.primaryStatus?.label || detail.fulfillmentStatusMeta?.label || detail.fulfillmentStatus}`}
             map={FULFILLMENT_STATUS_TONE}
           />,
           <StatusChip
@@ -289,8 +289,12 @@ export default function SellerOrderDetailPage() {
           </p>
           <div className="mt-4 grid gap-3">
             <SellerWorkspaceDetailItem
-              label="Suborder Payment"
-              value={detail.paymentStatusMeta?.label || detail.paymentStatus}
+              label="Store Split Payment"
+              value={
+                detail.readModel?.paymentState?.label ||
+                detail.paymentStatusMeta?.label ||
+                detail.paymentStatus
+              }
             />
             <SellerWorkspaceDetailItem
               label="Payment Record"
@@ -365,6 +369,30 @@ export default function SellerOrderDetailPage() {
           >
             <div className="grid gap-3">
               <SellerWorkspaceDetailItem
+                label="Seller Status"
+                value={
+                  detail.readModel?.primaryStatus?.label ||
+                  detail.fulfillmentStatusMeta?.label ||
+                  detail.fulfillmentStatus
+                }
+                hint={
+                  detail.readModel?.primaryStatus?.description ||
+                  detail.fulfillmentStatusMeta?.description ||
+                  "Seller fulfillment is the primary operational status for this store split."
+                }
+              />
+              <SellerWorkspaceDetailItem
+                label="Store Scope"
+                value={`${detail.readModel?.sellerScope?.itemCount || detail.items?.length || 0} item${(detail.readModel?.sellerScope?.itemCount || detail.items?.length || 0) === 1 ? "" : "s"}`}
+                hint={
+                  detail.readModel?.sellerScope?.itemScopeLabel ||
+                  "Item counts and totals only include this store-owned suborder."
+                }
+              />
+            </div>
+
+            <div className="grid gap-3">
+              <SellerWorkspaceDetailItem
                 label="Subtotal"
                 value={formatMoney(detail.totals?.subtotalAmount)}
               />
@@ -385,11 +413,18 @@ export default function SellerOrderDetailPage() {
             <div className="mt-4 grid gap-3">
               <SellerWorkspaceDetailItem
                 label="Parent Lifecycle"
-                value={detail.order?.statusMeta?.label || detail.order?.status || "-"}
+                value={
+                  detail.readModel?.parentOrder?.statusMeta?.label ||
+                  detail.order?.statusMeta?.label ||
+                  detail.order?.status ||
+                  "-"
+                }
+                hint={detail.readModel?.parentOrder?.note || undefined}
               />
               <SellerWorkspaceDetailItem
                 label="Parent Payment"
                 value={
+                  detail.readModel?.parentOrder?.paymentStatusMeta?.label ||
                   detail.order?.paymentStatusMeta?.label ||
                   detail.order?.paymentStatus ||
                   "-"
@@ -418,9 +453,8 @@ export default function SellerOrderDetailPage() {
             </div>
 
             <SellerWorkspaceNotice type="info" className="mt-4">
-              Parent order lifecycle can move on a different lane from seller fulfillment. Use the
-              suborder payment and fulfillment statuses above as the seller-scoped operational
-              truth.
+              {detail.readModel?.operationalNote ||
+                "Parent order lifecycle can move on a different lane from seller fulfillment. Use the suborder payment and fulfillment statuses above as the seller-scoped operational truth."}
             </SellerWorkspaceNotice>
           </SellerWorkspaceSectionCard>
 

@@ -42,9 +42,15 @@ const getStatusTone = (status) =>
   status === "active" ? "emerald" : status === "draft" ? "amber" : "stone";
 
 const getVisibilityTone = (visibility) => {
-  if (visibility?.storefrontVisible) return "emerald";
-  if (visibility?.isPublished) return "amber";
-  return "rose";
+  if (visibility?.stateCode === "STOREFRONT_VISIBLE") return "emerald";
+  if (visibility?.stateCode === "PUBLISHED_BLOCKED") return "amber";
+  return "stone";
+};
+
+const getAvailabilityTone = (availability) => {
+  if (availability?.stateCode === "PREORDER") return "sky";
+  if (availability?.stateCode === "IN_STOCK") return "emerald";
+  return "amber";
 };
 
 export default function SellerProductDetailPage() {
@@ -138,13 +144,14 @@ export default function SellerProductDetailPage() {
     ? product.category.assigned
     : [];
   const imageUrls = Array.isArray(product?.media?.imageUrls) ? product.media.imageUrls : [];
+  const contractNotes = Array.isArray(product?.contract?.notes) ? product.contract.notes : [];
 
   return (
     <div className="space-y-6">
       <SellerWorkspaceSectionHeader
         eyebrow="Seller Product Detail"
         title={product?.name || "Product"}
-        description="Seller-scoped detail view using Product.storeId as the tenant boundary. This can show private or draft rows owned by the current store."
+        description="Seller-scoped detail view using Product.storeId as the tenant boundary. Status comes from Product.status and public visibility follows the existing storefront rule: published plus active."
         actions={[
           backButton,
           <SellerWorkspaceBadge key="mode" label="Read-only" tone="amber" />,
@@ -156,6 +163,7 @@ export default function SellerProductDetailPage() {
           <SellerWorkspaceBadge
             key="publish"
             label={
+              product?.visibility?.sellerLabel ||
               product?.visibility?.publishLabel ||
               product?.visibility?.label ||
               (product?.published ? "Published" : "Private")
@@ -163,9 +171,9 @@ export default function SellerProductDetailPage() {
             tone={getVisibilityTone(product?.visibility)}
           />,
           <SellerWorkspaceBadge
-            key="storefront"
-            label={product?.visibility?.storefrontLabel || "Hidden from storefront"}
-            tone={product?.visibility?.storefrontVisible ? "emerald" : "stone"}
+            key="availability"
+            label={product?.availability?.label || "Availability unknown"}
+            tone={getAvailabilityTone(product?.availability)}
           />,
         ]}
       >
@@ -177,6 +185,19 @@ export default function SellerProductDetailPage() {
         </div>
       </SellerWorkspaceSectionHeader>
 
+      {contractNotes.length ? (
+        <SellerWorkspaceNotice type="info">
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em]">
+              Catalog Read Contract
+            </p>
+            {contractNotes.map((note) => (
+              <p key={note}>{note}</p>
+            ))}
+          </div>
+        </SellerWorkspaceNotice>
+      ) : null}
+
       <section className="grid gap-4 xl:grid-cols-4">
         <SellerWorkspaceDetailItem label="Slug" value={product?.slug} />
         <SellerWorkspaceDetailItem
@@ -186,19 +207,54 @@ export default function SellerProductDetailPage() {
         <SellerWorkspaceDetailItem
           label="Store Scope"
           value={
-            sellerContext?.store?.name ||
-            sellerContext?.store?.slug ||
-            `Store #${product?.storeId || storeId}`
+            product?.ownership?.storeId
+              ? `Store #${product.ownership.storeId}`
+              : sellerContext?.store?.name ||
+                sellerContext?.store?.slug ||
+                `Store #${product?.storeId || storeId}`
           }
         />
         <SellerWorkspaceDetailItem
-          label="Visibility Reason"
-          value={product?.visibility?.storefrontReason || "-"}
+          label="Public State"
+          value={product?.visibility?.storefrontLabel || "-"}
         />
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <div className="space-y-6">
+          <SellerWorkspaceSectionCard
+            title="Status and Visibility"
+            hint="Operational state and public storefront outcome use the same contract as the catalog list."
+            Icon={ShieldCheck}
+          >
+            <div className="grid gap-3 md:grid-cols-2">
+              <SellerWorkspaceDetailItem
+                label="Status"
+                value={product?.statusMeta?.label || "-"}
+              />
+              <SellerWorkspaceDetailItem
+                label="Operational Meaning"
+                value={product?.statusMeta?.operationalMeaning || "-"}
+              />
+              <SellerWorkspaceDetailItem
+                label="Seller Visibility"
+                value={product?.visibility?.sellerLabel || "-"}
+              />
+              <SellerWorkspaceDetailItem
+                label="Storefront State"
+                value={product?.visibility?.storefrontLabel || "-"}
+              />
+              <SellerWorkspaceDetailItem
+                label="Storefront Reason"
+                value={product?.visibility?.storefrontReason || "-"}
+              />
+              <SellerWorkspaceDetailItem
+                label="Seller Hint"
+                value={product?.visibility?.sellerHint || "-"}
+              />
+            </div>
+          </SellerWorkspaceSectionCard>
+
           <SellerWorkspaceSectionCard
             title="Pricing and Inventory"
             hint="Operational summary only. No edit lane is opened here."
@@ -222,32 +278,34 @@ export default function SellerProductDetailPage() {
                 }
               />
               <SellerWorkspaceDetailItem
+                label="Availability"
+                value={product?.availability?.label || "-"}
+              />
+              <SellerWorkspaceDetailItem
                 label="Stock"
-                value={String(product?.inventory?.stock ?? 0)}
+                value={
+                  String(product?.inventory?.stock ?? product?.availability?.stock ?? 0)
+                }
               />
               <SellerWorkspaceDetailItem
                 label="Pre-order"
                 value={
-                  product?.inventory?.preOrder
+                  product?.availability?.preOrder
                     ? `Yes${
-                        product?.inventory?.preorderDays
-                          ? ` · ${product.inventory.preorderDays} day(s)`
+                        product?.availability?.preorderDays
+                          ? ` · ${product.availability.preorderDays} day(s)`
                           : ""
                       }`
                     : "No"
                 }
               />
               <SellerWorkspaceDetailItem
+                label="Availability Impact"
+                value={product?.availability?.storefrontReason || "-"}
+              />
+              <SellerWorkspaceDetailItem
                 label="Publish Flag"
                 value={product?.visibility?.publishLabel || "-"}
-              />
-              <SellerWorkspaceDetailItem
-                label="Storefront Visibility"
-                value={product?.visibility?.storefrontLabel || "-"}
-              />
-              <SellerWorkspaceDetailItem
-                label="Storefront Reason"
-                value={product?.visibility?.storefrontReason || "-"}
               />
             </div>
           </SellerWorkspaceSectionCard>

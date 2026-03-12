@@ -76,6 +76,58 @@ const serializeRole = (role: any) => {
   };
 };
 
+function buildRoleReadModel(roleLike: {
+  code?: string | null;
+  name?: string | null;
+  description?: string | null;
+}) {
+  const roleCode = String(roleLike.code || "").trim().toUpperCase();
+  const label = String(roleLike.name || roleCode || "Unknown role");
+  const description = roleLike.description ? String(roleLike.description) : null;
+
+  if (roleCode === "STORE_OWNER") {
+    return {
+      code: roleCode,
+      label,
+      category: "OWNER",
+      authorityLevel: "FULL_CONTROL",
+      tone: "emerald",
+      summary: description || "Highest store-level authority for seller workspace.",
+    };
+  }
+
+  if (roleCode === "STORE_ADMIN") {
+    return {
+      code: roleCode,
+      label,
+      category: "ADMIN",
+      authorityLevel: "OPERATIONAL_MANAGEMENT",
+      tone: "sky",
+      summary: description || "Operational store admin with team management access.",
+    };
+  }
+
+  if (roleCode === "FINANCE_VIEWER") {
+    return {
+      code: roleCode,
+      label,
+      category: "SPECIALIST",
+      authorityLevel: "READ_HEAVY",
+      tone: "amber",
+      summary: description || "Read-only finance oversight role.",
+    };
+  }
+
+  return {
+    code: roleCode,
+    label,
+    category: "SPECIALIST",
+    authorityLevel: "LIMITED_SCOPE",
+    tone: "stone",
+    summary: description || "Scoped operational role for the seller workspace.",
+  };
+}
+
 function serializeActionMeta(action: string) {
   if (action === SELLER_TEAM_AUDIT_ACTIONS.TEAM_MEMBER_INVITE) {
     return { label: "Invitation created", tone: "amber" };
@@ -107,6 +159,193 @@ function serializeActionMeta(action: string) {
   return { label: action || "Recorded action", tone: "stone" };
 }
 
+function buildLifecycleReadModel(memberLike: any) {
+  const status = String(memberLike?.status || "").toUpperCase();
+  const invitationState = String(memberLike?.invitation?.state || "").toUpperCase();
+  const removedSource = String(
+    memberLike?.removedSource || memberLike?.lifecycle?.removedSource || ""
+  ).toUpperCase();
+
+  if (status === SELLER_TEAM_PERSISTENCE_STATUS.ACTIVE) {
+    return {
+      code: "ACTIVE_MEMBER",
+      label: "Active member",
+      tone: "emerald",
+      summary: "This membership currently has seller workspace access for the store.",
+      nextStep: "No action is required unless role or access needs to change.",
+    };
+  }
+
+  if (status === SELLER_TEAM_API_STATUS.DISABLED) {
+    return {
+      code: "DISABLED_MEMBER",
+      label: "Disabled member",
+      tone: "stone",
+      summary: "This membership remains recorded, but seller access is disabled.",
+      nextStep: "A store operator can reactivate the member when governance allows it.",
+    };
+  }
+
+  if (status === SELLER_TEAM_PERSISTENCE_STATUS.INVITED) {
+    if (invitationState === "EXPIRED") {
+      return {
+        code: "EXPIRED_INVITATION",
+        label: "Expired invitation",
+        tone: "rose",
+        summary:
+          "The invitation expired before acceptance, so this membership is still not operational.",
+        nextStep: "A store owner or admin must re-invite the user before access can activate.",
+      };
+    }
+
+    return {
+      code: "PENDING_INVITATION",
+      label: "Pending invitation",
+      tone: "amber",
+      summary: "This membership is waiting for the invited user to accept in the account lane.",
+      nextStep: "Wait for acceptance or re-invite if the invitation stalls or expires.",
+    };
+  }
+
+  if (status === SELLER_TEAM_PERSISTENCE_STATUS.REMOVED) {
+    return {
+      code:
+        removedSource === "INVITE_DECLINE"
+          ? "INVITATION_DECLINED"
+          : removedSource === "OPERATIONAL_REMOVE"
+            ? "REMOVED_BY_STORE"
+            : "REMOVED_MEMBER",
+      label:
+        removedSource === "INVITE_DECLINE"
+          ? "Invite declined"
+          : removedSource === "OPERATIONAL_REMOVE"
+            ? "Removed access"
+            : "Removed member",
+      tone: "rose",
+      summary:
+        removedSource === "INVITE_DECLINE"
+          ? "This membership closed because the invited user declined the invitation."
+          : removedSource === "OPERATIONAL_REMOVE"
+            ? "This membership closed because a store operator removed access."
+            : "This membership is closed and no longer has seller workspace access.",
+      nextStep: "If governance allows it, the member can only return through re-invite.",
+    };
+  }
+
+  return {
+    code: "UNKNOWN_LIFECYCLE",
+    label: "Unknown lifecycle",
+    tone: "stone",
+    summary: "Current lifecycle state could not be classified from the membership snapshot.",
+    nextStep: "Check lifecycle history for the latest recorded transition.",
+  };
+}
+
+function buildMemberAuthorityReadModel(args: {
+  member: any;
+  governance: any;
+}) {
+  const governance = args.governance || {};
+  const member = args.member || {};
+
+  if (governance.isOwner) {
+    return {
+      code: "OWNER_PROTECTED",
+      label: "Owner protected",
+      tone: "emerald",
+      description: "Store owner stays protected in this phase and cannot be mutated from this lane.",
+    };
+  }
+
+  if (governance.isSelf) {
+    return {
+      code: "SELF_PROTECTED",
+      label: "Self protected",
+      tone: "stone",
+      description: "This row belongs to the current actor. Self mutation stays blocked here.",
+    };
+  }
+
+  if (
+    governance.canEditRole ||
+    governance.canToggleStatus ||
+    governance.canRemove ||
+    governance.canReinvite
+  ) {
+    return {
+      code: "MANAGEABLE",
+      label: "Manageable by current actor",
+      tone: "sky",
+      description:
+        member.status === SELLER_TEAM_PERSISTENCE_STATUS.REMOVED
+          ? "This row is currently manageable through the re-invite lane."
+          : "Current actor can manage at least one governance action for this membership.",
+    };
+  }
+
+  return {
+    code: "READ_ONLY",
+    label: "Read-only for current actor",
+    tone: "stone",
+    description:
+      governance.restrictionReason ||
+      "Current actor can view this membership, but cannot mutate it in this phase.",
+  };
+}
+
+function buildMemberReadModel(args: {
+  member: any;
+  governance: any;
+}) {
+  const roleReadModel = buildRoleReadModel({
+    code: args.member?.roleCode,
+    name: args.member?.roleName,
+    description: args.member?.role?.description,
+  });
+  const lifecycle = buildLifecycleReadModel(args.member);
+  const authority = buildMemberAuthorityReadModel(args);
+
+  return {
+    primaryRole: roleReadModel,
+    lifecycle,
+    authority,
+  };
+}
+
+function buildCurrentAccessReadModel(args: {
+  sellerAccess: any;
+  capabilities: any;
+}) {
+  const roleReadModel = buildRoleReadModel({
+    code: args.sellerAccess?.roleCode,
+  });
+  const capabilities = args.capabilities || {};
+  const hasMutationAuthority =
+    Boolean(capabilities.canInviteMembers) ||
+    Boolean(capabilities.canAttachMembers) ||
+    Boolean(capabilities.canChangeRoles) ||
+    Boolean(capabilities.canChangeStatus) ||
+    Boolean(capabilities.canRemoveMembers) ||
+    Boolean(capabilities.canReinviteMembers);
+
+  return {
+    primaryRole: roleReadModel,
+    authority: {
+      code: hasMutationAuthority ? "TEAM_OPERATOR" : "READ_ONLY",
+      label: hasMutationAuthority ? "Operational team manager" : "Read-only team viewer",
+      tone: hasMutationAuthority ? "emerald" : "stone",
+      description: hasMutationAuthority
+        ? "Current actor can open at least one team governance mutation lane in this store."
+        : "Current actor can read team governance data, but mutation lanes are closed.",
+    },
+    membershipBoundary:
+      args.sellerAccess?.accessMode === "OWNER_BRIDGE" &&
+      args.sellerAccess?.membershipStatus === "VIRTUAL_OWNER"
+        ? "Access is currently resolved through the owner bridge, not a persisted store_members row."
+        : "Access is resolved from the active store membership and role snapshot.",
+  };
+}
+
 function serializeAuditSnapshot(beforeState: any, afterState: any, targetMember: any) {
   const targetRole = targetMember?.role ?? targetMember?.get?.("role") ?? null;
   const currentRoleCode = targetRole ? String(getAttr(targetRole, "code") || "") : null;
@@ -129,6 +368,134 @@ function serializeAuditSnapshot(beforeState: any, afterState: any, targetMember:
     status: snapshotStatus,
     currentRoleCode,
     currentRoleName,
+  };
+}
+
+function summarizeAuditDelta(beforeState: any, afterState: any) {
+  const changes = [];
+
+  if ((beforeState?.roleCode || null) !== (afterState?.roleCode || null)) {
+    changes.push(`Role ${beforeState?.roleCode || "-"} -> ${afterState?.roleCode || "-"}`);
+  }
+
+  if ((beforeState?.status || null) !== (afterState?.status || null)) {
+    changes.push(`Status ${beforeState?.status || "-"} -> ${afterState?.status || "-"}`);
+  }
+
+  if (changes.length === 0 && afterState?.status) {
+    changes.push(`Status ${afterState.status}`);
+  }
+
+  return changes.length > 0 ? changes.join(" | ") : "Snapshot recorded";
+}
+
+function buildAuditReadModel(input: {
+  action: string;
+  beforeState: any;
+  afterState: any;
+  targetSnapshot: any;
+}) {
+  const changeSummary = summarizeAuditDelta(input.beforeState, input.afterState);
+
+  if (input.action === SELLER_TEAM_AUDIT_ACTIONS.TEAM_MEMBER_INVITE) {
+    return {
+      category: "INVITATION",
+      title: "Invitation created",
+      tone: "amber",
+      summary: "A pending store invitation was created for this user.",
+      changeSummary,
+    };
+  }
+
+  if (input.action === SELLER_TEAM_AUDIT_ACTIONS.TEAM_MEMBER_REINVITE) {
+    return {
+      category: "INVITATION",
+      title: "Invitation sent again",
+      tone: "amber",
+      summary: "A closed or expired membership was reopened through re-invite.",
+      changeSummary,
+    };
+  }
+
+  if (input.action === SELLER_TEAM_AUDIT_ACTIONS.TEAM_MEMBER_INVITE_ACCEPT) {
+    return {
+      category: "LIFECYCLE",
+      title: "Invitation accepted",
+      tone: "emerald",
+      summary: "The invited user accepted and the membership moved into active access.",
+      changeSummary,
+    };
+  }
+
+  if (input.action === SELLER_TEAM_AUDIT_ACTIONS.TEAM_MEMBER_INVITE_DECLINE) {
+    return {
+      category: "LIFECYCLE",
+      title: "Invitation declined",
+      tone: "stone",
+      summary: "The invited user declined, so the membership closed without becoming active.",
+      changeSummary,
+    };
+  }
+
+  if (input.action === SELLER_TEAM_AUDIT_ACTIONS.TEAM_MEMBER_ATTACH) {
+    return {
+      category: "MEMBERSHIP",
+      title: "Member attached directly",
+      tone: "emerald",
+      summary: "The user was attached as an operational member immediately, without invite waiting.",
+      changeSummary,
+    };
+  }
+
+  if (input.action === SELLER_TEAM_AUDIT_ACTIONS.TEAM_MEMBER_ROLE_CHANGE) {
+    return {
+      category: "ROLE",
+      title: "Role changed",
+      tone: "sky",
+      summary: "The membership role changed inside the same store boundary.",
+      changeSummary,
+    };
+  }
+
+  if (input.action === SELLER_TEAM_AUDIT_ACTIONS.TEAM_MEMBER_DISABLE) {
+    return {
+      category: "ACCESS",
+      title: "Member disabled",
+      tone: "amber",
+      summary: "Operational access was disabled while the membership row stayed recorded.",
+      changeSummary,
+    };
+  }
+
+  if (input.action === SELLER_TEAM_AUDIT_ACTIONS.TEAM_MEMBER_REACTIVATE) {
+    return {
+      category: "ACCESS",
+      title: "Member reactivated",
+      tone: "emerald",
+      summary: "Operational access was restored for the recorded membership row.",
+      changeSummary,
+    };
+  }
+
+  if (input.action === SELLER_TEAM_AUDIT_ACTIONS.TEAM_MEMBER_REMOVE) {
+    return {
+      category: "ACCESS",
+      title: "Member removed by store",
+      tone: "rose",
+      summary: "The store closed this membership row and removed seller access.",
+      changeSummary,
+    };
+  }
+
+  return {
+    category: "AUDIT",
+    title: input.action || "Recorded action",
+    tone: "stone",
+    summary:
+      input.targetSnapshot?.status
+        ? `Audit snapshot recorded for member status ${input.targetSnapshot.status}.`
+        : "Audit snapshot recorded for this team mutation.",
+    changeSummary,
   };
 }
 
@@ -291,6 +658,13 @@ function serializeTeamAuditRow(log: any) {
   const beforeState = parseAuditState(getAttr(log, "beforeState"));
   const afterState = parseAuditState(getAttr(log, "afterState"));
   const action = String(getAttr(log, "action") || "");
+  const targetSnapshot = serializeAuditSnapshot(beforeState, afterState, targetMember);
+  const readModel = buildAuditReadModel({
+    action,
+    beforeState,
+    afterState,
+    targetSnapshot,
+  });
 
   return {
     id: Number(getAttr(log, "id")),
@@ -302,10 +676,11 @@ function serializeTeamAuditRow(log: any) {
       memberId: targetMember ? Number(getAttr(targetMember, "id")) : null,
       roleCode: targetRole ? String(getAttr(targetRole, "code") || "") : null,
       roleName: targetRole ? String(getAttr(targetRole, "name") || "") : null,
-      snapshot: serializeAuditSnapshot(beforeState, afterState, targetMember),
+      snapshot: targetSnapshot,
     },
     beforeState,
     afterState,
+    readModel,
     createdAt: getAttr(log, "createdAt") || null,
   };
 }
@@ -978,6 +1353,10 @@ router.get(
             memberId: sellerAccess.memberId,
             storeRoleId: sellerAccess.storeRoleId,
             capabilities,
+            readModel: buildCurrentAccessReadModel({
+              sellerAccess,
+              capabilities,
+            }),
           },
           summary: {
             totalMembers: members.length,
@@ -995,12 +1374,20 @@ router.get(
           members: members.map((member) => {
             const serialized = serializeStoreMember(member) as any;
             const removedMeta = removedSourceMap.get(serialized.id);
-            return {
+            const memberWithLifecycle = {
               ...serialized,
               removedSource: removedMeta?.source || null,
               removedSourceLabel: getRemovedSourceLabel(removedMeta?.source),
               lastRemovalAction: removedMeta?.action || null,
-              governance: buildMemberGovernance({ sellerAccess, member }),
+            };
+            const governance = buildMemberGovernance({ sellerAccess, member });
+            return {
+              ...memberWithLifecycle,
+              governance,
+              readModel: buildMemberReadModel({
+                member: memberWithLifecycle,
+                governance,
+              }),
             };
           }),
           roles: serializedRoles,
@@ -1927,6 +2314,7 @@ router.get(
     try {
       const storeId = Number(req.params.storeId);
       const memberId = Number(req.params.memberId);
+      const sellerAccess = (req as any).sellerAccess;
 
       if (!Number.isInteger(memberId) || memberId <= 0) {
         return buildTeamMutationError(res, 400, "INVALID_MEMBER_ID", "Invalid member id.");
@@ -2006,11 +2394,26 @@ router.get(
       );
       const removedAction = removedHistoryMatch ? String(getAttr(removedHistoryMatch, "action") || "") : null;
       const removedSource = getRemovedSourceFromAction(removedAction);
+      const serializedMember = serializeStoreMember(member) as any;
+      const memberWithLifecycle = {
+        ...serializedMember,
+        removedSource,
+        removedSourceLabel: getRemovedSourceLabel(removedSource),
+        lastRemovalAction: removedAction,
+      };
+      const governance = buildMemberGovernance({ sellerAccess, member });
 
       return res.json({
         success: true,
         data: {
-          member: serializeStoreMember(member),
+          member: {
+            ...memberWithLifecycle,
+            governance,
+            readModel: buildMemberReadModel({
+              member: memberWithLifecycle,
+              governance,
+            }),
+          },
           statusContract: SELLER_TEAM_STATUS_CONTRACT,
           lifecycle: {
             invitedAt: getAttr(member, "invitedAt") || null,

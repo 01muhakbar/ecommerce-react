@@ -339,6 +339,73 @@ const normalizeOrderSummary = (order: any, fallback: any = {}) => {
   };
 };
 
+const normalizeReadModel = (readModel: any, fallback: any = {}) => {
+  const primaryStatus = normalizeFulfillmentStatus(
+    readModel?.primaryStatus?.code ?? fallback?.fulfillmentStatus
+  );
+  const paymentState = normalizeSuborderPaymentStatus(
+    readModel?.paymentState?.code ?? fallback?.paymentStatus
+  );
+  const parentOrder = normalizeOrderSummary(readModel?.parentOrder, fallback?.order);
+
+  return {
+    primaryStatus: {
+      code: primaryStatus,
+      label: normalizeText(readModel?.primaryStatus?.label) || buildFulfillmentMeta(primaryStatus).label,
+      description:
+        normalizeText(readModel?.primaryStatus?.description) ||
+        buildFulfillmentMeta(primaryStatus).description,
+      source: normalizeText(readModel?.primaryStatus?.source) || "SUBORDER.fulfillmentStatus",
+      scope: normalizeText(readModel?.primaryStatus?.scope) || "SELLER_SUBORDER",
+    },
+    paymentState: {
+      code: paymentState,
+      label: normalizeText(readModel?.paymentState?.label) || buildSuborderPaymentMeta(paymentState).label,
+      description:
+        normalizeText(readModel?.paymentState?.description) ||
+        buildSuborderPaymentMeta(paymentState).description,
+      source: normalizeText(readModel?.paymentState?.source) || "SUBORDER.paymentStatus",
+      scope: normalizeText(readModel?.paymentState?.scope) || "SELLER_SUBORDER",
+    },
+    parentOrder: {
+      ...parentOrder,
+      source: normalizeText(readModel?.parentOrder?.source) || "ORDER",
+      note:
+        normalizeText(readModel?.parentOrder?.note) ||
+        "Parent order lifecycle stays read-only in seller workspace.",
+    },
+    sellerScope: {
+      entity: normalizeText(readModel?.sellerScope?.entity) || "SUBORDER",
+      itemCount: asNumber(readModel?.sellerScope?.itemCount, asNumber(fallback?.itemCount, 0)),
+      subtotalAmount: asNumber(
+        readModel?.sellerScope?.subtotalAmount,
+        asNumber(fallback?.totals?.subtotalAmount, 0)
+      ),
+      shippingAmount: asNumber(
+        readModel?.sellerScope?.shippingAmount,
+        asNumber(fallback?.totals?.shippingAmount, 0)
+      ),
+      serviceFeeAmount: asNumber(
+        readModel?.sellerScope?.serviceFeeAmount,
+        asNumber(fallback?.totals?.serviceFeeAmount, 0)
+      ),
+      totalAmount: asNumber(
+        readModel?.sellerScope?.totalAmount,
+        asNumber(fallback?.totalAmount ?? fallback?.totals?.totalAmount, 0)
+      ),
+      itemScopeLabel:
+        normalizeText(readModel?.sellerScope?.itemScopeLabel) ||
+        "Item counts and totals only include this store-owned suborder.",
+      parentReferenceLabel:
+        normalizeText(readModel?.sellerScope?.parentReferenceLabel) ||
+        "Parent order lifecycle and payment remain read-only references.",
+    },
+    operationalNote:
+      normalizeText(readModel?.operationalNote) ||
+      "Use suborder payment readiness and seller fulfillment as the operational truth.",
+  };
+};
+
 const normalizeListItem = (item: any) => {
   if (!item || typeof item !== "object") return null;
   const paymentStatus = normalizeSuborderPaymentStatus(item.paymentStatus ?? item.paymentStatusMeta?.code);
@@ -349,6 +416,13 @@ const normalizeListItem = (item: any) => {
     id: item.orderId,
     orderNumber: item.orderNumber,
     checkoutMode: item.checkoutMode,
+  });
+  const readModel = normalizeReadModel(item.readModel, {
+    fulfillmentStatus,
+    paymentStatus,
+    order,
+    itemCount: item.itemCount,
+    totalAmount: item.totalAmount,
   });
 
   return {
@@ -363,11 +437,12 @@ const normalizeListItem = (item: any) => {
     paymentStatusMeta: buildSuborderPaymentMeta(paymentStatus),
     fulfillmentStatus,
     fulfillmentStatusMeta: buildFulfillmentMeta(fulfillmentStatus),
-    totalAmount: asNumber(item.totalAmount, 0),
-    itemCount: asNumber(item.itemCount, 0),
+    totalAmount: readModel.sellerScope.totalAmount,
+    itemCount: readModel.sellerScope.itemCount,
     createdAt: item.createdAt || null,
     buyer: normalizeBuyer(item.buyer),
     order,
+    readModel,
     scope: {
       storeId: asNumber(item.scope?.storeId ?? item.storeId, 0) || null,
       relationLabel:
@@ -387,13 +462,21 @@ const normalizeDetail = (detail: any) => {
   const fulfillmentStatus = normalizeFulfillmentStatus(
     detail.fulfillmentStatus ?? detail.fulfillmentStatusMeta?.code
   );
+  const order = normalizeOrderSummary(detail.order);
+  const readModel = normalizeReadModel(detail.readModel, {
+    fulfillmentStatus,
+    paymentStatus,
+    order,
+    totals: detail.totals,
+  });
 
   return {
     ...detail,
     suborderId: asNumber(detail.suborderId, 0),
     suborderNumber: normalizeText(detail.suborderNumber) || "-",
     storeId: asNumber(detail.storeId, 0),
-    order: normalizeOrderSummary(detail.order),
+    order,
+    readModel,
     scope: {
       storeId: asNumber(detail.scope?.storeId ?? detail.storeId, 0) || null,
       relationLabel:
@@ -413,10 +496,10 @@ const normalizeDetail = (detail: any) => {
     fulfillmentStatus,
     fulfillmentStatusMeta: buildFulfillmentMeta(fulfillmentStatus),
     totals: {
-      subtotalAmount: asNumber(detail.totals?.subtotalAmount, 0),
-      shippingAmount: asNumber(detail.totals?.shippingAmount, 0),
-      serviceFeeAmount: asNumber(detail.totals?.serviceFeeAmount, 0),
-      totalAmount: asNumber(detail.totals?.totalAmount, 0),
+      subtotalAmount: readModel.sellerScope.subtotalAmount,
+      shippingAmount: readModel.sellerScope.shippingAmount,
+      serviceFeeAmount: readModel.sellerScope.serviceFeeAmount,
+      totalAmount: readModel.sellerScope.totalAmount,
     },
     paidAt: detail.paidAt || null,
     createdAt: detail.createdAt || null,

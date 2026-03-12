@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from "express";
-import { Op } from "sequelize";
+import { Op, QueryTypes } from "sequelize";
 import {
   createOrderSchema,
   reviewCreateSchema,
@@ -354,6 +354,8 @@ const toProductListItem = (product: any) => {
     id: plain?.id,
     name: plain?.name,
     slug: plain?.slug,
+    routeSlug: plain?.slug || null,
+    productHref: plain?.slug ? `/product/${encodeURIComponent(String(plain.slug))}` : null,
     price,
     originalPrice,
     salePrice: hasDiscount ? Number(salePrice) : null,
@@ -368,6 +370,149 @@ const toProductListItem = (product: any) => {
     status: plain?.status,
     published: plain?.published,
     updatedAt: plain?.updatedAt,
+  };
+};
+
+const toText = (value: any, fallback = "") => {
+  const normalized = String(value ?? "").trim();
+  return normalized || fallback;
+};
+
+const toPreferredWhatsAppLink = (preferredValue: any) => {
+  const preferred = toText(preferredValue);
+  if (!preferred) return "";
+
+  const lowered = preferred.toLowerCase();
+  if (
+    lowered.startsWith("https://wa.me/") ||
+    lowered.startsWith("https://api.whatsapp.com/")
+  ) {
+    return preferred;
+  }
+
+  const digits = preferred.replace(/\D+/g, "");
+  if (!digits) return "";
+  return `https://wa.me/${digits}`;
+};
+
+const serializePublicSellerInfo = async (store: any) => {
+  if (!store) return null;
+
+  const readStoreAttr = (key: string) => getAttr(store, key) ?? store?.[key];
+  const storeId = Number(readStoreAttr("id") || 0);
+  const storeSlug = toText(readStoreAttr("slug"));
+  const storeWhatsApp = toPreferredWhatsAppLink(readStoreAttr("whatsapp"));
+  const storePhone = toText(readStoreAttr("phone"));
+  const storeEmail = toText(readStoreAttr("email"));
+
+  let productCount: number | null = null;
+  let ratingAverage: number | null = null;
+  let ratingCount = 0;
+
+  if (storeId > 0) {
+    productCount = await Product.count({
+      where: {
+        storeId,
+        status: "active",
+        isPublished: { [Op.in]: [1, true] },
+      } as any,
+    });
+
+    const rows = (await sequelize.query(
+      `
+        SELECT
+          ROUND(AVG(pr.rating), 1) AS ratingAverage,
+          COUNT(pr.id) AS ratingCount
+        FROM product_reviews pr
+        INNER JOIN products p ON p.id = pr.product_id
+        WHERE p.store_id = :storeId
+          AND p.status = 'active'
+          AND p.published IN (1, true)
+      `,
+      {
+        replacements: { storeId },
+        type: QueryTypes.SELECT,
+      }
+    )) as Array<{ ratingAverage?: number | string | null; ratingCount?: number | string | null }>;
+
+    const aggregate = rows[0] || {};
+    const parsedRatingAverage = toNumber(aggregate.ratingAverage);
+    ratingAverage =
+      Number.isFinite(Number(parsedRatingAverage)) && Number(parsedRatingAverage) > 0
+        ? Number(Number(parsedRatingAverage).toFixed(1))
+        : null;
+    ratingCount = Math.max(0, Math.round(toSafeNumber(aggregate.ratingCount, 0)));
+  }
+
+  const canVisitStore = Boolean(storeSlug);
+  const hasContactFallback = canVisitStore && Boolean(storePhone || storeEmail);
+  const chatMode = storeWhatsApp
+    ? "enabled"
+    : hasContactFallback
+      ? "contact_fallback"
+      : "disabled";
+
+  return {
+    storeId: storeId || null,
+    name: toText(readStoreAttr("name"), "Store"),
+    slug: storeSlug,
+    logoUrl: toText(readStoreAttr("logoUrl")) || null,
+    shortDescription: toText(readStoreAttr("description")) || null,
+    status: {
+      code: toText(readStoreAttr("status"), "ACTIVE"),
+      label:
+        toText(readStoreAttr("status"), "ACTIVE").toUpperCase() === "ACTIVE"
+          ? "Active store"
+          : "Store unavailable",
+      tone:
+        toText(readStoreAttr("status"), "ACTIVE").toUpperCase() === "ACTIVE"
+          ? "success"
+          : "neutral",
+    },
+    productCount,
+    ratingAverage,
+    ratingCount,
+    followerCount: null,
+    responseRate: null,
+    responseTimeLabel: null,
+    joinedAt: readStoreAttr("createdAt") || null,
+    canVisitStore,
+    visitStoreHref: canVisitStore ? `/store/${encodeURIComponent(storeSlug)}` : null,
+    canChat: chatMode !== "disabled",
+    chatMode,
+    chatHref:
+      chatMode === "enabled"
+        ? storeWhatsApp
+        : hasContactFallback
+          ? `/store/${encodeURIComponent(storeSlug)}`
+          : null,
+    chatLabel:
+      chatMode === "enabled"
+        ? "Chat Toko"
+        : hasContactFallback
+          ? "Hubungi Toko"
+          : "Chat segera hadir",
+    chatHelper:
+      chatMode === "enabled"
+        ? "Opens the store WhatsApp contact in a new tab."
+        : hasContactFallback
+          ? "Store contact details are currently shown on the public store page."
+          : "Direct seller chat is not available in this storefront yet.",
+    publicContact: {
+      phone: storePhone || null,
+      email: storeEmail || null,
+      whatsapp: storeWhatsApp || null,
+    },
+    contract: {
+      sourceOfTruth: "STORE",
+      productCountScope: "PUBLIC_ACTIVE_PUBLISHED_PRODUCTS",
+      ratingScope: "PUBLIC_PRODUCT_REVIEWS_FOR_THIS_STORE",
+      notes: [
+        "Only public-safe store identity is exposed in the PDP seller card.",
+        "Follower, response rate, and response speed remain null until a validated source of truth exists.",
+        "Chat CTA uses WhatsApp when the store has a public WhatsApp contact. Otherwise it falls back to the public store page when contact details are available there.",
+      ],
+    },
   };
 };
 
@@ -593,19 +738,45 @@ router.get(
           "id",
           "name",
           "slug",
+          "sku",
           "price",
           "salePrice",
           "stock",
           "description",
+          "storeId",
           "categoryId",
           "status",
           "isPublished",
+          "preOrder",
+          "preorderDays",
+          "weight",
+          "condition",
+          "variations",
           "promoImagePath",
           "imagePaths",
           "tags",
           "updatedAt",
         ],
-        include: [{ model: Category, as: "category", attributes: ["id", "name", "code"] }],
+        include: [
+          { model: Category, as: "category", attributes: ["id", "name", "code"] },
+          {
+            model: Store,
+            as: "store",
+            attributes: [
+              "id",
+              "name",
+              "slug",
+              "status",
+              "description",
+              "logoUrl",
+              "phone",
+              "email",
+              "whatsapp",
+              "createdAt",
+            ],
+            required: false,
+          },
+        ],
       });
       if (process.env.NODE_ENV !== "production" && !isNumeric) {
         console.debug("[store/products/:id] lookup by slug", rawParam);
@@ -674,12 +845,14 @@ router.get(
         ratingAvg: stats.ratingAvg ?? 0,
         reviewCount: stats.reviewCount ?? 0,
       };
+      const sellerInfo = await serializePublicSellerInfo(productPlain?.store ?? null);
 
       res.json({
         data: {
           ...toProductListItem(productWithStats),
           description: productPlain?.description ?? null,
           reviews: detailedReviews,
+          sellerInfo,
         },
       });
     } catch (error) {

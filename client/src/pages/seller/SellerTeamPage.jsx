@@ -58,6 +58,24 @@ function getInvitationHint(member) {
   );
 }
 
+function getRoleMeaning(member) {
+  return (
+    member?.readModel?.primaryRole?.summary ||
+    member?.role?.description ||
+    "Seller role snapshot"
+  );
+}
+
+function getLifecycleMeaning(member) {
+  return (
+    member?.readModel?.lifecycle?.summary ||
+    (member?.status === "REMOVED"
+      ? getRemovedSourceHint(member)
+      : getInvitationHint(member) || member?.statusMeta?.description) ||
+    "Operational team status"
+  );
+}
+
 export default function SellerTeamPage() {
   const { storeId } = useParams();
   const queryClient = useQueryClient();
@@ -443,8 +461,8 @@ export default function SellerTeamPage() {
     <div className="space-y-6">
       <SellerWorkspaceSectionHeader
         eyebrow="Seller Team"
-        title="Team mutation and invite lanes are active"
-        description="This page supports direct attach, first-time invite, removed-member re-invite, expired-invite re-issue, and operational remove. Remove closes an active or disabled membership with REMOVED while preserving the row for a future re-invite. Email automation, restore-general flow, owner transfer, and advanced lifecycle actions remain closed."
+        title="Seller team governance overview"
+        description="This page explains who owns the store, which memberships are active, how lifecycle states work, and which team actions are open for the current actor in this tenant-scoped store."
         actions={[
           <SellerWorkspaceBadge
             key="access-mode"
@@ -474,17 +492,25 @@ export default function SellerTeamPage() {
           label="Current Access"
           value={team?.currentAccess?.membershipStatus || "-"}
           hint={
-            team?.summary?.hasVirtualOwnerBridge
+            team?.currentAccess?.readModel?.authority?.label ||
+            (team?.summary?.hasVirtualOwnerBridge
               ? "Owner bridge is still virtual for this store."
-              : "Resolved from active store membership."
+              : "Resolved from active store membership.")
           }
           Icon={ShieldCheck}
           tone="emerald"
         />
         <SellerWorkspaceStatCard
           label="Current Role"
-          value={team?.currentAccess?.roleCode || "-"}
-          hint="Resolved by the backend seller access layer."
+          value={
+            team?.currentAccess?.readModel?.primaryRole?.label ||
+            team?.currentAccess?.roleCode ||
+            "-"
+          }
+          hint={
+            team?.currentAccess?.readModel?.primaryRole?.summary ||
+            "Resolved by the backend seller access layer."
+          }
           Icon={UserRound}
         />
         <SellerWorkspaceStatCard
@@ -516,12 +542,15 @@ export default function SellerTeamPage() {
                 Membership Status
               </dt>
               <dd className="mt-2 text-base font-semibold text-slate-900">
-                {team?.currentAccess?.membershipStatus || "-"}
+                {team?.currentAccess?.readModel?.authority?.label ||
+                  team?.currentAccess?.membershipStatus ||
+                  "-"}
               </dd>
               <p className="mt-2 text-xs text-slate-500">
-                {teamCapabilities.canInviteMembers || teamCapabilities.canAttachMembers
-                  ? "This actor can open the current phase-1 member mutation lanes."
-                  : "This actor can observe the team shell, but mutation lanes stay closed."}
+                {team?.currentAccess?.readModel?.authority?.description ||
+                  (teamCapabilities.canInviteMembers || teamCapabilities.canAttachMembers
+                    ? "This actor can open the current phase-1 member mutation lanes."
+                    : "This actor can observe the team shell, but mutation lanes stay closed.")}
               </p>
             </SellerWorkspaceInset>
             <SellerWorkspaceInset className="px-4 py-4">
@@ -531,6 +560,9 @@ export default function SellerTeamPage() {
               <dd className="mt-2 text-base font-semibold text-slate-900">
                 {team?.currentAccess?.memberId ?? "Virtual owner"}
               </dd>
+              <p className="mt-2 text-xs text-slate-500">
+                {team?.currentAccess?.readModel?.membershipBoundary || "Current access boundary."}
+              </p>
             </SellerWorkspaceInset>
           </dl>
 
@@ -770,15 +802,24 @@ export default function SellerTeamPage() {
                     ) : (
                       <>
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-medium text-slate-900">{member.roleName || member.roleCode || "-"}</p>
+                          <p className="font-medium text-slate-900">
+                            {member.readModel?.primaryRole?.label ||
+                              member.roleName ||
+                              member.roleCode ||
+                              "-"}
+                          </p>
                           {member.roleCode ? (
                             <SellerWorkspaceBadge label={member.roleCode} tone="stone" />
                           ) : null}
+                          {member.readModel?.primaryRole?.category ? (
+                            <SellerWorkspaceBadge
+                              label={member.readModel.primaryRole.category}
+                              tone={member.readModel.primaryRole.tone || "stone"}
+                            />
+                          ) : null}
                         </div>
                         <p className="mt-1 text-xs text-slate-500">
-                          {member.role?.permissionKeys?.length
-                            ? `${member.role.permissionKeys.length} permission keys in this role snapshot`
-                            : "Current seller role snapshot"}
+                          {getRoleMeaning(member)}
                         </p>
                       </>
                     )}
@@ -789,12 +830,13 @@ export default function SellerTeamPage() {
                       tone={statusTone(member.status)}
                     />
                     <p className="mt-2 text-xs text-slate-500">
-                      {member.status === "REMOVED"
-                        ? getRemovedSourceHint(member)
-                        : getInvitationHint(member) ||
-                          member.statusMeta?.description ||
-                          "Operational team status"}
+                      {getLifecycleMeaning(member)}
                     </p>
+                    {member.readModel?.lifecycle?.nextStep ? (
+                      <p className="mt-2 text-xs font-medium text-slate-500">
+                        {member.readModel.lifecycle.nextStep}
+                      </p>
+                    ) : null}
                     {member.status === "INVITED" && member.invitation?.expiresAt ? (
                       <p className="mt-2 text-xs font-medium text-slate-500">
                         Expires {formatDate(member.invitation.expiresAt)}
@@ -861,7 +903,8 @@ export default function SellerTeamPage() {
                         </button>
                       ) : (
                         <span className="text-xs text-slate-400">
-                          {member.governance?.restrictionReason ||
+                          {member.readModel?.authority?.label ||
+                            member.governance?.restrictionReason ||
                             (member.status === "INVITED"
                               ? member.invitation?.state === "EXPIRED"
                                 ? "Invitation expired"

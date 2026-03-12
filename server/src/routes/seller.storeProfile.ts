@@ -76,15 +76,15 @@ const storeProfileFieldMatrix: StoreProfileFieldContract[] = [
   {
     key: "name",
     label: "Store Name",
-    storefrontUsage: STOREFRONT_USAGE.OPERATIONAL_CLIENT,
+    storefrontUsage: STOREFRONT_USAGE.PUBLIC_STOREFRONT,
     notes:
-      "Used as store identity in seller, account, invitation, and checkout grouping flows. Public marketing pages still use store customization data.",
+      "Authoritative public store identity for microsite, public identity endpoint, and marketplace header branding.",
   },
   {
     key: "slug",
     label: "Slug",
-    storefrontUsage: STOREFRONT_USAGE.OPERATIONAL_CLIENT,
-    notes: "Used in operational store references and summaries, not as a dedicated public profile block.",
+    storefrontUsage: STOREFRONT_USAGE.PUBLIC_STOREFRONT,
+    notes: "Public store identifier used for /store/:slug microsite routing and store identity lookup.",
   },
   {
     key: "status",
@@ -95,14 +95,16 @@ const storeProfileFieldMatrix: StoreProfileFieldContract[] = [
   {
     key: "description",
     label: "Description",
-    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
-    notes: "Current public storefront pages do not read Store.description yet.",
+    storefrontUsage: STOREFRONT_USAGE.PUBLIC_STOREFRONT,
+    notes:
+      "Used by public store identity and as the fallback body for microsite rich-about content when customization is empty.",
   },
   {
     key: "logoUrl",
     label: "Logo URL",
-    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
-    notes: "Storefront header currently reads customization.headerLogoUrl instead of Store.logoUrl.",
+    storefrontUsage: STOREFRONT_USAGE.PUBLIC_STOREFRONT,
+    notes:
+      "Used by public store identity and preferred by the marketplace header before customization headerLogoUrl fallback.",
   },
   {
     key: "bannerUrl",
@@ -113,20 +115,23 @@ const storeProfileFieldMatrix: StoreProfileFieldContract[] = [
   {
     key: "email",
     label: "Email",
-    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
-    notes: "Contact page currently reads customization.contactUs.emailBox.email instead of Store.email.",
+    storefrontUsage: STOREFRONT_USAGE.PUBLIC_STOREFRONT,
+    notes:
+      "Used by store microsite contact blocks and preferred by the marketplace contact page over customization email fallback.",
   },
   {
     key: "phone",
     label: "Phone",
-    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
-    notes: "Header and contact sections currently read customization-managed phone fields.",
+    storefrontUsage: STOREFRONT_USAGE.PUBLIC_STOREFRONT,
+    notes:
+      "Used by store microsite contact blocks and preferred by marketplace header/contact surfaces before customization phone fallback.",
   },
   {
     key: "whatsapp",
     label: "WhatsApp",
-    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
-    notes: "Header currently reads customization.whatsAppLink instead of Store.whatsapp.",
+    storefrontUsage: STOREFRONT_USAGE.PUBLIC_STOREFRONT,
+    notes:
+      "Used by store microsite contact blocks and preferred by marketplace header before customization WhatsApp fallback.",
   },
   {
     key: "websiteUrl",
@@ -149,38 +154,39 @@ const storeProfileFieldMatrix: StoreProfileFieldContract[] = [
   {
     key: "addressLine1",
     label: "Address Line 1",
-    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
-    notes: "Contact page address still comes from store customization, not Store address fields.",
+    storefrontUsage: STOREFRONT_USAGE.PUBLIC_STOREFRONT,
+    notes:
+      "Rendered on the store microsite address block. Marketplace contact page address remains admin customization-owned.",
   },
   {
     key: "addressLine2",
     label: "Address Line 2",
-    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
-    notes: "Stored for seller identity but not surfaced in current storefront pages.",
+    storefrontUsage: STOREFRONT_USAGE.PUBLIC_STOREFRONT,
+    notes: "Rendered with the store microsite address block when present.",
   },
   {
     key: "city",
     label: "City",
-    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
-    notes: "Stored for seller identity but not surfaced in current storefront pages.",
+    storefrontUsage: STOREFRONT_USAGE.PUBLIC_STOREFRONT,
+    notes: "Rendered with the store microsite address block when present.",
   },
   {
     key: "province",
     label: "Province",
-    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
-    notes: "Stored for seller identity but not surfaced in current storefront pages.",
+    storefrontUsage: STOREFRONT_USAGE.PUBLIC_STOREFRONT,
+    notes: "Rendered with the store microsite address block when present.",
   },
   {
     key: "postalCode",
     label: "Postal Code",
-    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
-    notes: "Stored for seller identity but not surfaced in current storefront pages.",
+    storefrontUsage: STOREFRONT_USAGE.PUBLIC_STOREFRONT,
+    notes: "Rendered with the store microsite address block when present.",
   },
   {
     key: "country",
     label: "Country",
-    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
-    notes: "Stored for seller identity but not surfaced in current storefront pages.",
+    storefrontUsage: STOREFRONT_USAGE.PUBLIC_STOREFRONT,
+    notes: "Rendered with the store microsite address block when present.",
   },
   {
     key: "createdAt",
@@ -352,8 +358,9 @@ const buildStoreProfileContract = () => {
   return {
     notes: [
       "Backend seller profile remains the source of truth for editable fields.",
-      "Current public storefront pages still read header, contact, and content blocks from store customization instead of seller store profile fields.",
-      "Operational client flows still read limited store identity fields such as name, slug, and status.",
+      "Store identity, microsite contact, and public identity surfaces read seller-owned Store fields directly.",
+      "Marketplace header copy, marketplace contact-page layout, and store microsite rich-about content remain customization-managed.",
+      "Marketplace header phone, WhatsApp, and logo now prefer seller-owned Store fields before customization fallback.",
     ],
     categories: {
       editableFields: [...editableStoreProfileFields],

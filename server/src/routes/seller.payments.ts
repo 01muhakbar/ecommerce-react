@@ -14,6 +14,12 @@ import {
 } from "../models/index.js";
 import { recalculateParentOrderPaymentStatus } from "../services/orderPaymentAggregation.service.js";
 import { appendPaymentStatusLog } from "../services/paymentStatusLog.service.js";
+import { SELLER_ROLE_CODES } from "../services/seller/permissionMap.js";
+import {
+  listSellerAccessContexts,
+  resolveSellerAccess,
+  sellerHasPermission,
+} from "../services/seller/resolveSellerAccess.js";
 
 const router = Router();
 
@@ -28,6 +34,10 @@ const ALLOWED_PAYMENT_FILTERS = new Set([
   "REJECTED",
   "UNPAID",
 ]);
+const LEGACY_PAYMENT_REVIEW_REQUIRED_PERMISSIONS = [
+  "ORDER_VIEW",
+  "PAYMENT_STATUS_VIEW",
+] as const;
 
 const getAuthUser = (req: any) => {
   const userId = Number(req?.user?.id);
@@ -43,6 +53,131 @@ const getAttr = (row: any, key: string) =>
 const toNumber = (value: any, fallback = 0) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const isValidPositiveInt = (value: unknown) => Number.isInteger(Number(value)) && Number(value) > 0;
+
+const sendSellerAccessError = (
+  res: any,
+  payload: {
+    status: number;
+    code: string;
+    message: string;
+    extras?: Record<string, unknown>;
+  }
+) =>
+  res.status(payload.status).json({
+    success: false,
+    code: payload.code,
+    message: payload.message,
+    ...(payload.extras || {}),
+  });
+
+const canAccessLegacySellerPaymentReview = (access: any) => {
+  const hasRequiredPermissions = LEGACY_PAYMENT_REVIEW_REQUIRED_PERMISSIONS.every((permission) =>
+    sellerHasPermission(access, permission)
+  );
+
+  if (!hasRequiredPermissions) return false;
+  return (
+    Boolean(access?.isOwner) || String(access?.roleCode || "") === SELLER_ROLE_CODES.STORE_ADMIN
+  );
+};
+
+const resolveLegacySellerPaymentReviewAccess = async (input: {
+  userId: number | null;
+  requestedStoreId?: unknown;
+}) => {
+  const userId = Number(input.userId);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return {
+      ok: false as const,
+      status: 401,
+      code: "UNAUTHORIZED",
+      message: "Unauthorized",
+    };
+  }
+
+  if (input.requestedStoreId !== undefined && input.requestedStoreId !== null && input.requestedStoreId !== "") {
+    const requestedStoreId = Number(input.requestedStoreId);
+    if (!Number.isInteger(requestedStoreId) || requestedStoreId <= 0) {
+      return {
+        ok: false as const,
+        status: 400,
+        code: "INVALID_STORE_ID",
+        message: "Invalid store id.",
+      };
+    }
+
+    const accessResult = await resolveSellerAccess({
+      storeId: requestedStoreId,
+      userId,
+    });
+    if (!accessResult.ok) {
+      return accessResult;
+    }
+
+    if (!canAccessLegacySellerPaymentReview(accessResult.data)) {
+      return {
+        ok: false as const,
+        status: 403,
+        code: "SELLER_PAYMENT_REVIEW_FORBIDDEN",
+        message: "You do not have permission to access seller payment review for this store.",
+      };
+    }
+
+    return {
+      ok: true as const,
+      data: accessResult.data,
+    };
+  }
+
+  const accessContexts = await listSellerAccessContexts({
+    userId,
+    requiredPermissions: [...LEGACY_PAYMENT_REVIEW_REQUIRED_PERMISSIONS],
+  });
+  const eligibleAccessContexts = accessContexts.filter(canAccessLegacySellerPaymentReview);
+
+  if (eligibleAccessContexts.length === 0) {
+    return {
+      ok: false as const,
+      status: 403,
+      code: "SELLER_PAYMENT_REVIEW_FORBIDDEN",
+      message: "You do not have permission to access seller payment review.",
+    };
+  }
+
+  const ownerAccess = eligibleAccessContexts.find((access) => access.isOwner);
+  if (ownerAccess) {
+    return {
+      ok: true as const,
+      data: ownerAccess,
+    };
+  }
+
+  if (eligibleAccessContexts.length === 1) {
+    return {
+      ok: true as const,
+      data: eligibleAccessContexts[0],
+    };
+  }
+
+  return {
+    ok: false as const,
+    status: 409,
+    code: "SELLER_STORE_SCOPE_REQUIRED",
+    message:
+      "Multiple seller stores are available for this account. Select one store scope before opening this legacy payment review route.",
+    extras: {
+      stores: eligibleAccessContexts.map((access) => ({
+        id: Number(access.store?.id || access.storeId || 0) || null,
+        name: String(access.store?.name || ""),
+        slug: String(access.store?.slug || ""),
+        roleCode: String(access.roleCode || ""),
+        isOwner: Boolean(access.isOwner),
+      })),
+    },
+  };
 };
 
 const normalizeProofSummary = (proofs: any[]) => {
@@ -269,29 +404,26 @@ router.get("/suborders", async (req, res) => {
   try {
     const authUser = getAuthUser(req);
     if (!authUser.id) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
-    }
-
-    const store = await Store.findOne({
-      where: { ownerUserId: authUser.id },
-      attributes: ["id", "ownerUserId", "name", "slug", "status"],
-    });
-
-    if (!store) {
-      return res.json({
-        success: true,
-        data: {
-          store: null,
-          items: [],
-          filters: normalizeStatuses(req.query.paymentStatus),
-        },
+      return sendSellerAccessError(res, {
+        status: 401,
+        code: "UNAUTHORIZED",
+        message: "Unauthorized",
       });
     }
 
+    const accessResult = await resolveLegacySellerPaymentReviewAccess({
+      userId: authUser.id,
+      requestedStoreId: req.query.storeId,
+    });
+    if (!accessResult.ok) {
+      return sendSellerAccessError(res, accessResult);
+    }
+
     const statuses = normalizeStatuses(req.query.paymentStatus);
+    const scopedStoreId = Number(accessResult.data.store.id);
     const items = await Suborder.findAll({
       where: {
-        storeId: Number(getAttr(store, "id")),
+        storeId: scopedStoreId,
         paymentStatus: { [Op.in]: statuses },
       },
       attributes: [
@@ -313,10 +445,10 @@ router.get("/suborders", async (req, res) => {
       success: true,
       data: {
         store: {
-          id: toNumber(getAttr(store, "id")),
-          name: String(getAttr(store, "name") || ""),
-          slug: String(getAttr(store, "slug") || ""),
-          status: String(getAttr(store, "status") || "ACTIVE"),
+          id: toNumber(accessResult.data.store.id),
+          name: String(accessResult.data.store.name || ""),
+          slug: String(accessResult.data.store.slug || ""),
+          status: String(accessResult.data.store.status || "ACTIVE"),
         },
         filters: statuses,
         items: items.map(serializeSellerSuborder),
@@ -335,18 +467,27 @@ router.patch("/payments/:paymentId/review", async (req, res) => {
   try {
     const authUser = getAuthUser(req);
     if (!authUser.id) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
+      return sendSellerAccessError(res, {
+        status: 401,
+        code: "UNAUTHORIZED",
+        message: "Unauthorized",
+      });
     }
 
     const paymentId = Number(req.params.paymentId);
     if (!Number.isFinite(paymentId) || paymentId <= 0) {
-      return res.status(400).json({ success: false, message: "Invalid payment id." });
+      return sendSellerAccessError(res, {
+        status: 400,
+        code: "INVALID_PAYMENT_ID",
+        message: "Invalid payment id.",
+      });
     }
 
     const parsed = reviewSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
       return res.status(400).json({
         success: false,
+        code: "INVALID_REVIEW_PAYLOAD",
         message: "Invalid review payload.",
         errors: parsed.error.flatten(),
       });
@@ -354,22 +495,60 @@ router.patch("/payments/:paymentId/review", async (req, res) => {
 
     const payment = await loadSellerPayment(paymentId);
     if (!payment) {
-      return res.status(404).json({ success: false, message: "Payment not found." });
+      return sendSellerAccessError(res, {
+        status: 404,
+        code: "PAYMENT_NOT_FOUND",
+        message: "Payment not found.",
+      });
     }
 
     const paymentStore = (payment as any)?.store ?? payment?.get?.("store") ?? null;
-    const storeOwnerUserId = toNumber(getAttr(paymentStore, "ownerUserId"), 0);
-    if (storeOwnerUserId !== authUser.id) {
-      return res.status(403).json({
-        success: false,
-        message: "You do not have access to review this payment.",
+    const suborder = (payment as any)?.suborder ?? payment?.get?.("suborder") ?? null;
+    const paymentStoreId = toNumber(getAttr(paymentStore, "id"), 0);
+    const suborderStoreId = toNumber(getAttr(suborder, "storeId"), 0);
+    const scopedStoreId = suborderStoreId || paymentStoreId;
+
+    if (!isValidPositiveInt(scopedStoreId)) {
+      return sendSellerAccessError(res, {
+        status: 404,
+        code: "SELLER_PAYMENT_SCOPE_NOT_FOUND",
+        message: "This payment is not linked to a valid seller store scope.",
+      });
+    }
+
+    if (
+      isValidPositiveInt(paymentStoreId) &&
+      isValidPositiveInt(suborderStoreId) &&
+      paymentStoreId !== suborderStoreId
+    ) {
+      return sendSellerAccessError(res, {
+        status: 409,
+        code: "SELLER_PAYMENT_SCOPE_MISMATCH",
+        message: "Payment scope is inconsistent and cannot be reviewed safely.",
+      });
+    }
+
+    const accessResult = await resolveSellerAccess({
+      storeId: scopedStoreId,
+      userId: authUser.id,
+    });
+    if (!accessResult.ok) {
+      return sendSellerAccessError(res, accessResult);
+    }
+
+    if (!canAccessLegacySellerPaymentReview(accessResult.data)) {
+      return sendSellerAccessError(res, {
+        status: 403,
+        code: "SELLER_PAYMENT_REVIEW_FORBIDDEN",
+        message: "You do not have permission to review seller payments for this store.",
       });
     }
 
     const currentStatus = String(getAttr(payment, "status") || "CREATED").toUpperCase();
     if (currentStatus !== "PENDING_CONFIRMATION") {
-      return res.status(409).json({
-        success: false,
+      return sendSellerAccessError(res, {
+        status: 409,
+        code: "PAYMENT_REVIEW_STATUS_INVALID",
         message: "Payment review can only be processed while status is PENDING_CONFIRMATION.",
       });
     }
@@ -377,14 +556,16 @@ router.patch("/payments/:paymentId/review", async (req, res) => {
     const paymentProofs = ((payment as any)?.proofs ?? payment?.get?.("proofs") ?? []) as any[];
     const latestProof = normalizeProofSummary(paymentProofs);
     if (!latestProof) {
-      return res.status(409).json({
-        success: false,
+      return sendSellerAccessError(res, {
+        status: 409,
+        code: "PAYMENT_PROOF_REQUIRED",
         message: "Payment proof is required before review.",
       });
     }
     if (String(latestProof.reviewStatus || "PENDING").toUpperCase() !== "PENDING") {
-      return res.status(409).json({
-        success: false,
+      return sendSellerAccessError(res, {
+        status: 409,
+        code: "PAYMENT_PROOF_ALREADY_REVIEWED",
         message: "This payment proof has already been reviewed.",
       });
     }
@@ -396,7 +577,6 @@ router.patch("/payments/:paymentId/review", async (req, res) => {
         return rightTime - leftTime;
       })[0];
 
-    const suborder = (payment as any)?.suborder ?? payment?.get?.("suborder") ?? null;
     const orderId = toNumber(getAttr(suborder, "orderId"), 0);
     const now = new Date();
     const reviewNote = String(parsed.data.note || "").trim() || null;

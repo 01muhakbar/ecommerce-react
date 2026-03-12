@@ -43,26 +43,73 @@ const normalizeProductStatus = (value: unknown) => {
   return allowedStatuses.has(normalized) ? normalized : "draft";
 };
 
+const buildCatalogReadContract = () => ({
+  sourceOfTruth: {
+    tenantScope: "Product.storeId",
+    status: "Product.status",
+    publishFlag: "Product.isPublished",
+    storefrontVisibility: "Product.isPublished === true && Product.status === active",
+  },
+  supportedStatuses: ["active", "inactive", "draft"],
+  notes: [
+    "Seller catalog stays store-scoped through Product.storeId.",
+    "Current public storefront queries only gate product visibility by publish flag and active status.",
+    "Stock, pre-order, category publish state, and store status are not currently used as storefront visibility gates in product queries.",
+  ],
+});
+
 const serializeProductStatus = (status: string) => ({
   code: status,
   label: status === "active" ? "Active" : status === "inactive" ? "Inactive" : "Draft",
   storefrontEligible: status === "active",
+  operationalMeaning:
+    status === "active"
+      ? "Product is operationally active and can become public when publish is on."
+      : status === "inactive"
+        ? "Product stays attached to the store but is blocked from public storefront queries."
+        : "Product is still draft and blocked from public storefront queries.",
 });
 
 const serializeProductVisibility = (isPublished: boolean, status: string) => {
   const storefrontVisible = isPublished && status === "active";
+  const blockingSignals = [];
+
+  if (!isPublished) {
+    blockingSignals.push("PUBLISH_OFF");
+  }
+  if (status !== "active") {
+    blockingSignals.push("STATUS_NOT_ACTIVE");
+  }
+
+  const stateCode = !isPublished
+    ? "INTERNAL_ONLY"
+    : storefrontVisible
+      ? "STOREFRONT_VISIBLE"
+      : "PUBLISHED_BLOCKED";
 
   return {
     isPublished,
     storefrontVisible,
+    stateCode,
     label: isPublished ? "Published" : "Private",
     publishLabel: isPublished ? "Published" : "Private",
+    sellerLabel: !isPublished
+      ? "Private to seller and admin"
+      : storefrontVisible
+        ? "Visible in storefront"
+        : "Published but blocked",
     storefrontLabel: storefrontVisible ? "Visible in storefront" : "Hidden from storefront",
     storefrontReason: !isPublished
-      ? "Publish flag is off, so this product stays internal to admin and seller views."
+      ? "Public storefront queries exclude this product because the publish flag is off."
       : storefrontVisible
-        ? "Storefront can surface this product because publish is on and status is active."
-        : "Publish is on, but the product status must be active before storefront can surface it.",
+        ? "Public storefront queries include this product because publish is on and status is active."
+        : "Publish is on, but public storefront queries still exclude this product until status becomes active.",
+    sellerHint: !isPublished
+      ? "Seller can still review this product here, but customers cannot see it yet."
+      : storefrontVisible
+        ? "Seller and customer views are aligned for visibility."
+        : "Seller can review this product here, but customers will not see it until status becomes active.",
+    blockingSignals,
     reasonCode: !isPublished
       ? "UNPUBLISHED"
       : storefrontVisible
@@ -70,6 +117,42 @@ const serializeProductVisibility = (isPublished: boolean, status: string) => {
         : "STATUS_NOT_ACTIVE",
   };
 };
+
+const serializeProductAvailability = (
+  stock: number,
+  options: { preOrder?: boolean; preorderDays?: number | null } = {}
+) => {
+  const preOrder = Boolean(options.preOrder);
+  const preorderDays = options.preorderDays || null;
+  const inStock = stock > 0;
+  const stateCode = preOrder
+    ? "PREORDER"
+    : inStock
+      ? "IN_STOCK"
+      : "OUT_OF_STOCK";
+
+  return {
+    stock,
+    inStock,
+    preOrder,
+    preorderDays,
+    stateCode,
+    label: preOrder
+      ? `Pre-order${preorderDays ? ` (${preorderDays} day${preorderDays === 1 ? "" : "s"})` : ""}`
+      : inStock
+        ? "In stock"
+        : "Out of stock",
+    storefrontImpact: "NO_VISIBILITY_CHANGE",
+    storefrontReason:
+      "Current storefront product queries do not hide products based on stock or pre-order flags.",
+  };
+};
+
+const serializeProductOwnership = (product: any) => ({
+  storeId: toNumber(getAttr(product, "storeId")),
+  ownerUserId: toNumber(getAttr(product, "userId"), 0) || null,
+  tenantScoped: toNumber(getAttr(product, "storeId")) > 0,
+});
 
 const resolveProductPreviewImage = (product: any) => {
   const promoImagePath = normalizeString(getAttr(product, "promoImagePath"));
@@ -115,6 +198,7 @@ const serializeProductListItem = (product: any) => {
   const stock = toNumber(getAttr(product, "stock"));
   const isPublished = Boolean(getAttr(product, "isPublished"));
   const status = normalizeProductStatus(getAttr(product, "status"));
+  const availability = serializeProductAvailability(stock);
 
   return {
     id: toNumber(getAttr(product, "id")),
@@ -126,15 +210,16 @@ const serializeProductListItem = (product: any) => {
     statusMeta: serializeProductStatus(status),
     published: isPublished,
     visibility: serializeProductVisibility(isPublished, status),
+    availability,
     pricing: {
       price,
       salePrice: salePrice && salePrice > 0 ? salePrice : null,
       effectivePrice: salePrice && salePrice > 0 ? salePrice : price,
     },
     inventory: {
-      stock,
-      inStock: stock > 0,
+      ...availability,
     },
+    ownership: serializeProductOwnership(product),
     mediaPreviewUrl: resolveProductPreviewImage(product),
     category: serializeCategorySummary(category),
     createdAt: getAttr(product, "createdAt") || null,
@@ -167,6 +252,10 @@ const serializeProductDetail = (product: any) => {
   const variations = normalizeJsonValue(getAttr(product, "variations"));
   const wholesale = normalizeJsonValue(getAttr(product, "wholesale"));
   const tags = normalizeJsonValue(getAttr(product, "tags"));
+  const availability = serializeProductAvailability(stock, {
+    preOrder: Boolean(getAttr(product, "preOrder")),
+    preorderDays: toNumber(getAttr(product, "preorderDays"), 0) || null,
+  });
 
   return {
     id: toNumber(getAttr(product, "id")),
@@ -178,6 +267,7 @@ const serializeProductDetail = (product: any) => {
     statusMeta: serializeProductStatus(status),
     published: isPublished,
     visibility: serializeProductVisibility(isPublished, status),
+    availability,
     descriptions: {
       description: getAttr(product, "description")
         ? String(getAttr(product, "description"))
@@ -190,11 +280,9 @@ const serializeProductDetail = (product: any) => {
       effectivePrice: salePrice && salePrice > 0 ? salePrice : price,
     },
     inventory: {
-      stock,
-      inStock: stock > 0,
-      preOrder: Boolean(getAttr(product, "preOrder")),
-      preorderDays: toNumber(getAttr(product, "preorderDays"), 0) || null,
+      ...availability,
     },
+    ownership: serializeProductOwnership(product),
     category: {
       primary: serializeCategorySummary(primaryCategory),
       default: serializeCategorySummary(defaultCategory),
@@ -316,6 +404,7 @@ router.get(
         success: true,
         data: {
           items: result.rows.map(serializeProductListItem),
+          contract: buildCatalogReadContract(),
           filters: {
             keyword,
             status: allowedStatuses.has(status) ? status : "",
@@ -424,7 +513,10 @@ router.get(
 
       return res.json({
         success: true,
-        data: serializeProductDetail(product),
+        data: {
+          ...serializeProductDetail(product),
+          contract: buildCatalogReadContract(),
+        },
       });
     } catch (error) {
       console.error("[seller/products/detail] error", error);

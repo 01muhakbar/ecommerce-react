@@ -20,46 +20,28 @@ import { useCart } from "../../hooks/useCart.ts";
 import { useProduct, useProducts } from "../../storefront.jsx";
 import QueryState from "../../components/UI/QueryState.jsx";
 import { UiEmptyState, UiErrorState, UiSkeleton } from "../../components/ui-states/index.js";
+import ProductSellerInfoCard from "../../components/store/ProductSellerInfoCard.jsx";
 import { formatCurrency } from "../../utils/format.js";
 import { resolveProductImageUrl } from "../../utils/productImage.js";
 import { GENERIC_ERROR } from "../../constants/uiMessages.js";
 
-const COLOR_OPTIONS = [
-  {
-    value: "Red",
-    chipClass: "border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300",
-    activeClass: "border-rose-300 bg-rose-100 text-rose-700",
-  },
-  {
-    value: "Green",
-    chipClass:
-      "border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300",
-    activeClass: "border-emerald-300 bg-emerald-100 text-emerald-700",
-  },
-  {
-    value: "Blue",
-    chipClass: "border-sky-200 bg-sky-50 text-sky-700 hover:border-sky-300",
-    activeClass: "border-sky-300 bg-sky-100 text-sky-700",
-  },
-];
-
 const HIGHLIGHT_ITEMS = [
-  { icon: Truck, text: "Free shipping applies to all orders over Rp 100.000." },
-  { icon: House, text: "Home delivery within 1 hour in selected areas." },
-  { icon: Banknote, text: "Cash on delivery available." },
-  { icon: RotateCcw, text: "7 days returns money back guarantee." },
-  { icon: ShieldX, text: "Warranty not available for this item." },
-  { icon: Sparkles, text: "Guaranteed fresh quality from natural products." },
+  { icon: Truck, text: "Shipping fee is calculated at checkout." },
+  { icon: House, text: "Delivery coverage depends on your address." },
+  { icon: Banknote, text: "Cash on delivery is available when the store supports it." },
+  { icon: RotateCcw, text: "Follow store policy for return and support requests." },
+  { icon: ShieldX, text: "Warranty terms depend on the product category." },
+  { icon: Sparkles, text: "Product details are shown from the current public listing." },
   {
     icon: MapPin,
-    text: "Delivery from our pick point in Indonesia major city hubs.",
+    text: "Pickup and dispatch details may vary by store location.",
   },
 ];
 
-const QUICK_BUY_BENEFITS = [
-  { icon: Truck, title: "Fast delivery", text: "Same-day delivery in selected areas." },
-  { icon: Banknote, title: "Cash on delivery", text: "Pay when the order arrives at your door." },
-  { icon: RotateCcw, title: "Easy returns", text: "Support is available if the order needs follow-up." },
+const PURCHASE_POINTS = [
+  { icon: Truck, title: "Shipping at checkout" },
+  { icon: Banknote, title: "Store payment options apply" },
+  { icon: RotateCcw, title: "Support follows store policy" },
 ];
 
 const toPositiveNumber = (value, fallback = 0) => {
@@ -102,9 +84,9 @@ const toDateLabel = (value) => {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("id-ID", {
+  return date.toLocaleDateString("en-US", {
     day: "numeric",
-    month: "numeric",
+    month: "short",
     year: "numeric",
   });
 };
@@ -138,6 +120,58 @@ const normalizeReviews = (rawReviews) => {
       };
     })
     .filter((review) => Boolean(review.userName));
+};
+
+const normalizeVariationGroups = (rawVariations) => {
+  if (!rawVariations) return [];
+
+  const source = Array.isArray(rawVariations)
+    ? rawVariations
+    : Array.isArray(rawVariations?.groups)
+      ? rawVariations.groups
+      : rawVariations && typeof rawVariations === "object"
+        ? Object.entries(rawVariations).map(([key, value]) => ({
+            name: key,
+            options: Array.isArray(value) ? value : [],
+          }))
+        : [];
+
+  return source
+    .map((group, index) => {
+      if (!group || typeof group !== "object") return null;
+      const label = String(
+        group.name || group.label || group.title || group.attribute || `Option ${index + 1}`
+      ).trim();
+      const optionsSource = Array.isArray(group.options)
+        ? group.options
+        : Array.isArray(group.values)
+          ? group.values
+          : Array.isArray(group.items)
+            ? group.items
+            : [];
+      const options = optionsSource
+        .map((option, optionIndex) => {
+          const rawValue =
+            typeof option === "string"
+              ? option
+              : option?.label || option?.value || option?.name || option?.title || "";
+          const value = String(rawValue || "").trim();
+          if (!value) return null;
+          return {
+            id: `${label}-${optionIndex}-${value}`.toLowerCase(),
+            value,
+          };
+        })
+        .filter(Boolean);
+
+      if (!label || options.length === 0) return null;
+      return {
+        id: `${label}-${index}`.toLowerCase(),
+        label,
+        options,
+      };
+    })
+    .filter(Boolean);
 };
 
 function RatingStars({ rating, className = "h-4 w-4", showValue = false }) {
@@ -208,15 +242,14 @@ function ProductSummaryPanel({
   isAtStockLimit,
   cartLoading,
   isProductLoading,
-  selectedColor,
-  onSelectColor,
+  selectedOptions,
+  onSelectOption,
   onDecreaseQty,
   onIncreaseQty,
   onAddToCart,
   categoryName,
   categorySlug,
   tags,
-  compact = false,
 }) {
   const ratingAvg = Math.max(0, toSafeNumber(product?.ratingAvg, 0));
   const reviewCount = Math.max(0, Math.round(toSafeNumber(product?.reviewCount, 0)));
@@ -234,10 +267,39 @@ function ProductSummaryPanel({
   const stockLabel = hasFiniteStock ? stockValue : "N/A";
   const normalizedBrand = String(product?.brand?.name ?? product?.brandName ?? "").trim();
   const normalizedSku = String(product?.sku ?? product?.skuCode ?? product?.code ?? "").trim();
+  const weightValue = Number(product?.weight);
+  const hasWeight = Number.isFinite(weightValue) && weightValue > 0;
+  const supportsPreOrder = Boolean(product?.preOrder);
+  const preorderDays = Number(product?.preorderDays || 0);
+  const variationGroups = normalizeVariationGroups(product?.variations);
   const categoryHref = categorySlug
     ? `/category/${encodeURIComponent(String(categorySlug))}`
     : null;
-  const metaItems = [
+  const trustMeta = [
+    {
+      label: "Rating",
+      value:
+        ratingAvg > 0
+          ? `${ratingAvg.toFixed(1)} · ${reviewCount} ${reviewCount === 1 ? "review" : "reviews"}`
+          : "No reviews yet",
+      tone: "amber",
+    },
+    {
+      label: "Stock",
+      value: hasStock ? (hasFiniteStock ? `${stockValue} available` : "Available") : "Out of stock",
+      tone: hasStock ? "emerald" : "rose",
+    },
+    ...(supportsPreOrder
+      ? [
+          {
+            label: "Pre-order",
+            value: preorderDays > 0 ? `${preorderDays} day lead time` : "Available",
+            tone: "sky",
+          },
+        ]
+      : []),
+  ];
+  const detailItems = [
     {
       label: "Category",
       value: categoryName,
@@ -251,6 +313,22 @@ function ProductSummaryPanel({
           },
         ]
       : []),
+    ...(product?.unit
+      ? [
+          {
+            label: "Unit",
+            value: product.unit,
+          },
+        ]
+      : []),
+    ...(hasWeight
+      ? [
+          {
+            label: "Weight",
+            value: `${weightValue} g`,
+          },
+        ]
+      : []),
     ...(normalizedSku
       ? [
           {
@@ -260,134 +338,148 @@ function ProductSummaryPanel({
         ]
       : []),
   ];
+  const availabilityLabel = supportsPreOrder
+    ? preorderDays > 0
+      ? `Pre-order · ${preorderDays} day lead time`
+      : "Pre-order available"
+    : hasStock
+      ? hasFiniteStock
+        ? `${stockValue} in stock`
+        : "Ready to order"
+      : "Out of stock";
+  const discountLabel = hasDiscount ? `-${discountPercent.toFixed(0)}%` : null;
 
   return (
-    <div
-      className={`space-y-5 ${
-        compact
-          ? ""
-          : "rounded-[28px] border border-slate-200 bg-white p-4 shadow-[0_14px_30px_rgba(15,23,42,0.06)] sm:p-6 lg:p-7"
-      }`}
-    >
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <span className="inline-flex h-8 items-center rounded-full bg-slate-100 px-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
-            Product Details
+    <div className="space-y-5">
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex h-7 items-center rounded-full bg-slate-100 px-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">
+            {categoryName}
           </span>
           <span
-            className={`inline-flex h-8 items-center rounded-full border px-3 text-xs font-semibold uppercase tracking-wide ${
+            className={`inline-flex h-7 items-center rounded-full border px-3 text-[11px] font-semibold uppercase tracking-[0.16em] ${
               hasStock
                 ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                 : "border-rose-200 bg-rose-50 text-rose-700"
             }`}
           >
-            {hasStock ? `In stock (${stockLabel})` : "Out of stock"}
+            {availabilityLabel}
           </span>
-          {hasDiscount ? (
-            <span className="inline-flex h-8 items-center rounded-full border border-rose-200 bg-rose-50 px-3 text-xs font-semibold uppercase tracking-wide text-rose-600">
-              Save {discountPercent.toFixed(1)}%
+          {discountLabel ? (
+            <span className="inline-flex h-7 items-center rounded-full border border-rose-200 bg-rose-50 px-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-600">
+              {discountLabel}
             </span>
           ) : null}
         </div>
-        <h1
-          className={`${
-            compact ? "text-[30px]" : "text-[30px] sm:text-[34px] lg:text-[40px]"
-          } break-words font-bold leading-tight tracking-tight text-slate-900`}
-        >
+        <h1 className="break-words text-[30px] font-bold leading-tight tracking-tight text-slate-900 sm:text-[34px] xl:text-[40px]">
           {product?.name || "Product"}
         </h1>
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm text-slate-700">
-            <RatingStars rating={ratingAvg} showValue />
-            <span className="text-slate-300">|</span>
-            <span className="font-medium text-slate-600">
-              {reviewCount} {reviewCount === 1 ? "review" : "reviews"}
-            </span>
-          </div>
-          <div className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
-            {categoryName}
-          </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-500">
+          {trustMeta.map((item, index) => (
+            <div key={`${item.label}-${item.value}`} className="flex items-center gap-2">
+              <span
+                className={`inline-flex h-6 items-center rounded-full px-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${
+                  item.tone === "amber"
+                    ? "bg-amber-50 text-amber-700"
+                    : item.tone === "emerald"
+                      ? "bg-emerald-50 text-emerald-700"
+                      : item.tone === "rose"
+                        ? "bg-rose-50 text-rose-700"
+                        : "bg-sky-50 text-sky-700"
+                }`}
+              >
+                {item.label}
+              </span>
+              <span className="font-medium text-slate-600">{item.value}</span>
+              {index < trustMeta.length - 1 ? <span className="text-slate-300">|</span> : null}
+            </div>
+          ))}
         </div>
       </div>
 
-      <div className="rounded-[24px] border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 shadow-[0_10px_22px_rgba(15,23,42,0.05)] sm:p-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+      <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
               Price
             </p>
-            <div className="mt-2 flex flex-wrap items-end gap-2.5">
-              <span className="text-3xl font-bold leading-none text-slate-900 sm:text-[40px]">
+            <div className="flex flex-wrap items-end gap-2.5">
+              <span className="text-[34px] font-bold leading-none text-slate-900 sm:text-[42px]">
                 {formatCurrency(currentPrice)}
               </span>
               {hasDiscount ? (
-                <span className="text-base font-medium text-slate-400 line-through sm:text-lg">
+                <span className="pb-1 text-base font-medium text-slate-400 line-through sm:text-lg">
                   {formatCurrency(originalPrice)}
                 </span>
               ) : null}
             </div>
-            <p className="mt-2 text-sm text-slate-500">
-              Taxes and shipping are calculated during checkout.
-            </p>
+            <p className="text-sm text-slate-500">Shipping and payment options appear at checkout.</p>
           </div>
-          <div className="grid gap-2 sm:min-w-[200px]">
-            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-600">
-                Availability
+          <div className="grid gap-2 sm:min-w-[240px]">
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                Order note
+              </p>
+              <p className="mt-1 text-sm font-semibold text-slate-900">{availabilityLabel}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                Quick summary
               </p>
               <p className="mt-1 text-sm font-semibold text-slate-900">
-                {hasStock ? `Ready to order (${stockLabel})` : "Currently unavailable"}
+                {hasDiscount ? `Save ${discountPercent.toFixed(0)}% today` : "Standard marketplace pricing"}
               </p>
             </div>
-            {hasDiscount ? (
-              <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-rose-600">
-                  Savings
-                </p>
-                <p className="mt-1 text-sm font-semibold text-slate-900">
-                  Save {discountPercent.toFixed(1)}% on this item today
-                </p>
-              </div>
-            ) : null}
           </div>
         </div>
       </div>
 
-      <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-          Select color
-        </p>
-        <div className="flex flex-wrap items-center gap-2.5">
-          {COLOR_OPTIONS.map((option) => {
-            const active = selectedColor === option.value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => onSelectColor(option.value)}
-                className={`rounded-full border px-4 py-1.5 text-sm font-semibold transition ${
-                  active ? option.activeClass : option.chipClass
-                }`}
-              >
-                {option.value}
-              </button>
-            );
-          })}
+      {variationGroups.length > 0 ? (
+        <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+          {variationGroups.map((group) => (
+            <div key={group.id} className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  {group.label}
+                </p>
+                <span className="text-xs text-slate-500">
+                  {selectedOptions[group.id] || group.options[0]?.value || "-"}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {group.options.map((option) => {
+                  const active = selectedOptions[group.id] === option.value;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => onSelectOption(group.id, option.value)}
+                      className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition ${
+                        active
+                          ? "border-slate-900 bg-slate-900 text-white"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                      }`}
+                    >
+                      {option.value}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
-      </div>
+      ) : null}
 
-      <div className="space-y-4 rounded-[24px] border border-slate-200 bg-slate-50/80 p-4 shadow-[0_10px_22px_rgba(15,23,42,0.05)] sm:p-5">
+      <div className="space-y-4 rounded-[24px] border border-slate-200 bg-white p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Quantity
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+              Buy now
             </p>
-            <p className="mt-1 text-sm text-slate-500">
-              Adjust quantity, then add the product to your cart.
-            </p>
+            <p className="mt-1 text-sm text-slate-500">Choose a quantity and add this item to your cart.</p>
           </div>
           <div className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">
-            {hasStock ? "Ready to Buy" : "Unavailable"}
+            {hasStock ? "Ready to order" : "Unavailable"}
           </div>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -416,29 +508,26 @@ function ProductSummaryPanel({
             type="button"
             disabled={!hasStock || cartLoading || isProductLoading}
             onClick={onAddToCart}
-            className="inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-8 text-base font-semibold text-white shadow-[0_14px_26px_rgba(5,150,105,0.28)] transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:flex-1"
+            className="inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-8 text-base font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:flex-1"
           >
             Add to Cart
           </button>
         </div>
         <p className="text-xs text-slate-500">
           {hasFiniteStock
-            ? `Available stock: ${stockLabel}`
-            : "Stock availability is updated at checkout."}
+            ? `Stock available: ${stockLabel}`
+            : "Stock is confirmed during checkout."}
         </p>
         <div className="grid gap-2.5 sm:grid-cols-3">
-          {QUICK_BUY_BENEFITS.map((benefit) => (
+          {PURCHASE_POINTS.map((benefit) => (
             <div
               key={benefit.title}
-              className="rounded-2xl border border-white bg-white/80 px-3 py-3 shadow-[0_4px_10px_rgba(15,23,42,0.04)]"
+              className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3"
             >
-              <div className="flex items-center gap-2">
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-                  <benefit.icon className="h-4 w-4" />
-                </span>
-                <p className="text-sm font-semibold text-slate-900">{benefit.title}</p>
-              </div>
-              <p className="mt-2 text-xs leading-5 text-slate-500">{benefit.text}</p>
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                <benefit.icon className="h-4 w-4" />
+              </span>
+              <p className="text-sm font-semibold text-slate-900">{benefit.title}</p>
             </div>
           ))}
         </div>
@@ -446,7 +535,7 @@ function ProductSummaryPanel({
 
       <div className="space-y-3 border-t border-slate-200 pt-4">
         <dl className="grid gap-2.5 text-sm sm:grid-cols-2">
-          {metaItems.map((meta) => (
+          {detailItems.map((meta) => (
             <div key={meta.label} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
               <dt className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                 {meta.label}
@@ -484,7 +573,7 @@ export default function StoreProductDetailPage() {
   const { slug } = useParams();
   const { add, isLoading: cartLoading } = useCart();
   const [qty, setQty] = useState(1);
-  const [selectedColor, setSelectedColor] = useState("Red");
+  const [selectedOptions, setSelectedOptions] = useState({});
   const [activeTab, setActiveTab] = useState("reviews");
   const [addingRelatedId, setAddingRelatedId] = useState(null);
   const addingTimerRef = useRef(null);
@@ -567,6 +656,11 @@ export default function StoreProductDetailPage() {
     () => normalizeReviews(productData?.data?.reviews ?? product?.reviews ?? []),
     [productData?.data?.reviews, product?.reviews]
   );
+  const sellerInfo = productData?.data?.sellerInfo ?? product?.sellerInfo ?? null;
+  const variationGroups = useMemo(
+    () => normalizeVariationGroups(product?.variations),
+    [product?.variations]
+  );
 
   useEffect(() => {
     setImageSrc(resolvedImageSrc);
@@ -589,6 +683,22 @@ export default function StoreProductDetailPage() {
     },
     []
   );
+
+  useEffect(() => {
+    if (variationGroups.length === 0) {
+      setSelectedOptions({});
+      return;
+    }
+    setSelectedOptions((prev) => {
+      const next = {};
+      variationGroups.forEach((group) => {
+        const existing = prev[group.id];
+        const hasExisting = group.options.some((option) => option.value === existing);
+        next[group.id] = hasExisting ? existing : group.options[0]?.value ?? "";
+      });
+      return next;
+    });
+  }, [variationGroups]);
 
   const handleAddMainProduct = () => {
     add(product.id, qty, {
@@ -728,8 +838,13 @@ export default function StoreProductDetailPage() {
                 isAtStockLimit={isAtStockLimit}
                 cartLoading={cartLoading}
                 isProductLoading={isLoading}
-                selectedColor={selectedColor}
-                onSelectColor={setSelectedColor}
+                selectedOptions={selectedOptions}
+                onSelectOption={(groupId, value) =>
+                  setSelectedOptions((prev) => ({
+                    ...prev,
+                    [groupId]: value,
+                  }))
+                }
                 onDecreaseQty={() => setQty((prev) => Math.max(1, prev - 1))}
                 onIncreaseQty={() =>
                   setQty((prev) => {
@@ -746,6 +861,10 @@ export default function StoreProductDetailPage() {
           </div>
         </div>
 
+        <div className="px-1">
+          <ProductSellerInfoCard sellerInfo={sellerInfo} />
+        </div>
+
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start lg:gap-10">
           <div id="product-tabs" className="order-3 lg:col-span-7 lg:self-start">
             <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white">
@@ -760,7 +879,7 @@ export default function StoreProductDetailPage() {
                         : "border-transparent text-slate-500 hover:text-slate-700"
                     }`}
                   >
-                    Customer Reviews
+                    Reviews
                   </button>
                   <button
                     type="button"
@@ -771,7 +890,7 @@ export default function StoreProductDetailPage() {
                         : "border-transparent text-slate-500 hover:text-slate-700"
                     }`}
                   >
-                    Description
+                    Details
                   </button>
                 </div>
               </div>
@@ -828,17 +947,13 @@ export default function StoreProductDetailPage() {
                   ) : (
                     <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-500">
                       {reviewCount > 0
-                        ? `This product has ${reviewCount} reviews. Detailed review items are not available in this environment yet.`
+                        ? `${reviewCount} ${reviewCount === 1 ? "review" : "reviews"} available. Full review entries are not shown here yet.`
                         : "No customer reviews yet."}
                     </div>
                   )
                 ) : (
                   <div className="space-y-3 text-[15px] leading-8 text-slate-600">
-                    {descriptionText ? (
-                      <p>{descriptionText}</p>
-                    ) : (
-                      <p>No description available for this product.</p>
-                    )}
+                    {descriptionText ? <p>{descriptionText}</p> : <p>No details yet.</p>}
                   </div>
                 )}
               </div>
@@ -851,7 +966,7 @@ export default function StoreProductDetailPage() {
                 id="product-highlights"
                 className="rounded-[28px] border border-slate-200 bg-white p-5 sm:p-6"
               >
-                <h3 className="text-2xl font-bold leading-tight tracking-tight text-slate-900 sm:text-3xl">
+                <h3 className="text-2xl font-bold leading-tight tracking-tight text-slate-900 sm:text-[32px]">
                   Highlights
                 </h3>
                 <ul className="mt-4 space-y-3 text-[15px] text-slate-600">
@@ -868,12 +983,10 @@ export default function StoreProductDetailPage() {
                 id="product-share"
                 className="rounded-[28px] border border-slate-200 bg-white p-5 sm:p-6"
               >
-                <h4 className="text-2xl font-bold leading-tight tracking-tight text-slate-900 sm:text-3xl">
-                  Share your social network
+                <h4 className="text-2xl font-bold leading-tight tracking-tight text-slate-900 sm:text-[32px]">
+                  Share
                 </h4>
-                <p className="mt-1 text-[15px] text-slate-500">
-                  For get lots of traffic from social network share this product.
-                </p>
+                <p className="mt-1 text-[15px] text-slate-500">Send this item to someone else.</p>
                 <div className="mt-4 flex items-center gap-2">
                   <a
                     href="#"
@@ -919,7 +1032,7 @@ export default function StoreProductDetailPage() {
           error={relatedQuery.error}
           isEmpty={!relatedQuery.isLoading && !relatedQuery.isError && relatedProducts.length === 0}
           emptyTitle="No related products"
-          emptyHint="Coba jelajahi produk lainnya."
+          emptyHint="Browse more items from this category."
           onRetry={() => relatedQuery.refetch()}
         >
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">

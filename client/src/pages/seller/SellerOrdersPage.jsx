@@ -98,9 +98,16 @@ function buildOrderStats(items) {
 }
 
 const getParentLifecycleHint = (item) => {
-  const parentOrderStatus = item.order?.statusMeta?.label || item.order?.status || "-";
+  const parentOrderStatus =
+    item.readModel?.parentOrder?.statusMeta?.label ||
+    item.order?.statusMeta?.label ||
+    item.order?.status ||
+    "-";
   const parentPaymentStatus =
-    item.order?.paymentStatusMeta?.label || item.order?.paymentStatus || "-";
+    item.readModel?.parentOrder?.paymentStatusMeta?.label ||
+    item.order?.paymentStatusMeta?.label ||
+    item.order?.paymentStatus ||
+    "-";
   return `Parent order ${parentOrderStatus} · parent payment ${parentPaymentStatus}`;
 };
 
@@ -114,6 +121,10 @@ const getPaymentSnapshotHint = (item) => {
     ? `Payment record ${item.paymentSummary.statusMeta?.label || item.paymentSummary.status} · proof ${proofLabel}`
     : item.paymentSummary.statusMeta?.description || "Latest payment snapshot is attached to this suborder.";
 };
+
+const getSellerOperationalHint = (item) =>
+  item.readModel?.operationalNote ||
+  "Use suborder payment and seller fulfillment as the operational truth for this store split.";
 
 const formatMoney = (value) =>
   new Intl.NumberFormat("id-ID", {
@@ -270,7 +281,7 @@ export default function SellerOrdersPage() {
       <SellerWorkspaceSectionHeader
         eyebrow="Seller Orders"
         title="Seller suborder overview"
-        description="This module only shows suborders belonging to the current store. All access stays tenant-scoped and enforced by the backend seller access resolver."
+        description="This module only shows suborders belonging to the current store. Seller fulfillment is the primary operational status here, while parent order lifecycle stays a global reference."
         actions={[
           <SellerWorkspaceBadge
             key="mode"
@@ -483,27 +494,35 @@ export default function SellerOrdersPage() {
                 <div className="space-y-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-                      {item.suborderNumber}
+                      Seller suborder
                     </p>
                     <h3 className="mt-2 text-xl font-semibold text-slate-900">
-                      Parent Order {item.order?.orderNumber || item.orderNumber}
+                      {item.suborderNumber}
                     </h3>
-                    <p className="mt-2 text-sm text-slate-500">{item.scope?.relationLabel}</p>
+                    <p className="mt-2 text-sm text-slate-500">
+                      Parent order {item.order?.orderNumber || item.orderNumber} ·{" "}
+                      {item.scope?.relationLabel}
+                    </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <StatusChip
-                      value={item.paymentStatus}
-                      label={`Suborder ${item.paymentStatusMeta?.label || item.paymentStatus}`}
-                      map={PAYMENT_STATUS_CLASS}
-                    />
-                    <StatusChip
                       value={item.fulfillmentStatus}
-                      label={`Fulfillment ${item.fulfillmentStatusMeta?.label || item.fulfillmentStatus}`}
+                      label={`Seller ${item.readModel?.primaryStatus?.label || item.fulfillmentStatusMeta?.label || item.fulfillmentStatus}`}
                       map={FULFILLMENT_STATUS_CLASS}
                     />
                     <StatusChip
+                      value={item.paymentStatus}
+                      label={`Store split ${item.readModel?.paymentState?.label || item.paymentStatusMeta?.label || item.paymentStatus}`}
+                      map={PAYMENT_STATUS_CLASS}
+                    />
+                    <StatusChip
                       value={item.order?.checkoutMode}
-                      label={item.order?.checkoutModeMeta?.label || item.order?.checkoutMode || "-"}
+                      label={
+                        item.readModel?.parentOrder?.checkoutModeMeta?.label ||
+                        item.order?.checkoutModeMeta?.label ||
+                        item.order?.checkoutMode ||
+                        "-"
+                      }
                       map={CHECKOUT_MODE_CLASS}
                     />
                     {item.paymentSummary?.status ? (
@@ -534,42 +553,61 @@ export default function SellerOrdersPage() {
                   <div className="flex flex-wrap gap-2 text-xs text-slate-600">
                     <InfoPill
                       label="Parent lifecycle"
-                      value={item.order?.statusMeta?.label || item.order?.status || "-"}
+                      value={
+                        item.readModel?.parentOrder?.statusMeta?.label ||
+                        item.order?.statusMeta?.label ||
+                        item.order?.status ||
+                        "-"
+                      }
                     />
                     <InfoPill
                       label="Parent payment"
                       value={
+                        item.readModel?.parentOrder?.paymentStatusMeta?.label ||
                         item.order?.paymentStatusMeta?.label ||
                         item.order?.paymentStatus ||
                         "-"
                       }
                     />
+                    <InfoPill label="Scope" value="Store-only items and totals" />
                   </div>
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600 xl:w-[280px]">
                   <p className="font-semibold text-slate-900">Operational Snapshot</p>
                   <p className="mt-2">
-                    Suborder Payment:{" "}
+                    Seller Status:{" "}
                     <span className="font-semibold text-slate-900">
-                      {item.paymentStatusMeta?.label || item.paymentStatus}
+                      {item.readModel?.primaryStatus?.label ||
+                        item.fulfillmentStatusMeta?.label ||
+                        item.fulfillmentStatus}
                     </span>
                   </p>
                   <p className="mt-1">
-                    Fulfillment:{" "}
+                    Store Split Payment:{" "}
                     <span className="font-medium text-slate-900">
-                      {item.fulfillmentStatusMeta?.label || item.fulfillmentStatus}
+                      {item.readModel?.paymentState?.label ||
+                        item.paymentStatusMeta?.label ||
+                        item.paymentStatus}
                     </span>
                   </p>
                   <p className="mt-1">
-                    Payment Record:{" "}
+                    Seller Scope:{" "}
                     <span className="font-medium text-slate-900">
-                      {item.paymentSummary?.statusMeta?.label || item.paymentSummary?.status || "-"}
+                      {item.readModel?.sellerScope?.itemCount || item.itemCount} item
+                      {(item.readModel?.sellerScope?.itemCount || item.itemCount) === 1 ? "" : "s"} ·{" "}
+                      {formatMoney(item.readModel?.sellerScope?.totalAmount || item.totalAmount)}
                     </span>
                   </p>
                   <p className="mt-1">
                     Parent:{" "}
                     <span className="font-medium text-slate-900">{getParentLifecycleHint(item)}</span>
+                  </p>
+                  <p className="mt-1">
+                    Payment Snapshot:{" "}
+                    <span className="font-medium text-slate-900">
+                      {item.paymentSummary?.statusMeta?.label || item.paymentSummary?.status || "-"}
+                    </span>
                   </p>
                   <p className="mt-1">
                     Reference:{" "}
@@ -586,7 +624,10 @@ export default function SellerOrdersPage() {
                     </span>
                   </p>
                   <p className="mt-3 text-xs leading-5 text-slate-500">
-                    {getPaymentSnapshotHint(item)}
+                    {getSellerOperationalHint(item)}
+                  </p>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    {item.readModel?.parentOrder?.note || getPaymentSnapshotHint(item)}
                   </p>
 
                   {item.governance?.fulfillment?.availableActions?.length > 0 ? (

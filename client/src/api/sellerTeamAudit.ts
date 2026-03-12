@@ -58,6 +58,13 @@ const normalizeAuditItem = (item: any) => {
     },
     beforeState: item.beforeState || null,
     afterState: item.afterState || null,
+    readModel: {
+      category: normalizeText(item.readModel?.category) || null,
+      title: normalizeText(item.readModel?.title) || null,
+      tone: normalizeText(item.readModel?.tone) || "stone",
+      summary: normalizeText(item.readModel?.summary) || null,
+      changeSummary: normalizeText(item.readModel?.changeSummary) || null,
+    },
     createdAt: item.createdAt ?? null,
   };
 };

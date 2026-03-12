@@ -163,7 +163,8 @@ export default function SellerStoreProfilePage() {
             key: "description",
             label: "Description",
             type: "textarea",
-            hint: "Seller-managed store summary. Public storefront content pages still read store customization.",
+            hint:
+              "Seller-managed store summary. This now feeds public store identity and the fallback body for microsite rich-about when customization content is empty.",
           },
           { key: "logoUrl", label: "Logo URL", type: "url" },
           { key: "bannerUrl", label: "Banner URL", type: "url" },
@@ -313,7 +314,7 @@ export default function SellerStoreProfilePage() {
       <SellerWorkspaceSectionHeader
         eyebrow="Store Profile"
         title="Seller store profile overview"
-        description="Identity, contact, and address fields stay scoped to the active store. Backend seller profile governs editability here, while current public storefront pages still rely mostly on store customization for header, contact, and content surfaces."
+        description="Identity, contact, and address fields stay scoped to the active store. Seller-owned Store fields now drive public store identity and microsite contact surfaces, while admin customization still owns marketplace copy, contact-page layout, and rich content blocks."
         actions={[
           <SellerWorkspaceBadge
             key="status"
@@ -501,9 +502,7 @@ export default function SellerStoreProfilePage() {
                       />
                     ))
                   ) : (
-                    <span className="text-sm text-sky-900">
-                      No seller profile field is wired directly into current public storefront pages.
-                    </span>
+                    <span className="text-sm text-sky-900">No public storefront field noted.</span>
                   )}
                 </div>
               </div>

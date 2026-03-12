@@ -113,16 +113,22 @@ export default function SellerPaymentProfilePage() {
   }
 
   const readiness = profile.readiness || {};
+  const readModel = profile.readModel || {};
+  const primaryStatus = readModel.primaryStatus || readiness || {};
+  const reviewStatus = readModel.reviewStatus || profile.verificationMeta || {};
+  const nextStep = readModel.nextStep || {};
+  const completeness = readModel.completeness || {};
+  const boundaries = readModel.boundaries || {};
   const verificationMeta = profile.verificationMeta || {};
   const activityMeta = profile.activityMeta || {};
-  const missingFields = readiness.missingFields || [];
+  const missingFields = completeness.missingFields || readiness.missingFields || [];
 
   return (
     <div className="space-y-6">
       <SellerWorkspaceSectionHeader
         eyebrow="Payment Profile"
         title="Seller payment profile overview"
-        description="This page exposes a store-scoped payment setup snapshot only. Readiness is based on required payment destination fields plus the existing admin review status, not on a separate seller-only payment system."
+        description="This page exposes a store-scoped payment readiness snapshot only. It explains profile completeness and admin review status, and it does not represent buyer payment history or order payment proof outcomes."
         actions={[
           <SellerWorkspaceBadge
             key="snapshot"
@@ -130,14 +136,14 @@ export default function SellerPaymentProfilePage() {
             tone="stone"
           />,
           <SellerWorkspaceBadge
-            key="readiness"
-            label={readiness.label || "Pending review"}
-            tone={readiness.tone || "amber"}
+            key="primary"
+            label={primaryStatus.label || "Pending admin review"}
+            tone={primaryStatus.tone || "amber"}
           />,
           <SellerWorkspaceBadge
-            key="verification"
-            label={verificationMeta.label || "Pending review"}
-            tone={verificationMeta.tone || "amber"}
+            key="review"
+            label={`Review ${reviewStatus.label || verificationMeta.label || "Pending review"}`}
+            tone={reviewStatus.tone || verificationMeta.tone || "amber"}
           />,
           <SellerWorkspaceBadge
             key="activity"
@@ -170,13 +176,26 @@ export default function SellerPaymentProfilePage() {
 
         <SellerWorkspaceSectionCard
           title="Readiness"
-          hint="Operational completeness of this payment destination snapshot."
+          hint="Primary seller-facing readiness state for this payment destination snapshot."
           Icon={ShieldAlert}
         >
-          <p className="text-3xl font-semibold text-slate-900">
-            {readiness.completedFields || 0}/{readiness.totalFields || 0}
+          <p className="text-lg font-semibold text-slate-900">
+            {primaryStatus.label || readiness.label || "Pending review"}
           </p>
-          <p className="mt-2 text-sm text-slate-600">{readiness.description || "-"}</p>
+          <p className="mt-2 text-sm text-slate-600">
+            {primaryStatus.description || readiness.description || "-"}
+          </p>
+          <div className="mt-4 grid gap-3">
+            <SellerWorkspaceDetailItem
+              label="Required Fields"
+              value={`${completeness.completedFields || readiness.completedFields || 0}/${completeness.totalFields || readiness.totalFields || 0}`}
+            />
+            <SellerWorkspaceDetailItem
+              label="Next Step"
+              value={nextStep.label || "Wait for admin review"}
+              hint={nextStep.description || boundaries.sellerWorkspaceMode}
+            />
+          </div>
           {missingFields.length ? (
             <SellerWorkspaceNotice type="warning" className="mt-4">
               <div className="space-y-3">
@@ -239,14 +258,14 @@ export default function SellerPaymentProfilePage() {
 
         <div className="space-y-6">
           <SellerWorkspaceSectionCard
-            title="Instruction Snapshot"
-            hint="This text is displayed in seller workspace as a read-only payment instruction."
-            Icon={CreditCard}
-          >
-            <SellerWorkspaceNotice type="info">
-              This payment destination remains read-only inside seller workspace. Any setup or
-              verification mutation still belongs to the existing account or admin lane.
-            </SellerWorkspaceNotice>
+          title="Instruction Snapshot"
+          hint="This text is displayed in seller workspace as a read-only payment instruction."
+          Icon={CreditCard}
+        >
+          <SellerWorkspaceNotice type="info">
+            {boundaries.sellerWorkspaceMode ||
+              "This payment destination remains read-only inside seller workspace. Any setup or verification mutation still belongs to the existing account or admin lane."}
+          </SellerWorkspaceNotice>
 
             <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm leading-7 text-slate-700">
               {profile.instructionText || "No payment instruction text has been set."}
@@ -263,24 +282,42 @@ export default function SellerPaymentProfilePage() {
           </SellerWorkspaceSectionCard>
 
           <SellerWorkspaceSectionCard
-            title="Governance and Timeline"
-            hint="Seller workspace consumes this as a snapshot and does not open write actions here."
+            title="Review and Next Step"
+            hint="Seller workspace consumes this as a readiness snapshot and does not open write actions here."
             Icon={ShieldAlert}
           >
             <div className="grid gap-3 md:grid-cols-2">
               <SellerWorkspaceDetailItem
-                label="Verification"
-                value={verificationMeta.label || profile.verificationStatus}
-                hint={verificationMeta.description}
+                label="Primary Readiness"
+                value={primaryStatus.label || readiness.label || "-"}
+                hint={primaryStatus.description || readiness.description}
+              />
+              <SellerWorkspaceDetailItem
+                label="Admin Review"
+                value={reviewStatus.label || verificationMeta.label || profile.verificationStatus}
+                hint={reviewStatus.description || verificationMeta.description}
               />
               <SellerWorkspaceDetailItem
                 label="Activity"
                 value={activityMeta.label || (profile.isActive ? "Active" : "Inactive")}
                 hint={activityMeta.description}
               />
+              <SellerWorkspaceDetailItem
+                label="Next Step Lane"
+                value={nextStep.lane || "ADMIN_REVIEW"}
+                hint={nextStep.description || "-"}
+              />
               <SellerWorkspaceDetailItem label="Created" value={formatDate(profile.createdAt)} />
               <SellerWorkspaceDetailItem label="Updated" value={formatDate(profile.updatedAt)} />
-              <SellerWorkspaceDetailItem label="Verified" value={formatDate(profile.verifiedAt)} />
+              <SellerWorkspaceDetailItem
+                label="Reviewed"
+                value={formatDate(reviewStatus.reviewedAt || profile.verifiedAt)}
+              />
+              <SellerWorkspaceDetailItem
+                label="Reviewed By"
+                value={reviewStatus.reviewedBy?.name || "-"}
+                hint={reviewStatus.reviewedBy?.email || "Admin is the authority for the review decision."}
+              />
               <SellerWorkspaceDetailItem
                 label="Editability"
                 value={profile.governance?.canEdit ? "Editable" : "Read-only"}
@@ -289,8 +326,13 @@ export default function SellerPaymentProfilePage() {
             </div>
 
             <SellerWorkspaceNotice type="warning" className="mt-5">
-              Payment profile readiness is a combination of required destination fields,
-              verification review, and active status. Seller workspace only reports that result.
+              {boundaries.readinessVsPaymentHistory ||
+                "Payment profile readiness is a combination of required destination fields, verification review, and active status. Seller workspace only reports that result."}
+            </SellerWorkspaceNotice>
+
+            <SellerWorkspaceNotice type="info" className="mt-4">
+              {boundaries.paymentHistoryLane ||
+                "Buyer payment proofs and payment history stay in separate seller payment review and order lanes."}
             </SellerWorkspaceNotice>
           </SellerWorkspaceSectionCard>
         </div>

@@ -26,30 +26,100 @@ const buildStatusMeta = (status: string) => ({
   code: status,
   label: status === "active" ? "Active" : status === "inactive" ? "Inactive" : "Draft",
   storefrontEligible: status === "active",
+  operationalMeaning:
+    status === "active"
+      ? "Product is operationally active and can become public when publish is on."
+      : status === "inactive"
+        ? "Product stays attached to the store but is blocked from public storefront queries."
+        : "Product is still draft and blocked from public storefront queries.",
 });
 
-const buildVisibility = (published: boolean, status: string, fallback = {}) => {
+const buildVisibility = (
+  published: boolean,
+  status: string,
+  fallback: Record<string, any> = {}
+) => {
   const storefrontVisible = published && status === "active";
   const reasonCode = !published
     ? "UNPUBLISHED"
     : storefrontVisible
       ? "STOREFRONT_VISIBLE"
       : "STATUS_NOT_ACTIVE";
+  const blockingSignals = Array.isArray(fallback?.blockingSignals)
+    ? fallback.blockingSignals
+    : [
+        ...(!published ? ["PUBLISH_OFF"] : []),
+        ...(status !== "active" ? ["STATUS_NOT_ACTIVE"] : []),
+      ];
+  const stateCode =
+    fallback?.stateCode ||
+    (!published ? "INTERNAL_ONLY" : storefrontVisible ? "STOREFRONT_VISIBLE" : "PUBLISHED_BLOCKED");
 
   return {
     ...fallback,
     isPublished: published,
     storefrontVisible,
+    stateCode,
     label: published ? "Published" : "Private",
     publishLabel: published ? "Published" : "Private",
+    sellerLabel:
+      fallback?.sellerLabel ||
+      (!published
+        ? "Private to seller and admin"
+        : storefrontVisible
+          ? "Visible in storefront"
+          : "Published but blocked"),
     storefrontLabel: storefrontVisible ? "Visible in storefront" : "Hidden from storefront",
     storefrontReason:
-      !published
-        ? "Publish flag is off, so this product stays internal to admin and seller views."
+      fallback?.storefrontReason ||
+      (!published
+        ? "Public storefront queries exclude this product because the publish flag is off."
         : storefrontVisible
-          ? "Storefront can surface this product because publish is on and status is active."
-          : "Publish is on, but the product status must be active before storefront can surface it.",
+          ? "Public storefront queries include this product because publish is on and status is active."
+          : "Publish is on, but public storefront queries still exclude this product until status becomes active."),
+    sellerHint:
+      fallback?.sellerHint ||
+      (!published
+        ? "Seller can still review this product here, but customers cannot see it yet."
+        : storefrontVisible
+          ? "Seller and customer views are aligned for visibility."
+          : "Seller can review this product here, but customers will not see it until status becomes active."),
+    blockingSignals,
     reasonCode,
+  };
+};
+
+const normalizeAvailability = (availability: any, inventory: any = {}) => {
+  const stock = asNumber(availability?.stock ?? inventory?.stock, 0);
+  const preOrder = Boolean(availability?.preOrder ?? inventory?.preOrder);
+  const preorderDaysValue = Number(
+    availability?.preorderDays ?? inventory?.preorderDays ?? 0
+  );
+  const preorderDays =
+    Number.isFinite(preorderDaysValue) && preorderDaysValue > 0 ? preorderDaysValue : null;
+  const inStock = stock > 0;
+  const stateCode =
+    availability?.stateCode ||
+    (preOrder ? "PREORDER" : inStock ? "IN_STOCK" : "OUT_OF_STOCK");
+
+  return {
+    ...availability,
+    stock,
+    inStock,
+    preOrder,
+    preorderDays,
+    stateCode,
+    label:
+      availability?.label ||
+      (preOrder
+        ? `Pre-order${preorderDays ? ` (${preorderDays} day${preorderDays === 1 ? "" : "s"})` : ""}`
+        : inStock
+          ? "In stock"
+          : "Out of stock"),
+    storefrontImpact: availability?.storefrontImpact || "NO_VISIBILITY_CHANGE",
+    storefrontReason:
+      availability?.storefrontReason ||
+      "Current storefront product queries do not hide products based on stock or pre-order flags.",
   };
 };
 
@@ -106,12 +176,20 @@ const normalizeProductListItem = (item: any) => {
     slug: normalizeText(item.slug),
     sku: normalizeText(item.sku) || null,
     status,
-    statusMeta: buildStatusMeta(status),
+    statusMeta: {
+      ...buildStatusMeta(status),
+      ...(item.statusMeta && typeof item.statusMeta === "object" ? item.statusMeta : {}),
+    },
     published,
     visibility: buildVisibility(published, status, item.visibility),
     pricing: normalizePricing(item.pricing),
-    inventory: normalizeInventory(item.inventory),
+    availability: normalizeAvailability(item.availability, item.inventory),
+    inventory: {
+      ...normalizeInventory(item.inventory),
+      ...normalizeAvailability(item.availability, item.inventory),
+    },
     category: normalizeCategorySummary(item.category),
+    ownership: item.ownership && typeof item.ownership === "object" ? item.ownership : null,
     mediaPreviewUrl: normalizeText(item.mediaPreviewUrl) || null,
   };
 };
@@ -135,11 +213,19 @@ const normalizeProductDetail = (item: any) => {
     slug: normalizeText(item.slug),
     sku: normalizeText(item.sku) || null,
     status,
-    statusMeta: buildStatusMeta(status),
+    statusMeta: {
+      ...buildStatusMeta(status),
+      ...(item.statusMeta && typeof item.statusMeta === "object" ? item.statusMeta : {}),
+    },
     published,
     visibility: buildVisibility(published, status, item.visibility),
     pricing: normalizePricing(item.pricing),
-    inventory: normalizeInventory(item.inventory),
+    availability: normalizeAvailability(item.availability, item.inventory),
+    inventory: {
+      ...normalizeInventory(item.inventory),
+      ...normalizeAvailability(item.availability, item.inventory),
+    },
+    ownership: item.ownership && typeof item.ownership === "object" ? item.ownership : null,
     category: {
       primary: normalizeCategorySummary(category.primary),
       default: normalizeCategorySummary(category.default),
@@ -177,6 +263,7 @@ export const getSellerProducts = async (
 
   return {
     ...payload,
+    contract: payload.contract && typeof payload.contract === "object" ? payload.contract : null,
     items: Array.isArray(payload.items)
       ? payload.items.map(normalizeProductListItem).filter(Boolean)
       : [],

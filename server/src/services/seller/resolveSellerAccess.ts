@@ -187,6 +187,63 @@ export async function resolveSellerAccess(input: {
   };
 }
 
+export async function listSellerAccessContexts(input: {
+  userId: number | null | undefined;
+  requiredPermissions?: string[];
+}) {
+  const userId = Number(input.userId);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return [];
+  }
+
+  const candidateStoreIds = new Set<number>();
+  const ownerStores = await Store.findAll({
+    where: { ownerUserId: userId } as any,
+    attributes: ["id"],
+  });
+
+  ownerStores.forEach((store: any) => {
+    const storeId = Number(store?.id);
+    if (Number.isInteger(storeId) && storeId > 0) {
+      candidateStoreIds.add(storeId);
+    }
+  });
+
+  try {
+    const memberships = await StoreMember.findAll({
+      where: { userId, status: "ACTIVE" } as any,
+      attributes: ["storeId"],
+    });
+
+    memberships.forEach((membership: any) => {
+      const storeId = Number(
+        membership?.getDataValue?.("storeId") ??
+          membership?.get?.("storeId") ??
+          membership?.storeId
+      );
+      if (Number.isInteger(storeId) && storeId > 0) {
+        candidateStoreIds.add(storeId);
+      }
+    });
+  } catch (error) {
+    if (!isMissingTableError(error)) throw error;
+  }
+
+  const resolved = await Promise.all(
+    [...candidateStoreIds].map((storeId) => resolveSellerAccess({ storeId, userId }))
+  );
+  const requiredPermissions = Array.isArray(input.requiredPermissions)
+    ? input.requiredPermissions.filter(Boolean)
+    : [];
+
+  return resolved
+    .filter((result): result is Extract<ResolveResult, { ok: true }> => result.ok)
+    .map((result) => result.data)
+    .filter((access) =>
+      requiredPermissions.every((permission) => sellerHasPermission(access, permission))
+    );
+}
+
 export function sellerHasPermission(
   access: Pick<SellerAccessContext, "permissionKeys"> | null | undefined,
   requiredPermission: string

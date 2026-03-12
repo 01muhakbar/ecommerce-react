@@ -343,6 +343,78 @@ const buildShippingSummary = (order: any) => {
   };
 };
 
+const countSuborderItems = (suborder: any) =>
+  Array.isArray(suborder?.items)
+    ? suborder.items.reduce((sum: number, item: any) => sum + toNumber(getAttr(item, "qty")), 0)
+    : 0;
+
+const buildSellerReadModel = (input: {
+  suborder: any;
+  order: any;
+  fulfillmentStatus: string;
+  paymentStatus: string;
+  parentOrderStatus: string;
+  parentPaymentStatus: string;
+  checkoutMode: string;
+}) => {
+  const fulfillmentMeta = serializeFulfillmentStatusMeta(input.fulfillmentStatus);
+  const paymentMeta = serializePaymentStatusMeta(input.paymentStatus);
+  const parentOrderMeta = serializeOrderStatusMeta(input.parentOrderStatus);
+  const parentPaymentMeta = serializePaymentStatusMeta(input.parentPaymentStatus);
+  const checkoutModeMeta = serializeCheckoutModeMeta(input.checkoutMode);
+  const itemCount = countSuborderItems(input.suborder);
+  const subtotalAmount = toNumber(getAttr(input.suborder, "subtotalAmount"));
+  const shippingAmount = toNumber(getAttr(input.suborder, "shippingAmount"));
+  const serviceFeeAmount = toNumber(getAttr(input.suborder, "serviceFeeAmount"));
+  const totalAmount = toNumber(getAttr(input.suborder, "totalAmount"));
+
+  return {
+    primaryStatus: {
+      code: input.fulfillmentStatus,
+      label: fulfillmentMeta.label,
+      description: fulfillmentMeta.description,
+      source: "SUBORDER.fulfillmentStatus",
+      scope: "SELLER_SUBORDER",
+    },
+    paymentState: {
+      code: input.paymentStatus,
+      label: paymentMeta.label,
+      description: paymentMeta.description,
+      source: "SUBORDER.paymentStatus",
+      scope: "SELLER_SUBORDER",
+    },
+    parentOrder: {
+      orderNumber: String(getAttr(input.order, "invoiceNo") || ""),
+      status: input.parentOrderStatus,
+      statusMeta: parentOrderMeta,
+      paymentStatus: input.parentPaymentStatus,
+      paymentStatusMeta: parentPaymentMeta,
+      checkoutMode: input.checkoutMode,
+      checkoutModeMeta,
+      source: "ORDER",
+      note:
+        input.checkoutMode === "MULTI_STORE"
+          ? "Parent order lifecycle can differ from this store split because one checkout is shared across multiple seller suborders."
+          : "Parent order lifecycle is a read-only reference. Seller operations stay scoped to this store suborder.",
+    },
+    sellerScope: {
+      entity: "SUBORDER",
+      itemCount,
+      subtotalAmount,
+      shippingAmount,
+      serviceFeeAmount,
+      totalAmount,
+      itemScopeLabel: "Item counts and totals only include this store-owned suborder.",
+      parentReferenceLabel:
+        "Parent order lifecycle and parent payment remain read-only references in seller workspace.",
+    },
+    operationalNote:
+      input.paymentStatus === "PAID"
+        ? "Use seller fulfillment as the primary operational status for this store split. Payment for this suborder is already settled."
+        : "Use suborder payment readiness and seller fulfillment as the operational truth. Parent order status can move on a separate global lane.",
+  };
+};
+
 const serializeAuditState = (value?: Record<string, unknown> | null) =>
   value ? JSON.stringify(value) : null;
 
@@ -565,6 +637,15 @@ const serializeListItem = (suborder: any, sellerAccess: any = null) => {
     orderStatus,
     paymentStatus,
   });
+  const readModel = buildSellerReadModel({
+    suborder,
+    order,
+    fulfillmentStatus,
+    paymentStatus,
+    parentOrderStatus: orderStatus,
+    parentPaymentStatus,
+    checkoutMode,
+  });
 
   return {
     suborderId: toNumber(getAttr(suborder, "id")),
@@ -577,10 +658,8 @@ const serializeListItem = (suborder: any, sellerAccess: any = null) => {
     paymentStatusMeta: serializePaymentStatusMeta(paymentStatus),
     fulfillmentStatus,
     fulfillmentStatusMeta: serializeFulfillmentStatusMeta(fulfillmentStatus),
-    totalAmount: toNumber(getAttr(suborder, "totalAmount")),
-    itemCount: Array.isArray(suborder?.items)
-      ? suborder.items.reduce((sum: number, item: any) => sum + toNumber(getAttr(item, "qty")), 0)
-      : 0,
+    totalAmount: readModel.sellerScope.totalAmount,
+    itemCount: readModel.sellerScope.itemCount,
     createdAt: getAttr(suborder, "createdAt") || null,
     order: {
       id: toNumber(getAttr(order, "id")),
@@ -597,6 +676,7 @@ const serializeListItem = (suborder: any, sellerAccess: any = null) => {
       storeId: toNumber(getAttr(suborder, "storeId")),
       relationLabel: "Seller suborder for the active store only.",
     },
+    readModel,
     governance: {
       fulfillment: buildFulfillmentGovernance(sellerAccess, fulfillmentStatus, {
         blockerCode: fulfillmentBlocker?.code,
@@ -647,6 +727,15 @@ const serializeDetail = (suborder: any, sellerAccess: any = null) => {
     orderStatus,
     paymentStatus,
   });
+  const readModel = buildSellerReadModel({
+    suborder,
+    order,
+    fulfillmentStatus,
+    paymentStatus,
+    parentOrderStatus: orderStatus,
+    parentPaymentStatus,
+    checkoutMode,
+  });
 
   return {
     suborderId: toNumber(getAttr(suborder, "id")),
@@ -667,6 +756,7 @@ const serializeDetail = (suborder: any, sellerAccess: any = null) => {
       storeId: toNumber(getAttr(suborder, "storeId")),
       relationLabel: "This seller detail is scoped to one store-owned suborder.",
     },
+    readModel,
     governance: {
       fulfillment: buildFulfillmentGovernance(sellerAccess, fulfillmentStatus, {
         blockerCode: fulfillmentBlocker?.code,
@@ -687,10 +777,10 @@ const serializeDetail = (suborder: any, sellerAccess: any = null) => {
     fulfillmentStatus,
     fulfillmentStatusMeta: serializeFulfillmentStatusMeta(fulfillmentStatus),
     totals: {
-      subtotalAmount: toNumber(getAttr(suborder, "subtotalAmount")),
-      shippingAmount: toNumber(getAttr(suborder, "shippingAmount")),
-      serviceFeeAmount: toNumber(getAttr(suborder, "serviceFeeAmount")),
-      totalAmount: toNumber(getAttr(suborder, "totalAmount")),
+      subtotalAmount: readModel.sellerScope.subtotalAmount,
+      shippingAmount: readModel.sellerScope.shippingAmount,
+      serviceFeeAmount: readModel.sellerScope.serviceFeeAmount,
+      totalAmount: readModel.sellerScope.totalAmount,
     },
     paidAt: getAttr(suborder, "paidAt") || null,
     createdAt: getAttr(suborder, "createdAt") || null,

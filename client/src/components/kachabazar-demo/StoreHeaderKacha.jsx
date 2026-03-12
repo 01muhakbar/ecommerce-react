@@ -89,23 +89,23 @@ export default function StoreHeaderKacha({ onCartClick }) {
   );
   const resolvedBrandName = resolvePreferredText(publicIdentity.name, "", "KACHA BAZAR");
   const resolvedPhoneNumber = resolvePreferredText(
-    publicIdentity.phone,
-    headerContent.phoneNumber
+    headerContent.phoneNumber,
+    publicIdentity.phone
   );
   const resolvedWhatsAppLink = toPreferredWhatsAppLink(
-    publicIdentity.whatsapp,
-    headerContent.whatsAppLink
+    headerContent.whatsAppLink,
+    publicIdentity.whatsapp
   );
   const resolvedHeaderLogoUrl = resolvePreferredText(
-    publicIdentity.logoUrl,
-    headerContent.headerLogoUrl
+    headerContent.headerLogoUrl,
+    publicIdentity.logoUrl
   );
   const isIdentityLoading =
     !hasHeaderPayload &&
     !hasPublicIdentityPayload &&
     (headerQuery.isFetching || publicIdentityQuery.isFetching);
   const headerVersion = useMemo(() => {
-    const versionSource = resolvePreferredText(publicIdentity.updatedAt, headerContent.updatedAt);
+    const versionSource = resolvePreferredText(headerContent.updatedAt, publicIdentity.updatedAt);
     const parsed = Date.parse(versionSource);
     return Number.isFinite(parsed)
       ? String(parsed)

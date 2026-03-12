@@ -66,6 +66,9 @@ function actionLabel(action) {
 }
 
 function currentStateSummary(member, lifecycle) {
+  if (member?.readModel?.lifecycle?.summary) {
+    return member.readModel.lifecycle.summary;
+  }
   if (member?.status === "REMOVED") {
     if (lifecycle?.removedSource === "INVITE_DECLINE") {
       return "This membership is closed because the invited user declined the store invitation.";
@@ -298,14 +301,20 @@ export default function SellerMemberLifecyclePage() {
         <div className="mt-5 grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
           <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Role</p>
-            <p className="mt-3 text-base font-semibold text-stone-900">
-              {member?.role?.name || member?.roleName || member?.roleCode || "-"}
-            </p>
-            <p className="mt-1 text-sm text-stone-500">{member?.role?.code || member?.roleCode || "-"}</p>
-            <p className="mt-3 text-sm leading-6 text-stone-600">
-              {member?.role?.description || "No role description is stored for this membership snapshot."}
-            </p>
-          </div>
+              <p className="mt-3 text-base font-semibold text-stone-900">
+              {member?.readModel?.primaryRole?.label ||
+                member?.role?.name ||
+                member?.roleName ||
+                member?.roleCode ||
+                "-"}
+              </p>
+              <p className="mt-1 text-sm text-stone-500">{member?.role?.code || member?.roleCode || "-"}</p>
+              <p className="mt-3 text-sm leading-6 text-stone-600">
+              {member?.readModel?.primaryRole?.summary ||
+                member?.role?.description ||
+                "No role description is stored for this membership snapshot."}
+              </p>
+            </div>
           <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">
               Permission Snapshot
@@ -346,7 +355,10 @@ export default function SellerMemberLifecyclePage() {
                   <span className="text-xs text-stone-500">{formatDateTime(item.createdAt)}</span>
                 </div>
                 <p className="mt-3 text-sm font-medium text-stone-900">
-                  {summarizeDelta(item.beforeState, item.afterState)}
+                  {item.readModel?.changeSummary || summarizeDelta(item.beforeState, item.afterState)}
+                </p>
+                <p className="mt-2 text-sm text-stone-600">
+                  {item.readModel?.summary || "Membership mutation recorded in the seller audit trail."}
                 </p>
                 <p className="mt-2 text-xs text-stone-500">
                   Actor: {item.actor?.name || item.actor?.email || "System"}
@@ -355,10 +367,7 @@ export default function SellerMemberLifecyclePage() {
                   Snapshot: {item.target?.snapshot?.roleCode || "-"} / {item.target?.snapshot?.status || "-"}
                 </p>
                 <p className="mt-1 text-xs text-stone-500">
-                  Before: {item.beforeState ? JSON.stringify(item.beforeState) : "-"}
-                </p>
-                <p className="mt-1 text-xs text-stone-500">
-                  After: {item.afterState ? JSON.stringify(item.afterState) : "-"}
+                  Category: {item.readModel?.category || "AUDIT"}
                 </p>
               </article>
             ))}

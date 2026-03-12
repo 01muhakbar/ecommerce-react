@@ -98,6 +98,53 @@ const normalizeInvitation = (invitation: any, fallbackStatus: string) => {
   };
 };
 
+const normalizeRoleReadModel = (payload: any, fallback: any = {}) => ({
+  code: normalizeText(payload?.code ?? fallback?.code) || null,
+  label: normalizeText(payload?.label ?? fallback?.label) || null,
+  category: normalizeText(payload?.category) || null,
+  authorityLevel: normalizeText(payload?.authorityLevel) || null,
+  tone: normalizeText(payload?.tone) || "stone",
+  summary: normalizeText(payload?.summary ?? fallback?.summary) || null,
+});
+
+const normalizeLifecycleReadModel = (payload: any, fallback: any = {}) => ({
+  code: normalizeText(payload?.code) || null,
+  label: normalizeText(payload?.label ?? fallback?.label) || null,
+  tone: normalizeText(payload?.tone) || "stone",
+  summary: normalizeText(payload?.summary ?? fallback?.summary) || null,
+  nextStep: normalizeText(payload?.nextStep) || null,
+});
+
+const normalizeAuthorityReadModel = (payload: any) => ({
+  code: normalizeText(payload?.code) || null,
+  label: normalizeText(payload?.label) || null,
+  tone: normalizeText(payload?.tone) || "stone",
+  description: normalizeText(payload?.description) || null,
+});
+
+const normalizeMemberReadModel = (payload: any, fallback: any = {}) => ({
+  primaryRole: normalizeRoleReadModel(payload?.primaryRole, fallback?.role),
+  lifecycle: normalizeLifecycleReadModel(payload?.lifecycle, fallback?.statusMeta),
+  authority: normalizeAuthorityReadModel(payload?.authority),
+});
+
+const normalizeCurrentAccessReadModel = (payload: any, fallback: any = {}) => ({
+  primaryRole: normalizeRoleReadModel(payload?.primaryRole, {
+    code: fallback?.roleCode,
+    label: fallback?.roleCode,
+  }),
+  authority: normalizeAuthorityReadModel(payload?.authority),
+  membershipBoundary: normalizeText(payload?.membershipBoundary) || null,
+});
+
+const normalizeAuditReadModel = (payload: any) => ({
+  category: normalizeText(payload?.category) || null,
+  title: normalizeText(payload?.title) || null,
+  tone: normalizeText(payload?.tone) || "stone",
+  summary: normalizeText(payload?.summary) || null,
+  changeSummary: normalizeText(payload?.changeSummary) || null,
+});
+
 const normalizeMember = (member: any) => {
   if (!member || typeof member !== "object") return null;
   const status = normalizeMemberStatus(member.status ?? member.statusMeta?.code);
@@ -136,6 +183,10 @@ const normalizeMember = (member: any) => {
       isOwner: Boolean(member.governance?.isOwner),
       restrictionReason: normalizeText(member.governance?.restrictionReason) || null,
     },
+    readModel: normalizeMemberReadModel(member.readModel, {
+      role: member.role,
+      statusMeta: member.statusMeta,
+    }),
   };
 };
 
@@ -186,6 +237,7 @@ const normalizeHistoryItem = (item: any) => {
     },
     beforeState: item.beforeState || null,
     afterState: item.afterState || null,
+    readModel: normalizeAuditReadModel(item.readModel),
     createdAt: item.createdAt ?? null,
   };
 };
@@ -224,6 +276,9 @@ export const getSellerTeamSummary = async (storeId: number | string) => {
               .filter(Boolean)
           : [],
       },
+      readModel: normalizeCurrentAccessReadModel(payload.currentAccess?.readModel, {
+        roleCode: payload.currentAccess?.roleCode,
+      }),
     },
     summary: {
       totalMembers: asNumber(payload.summary?.totalMembers, 0),
