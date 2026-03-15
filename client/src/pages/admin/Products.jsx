@@ -11,6 +11,7 @@ import {
 } from "../../lib/adminApi.js";
 import { moneyIDR } from "../../utils/money.js";
 import { resolveAssetUrl } from "../../lib/assetUrl.js";
+import { getPrimaryProductImageUrl } from "../../utils/productDisplay.js";
 import {
   Download,
   ChevronDown,
@@ -352,7 +353,7 @@ export default function AdminProductsPage() {
 
   const asCurrency = (value) => moneyIDR(Number(value || 0));
   const resolveThumbnail = (product) =>
-    resolveAssetUrl(product.imageUrl || product.promoImagePath || FALLBACK_THUMBNAIL);
+    resolveAssetUrl(getPrimaryProductImageUrl(product, FALLBACK_THUMBNAIL));
 
   const getPublished = (product) => {
     const override = publishedOverrides[product.id];

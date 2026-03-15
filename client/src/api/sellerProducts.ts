@@ -6,7 +6,13 @@ type SellerProductsQuery = {
   keyword?: string;
   status?: string;
   published?: "" | "true" | "false";
-  submissionStatus?: "" | "none" | "submitted" | "needs_revision" | "review_queue";
+  submissionStatus?:
+    | ""
+    | "none"
+    | "submitted"
+    | "needs_revision"
+    | "review_queue"
+    | "ready_to_submit";
   visibilityState?: "" | "internal_only" | "storefront_visible" | "published_blocked";
 };
 
@@ -393,8 +399,15 @@ const normalizeCatalogGovernance = (governance: any) => {
 const normalizeProductSummary = (value: any) => ({
   totalProducts: asNumber(value?.totalProducts, 0),
   drafts: asNumber(value?.drafts, 0),
+  readyToSubmit: asNumber(value?.readyToSubmit, 0),
+  active: asNumber(value?.active, 0),
+  inactive: asNumber(value?.inactive, 0),
   submitted: asNumber(value?.submitted, 0),
   needsRevision: asNumber(value?.needsRevision, 0),
+  reviewQueue: asNumber(
+    value?.reviewQueue,
+    asNumber(value?.submitted, 0) + asNumber(value?.needsRevision, 0)
+  ),
   storefrontVisible: asNumber(value?.storefrontVisible, 0),
   publishedBlocked: asNumber(value?.publishedBlocked, 0),
   internalOnly: asNumber(value?.internalOnly, 0),

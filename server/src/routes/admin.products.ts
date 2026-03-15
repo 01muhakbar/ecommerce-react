@@ -32,12 +32,224 @@ const normalizeCategoryIdsInput = (value: unknown) => {
   if (!Array.isArray(value)) return undefined;
   return Array.from(new Set(value.map((entry) => parseOptionalPositiveId(entry)).filter((entry) => entry !== null))) as number[];
 };
-const normalizeUploadsUrl = (v?: string | null) => {
-  if (!v) return null;
-  if (/^https?:\/\//i.test(v)) return v;
-  if (v.startsWith("/uploads/")) return v;
-  if (v.startsWith("/")) return v;
-  return `/uploads/${v}`;
+const normalizeUploadsUrl = (value?: unknown): string | null => {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  if (!normalized) return null;
+
+  if (
+    normalized === "[]" ||
+    normalized === "[" ||
+    normalized === "]" ||
+    normalized === "{}" ||
+    normalized === "null" ||
+    normalized === "undefined"
+  ) {
+    return null;
+  }
+
+  if (normalized.startsWith("[") || normalized.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(normalized);
+      if (Array.isArray(parsed)) {
+        return normalizeUploadsUrl(parsed[0]);
+      }
+      if (parsed && typeof parsed === "object") {
+        return (
+          normalizeUploadsUrl((parsed as any).url) ||
+          normalizeUploadsUrl((parsed as any).path) ||
+          normalizeUploadsUrl((parsed as any).src)
+        );
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  if (/^https?:\/\//i.test(normalized)) return normalized;
+  if (normalized.startsWith("/uploads/")) return normalized;
+  if (normalized.startsWith("/")) return normalized;
+  return `/uploads/${normalized}`;
+};
+
+const normalizeImagePathList = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return Array.from(
+      new Set(value.map((entry) => normalizeUploadsUrl(entry)).filter(Boolean))
+    ) as string[];
+  }
+
+  const normalized = typeof value === "string" ? value.trim() : "";
+  if (!normalized) return [];
+
+  if (normalized.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(normalized);
+      if (Array.isArray(parsed)) {
+        return Array.from(
+          new Set(parsed.map((entry) => normalizeUploadsUrl(entry)).filter(Boolean))
+        ) as string[];
+      }
+    } catch {
+      return [];
+    }
+  }
+
+  const single = normalizeUploadsUrl(normalized);
+  return single ? [single] : [];
+};
+const isMalformedLiteral = (value: string) => {
+  const normalized = value.trim();
+  return (
+    normalized === "[]" ||
+    normalized === "[" ||
+    normalized === "]" ||
+    normalized === "{}" ||
+    normalized === "null" ||
+    normalized === "undefined"
+  );
+};
+const tryParseJson = (value: string) => {
+  try {
+    return { ok: true as const, value: JSON.parse(value) };
+  } catch {
+    return { ok: false as const, value: null };
+  }
+};
+const normalizeAdminProductTags = (value: unknown): string[] => {
+  const result: string[] = [];
+  const seen = new Set<string>();
+
+  const pushTag = (candidate: unknown) => {
+    const normalized = String(candidate ?? "").trim();
+    if (!normalized || isMalformedLiteral(normalized)) return;
+    const dedupeKey = normalized.toLowerCase();
+    if (seen.has(dedupeKey)) return;
+    seen.add(dedupeKey);
+    result.push(normalized);
+  };
+
+  const consume = (entry: unknown, depth = 0): void => {
+    if (entry === null || typeof entry === "undefined" || depth > 4) return;
+
+    if (Array.isArray(entry)) {
+      entry.forEach((item) => consume(item, depth + 1));
+      return;
+    }
+
+    if (typeof entry === "string") {
+      let normalized = entry.trim();
+      if (!normalized || isMalformedLiteral(normalized)) return;
+
+      const parsed = tryParseJson(normalized);
+      if (parsed.ok) {
+        consume(parsed.value, depth + 1);
+        return;
+      }
+
+      const unescaped = normalized
+        .replace(/\\"/g, '"')
+        .replace(/\\'/g, "'")
+        .replace(/\\\\/g, "\\")
+        .trim();
+      if (unescaped && unescaped !== normalized) {
+        const reparsed = tryParseJson(unescaped);
+        if (reparsed.ok) {
+          consume(reparsed.value, depth + 1);
+          return;
+        }
+        normalized = unescaped;
+      }
+
+      if (
+        (normalized.startsWith('"') && normalized.endsWith('"')) ||
+        (normalized.startsWith("'") && normalized.endsWith("'"))
+      ) {
+        const stripped = normalized.slice(1, -1).trim();
+        if (stripped && stripped !== normalized) {
+          consume(stripped, depth + 1);
+          return;
+        }
+      }
+
+      if (normalized.includes(",")) {
+        normalized
+          .split(",")
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .forEach((part) => consume(part, depth + 1));
+        return;
+      }
+
+      pushTag(normalized);
+      return;
+    }
+
+    if (typeof entry === "object") {
+      const record = entry as Record<string, unknown>;
+      const unitValue = record.unit ?? record.Unit;
+      if (unitValue !== null && typeof unitValue !== "undefined") {
+        consume(unitValue, depth + 1);
+      }
+
+      Object.entries(record).forEach(([key, item]) => {
+        if (key === "unit" || key === "Unit") return;
+        if (/^(source|seed|__)/i.test(key)) return;
+        consume(item, depth + 1);
+      });
+      return;
+    }
+
+    pushTag(entry);
+  };
+
+  consume(value);
+  return result;
+};
+const extractAdminProductUnit = (value: unknown): string | null => {
+  const consume = (entry: unknown, depth = 0): string | null => {
+    if (entry === null || typeof entry === "undefined" || depth > 4) return null;
+
+    if (Array.isArray(entry)) {
+      for (const item of entry) {
+        const resolved = consume(item, depth + 1);
+        if (resolved) return resolved;
+      }
+      return null;
+    }
+
+    if (typeof entry === "string") {
+      const normalized = entry.trim();
+      if (!normalized || isMalformedLiteral(normalized)) return null;
+
+      const parsed = tryParseJson(normalized);
+      if (parsed.ok) return consume(parsed.value, depth + 1);
+
+      const unescaped = normalized
+        .replace(/\\"/g, '"')
+        .replace(/\\'/g, "'")
+        .replace(/\\\\/g, "\\")
+        .trim();
+      if (unescaped && unescaped !== normalized) {
+        const reparsed = tryParseJson(unescaped);
+        if (reparsed.ok) return consume(reparsed.value, depth + 1);
+      }
+
+      return null;
+    }
+
+    if (typeof entry === "object") {
+      const record = entry as Record<string, unknown>;
+      const directUnit = record.unit ?? record.Unit;
+      if (directUnit !== null && typeof directUnit !== "undefined") {
+        const normalized = String(directUnit).trim();
+        return normalized && !isMalformedLiteral(normalized) ? normalized : null;
+      }
+    }
+
+    return null;
+  };
+
+  return consume(value);
 };
 const toNumber = (value: unknown, fallback = 0) => {
   const parsed = Number(value);
@@ -464,14 +676,14 @@ const resolveAdminPriceFields = (plain: any) => {
 
 const toAdminProductListItem = (product: any) => {
   const plain = product?.get ? product.get({ plain: true }) : product;
-  const rawImage = plain?.promoImagePath || plain?.imagePaths?.[0] || null;
-  const imageUrl = normalizeUploadsUrl(rawImage);
+  const imagePaths = normalizeImagePathList(plain?.imagePaths);
+  const imageUrl = normalizeUploadsUrl(plain?.promoImagePath) || imagePaths[0] || null;
   const priceFields = resolveAdminPriceFields(plain);
 
   const ratingAvgRaw = toNumber(plain?.ratingAvg ?? plain?.rating_avg, 0);
   const ratingAvg = Number(ratingAvgRaw.toFixed(1));
   const reviewCount = Math.max(0, Math.round(toNumber(plain?.reviewCount ?? plain?.review_count, 0)));
-  const unit = String(plain?.tags?.unit || "").trim() || null;
+  const unit = extractAdminProductUnit(plain?.tags);
 
   return {
     id: plain?.id,
@@ -506,24 +718,10 @@ const toAdminProductListItem = (product: any) => {
 
 const toAdminProductDetail = (product: any) => {
   const plain = product?.get ? product.get({ plain: true }) : product;
-  const rawImage = plain?.promoImagePath || plain?.imagePaths?.[0] || null;
-  const imageUrl = normalizeUploadsUrl(rawImage);
+  const imagePaths = normalizeImagePathList(plain?.imagePaths);
+  const imageUrl = normalizeUploadsUrl(plain?.promoImagePath) || imagePaths[0] || null;
   const priceFields = resolveAdminPriceFields(plain);
-
-  const tagsRaw = plain?.tags;
-  let tags: string[] = [];
-  if (Array.isArray(tagsRaw)) {
-    tags = tagsRaw.map((tag) => String(tag)).filter(Boolean);
-  } else if (tagsRaw && typeof tagsRaw === "object") {
-    tags = Object.values(tagsRaw)
-      .map((tag) => String(tag || "").trim())
-      .filter(Boolean);
-  } else if (typeof tagsRaw === "string") {
-    tags = tagsRaw
-      .split(",")
-      .map((tag) => tag.trim())
-      .filter(Boolean);
-  }
+  const tags = normalizeAdminProductTags(plain?.tags);
 
   return {
     id: plain?.id,
@@ -549,11 +747,8 @@ const toAdminProductDetail = (product: any) => {
     categories: resolveProductSelectedCategories(plain),
     imageUrl,
     promoImagePath: imageUrl,
-    imagePaths: Array.isArray(plain?.imagePaths)
-      ? plain.imagePaths.map((value: string) => normalizeUploadsUrl(value)).filter(Boolean)
-      : imageUrl
-      ? [imageUrl]
-      : [],
+    imagePaths:
+      imageUrl && !imagePaths.includes(imageUrl) ? [imageUrl, ...imagePaths] : imagePaths,
     tags,
     createdAt: plain?.createdAt ?? null,
     updatedAt: plain?.updatedAt ?? null,

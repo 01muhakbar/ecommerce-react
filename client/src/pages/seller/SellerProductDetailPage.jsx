@@ -27,6 +27,10 @@ import {
   SellerWorkspaceSectionHeader,
 } from "../../components/seller/SellerWorkspaceFoundation.jsx";
 import { resolveAssetUrl } from "../../lib/assetUrl.js";
+import {
+  getProductVisibleImageUrls,
+  normalizeProductDisplayTags,
+} from "../../utils/productDisplay.js";
 import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
 import { useSellerWorkspaceRoute } from "../../utils/sellerWorkspaceRoute.js";
 
@@ -44,8 +48,6 @@ const formatDateTime = (value) =>
         timeStyle: "short",
       }).format(new Date(value))
     : "-";
-
-const prettyJson = (value) => JSON.stringify(value, null, 2);
 
 const getStatusTone = (status) =>
   status === "active" ? "emerald" : status === "draft" ? "amber" : "stone";
@@ -74,7 +76,7 @@ const getSubmissionErrorMessage = (error) => {
   }
 
   if (code === "SELLER_PRODUCT_ALREADY_SUBMITTED") {
-    return "This draft is already submitted for review.";
+    return "This draft is already waiting in admin review.";
   }
 
   return (
@@ -213,7 +215,11 @@ export default function SellerProductDetailPage() {
   const assignedCategories = Array.isArray(product?.category?.assigned)
     ? product.category.assigned
     : [];
-  const imageUrls = Array.isArray(product?.media?.imageUrls) ? product.media.imageUrls : [];
+  const normalizedTags = normalizeProductDisplayTags(product?.attributes?.tags);
+  const detailImageUrls = getProductVisibleImageUrls({
+    promoImageUrl: product?.media?.promoImageUrl,
+    imageUrls: product?.media?.imageUrls,
+  });
   const contractNotes = Array.isArray(product?.contract?.notes) ? product.contract.notes : [];
   const catalogGovernance = product?.governance ?? null;
   const authoringGovernance = catalogGovernance?.authoring ?? null;
@@ -239,7 +245,7 @@ export default function SellerProductDetailPage() {
       <SellerWorkspaceSectionHeader
         eyebrow="Seller Product Detail"
         title={product?.name || "Product"}
-        description="Seller-scoped lifecycle view for this product: check submission state, read revision guidance, confirm storefront visibility, and follow the next valid seller action without crossing into admin-only review authority."
+        description="Use this page to see whether the product is still a draft, already with admin review, or back for changes before deciding the next seller action."
         actions={[
           backButton,
           canEditDraft ? (
@@ -337,8 +343,8 @@ export default function SellerProductDetailPage() {
 
       {isSubmitted ? (
         <SellerWorkspaceNotice type="info">
-          Admin is now reviewing this product. Seller editing stays locked until admin publishes the
-          final outcome or sends the draft back with a revision request.
+          This draft is with admin review now. You can still check the detail here, but editing
+          stays locked until admin asks for changes or finishes the review.
         </SellerWorkspaceNotice>
       ) : null}
 
@@ -349,8 +355,8 @@ export default function SellerProductDetailPage() {
               Revision requested
             </p>
             <p>
-              Admin sent this product back for correction. Continue the revision, update the allowed
-              fields, then resubmit it for review.
+              Admin asked for changes on this draft. Update the requested fields, then send it back
+              for review when ready.
             </p>
             {revisionReason ? <p>{revisionReason}</p> : null}
           </div>
@@ -359,7 +365,7 @@ export default function SellerProductDetailPage() {
 
       <SellerWorkspaceSectionCard
         title="Submission lifecycle"
-        hint="Use this panel to understand the current seller submission state, the storefront outcome, and the next valid action."
+        hint="Use this panel to see the current review state and the next seller step."
         Icon={Send}
         actions={
           canEditDraft || canSubmitForReview
@@ -418,7 +424,7 @@ export default function SellerProductDetailPage() {
             value={submission?.nextActionLabel || "Review product status"}
             hint={
               submission?.nextActionDescription ||
-              "No seller submission action is currently available for this product."
+              "No seller action is open for this product right now."
             }
           />
         </div>
@@ -448,7 +454,7 @@ export default function SellerProductDetailPage() {
 
       <SellerWorkspaceSectionCard
         title="Submission timeline"
-        hint="Seller submission state does not publish the product by itself. Admin remains the final review and publish authority."
+        hint="Sending a draft for review does not publish it. Admin still decides the final outcome."
         Icon={Send}
       >
         {submissionGovernance?.note ? (
@@ -663,9 +669,9 @@ export default function SellerProductDetailPage() {
                   value={product?.media?.videoUrl || "-"}
                 />
               </div>
-              {imageUrls.length > 0 ? (
+              {detailImageUrls.length > 0 ? (
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {imageUrls.map((imageUrl) => (
+                  {detailImageUrls.map((imageUrl) => (
                     <div
                       key={imageUrl}
                       className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50"
@@ -683,8 +689,8 @@ export default function SellerProductDetailPage() {
                 </div>
               ) : (
                 <SellerWorkspaceEmptyState
-                  title="No additional images stored"
-                  description="This product does not expose extra media rows in the current seller snapshot."
+                  title="No product images stored"
+                  description="This product does not currently expose a promo image or additional seller media rows."
                   icon={<ImageIcon className="h-5 w-5" />}
                 />
               )}
@@ -814,10 +820,12 @@ export default function SellerProductDetailPage() {
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                   Tags
                 </p>
-                {product?.attributes?.tags ? (
-                  <pre className="mt-3 overflow-x-auto rounded-2xl bg-slate-950 p-4 text-xs leading-6 text-slate-100">
-                    {prettyJson(product.attributes.tags)}
-                  </pre>
+                {normalizedTags.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {normalizedTags.map((tag) => (
+                      <SellerWorkspaceBadge key={tag} label={tag} tone="stone" />
+                    ))}
+                  </div>
                 ) : (
                   <p className="mt-3 text-sm text-slate-500">No tag data stored.</p>
                 )}

@@ -7,11 +7,14 @@ import {
   updateAdminProductPublished,
 } from "../../lib/adminApi.js";
 import { moneyIDR } from "../../utils/money.js";
+import {
+  getPrimaryProductImageUrl,
+  normalizeProductDisplayTags,
+} from "../../utils/productDisplay.js";
 import { resolveAssetUrl } from "../../lib/assetUrl.js";
 
 const FALLBACK_THUMBNAIL = "/demo/placeholder-product.svg";
 const MAX_VISIBLE_TAGS = 6;
-const INTERNAL_TAG_PATTERN = /^(source:|__)|seed:/i;
 const MAX_VARIANTS = 9;
 const DEFAULT_COLORS = ["Red", "Green", "Blue"];
 const DEFAULT_SIZES = ["Small", "Medium", "Large"];
@@ -32,18 +35,6 @@ const SIZE_CANDIDATES = new Set(["xs", "s", "small", "m", "medium", "l", "large"
 const asNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
-};
-
-const truncateTag = (value, max = 32) =>
-  value.length > max ? `${value.slice(0, max - 1)}...` : value;
-
-const isInternalTag = (value) => INTERNAL_TAG_PATTERN.test(String(value || "").trim());
-const tryParseJson = (value) => {
-  try {
-    return { ok: true, value: JSON.parse(value) };
-  } catch {
-    return { ok: false, value: null };
-  }
 };
 
 const toTitle = (value) =>
@@ -76,120 +67,6 @@ const extractCandidates = (tags, dictionary) => {
   });
 
   return found;
-};
-
-const normalizeTags = (raw) => {
-  const result = [];
-  const seen = new Set();
-
-  const pushTag = (candidate) => {
-    const text = String(candidate || "").trim();
-    if (!text || isInternalTag(text)) return;
-    const key = text.toLowerCase();
-    if (seen.has(key)) return;
-    seen.add(key);
-    result.push(truncateTag(text));
-  };
-
-  const consumeObject = (obj) => {
-    if (!obj || typeof obj !== "object") return;
-    const unitValue = obj.unit ?? obj.Unit;
-    if (unitValue != null && String(unitValue).trim()) {
-      pushTag(String(unitValue).trim());
-    }
-
-    Object.entries(obj).forEach(([key, value]) => {
-      if (["source", "Source", "unit", "Unit"].includes(key)) return;
-      if (/^(source|seed|__)/i.test(key)) return;
-      if (value == null) return;
-      if (typeof value === "object") return;
-      pushTag(value);
-    });
-  };
-
-  const consumeEntry = (entry) => {
-    if (entry == null) return;
-
-    if (typeof entry === "string") {
-      let normalized = entry.trim();
-      if (!normalized) return;
-
-      // Handle raw JSON, double-encoded JSON, and escaped JSON-like string from legacy seed data.
-      for (let depth = 0; depth < 3; depth += 1) {
-        const parsed = tryParseJson(normalized);
-        if (!parsed.ok) break;
-
-        if (typeof parsed.value === "string") {
-          const next = parsed.value.trim();
-          if (!next || next === normalized) break;
-          normalized = next;
-          continue;
-        }
-
-        consumeEntry(parsed.value);
-        return;
-      }
-
-      // Example fallback: {\"unit\":\"1 kg\"} -> {"unit":"1 kg"}
-      for (let depth = 0; depth < 3; depth += 1) {
-        const unescaped = normalized
-          .replace(/\\"/g, '"')
-          .replace(/\\'/g, "'")
-          .replace(/\\\\/g, "\\")
-          .trim();
-        if (!unescaped || unescaped === normalized) break;
-        normalized = unescaped;
-
-        const reparsed = tryParseJson(normalized);
-        if (!reparsed.ok) continue;
-
-        if (typeof reparsed.value === "string") {
-          const next = reparsed.value.trim();
-          if (!next || next === normalized) break;
-          normalized = next;
-          continue;
-        }
-
-        consumeEntry(reparsed.value);
-        return;
-      }
-
-      if (
-        (normalized.startsWith('"') && normalized.endsWith('"')) ||
-        (normalized.startsWith("'") && normalized.endsWith("'"))
-      ) {
-        normalized = normalized.slice(1, -1).trim();
-        const reparsed = tryParseJson(normalized);
-        if (reparsed.ok) {
-          consumeEntry(reparsed.value);
-          return;
-        }
-      }
-
-      pushTag(normalized);
-      return;
-    }
-
-    if (Array.isArray(entry)) {
-      entry.forEach((item) => consumeEntry(item));
-      return;
-    }
-
-    if (typeof entry === "object") {
-      consumeObject(entry);
-      return;
-    }
-
-    pushTag(entry);
-  };
-
-  if (Array.isArray(raw)) {
-    raw.forEach((entry) => consumeEntry(entry));
-  } else {
-    consumeEntry(raw);
-  }
-
-  return result;
 };
 
 const buildVariants = (product, normalizedTags, baseImageUrl) => {
@@ -240,6 +117,49 @@ const buildVariants = (product, normalizedTags, baseImageUrl) => {
   });
 };
 
+const getLifecycleMeta = (status) => {
+  const normalized = String(status || "").trim().toLowerCase();
+  if (normalized === "active") {
+    return {
+      label: "Active",
+      toneClass: "bg-emerald-100 text-emerald-700",
+    };
+  }
+  if (normalized === "inactive") {
+    return {
+      label: "Inactive",
+      toneClass: "bg-stone-100 text-stone-700",
+    };
+  }
+  return {
+    label: "Draft",
+    toneClass: "bg-amber-100 text-amber-800",
+  };
+};
+
+const getStorefrontMeta = (published, status) => {
+  const normalized = String(status || "").trim().toLowerCase();
+  if (!published) {
+    return {
+      label: "Hidden from storefront",
+      toneClass: "bg-rose-100 text-rose-700",
+      description: "Publish is off, so customers cannot see this product yet.",
+    };
+  }
+  if (normalized === "active") {
+    return {
+      label: "Visible in storefront",
+      toneClass: "bg-emerald-100 text-emerald-700",
+      description: "Publish is on and lifecycle is active, so storefront visibility is live.",
+    };
+  }
+  return {
+    label: "Published but blocked",
+    toneClass: "bg-amber-100 text-amber-800",
+    description: "Publish is on, but storefront visibility stays blocked until lifecycle returns to active.",
+  };
+};
+
 const getProductCategoryContext = (product) => {
   const selectedCategories = Array.isArray(product?.categories)
     ? product.categories.filter(Boolean)
@@ -273,18 +193,25 @@ export default function ProductPreviewDrawer({ productId, onClose, onEdit }) {
   });
 
   const product = detailQuery.data?.data || null;
-  const displayTags = useMemo(() => normalizeTags(product?.tags), [product?.tags]);
+  const displayTags = useMemo(
+    () =>
+      normalizeProductDisplayTags(product?.tags, {
+        filterInternal: true,
+        maxLength: 32,
+      }),
+    [product?.tags]
+  );
   const visibleTags = displayTags.slice(0, MAX_VISIBLE_TAGS);
   const hiddenTagsCount = Math.max(0, displayTags.length - visibleTags.length);
   const price = asNumber(product?.price);
   const salePrice = asNumber(product?.salePrice);
   const hasSalePrice = salePrice > 0 && salePrice < price;
   const published = Boolean(product?.published ?? product?.isPublished);
+  const lifecycleMeta = getLifecycleMeta(product?.status);
+  const storefrontMeta = getStorefrontMeta(published, product?.status);
   const skuValue = String(product?.sku ?? "").trim();
   const skuDisplay = skuValue && skuValue !== "-" ? skuValue : "N/A";
-  const imageUrl = resolveAssetUrl(
-    product?.imageUrl || product?.promoImagePath || product?.imagePaths?.[0] || FALLBACK_THUMBNAIL
-  );
+  const imageUrl = resolveAssetUrl(getPrimaryProductImageUrl(product, FALLBACK_THUMBNAIL));
   const categoryContext = useMemo(() => getProductCategoryContext(product), [product]);
   const variants = useMemo(
     () => buildVariants(product, displayTags, imageUrl),
@@ -422,13 +349,19 @@ export default function ProductPreviewDrawer({ productId, onClose, onEdit }) {
               </div>
 
               <div className="space-y-4">
-                <p
-                  className={`text-sm font-semibold ${
-                    published ? "text-emerald-600" : "text-rose-500"
-                  }`}
-                >
-                  Status: {published ? "Published" : "This product Hidden"}
-                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${lifecycleMeta.toneClass}`}
+                  >
+                    Lifecycle: {lifecycleMeta.label}
+                  </span>
+                  <span
+                    className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${storefrontMeta.toneClass}`}
+                  >
+                    Storefront: {storefrontMeta.label}
+                  </span>
+                </div>
+                <p className="text-sm text-slate-500">{storefrontMeta.description}</p>
 
                 <h2 className="text-3xl font-semibold leading-tight text-slate-900">
                   {product.name || "-"}

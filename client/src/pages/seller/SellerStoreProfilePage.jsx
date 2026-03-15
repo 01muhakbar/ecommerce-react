@@ -237,6 +237,30 @@ export default function SellerStoreProfilePage() {
     await mutation.mutateAsync(filteredPayload);
   };
 
+  const profile = profileQuery.data;
+  const completeness = profile?.completeness || {
+    label: "Profile needs attention",
+    tone: "warning",
+    completedFields: 0,
+    totalFields: 0,
+    missingFields: [],
+  };
+  const editableFields = profile?.governance?.editableFields || [];
+  const readOnlyFields = profile?.governance?.readOnlyFields || [];
+  const missingFields = completeness.missingFields || [];
+  const contract = profile?.contract || {
+    notes: [],
+    categories: {
+      editableFields,
+      readOnlyFields,
+      publicStorefrontFields: [],
+      operationalClientFields: [],
+      notSurfacedFields: [],
+    },
+    fieldMatrix: [],
+  };
+  const editableFieldSet = useMemo(() => new Set(editableFields), [editableFields]);
+
   if (!canView) {
     return (
       <SellerWorkspaceSectionCard
@@ -268,10 +292,8 @@ export default function SellerStoreProfilePage() {
         })}
         Icon={ShieldCheck}
       />
-    );
+      );
   }
-
-  const profile = profileQuery.data;
 
   if (!profile) {
     return (
@@ -288,29 +310,6 @@ export default function SellerStoreProfilePage() {
       </SellerWorkspaceSectionCard>
     );
   }
-
-  const completeness = profile.completeness || {
-    label: "Profile needs attention",
-    tone: "warning",
-    completedFields: 0,
-    totalFields: 0,
-    missingFields: [],
-  };
-  const editableFields = profile.governance?.editableFields || [];
-  const readOnlyFields = profile.governance?.readOnlyFields || [];
-  const missingFields = completeness.missingFields || [];
-  const contract = profile.contract || {
-    notes: [],
-    categories: {
-      editableFields,
-      readOnlyFields,
-      publicStorefrontFields: [],
-      operationalClientFields: [],
-      notSurfacedFields: [],
-    },
-    fieldMatrix: [],
-  };
-  const editableFieldSet = useMemo(() => new Set(editableFields), [editableFields]);
 
   return (
     <div className="space-y-6">

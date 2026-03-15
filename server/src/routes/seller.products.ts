@@ -87,6 +87,7 @@ const allowedSellerSubmissionFilters = new Set([
   "submitted",
   "needs_revision",
   "review_queue",
+  "ready_to_submit",
 ]);
 const allowedVisibilityStates = new Set([
   "internal_only",
@@ -308,14 +309,10 @@ const syncProductCategoryAssignments = async (
 };
 
 const buildAuthoringPermissions = (sellerAccess: any = null) => {
-  const permissionKeys = Array.isArray(sellerAccess?.permissionKeys)
-    ? sellerAccess.permissionKeys
-    : [];
-
   return {
-    canCreateDraft: sellerHasPermission(permissionKeys, "PRODUCT_CREATE"),
-    canEditDrafts: sellerHasPermission(permissionKeys, "PRODUCT_EDIT"),
-    canSubmitDrafts: sellerHasPermission(permissionKeys, "PRODUCT_EDIT"),
+    canCreateDraft: sellerHasPermission(sellerAccess, "PRODUCT_CREATE"),
+    canEditDrafts: sellerHasPermission(sellerAccess, "PRODUCT_EDIT"),
+    canSubmitDrafts: sellerHasPermission(sellerAccess, "PRODUCT_EDIT"),
   };
 };
 
@@ -350,12 +347,12 @@ const buildSellerSubmissionGovernance = (
     requiresSellerChanges: submissionStatus === "needs_revision",
     note:
       submissionStatus === "submitted"
-        ? "This product draft has been handed off for review. Seller editing is locked until a later review or revision flow is opened."
+        ? "This draft is now with admin review. Seller editing stays locked until an admin asks for changes or finishes the review."
         : submissionStatus === "needs_revision"
-          ? "Admin requested a revision for this draft. Seller editing is reopened for the current store so the product can be corrected and resubmitted."
+          ? "Admin asked for changes on this draft. Seller editing is open again so the requested updates can be made and sent back."
         : hasConcreteProduct
-          ? "Seller may submit a store-scoped draft for review, but publish authority remains admin-owned."
-          : "Submission action becomes available only after a concrete draft exists and seller governance allows the handoff.",
+          ? "This draft can be sent to admin review when it is ready. Final publishing still stays admin-owned."
+          : "You can send a product for review after the draft has been created.",
   };
 };
 
@@ -370,9 +367,9 @@ const buildSellerNextActionState = (options: any = {}) => {
   if (submissionStatus === "submitted") {
     return {
       code: "WAIT_ADMIN_REVIEW",
-      label: "Waiting for Admin Review",
+      label: "Waiting on Admin",
       description:
-        "Admin is the next actor. Seller editing and resubmission stay locked until an admin requests revisions or publishes the final outcome.",
+        "This draft is with admin review now. Seller editing stays locked until admin asks for changes or finishes the review.",
     };
   }
 
@@ -381,8 +378,8 @@ const buildSellerNextActionState = (options: any = {}) => {
       code: canEditDraft ? "CONTINUE_REVISION" : "REVISION_LOCKED",
       label: canEditDraft ? "Continue Revision" : "Revision Locked",
       description: canResubmit
-        ? "Update the requested fields, then resubmit this draft for admin review."
-        : "Admin requested changes for this draft before it can move forward again.",
+        ? "Update the requested changes, then send this draft back for admin review."
+        : "Admin requested changes before this draft can move forward again.",
     };
   }
 
@@ -391,7 +388,7 @@ const buildSellerNextActionState = (options: any = {}) => {
       code: "SUBMIT_REVIEW",
       label: "Submit for Review",
       description:
-        "This draft is still seller-owned. Finish the required changes, then submit it to the admin review lane.",
+        "This draft is still with the seller. Finish the remaining updates, then send it to admin review.",
     };
   }
 
@@ -400,7 +397,7 @@ const buildSellerNextActionState = (options: any = {}) => {
       code: "EDIT_DRAFT",
       label: "Edit Draft",
       description:
-        "This draft is still inside seller authoring. Complete the remaining fields before submitting it for review.",
+        "This draft is still open in seller workspace. Complete the remaining fields before sending it for review.",
     };
   }
 
@@ -415,9 +412,9 @@ const buildSellerNextActionState = (options: any = {}) => {
 
   return {
     code: "VIEW_STATUS",
-    label: "Review Status",
+    label: "Check Status",
     description:
-      "No seller submission action is currently available. Review the current lifecycle and storefront visibility state.",
+      "No seller action is open right now. Check the current lifecycle and storefront visibility state instead.",
   };
 };
 
@@ -1131,8 +1128,12 @@ const buildSellerProductSummary = async (storeId: number) => {
   const [
     totalProducts,
     drafts,
+    readyToSubmit,
+    active,
+    inactive,
     submitted,
     needsRevision,
+    reviewQueue,
     storefrontVisible,
     publishedBlocked,
     internalOnly,
@@ -1140,10 +1141,27 @@ const buildSellerProductSummary = async (storeId: number) => {
     Product.count({ where: baseWhere }),
     Product.count({ where: { ...baseWhere, status: "draft" } as any }),
     Product.count({
+      where: {
+        ...baseWhere,
+        status: "draft",
+        sellerSubmissionStatus: "none",
+      } as any,
+    }),
+    Product.count({ where: { ...baseWhere, status: "active" } as any }),
+    Product.count({ where: { ...baseWhere, status: "inactive" } as any }),
+    Product.count({
       where: { ...baseWhere, sellerSubmissionStatus: "submitted" } as any,
     }),
     Product.count({
       where: { ...baseWhere, sellerSubmissionStatus: "needs_revision" } as any,
+    }),
+    Product.count({
+      where: {
+        ...baseWhere,
+        sellerSubmissionStatus: {
+          [Op.in]: ["submitted", "needs_revision"],
+        },
+      } as any,
     }),
     Product.count({
       where: { ...baseWhere, isPublished: true, status: "active" } as any,
@@ -1161,8 +1179,12 @@ const buildSellerProductSummary = async (storeId: number) => {
   return {
     totalProducts,
     drafts,
+    readyToSubmit,
+    active,
+    inactive,
     submitted,
     needsRevision,
+    reviewQueue,
     storefrontVisible,
     publishedBlocked,
     internalOnly,
@@ -1195,6 +1217,9 @@ const buildSellerProductsWhere = (options: any = {}) => {
         [Op.in]: ["submitted", "needs_revision"],
       },
     });
+  } else if (options?.submissionStatus === "ready_to_submit") {
+    andConditions.push({ status: "draft" });
+    andConditions.push({ sellerSubmissionStatus: "none" });
   } else if (allowedSellerSubmissionStatuses.has(options?.submissionStatus)) {
     andConditions.push({ sellerSubmissionStatus: options.submissionStatus });
   }
@@ -1902,6 +1927,9 @@ router.get(
             [Op.in]: ["submitted", "needs_revision"],
           },
         });
+      } else if (submissionStatus === "ready_to_submit") {
+        andConditions.push({ status: "draft" });
+        andConditions.push({ sellerSubmissionStatus: "none" });
       } else if (allowedSellerSubmissionStatuses.has(submissionStatus)) {
         andConditions.push({ sellerSubmissionStatus: submissionStatus });
       }

@@ -58,6 +58,20 @@ const getSellerPageMeta = (pathname) => {
     };
   }
 
+  if (pathname.endsWith("/catalog/new")) {
+    return {
+      title: "New Product",
+      subtitle: "Seller draft authoring lane scoped to the active store.",
+    };
+  }
+
+  if (pathname.endsWith("/edit")) {
+    return {
+      title: "Edit Product Draft",
+      subtitle: "Seller draft editing lane scoped to the active store.",
+    };
+  }
+
   if (pathname.includes("/catalog/")) {
     return {
       title: "Product Detail",

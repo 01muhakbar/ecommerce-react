@@ -148,15 +148,15 @@ const getAuthoringErrorMessage = (error, mode = "create") => {
   }
 
   if (code === "SELLER_PRODUCT_DRAFT_REQUIRED") {
-    return "Only draft products can be edited in seller authoring MVP.";
+    return "Only draft products can be edited here.";
   }
 
   if (code === "SELLER_PRODUCT_SUBMISSION_LOCKED") {
-    return "This seller draft is already submitted for review and is locked for editing.";
+    return "This draft is already with admin review, so editing is locked for now.";
   }
 
   if (code === "SELLER_PRODUCT_ALREADY_SUBMITTED") {
-    return "This seller draft is already submitted for review.";
+    return "This draft is already waiting in admin review.";
   }
 
   if (code === "SELLER_PRODUCT_NAME_REQUIRED") {
@@ -619,11 +619,11 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
 
   if (!isEditMode && !canCreateDraft) {
     return (
-      <SellerWorkspaceStatePanel
-        title="Draft creation is unavailable"
-        description={
-          authoringGovernance?.note ||
-          "Your current seller access does not include draft creation in this workspace."
+        <SellerWorkspaceStatePanel
+          title="Draft creation is unavailable"
+          description={
+            authoringGovernance?.note ||
+          "Your current seller access does not include draft creation in this store."
         }
         action={backButton}
         tone="warning"
@@ -640,7 +640,7 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
           title="Draft editing is unavailable"
           description={
             authoringGovernance?.note ||
-            "Seller draft editing stays limited to draft rows in this MVP lane."
+            "This product cannot be edited from seller workspace right now."
           }
           actions={[
             backButton,
@@ -656,14 +656,14 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
 
         <SellerWorkspaceSectionCard
           title="Why this product is read-only here"
-          hint="Seller authoring MVP only opens edit access for draft rows."
+          hint="Seller workspace only opens edit access when the current draft state allows it."
           Icon={ShieldCheck}
         >
           <SellerWorkspaceNotice type="warning">
             {detailAuthoring?.editBlockedReason === "PRODUCT_STATUS_NOT_DRAFT"
-              ? "This product is no longer in draft status, so seller draft editing is closed."
+              ? "This product is no longer a draft, so seller editing is closed here."
               : detailAuthoring?.editBlockedReason === "PRODUCT_SUBMISSION_PENDING_REVIEW"
-                ? "This product draft is already submitted for review, so seller editing is locked in this phase."
+                ? "This draft is already with admin review, so seller editing stays locked until admin asks for changes."
                 : "Your current seller access does not include draft editing for this product."}
           </SellerWorkspaceNotice>
         </SellerWorkspaceSectionCard>
@@ -689,9 +689,9 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
         description={
           isEditMode
             ? isNeedsRevision
-              ? "Admin requested revisions for this draft. Update the allowed seller fields, then resubmit it for review when the requested changes are complete."
-              : "Update the draft-safe seller fields opened in phase 2. Publish and broader governance-heavy actions remain outside this lane."
-            : "Create a store-scoped draft with core seller-owned fields such as categories, pricing, and stock while publish stays admin-owned."
+              ? "Admin asked for changes on this draft. Update the allowed fields, then send it back for review when the requested changes are complete."
+              : "Update the draft fields that seller workspace currently owns. Final review and publishing still happen outside this page."
+            : "Create a store-scoped draft with the fields seller workspace currently owns. Final review and publishing still happen outside this page."
         }
         actions={[
           backButton,
@@ -727,8 +727,8 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
               Revision Requested
             </p>
             <p>
-              Admin reopened this draft for corrections. Update the allowed seller fields, then
-              resubmit it for review when ready.
+              Admin reopened this draft for changes. Update the requested fields, then send it
+              back for review when ready.
             </p>
             {submissionReason ? <p>{submissionReason}</p> : null}
           </div>
@@ -738,7 +738,7 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
       {isEditMode ? (
         <SellerWorkspaceSectionCard
           title="Submission context"
-          hint="Use this state panel to understand the current revision lane before editing or resubmitting."
+          hint="Use this state panel to see where the draft stands and what seller should do next."
           Icon={ShieldCheck}
         >
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -766,7 +766,7 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
               value={submission?.nextActionLabel || "Edit Draft"}
               hint={
                 submission?.nextActionDescription ||
-                "Keep editing the seller-owned draft fields before submitting this product."
+                "Keep updating this draft until it is ready to send for review."
               }
             />
           </div>
@@ -780,8 +780,8 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
           }
           hint={
             isNeedsRevision
-              ? "Only the seller-managed draft fields are reopened here. Complete the requested corrections, then resubmit for admin review."
-              : "Phase 2 opens core seller-managed draft fields without exposing publish or admin-owned controls."
+              ? "Only the seller-managed draft fields are reopened here. Finish the requested corrections, then send the draft back for review."
+              : "Use this form for the draft fields seller workspace owns. Publishing and final review stay outside this page."
           }
           Icon={isEditMode ? Save : Plus}
         >
@@ -1033,7 +1033,7 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
         <div className="space-y-6">
           <SellerWorkspaceSectionCard
             title="Governance snapshot"
-            hint="Source of truth comes from seller backend governance, not from UI guesswork."
+            hint="These permissions come from the current seller rules for this store."
             Icon={ShieldCheck}
           >
             <div className="grid gap-3 md:grid-cols-2">
