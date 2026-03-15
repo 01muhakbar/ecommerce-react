@@ -368,7 +368,7 @@ const toProductListItem = (product: any) => {
     category,
     stock: plain?.stock ?? null,
     status: plain?.status,
-    published: plain?.published,
+    published: plain?.isPublished ?? plain?.published ?? false,
     updatedAt: plain?.updatedAt,
   };
 };
@@ -462,8 +462,8 @@ const serializePublicSellerInfo = async (store: any) => {
       code: toText(readStoreAttr("status"), "ACTIVE"),
       label:
         toText(readStoreAttr("status"), "ACTIVE").toUpperCase() === "ACTIVE"
-          ? "Active store"
-          : "Store unavailable",
+          ? "Active"
+          : "Unavailable",
       tone:
         toText(readStoreAttr("status"), "ACTIVE").toUpperCase() === "ACTIVE"
           ? "success"
@@ -592,7 +592,7 @@ router.get(
 
       const where: any = {
         status: "active",
-        published: { [Op.in]: [1, true] },
+        isPublished: { [Op.in]: [1, true] },
       };
       if (search) {
         where.name = { [Op.like]: `%${search}%` };
@@ -658,7 +658,7 @@ router.get(
           "imagePaths",
           "tags",
           "status",
-          "published",
+          "isPublished",
           "updatedAt",
           [
             sequelize.literal(
@@ -1727,7 +1727,7 @@ router.post(
             "price",
             "salePrice",
             "status",
-            "published",
+            "isPublished",
           ],
           transaction: tx,
           lock: tx.LOCK.UPDATE,

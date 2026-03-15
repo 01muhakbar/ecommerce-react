@@ -13,6 +13,7 @@ import {
   sequelize,
 } from "../models/index.js";
 import { recalculateParentOrderPaymentStatus } from "../services/orderPaymentAggregation.service.js";
+import { expirePaymentIfNeeded } from "../services/paymentExpiry.service.js";
 import { appendPaymentStatusLog } from "../services/paymentStatusLog.service.js";
 
 const router = Router();
@@ -51,7 +52,8 @@ const normalizeProofSummary = (proofs: any[]) => {
     .sort((left, right) => {
       const leftTime = new Date(getAttr(left, "createdAt") || 0).getTime();
       const rightTime = new Date(getAttr(right, "createdAt") || 0).getTime();
-      return rightTime - leftTime;
+      if (rightTime !== leftTime) return rightTime - leftTime;
+      return toNumber(getAttr(right, "id")) - toNumber(getAttr(left, "id"));
     })[0];
   return {
     id: toNumber(getAttr(latest, "id")),
@@ -96,6 +98,8 @@ const serializePaymentStatusLogs = (logs: any[]) => {
 const serializePaymentDetail = (payment: any) => {
   const suborder = payment?.suborder ?? payment?.get?.("suborder") ?? null;
   const store = payment?.store ?? payment?.get?.("store") ?? suborder?.store ?? null;
+  const paymentProfile =
+    payment?.paymentProfile ?? payment?.get?.("paymentProfile") ?? suborder?.paymentProfile ?? null;
   const proofs = payment?.proofs ?? payment?.get?.("proofs") ?? [];
   return {
     paymentId: toNumber(getAttr(payment, "id")),
@@ -112,6 +116,15 @@ const serializePaymentDetail = (payment: any) => {
     status: String(getAttr(payment, "status") || "CREATED"),
     qrImageUrl: getAttr(payment, "qrImageUrl") ? String(getAttr(payment, "qrImageUrl")) : null,
     qrPayload: getAttr(payment, "qrPayload") ? String(getAttr(payment, "qrPayload")) : null,
+    instructionText: getAttr(paymentProfile, "instructionText")
+      ? String(getAttr(paymentProfile, "instructionText"))
+      : null,
+    merchantName: getAttr(paymentProfile, "merchantName")
+      ? String(getAttr(paymentProfile, "merchantName"))
+      : null,
+    accountName: getAttr(paymentProfile, "accountName")
+      ? String(getAttr(paymentProfile, "accountName"))
+      : null,
     internalReference: String(getAttr(payment, "internalReference") || ""),
     expiresAt: getAttr(payment, "expiresAt") || null,
     paidAt: getAttr(payment, "paidAt") || null,
@@ -132,7 +145,16 @@ const loadPaymentForActor = async (paymentId: number) =>
       {
         model: StorePaymentProfile,
         as: "paymentProfile",
-        attributes: ["id", "storeId", "providerCode", "paymentType", "verificationStatus"],
+        attributes: [
+          "id",
+          "storeId",
+          "providerCode",
+          "paymentType",
+          "verificationStatus",
+          "instructionText",
+          "merchantName",
+          "accountName",
+        ],
       },
       {
         model: PaymentProof,
@@ -222,9 +244,12 @@ router.get("/:paymentId", async (req, res) => {
       });
     }
 
+    const expired = await expirePaymentIfNeeded(paymentId);
+    const resolvedPayment = expired ? await loadPaymentForActor(paymentId) : payment;
+
     return res.json({
       success: true,
-      data: serializePaymentDetail(payment),
+      data: serializePaymentDetail(resolvedPayment),
     });
   } catch (error) {
     console.error("[payments/detail] error", error);
@@ -270,11 +295,24 @@ router.post("/:paymentId/proof", async (req, res) => {
       });
     }
 
-    const currentStatus = String(getAttr(payment, "status") || "CREATED").toUpperCase();
-    if (currentStatus !== "CREATED") {
+    const expired = await expirePaymentIfNeeded(paymentId);
+    const paymentForSubmit = expired ? await loadPaymentForActor(paymentId) : payment;
+    if (!paymentForSubmit) {
+      return res.status(404).json({ success: false, message: "Payment not found." });
+    }
+    const currentStatus = String(getAttr(paymentForSubmit, "status") || "CREATED").toUpperCase();
+    if (currentStatus === "EXPIRED") {
       return res.status(409).json({
         success: false,
-        message: "Payment proof can only be submitted while payment is in CREATED status.",
+        message: "Payment deadline has expired. Create a new order if you still want to pay this store.",
+      });
+    }
+    const canSubmitProof = currentStatus === "CREATED" || currentStatus === "REJECTED";
+    if (!canSubmitProof) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Payment proof can only be submitted while payment is waiting for first proof or after a rejected proof.",
       });
     }
 
@@ -297,14 +335,15 @@ router.post("/:paymentId/proof", async (req, res) => {
         { transaction: tx }
       );
 
-      await payment.update(
+      await paymentForSubmit.update(
         {
           status: "PENDING_CONFIRMATION",
         } as any,
         { transaction: tx }
       );
 
-      const suborder = (payment as any)?.suborder ?? payment?.get?.("suborder") ?? null;
+      const suborder =
+        (paymentForSubmit as any)?.suborder ?? paymentForSubmit?.get?.("suborder") ?? null;
       if (suborder) {
         await suborder.update(
           {

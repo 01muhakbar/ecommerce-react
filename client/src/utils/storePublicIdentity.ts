@@ -4,9 +4,13 @@ export type NormalizedPublicStoreIdentity = {
   slug: string;
   description: string;
   logoUrl: string;
+  bannerUrl: string;
   email: string;
   phone: string;
   whatsapp: string;
+  websiteUrl: string;
+  instagramUrl: string;
+  tiktokUrl: string;
   addressLine1: string;
   addressLine2: string;
   city: string;
@@ -61,9 +65,13 @@ export const normalizePublicStoreIdentity = (
     slug: toText(source.slug),
     description: toText(source.description),
     logoUrl: toText(source.logoUrl),
+    bannerUrl: toText(source.bannerUrl),
     email: toText(source.email),
     phone: toText(source.phone),
     whatsapp: toText(source.whatsapp),
+    websiteUrl: toText(source.websiteUrl),
+    instagramUrl: toText(source.instagramUrl),
+    tiktokUrl: toText(source.tiktokUrl),
     addressLine1: toText(source.addressLine1),
     addressLine2: toText(source.addressLine2),
     city: toText(source.city),

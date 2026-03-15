@@ -25,6 +25,9 @@ export type GroupedPaymentDetail = {
   amount: number;
   qrImageUrl?: string | null;
   qrPayload?: string | null;
+  instructionText?: string | null;
+  merchantName?: string | null;
+  accountName?: string | null;
   status:
     | "CREATED"
     | "PENDING_CONFIRMATION"
@@ -73,6 +76,9 @@ export type GroupedOrderPaymentResponse = {
       fulfillmentStatus: string;
       paymentProfileStatus: string;
       paymentAvailable: boolean;
+      paymentInstruction?: string | null;
+      merchantName?: string | null;
+      accountName?: string | null;
       warning?: string | null;
       items: Array<{
         id?: number | null;
@@ -103,6 +109,9 @@ export type PaymentDetailResponse = {
     status: string;
     qrImageUrl?: string | null;
     qrPayload?: string | null;
+    instructionText?: string | null;
+    merchantName?: string | null;
+    accountName?: string | null;
     internalReference: string;
     expiresAt?: string | null;
     paidAt?: string | null;
@@ -151,4 +160,17 @@ export const submitPaymentProof = async (
     payload
   );
   return data;
+};
+
+export const uploadPaymentProofImage = async (file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await api.post<{ data?: { url?: string } }>("/upload", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  const url = data?.data?.url ? String(data.data.url).trim() : "";
+  if (!url) {
+    throw new Error("Upload succeeded without URL.");
+  }
+  return url;
 };

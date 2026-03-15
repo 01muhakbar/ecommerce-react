@@ -215,7 +215,7 @@ export default function SellerOrderDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {feedback ? (
         <SellerWorkspaceNotice type={feedback.type === "success" ? "success" : "error"}>
           {feedback.message}
@@ -256,24 +256,24 @@ export default function SellerOrderDetailPage() {
           ) : null,
         ].filter(Boolean)}
       >
-        <p className="text-sm leading-6 text-slate-500">
+        <p className="text-sm leading-5 text-slate-500">
           {fulfillmentGovernance?.actorHasManagePermission
             ? "Seller fulfillment phase 1 is active for direct forward transitions only. Parent order and payment lifecycle remain on separate governance lanes."
             : "Seller fulfillment stays read-only here for this actor. Parent order and payment lifecycle remain on separate governance lanes."}
         </p>
       </SellerWorkspaceSectionHeader>
 
-      <section className="grid gap-4 lg:grid-cols-3">
+      <section className="grid gap-3.5 lg:grid-cols-3">
         <SellerWorkspaceSectionCard title="Buyer" hint="Seller-scoped buyer snapshot" Icon={PackageSearch}>
-          <p className="text-lg font-semibold text-slate-900">{detail.buyer?.name || "-"}</p>
-          <p className="mt-2 text-sm text-slate-600">{detail.buyer?.email || "-"}</p>
+          <p className="text-base font-semibold text-slate-900">{detail.buyer?.name || "-"}</p>
+          <p className="mt-1.5 text-sm text-slate-600">{detail.buyer?.email || "-"}</p>
           <p className="mt-1 text-sm text-slate-600">{detail.buyer?.phone || "-"}</p>
         </SellerWorkspaceSectionCard>
 
         <SellerWorkspaceSectionCard title="Shipping" hint="Read-only delivery summary" Icon={Truck}>
           <p className="text-sm font-semibold text-slate-900">{detail.shipping?.fullName || "-"}</p>
           <p className="mt-1 text-sm text-slate-600">{detail.shipping?.phoneNumber || "-"}</p>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
+          <p className="mt-2 text-sm leading-5 text-slate-600">
             {detail.shipping?.addressLine || "No shipping address available."}
           </p>
           <p className="mt-2 text-xs leading-5 text-slate-500">
@@ -330,7 +330,7 @@ export default function SellerOrderDetailPage() {
         </SellerWorkspaceSectionCard>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+      <section className="grid gap-5 xl:grid-cols-[1.08fr_0.92fr]">
         <SellerWorkspaceSectionCard
           title="Items"
           hint="Suborder item snapshot"
@@ -341,7 +341,7 @@ export default function SellerOrderDetailPage() {
               detail.items.map((item) => (
                 <div
                   key={item.id}
-                  className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
+                  className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5"
                 >
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div>
@@ -352,7 +352,7 @@ export default function SellerOrderDetailPage() {
                       Qty {item.qty} · {formatMoney(item.price)}
                     </div>
                   </div>
-                  <p className="mt-3 text-sm font-semibold text-slate-900">
+                  <p className="mt-2.5 text-sm font-semibold text-slate-900">
                     Total {formatMoney(item.totalPrice)}
                   </p>
                 </div>
@@ -363,7 +363,7 @@ export default function SellerOrderDetailPage() {
           </div>
         </SellerWorkspaceSectionCard>
 
-        <div className="space-y-6">
+        <div className="space-y-5">
           <SellerWorkspaceSectionCard
             title="Totals and Status"
             hint="Financial and lifecycle summary for this seller-scoped suborder."
@@ -412,7 +412,7 @@ export default function SellerOrderDetailPage() {
               />
             </div>
 
-            <div className="mt-4 grid gap-3">
+            <div className="mt-3.5 grid gap-3">
               <SellerWorkspaceDetailItem
                 label="Parent Lifecycle"
                 value={
@@ -482,7 +482,7 @@ export default function SellerOrderDetailPage() {
                 "Seller fulfillment mutations are still closed in the current workspace phase."}
             </SellerWorkspaceNotice>
 
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-3.5 flex flex-wrap gap-2">
               <StatusChip
                 value={fulfillmentGovernance?.currentMode || "READ_ONLY"}
                 label={fulfillmentGovernance?.currentMode || "READ_ONLY"}
@@ -495,7 +495,7 @@ export default function SellerOrderDetailPage() {
               />
             </div>
 
-            <div className="mt-4 grid gap-3">
+            <div className="mt-3.5 grid gap-3">
               <SellerWorkspaceDetailItem
                 label="Scope"
                 value={
@@ -535,26 +535,26 @@ export default function SellerOrderDetailPage() {
                 ))}
               </div>
             ) : (
-              <p className="mt-4 text-sm leading-6 text-slate-600">
+              <p className="mt-3.5 text-sm leading-5 text-slate-600">
                 {fulfillmentGovernance?.mutationBlockedReason ||
                   "No fulfillment mutation is available for this suborder."}
               </p>
             )}
 
-            <div className="mt-4 grid gap-3 text-sm text-slate-600">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div className="mt-3.5 grid gap-3 text-sm text-slate-600">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5">
                 <p className="font-semibold text-slate-900">Safe later for seller</p>
                 <p className="mt-2 leading-6">
                   {formatActionList(fulfillmentGovernance?.sellerCandidateActions)}
                 </p>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5">
                 <p className="font-semibold text-slate-900">Read-only now</p>
                 <p className="mt-2 leading-6">
                   {formatActionList(fulfillmentGovernance?.readOnlyActions)}
                 </p>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5">
                 <p className="font-semibold text-slate-900">Keep under admin governance</p>
                 <p className="mt-2 leading-6">
                   {formatActionList(fulfillmentGovernance?.adminOnlyActions)}

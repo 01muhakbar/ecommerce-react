@@ -125,7 +125,9 @@ export default function AccountOrderDetailPage() {
               to={`/user/my-orders/${order.id}/payment`}
               className="inline-flex h-10 items-center justify-center rounded-full border border-emerald-200 px-4 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
             >
-              Payment by Store
+              {String(order.paymentStatus || groupedOrder?.paymentStatus).toUpperCase() === "PAID"
+                ? "View Payment by Store"
+                : "Continue to QRIS Payment"}
             </Link>
           </div>
         ) : null}
@@ -181,6 +183,36 @@ export default function AccountOrderDetailPage() {
                     <div className="text-right text-sm text-slate-600">
                       <p className="font-semibold text-slate-900">{money(group.totalAmount)}</p>
                       <p>Fulfillment: {group.fulfillmentStatus}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid gap-3 md:grid-cols-[160px_minmax(0,1fr)]">
+                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white p-3">
+                      {group.payment?.qrImageUrl ? (
+                        <img
+                          src={group.payment.qrImageUrl}
+                          alt={`QRIS ${group.storeName}`}
+                          className="mx-auto h-28 w-full object-contain"
+                        />
+                      ) : (
+                        <div className="flex h-28 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 text-center text-xs text-slate-500">
+                          QRIS image unavailable
+                        </div>
+                      )}
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+                      <p>
+                        <span className="font-semibold text-slate-900">Merchant:</span>{" "}
+                        {group.payment?.merchantName || group.merchantName || "-"}
+                      </p>
+                      <p className="mt-1">
+                        <span className="font-semibold text-slate-900">Account Label:</span>{" "}
+                        {group.payment?.accountName || group.accountName || "-"}
+                      </p>
+                      <p className="mt-2 leading-6">
+                        {group.payment?.instructionText ||
+                          group.paymentInstruction ||
+                          "Per-store payment instructions are available on the payment page."}
+                      </p>
                     </div>
                   </div>
                 </div>

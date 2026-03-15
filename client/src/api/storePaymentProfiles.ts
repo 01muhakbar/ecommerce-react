@@ -25,10 +25,8 @@ export const fetchAdminStorePaymentProfiles = async () => {
 
 export const reviewAdminStorePaymentProfile = async (
   storeId: number | string,
-  verificationStatus: string
+  payload: { verificationStatus: string; adminReviewNote?: string | null }
 ) => {
-  const { data } = await api.patch(`/admin/stores/${storeId}/payment-profile/review`, {
-    verificationStatus,
-  });
+  const { data } = await api.patch(`/admin/stores/${storeId}/payment-profile/review`, payload);
   return data?.data ?? null;
 };

@@ -35,6 +35,11 @@ const toWhatsAppHref = (value) => {
     : `https://wa.me/${safeValue.replace(/\D+/g, "")}`;
 };
 
+const toExternalHref = (value) => {
+  const safeValue = toText(value);
+  return /^https?:\/\//i.test(safeValue) ? safeValue : "";
+};
+
 const formatStoreAddress = (identity) => {
   const lineOne = toText(identity?.addressLine1);
   const lineTwo = toText(identity?.addressLine2);
@@ -93,6 +98,31 @@ const buildContactActions = (identity) => {
   ].filter(Boolean);
 };
 
+const buildPublicProfileLinks = (identity) =>
+  [
+    identity?.websiteUrl
+      ? {
+          key: "website",
+          label: "Website",
+          href: toExternalHref(identity.websiteUrl),
+        }
+      : null,
+    identity?.instagramUrl
+      ? {
+          key: "instagram",
+          label: "Instagram",
+          href: toExternalHref(identity.instagramUrl),
+        }
+      : null,
+    identity?.tiktokUrl
+      ? {
+          key: "tiktok",
+          label: "TikTok",
+          href: toExternalHref(identity.tiktokUrl),
+        }
+      : null,
+  ].filter((item) => Boolean(item?.href));
+
 const buildSummaryItems = (identity) => {
   const summary = identity?.summary || {};
   const items = [];
@@ -148,7 +178,9 @@ export default function StoreMicrositeShell({
   const storeSlug = toText(identity?.slug, safeSlug);
   const storeHref = buildStoreMicrositeHref(storeSlug || safeSlug);
   const logoSrc = resolveAssetUrl(identity?.logoUrl);
+  const bannerSrc = resolveAssetUrl(identity?.bannerUrl);
   const contactActions = buildContactActions(identity);
+  const publicProfileLinks = buildPublicProfileLinks(identity);
   const summaryItems = buildSummaryItems(identity);
   const addressText = formatStoreAddress(identity);
   const hasCurrentLabel = toText(currentLabel) && toText(currentLabel) !== storeName;
@@ -215,12 +247,27 @@ export default function StoreMicrositeShell({
           className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_20px_45px_rgba(15,23,42,0.08)]"
         >
           <div
-            className={`bg-gradient-to-r from-emerald-700 via-emerald-600 to-emerald-500 text-white ${
+            className={`relative overflow-hidden text-white ${
               compact ? "px-5 py-5 sm:px-6 sm:py-6" : "px-6 py-5 sm:px-7 sm:py-6"
             }`}
           >
+            {bannerSrc ? (
+              <img
+                src={bannerSrc}
+                alt=""
+                aria-hidden="true"
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            ) : null}
             <div
-              className={`grid gap-4 ${
+              className={`absolute inset-0 ${
+                bannerSrc
+                  ? "bg-gradient-to-r from-emerald-950/85 via-emerald-800/80 to-emerald-600/75"
+                  : "bg-gradient-to-r from-emerald-700 via-emerald-600 to-emerald-500"
+              }`}
+            />
+            <div
+              className={`relative grid gap-4 ${
                 compact
                   ? "lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]"
                   : "lg:grid-cols-[minmax(0,1fr)_minmax(360px,460px)]"
@@ -303,6 +350,7 @@ export default function StoreMicrositeShell({
                     ) : null}
                     {actions}
                   </div>
+
                 </div>
               </div>
 
@@ -335,29 +383,42 @@ export default function StoreMicrositeShell({
           <div className="space-y-4 px-5 py-4 sm:px-6 sm:py-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-wrap gap-2">
-                {contactActions.length > 0 ? (
-                  contactActions.map((item) => {
-                    const className =
-                      item.tone === "primary"
-                        ? "inline-flex h-10 items-center justify-center gap-2 rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
-                        : "inline-flex h-10 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50";
+                {contactActions.length > 0 || publicProfileLinks.length > 0 ? (
+                  <>
+                    {contactActions.map((item) => {
+                      const className =
+                        item.tone === "primary"
+                          ? "inline-flex h-10 items-center justify-center gap-2 rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
+                          : "inline-flex h-10 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50";
 
-                    return (
+                      return (
+                        <a
+                          key={item.key}
+                          href={item.href}
+                          target={item.external ? "_blank" : undefined}
+                          rel={item.external ? "noreferrer" : undefined}
+                          className={className}
+                        >
+                          <item.Icon className="h-4 w-4" />
+                          {item.label}
+                        </a>
+                      );
+                    })}
+                    {publicProfileLinks.map((item) => (
                       <a
                         key={item.key}
                         href={item.href}
-                        target={item.external ? "_blank" : undefined}
-                        rel={item.external ? "noreferrer" : undefined}
-                        className={className}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex h-10 items-center justify-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                       >
-                        <item.Icon className="h-4 w-4" />
                         {item.label}
                       </a>
-                    );
-                  })
+                    ))}
+                  </>
                 ) : (
                   <span className="inline-flex h-10 items-center rounded-full border border-dashed border-slate-300 px-4 text-sm text-slate-500">
-                    Contact details are not public yet.
+                    Public contact and store links are not available yet.
                   </span>
                 )}
               </div>

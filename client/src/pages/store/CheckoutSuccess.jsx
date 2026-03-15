@@ -1,66 +1,104 @@
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { ArrowRight, CheckCircle2, QrCode, ReceiptText } from "lucide-react";
 import { formatCurrency } from "../../utils/format.js";
-import {
-  COD_INSTRUCTIONS,
-  TRANSFER_INSTRUCTIONS,
-} from "../../config/paymentInstructions.ts";
 
 export default function CheckoutSuccess() {
   const [params] = useSearchParams();
-  const invoiceNo = params.get("invoiceNo") || params.get("orderId") || "";
+  const location = useLocation();
+  const invoiceNo =
+    params.get("invoiceNo") || params.get("ref") || location.state?.ref || "";
+  const orderId = params.get("orderId") || location.state?.orderId || "";
   const total = params.get("total");
-  const method = params.get("method") || "COD";
+  const method = (params.get("method") || location.state?.method || "QRIS").toUpperCase();
   const totalDisplay =
     total != null && total !== "" ? formatCurrency(Number(total || 0)) : null;
+  const isQris = method === "QRIS";
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white px-6 py-8 text-center">
-      <h1 className="text-2xl font-semibold">Order placed!</h1>
-      {invoiceNo ? (
-        <p className="mt-2 text-sm text-slate-600">Invoice: {invoiceNo}</p>
-      ) : null}
-      {totalDisplay ? (
-        <p className="mt-1 text-sm text-slate-600">Total: {totalDisplay}</p>
-      ) : null}
-      <p className="mt-2 text-sm text-slate-600">Payment Method: {method}</p>
-      {method === "TRANSFER" ? (
-        <div className="mx-auto mt-3 max-w-md rounded-xl border border-slate-200 p-3 text-left text-sm text-slate-600">
-          <strong className="text-slate-900">How to pay (Bank Transfer)</strong>
-          <div>Bank: {TRANSFER_INSTRUCTIONS.bank}</div>
-          <div>Account No: {TRANSFER_INSTRUCTIONS.accountNo}</div>
-          <div>Account Name: {TRANSFER_INSTRUCTIONS.accountName}</div>
-          <div className="mt-2">
-            After transfer, please upload proof via WhatsApp{" "}
-            {TRANSFER_INSTRUCTIONS.whatsapp}.
+    <section className="space-y-5 rounded-[28px] border border-slate-200 bg-white px-5 py-7 text-slate-900 shadow-[0_18px_40px_rgba(15,23,42,0.06)] sm:px-7">
+      <div className="flex items-start gap-3">
+        <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+          <CheckCircle2 className="h-6 w-6" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+            Checkout Created
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold">
+            {isQris ? "Continue to QRIS payment" : "Order placed"}
+          </h1>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            {isQris
+              ? "Scan QR code to pay from the payment page. Marketplace payment stays split by store, so each store keeps its own QRIS panel and proof lane."
+              : "Your order was created successfully."}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+            Invoice
+          </p>
+          <p className="mt-1 text-sm font-semibold text-slate-900">{invoiceNo || "-"}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+            Payment Method
+          </p>
+          <p className="mt-1 text-sm font-semibold text-slate-900">{method}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+            Total
+          </p>
+          <p className="mt-1 text-sm font-semibold text-slate-900">{totalDisplay || "-"}</p>
+        </div>
+      </div>
+
+      {isQris ? (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4">
+          <div className="flex items-start gap-3">
+            <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-emerald-700">
+              <QrCode className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-slate-900">Scan QR code to pay</p>
+              <p className="mt-1 text-sm leading-6 text-slate-700">
+                Open the payment page to see QRIS per store, copy the exact amount to pay, and
+                submit payment proof for each store after transfer.
+              </p>
+            </div>
           </div>
         </div>
-      ) : (
-        <div className="mx-auto mt-3 max-w-md rounded-xl border border-slate-200 p-3 text-left text-sm text-slate-600">
-          <strong className="text-slate-900">Pay on delivery</strong>
-          <div>{COD_INSTRUCTIONS.text}</div>
-        </div>
-      )}
-      {invoiceNo ? (
+      ) : null}
+
+      <div className="flex flex-col gap-3 sm:flex-row">
+        {orderId ? (
+          <Link
+            to={`/user/my-orders/${orderId}/payment`}
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800"
+          >
+            {isQris ? "Open QRIS Payment Page" : "Open Payment Page"}
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        ) : null}
+        {orderId ? (
+          <Link
+            to={`/user/my-orders/${orderId}`}
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-slate-200 px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            View Order Detail
+            <ReceiptText className="h-4 w-4" />
+          </Link>
+        ) : null}
         <Link
-          to={`/order/${encodeURIComponent(invoiceNo)}`}
-          className="mt-4 inline-flex text-sm font-medium text-slate-700 hover:text-slate-900"
+          to="/user/my-orders"
+          className="inline-flex h-12 items-center justify-center rounded-full border border-slate-200 px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
         >
-          Track your order
+          Back to Orders
         </Link>
-      ) : (
-        <Link
-          to="/account/orders"
-          className="mt-4 inline-flex text-sm font-medium text-slate-700 hover:text-slate-900"
-        >
-          Track your order
-        </Link>
-      )}
-      <Link
-        to="/"
-        className="mt-6 inline-flex rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white"
-      >
-        Back to Home
-      </Link>
+      </div>
     </section>
   );
 }

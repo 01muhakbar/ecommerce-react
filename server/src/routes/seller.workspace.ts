@@ -5,6 +5,7 @@ import {
   Order,
   Payment,
   PaymentProof,
+  Store,
   StorePaymentProfile,
   Suborder,
 } from "../models/index.js";
@@ -12,6 +13,10 @@ import {
   resolveSellerAccessBySlug,
   sellerHasPermission,
 } from "../services/seller/resolveSellerAccess.js";
+import {
+  resolvePreferredStorePaymentProfile,
+  STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES,
+} from "../services/storePaymentProfileCompat.js";
 
 const router = Router();
 
@@ -607,21 +612,24 @@ router.get(
 
       const [paymentProfile, suborders, payments] = await Promise.all([
         canViewPaymentProfile
-          ? StorePaymentProfile.findOne({
-              where: { storeId },
-              attributes: [
-                "id",
-                "storeId",
-                "providerCode",
-                "paymentType",
-                "accountName",
-                "merchantName",
-                "qrisImageUrl",
-                "isActive",
-                "verificationStatus",
-                "updatedAt",
+          ? Store.findByPk(storeId, {
+              attributes: ["id", "activeStorePaymentProfileId"],
+              include: [
+                {
+                  model: StorePaymentProfile,
+                  as: "paymentProfile",
+                  attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+                  required: false,
+                },
+                {
+                  model: StorePaymentProfile,
+                  as: "activePaymentProfile",
+                  attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+                  required: false,
+                },
               ],
             })
+              .then((store) => resolvePreferredStorePaymentProfile(store))
           : Promise.resolve(null),
         canViewOrders
           ? Suborder.findAll({

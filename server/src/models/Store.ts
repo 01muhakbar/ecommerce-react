@@ -3,6 +3,7 @@ import { DataTypes, Model, Optional, Sequelize } from "sequelize";
 export interface StoreAttributes {
   id: number;
   ownerUserId: number;
+  activeStorePaymentProfileId?: number | null;
   name: string;
   slug: string;
   status: "ACTIVE" | "INACTIVE";
@@ -28,6 +29,7 @@ export interface StoreAttributes {
 type StoreCreationAttributes = Optional<
   StoreAttributes,
   | "id"
+  | "activeStorePaymentProfileId"
   | "status"
   | "description"
   | "logoUrl"
@@ -52,6 +54,7 @@ export class Store
 {
   declare id: number;
   declare ownerUserId: number;
+  declare activeStorePaymentProfileId: number | null;
   declare name: string;
   declare slug: string;
   declare status: "ACTIVE" | "INACTIVE";
@@ -82,9 +85,17 @@ export class Store
       foreignKey: { name: "ownerUserId", field: "owner_user_id" },
       as: "owner",
     });
+    Store.belongsTo(models.StorePaymentProfile, {
+      foreignKey: { name: "activeStorePaymentProfileId", field: "active_store_payment_profile_id" },
+      as: "activePaymentProfile",
+    });
     Store.hasOne(models.StorePaymentProfile, {
       foreignKey: { name: "storeId", field: "store_id" },
       as: "paymentProfile",
+    });
+    Store.hasMany(models.StorePaymentProfileRequest, {
+      foreignKey: { name: "storeId", field: "store_id" },
+      as: "paymentProfileRequests",
     });
     Store.hasMany(models.Suborder, {
       foreignKey: { name: "storeId", field: "store_id" },
@@ -115,6 +126,15 @@ export class Store
           field: "owner_user_id",
           references: {
             model: "users",
+            key: "id",
+          },
+        },
+        activeStorePaymentProfileId: {
+          type: DataTypes.INTEGER.UNSIGNED,
+          allowNull: true,
+          field: "active_store_payment_profile_id",
+          references: {
+            model: "store_payment_profiles",
             key: "id",
           },
         },

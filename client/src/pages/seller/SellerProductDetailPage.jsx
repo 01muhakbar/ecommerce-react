@@ -241,7 +241,7 @@ export default function SellerProductDetailPage() {
       : "Submit for Review";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <SellerWorkspaceSectionHeader
         eyebrow="Seller Product Detail"
         title={product?.name || "Product"}
@@ -282,32 +282,9 @@ export default function SellerProductDetailPage() {
             <SellerWorkspaceBadge key="live" label="Live in storefront" tone="emerald" />
           ) : null,
           <SellerWorkspaceBadge
-            key="mode"
-            label={
-              authoringGovernance?.phaseLabel ||
-              (catalogGovernance?.mode === "READ_ONLY_PHASE_1" ? "Read-only" : "Catalog access")
-            }
-            tone="amber"
-          />,
-          <SellerWorkspaceBadge
             key="status"
             label={product?.statusMeta?.label || String(product?.status || "draft").toUpperCase()}
             tone={getStatusTone(product?.statusMeta?.code || product?.status)}
-          />,
-          <SellerWorkspaceBadge
-            key="publish"
-            label={
-              product?.visibility?.sellerLabel ||
-              product?.visibility?.publishLabel ||
-              product?.visibility?.label ||
-              (product?.published ? "Published" : "Private")
-            }
-            tone={getVisibilityTone(product?.visibility)}
-          />,
-          <SellerWorkspaceBadge
-            key="availability"
-            label={product?.availability?.label || "Availability unknown"}
-            tone={getAvailabilityTone(product?.availability)}
           />,
           <SellerWorkspaceBadge
             key="submission"
@@ -321,6 +298,26 @@ export default function SellerProductDetailPage() {
           {product?.category?.default?.name ? (
             <SellerWorkspaceBadge label={product.category.default.name} tone="sky" />
           ) : null}
+          <SellerWorkspaceBadge
+            label={
+              authoringGovernance?.phaseLabel ||
+              (catalogGovernance?.mode === "READ_ONLY_PHASE_1" ? "Read-only" : "Catalog access")
+            }
+            tone="amber"
+          />
+          <SellerWorkspaceBadge
+            label={
+              product?.visibility?.sellerLabel ||
+              product?.visibility?.publishLabel ||
+              product?.visibility?.label ||
+              (product?.published ? "Published" : "Private")
+            }
+            tone={getVisibilityTone(product?.visibility)}
+          />
+          <SellerWorkspaceBadge
+            label={product?.availability?.label || "Availability unknown"}
+            tone={getAvailabilityTone(product?.availability)}
+          />
         </div>
       </SellerWorkspaceSectionHeader>
 
@@ -430,7 +427,7 @@ export default function SellerProductDetailPage() {
         </div>
       </SellerWorkspaceSectionCard>
 
-      <section className="grid gap-4 xl:grid-cols-4">
+      <section className="grid gap-3.5 xl:grid-cols-4">
         <SellerWorkspaceDetailItem label="Slug" value={product?.slug} />
         <SellerWorkspaceDetailItem
           label="Updated"
@@ -533,8 +530,8 @@ export default function SellerProductDetailPage() {
         </div>
       </SellerWorkspaceSectionCard>
 
-      <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <div className="space-y-6">
+      <section className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+        <div className="space-y-5">
           <SellerWorkspaceSectionCard
             title="Status and Visibility"
             hint="Operational state and public storefront outcome use the same contract as the catalog list."
@@ -633,20 +630,20 @@ export default function SellerProductDetailPage() {
             hint="Read-only text and notes as stored in the existing product representation."
             Icon={FileText}
           >
-            <div className="grid gap-4">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div className="grid gap-3.5">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                   Description
                 </p>
-                <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                <p className="mt-2.5 whitespace-pre-wrap text-sm leading-6 text-slate-700">
                   {product?.descriptions?.description || "No description stored for this product."}
                 </p>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                   Internal Notes
                 </p>
-                <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                <p className="mt-2.5 whitespace-pre-wrap text-sm leading-6 text-slate-700">
                   {product?.descriptions?.notes || "No internal notes stored."}
                 </p>
               </div>
@@ -658,7 +655,7 @@ export default function SellerProductDetailPage() {
             hint="Seller draft media is limited to a minimal image set. The first image becomes the primary preview while richer media governance stays outside this lane."
             Icon={ImageIcon}
           >
-            <div className="space-y-4">
+            <div className="space-y-3.5">
               <div className="grid gap-3 md:grid-cols-2">
                 <SellerWorkspaceDetailItem
                   label="Promo Image"
@@ -674,7 +671,7 @@ export default function SellerProductDetailPage() {
                   {detailImageUrls.map((imageUrl) => (
                     <div
                       key={imageUrl}
-                      className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50"
+                      className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50"
                     >
                       <img
                         src={resolveAssetUrl(imageUrl)}
@@ -698,7 +695,7 @@ export default function SellerProductDetailPage() {
           </SellerWorkspaceSectionCard>
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-5">
           <SellerWorkspaceSectionCard
             title="Catalog Metadata"
             hint="Safe seller-facing snapshot from the current product schema."
@@ -760,11 +757,11 @@ export default function SellerProductDetailPage() {
                 value={product?.attributes?.youtubeLink || "-"}
               />
             </div>
-            <div className="mt-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Assigned Categories
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-3.5">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Assigned Categories
+                </p>
+              <div className="mt-2.5 flex flex-wrap gap-2">
                 {assignedCategories.length > 0 ? (
                   assignedCategories.map((category) => (
                     <SellerWorkspaceBadge
@@ -787,47 +784,47 @@ export default function SellerProductDetailPage() {
             hint="Existing JSON-based representations are exposed read-only for seller visibility."
             Icon={Layers3}
           >
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div className="space-y-3.5">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                   Variations
                 </p>
                 {product?.variations?.hasVariations ? (
-                  <pre className="mt-3 overflow-x-auto rounded-2xl bg-slate-950 p-4 text-xs leading-6 text-slate-100">
+                  <pre className="mt-2.5 overflow-x-auto rounded-xl bg-slate-950 p-3.5 text-xs leading-6 text-slate-100">
                     {prettyJson(product.variations.raw)}
                   </pre>
                 ) : (
-                  <p className="mt-3 text-sm text-slate-500">No variation data stored.</p>
+                  <p className="mt-2.5 text-sm text-slate-500">No variation data stored.</p>
                 )}
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                   Wholesale
                 </p>
                 {product?.wholesale?.hasWholesale ? (
-                  <pre className="mt-3 overflow-x-auto rounded-2xl bg-slate-950 p-4 text-xs leading-6 text-slate-100">
+                  <pre className="mt-2.5 overflow-x-auto rounded-xl bg-slate-950 p-3.5 text-xs leading-6 text-slate-100">
                     {prettyJson(product.wholesale.raw)}
                   </pre>
                 ) : (
-                  <p className="mt-3 text-sm text-slate-500">
+                  <p className="mt-2.5 text-sm text-slate-500">
                     No wholesale configuration stored.
                   </p>
                 )}
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                   Tags
                 </p>
                 {normalizedTags.length > 0 ? (
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="mt-2.5 flex flex-wrap gap-2">
                     {normalizedTags.map((tag) => (
                       <SellerWorkspaceBadge key={tag} label={tag} tone="stone" />
                     ))}
                   </div>
                 ) : (
-                  <p className="mt-3 text-sm text-slate-500">No tag data stored.</p>
+                  <p className="mt-2.5 text-sm text-slate-500">No tag data stored.</p>
                 )}
               </div>
             </div>

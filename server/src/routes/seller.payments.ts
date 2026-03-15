@@ -205,7 +205,8 @@ const normalizeProofSummary = (proofs: any[]) => {
     .sort((left, right) => {
       const leftTime = new Date(getAttr(left, "createdAt") || 0).getTime();
       const rightTime = new Date(getAttr(right, "createdAt") || 0).getTime();
-      return rightTime - leftTime;
+      if (rightTime !== leftTime) return rightTime - leftTime;
+      return toNumber(getAttr(right, "id")) - toNumber(getAttr(left, "id"));
     })[0];
   return {
     id: toNumber(getAttr(latest, "id")),
@@ -369,6 +370,30 @@ const serializeSellerSuborder = (suborder: any) => {
   };
 };
 
+const resolveSellerPaymentReviewFilterStatus = (suborder: any) => {
+  const payments = Array.isArray(suborder?.payments) ? suborder.payments : [];
+  const latestPayment =
+    payments.length > 1
+      ? [...payments].sort((left, right) => {
+          const leftTime = new Date(getAttr(left, "createdAt") || 0).getTime();
+          const rightTime = new Date(getAttr(right, "createdAt") || 0).getTime();
+          return rightTime - leftTime;
+        })[0]
+      : payments[0] ?? null;
+  const paymentStatus = String(getAttr(latestPayment, "status") || "").trim().toUpperCase();
+  const suborderStatus = String(getAttr(suborder, "paymentStatus") || "UNPAID")
+    .trim()
+    .toUpperCase();
+
+  if (paymentStatus === "REJECTED") return "REJECTED";
+  if (paymentStatus === "PENDING_CONFIRMATION") return "PENDING_CONFIRMATION";
+  if (paymentStatus === "PAID") return "PAID";
+  if (suborderStatus === "PENDING_CONFIRMATION") return "PENDING_CONFIRMATION";
+  if (suborderStatus === "PAID") return "PAID";
+  if (suborderStatus === "UNPAID") return "UNPAID";
+  return paymentStatus || suborderStatus || "UNPAID";
+};
+
 const loadSellerPayment = async (paymentId: number) =>
   Payment.findByPk(paymentId, {
     include: [
@@ -417,11 +442,10 @@ const loadSellerPayment = async (paymentId: number) =>
     ],
   });
 
-const listSellerPaymentReviewSuborders = async (storeId: number, statuses: string[]) =>
-  Suborder.findAll({
+const listSellerPaymentReviewSuborders = async (storeId: number, statuses: string[]) => {
+  const items = await Suborder.findAll({
     where: {
       storeId,
-      paymentStatus: { [Op.in]: statuses },
     },
     attributes: [
       "id",
@@ -437,6 +461,11 @@ const listSellerPaymentReviewSuborders = async (storeId: number, statuses: strin
     include: sellerListInclude,
     order: [["createdAt", "DESC"]],
   });
+
+  return items.filter((suborder) =>
+    statuses.includes(resolveSellerPaymentReviewFilterStatus(suborder))
+  );
+};
 
 const buildSellerPaymentReviewListPayload = (input: {
   access: any;
@@ -683,7 +712,8 @@ const handleSellerPaymentReview = async (req: any, res: any, options: { requireR
       .sort((left, right) => {
         const leftTime = new Date(getAttr(left, "createdAt") || 0).getTime();
         const rightTime = new Date(getAttr(right, "createdAt") || 0).getTime();
-        return rightTime - leftTime;
+        if (rightTime !== leftTime) return rightTime - leftTime;
+        return toNumber(getAttr(right, "id")) - toNumber(getAttr(left, "id"));
       })[0];
 
     const orderId = toNumber(getAttr(suborder, "orderId"), 0);
@@ -704,6 +734,7 @@ const handleSellerPaymentReview = async (req: any, res: any, options: { requireR
           await suborder.update(
             {
               paymentStatus: "PAID",
+              fulfillmentStatus: "PROCESSING",
               paidAt: now,
             } as any,
             { transaction: tx }
@@ -769,7 +800,22 @@ const handleSellerPaymentReview = async (req: any, res: any, options: { requireR
       }
 
       if (orderId > 0) {
-        await recalculateParentOrderPaymentStatus(orderId, tx);
+        const nextParentPaymentStatus = await recalculateParentOrderPaymentStatus(orderId, tx);
+        if (parsed.data.action === "APPROVE" && String(nextParentPaymentStatus || "").toUpperCase() === "PAID") {
+          const parentOrder = await Order.findByPk(orderId, {
+            attributes: ["id", "status"],
+            transaction: tx,
+          });
+          const parentStatus = String(getAttr(parentOrder, "status") || "pending").toLowerCase().trim();
+          if (parentOrder && parentStatus === "pending") {
+            await parentOrder.update(
+              {
+                status: "processing",
+              } as any,
+              { transaction: tx }
+            );
+          }
+        }
       }
 
       await tx.commit();

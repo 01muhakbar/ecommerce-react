@@ -135,9 +135,13 @@ const serializePublicStoreIdentityContract = () => ({
     "slug",
     "description",
     "logoUrl",
+    "bannerUrl",
     "email",
     "phone",
     "whatsapp",
+    "websiteUrl",
+    "instagramUrl",
+    "tiktokUrl",
     "addressLine1",
     "addressLine2",
     "city",
@@ -152,6 +156,7 @@ const serializePublicStoreIdentityContract = () => ({
   ],
   notes: [
     "Public store identity and store microsite contact fields read from Store.",
+    "Store microsite hero artwork and public outbound links read seller-owned Store fields when present.",
     "Global marketplace header copy and contact-page layout remain admin customization-managed.",
     "Store description is the fallback for store microsite about content when rich-about customization is empty.",
   ],
@@ -164,9 +169,13 @@ const publicStoreIdentityAttributes = [
   "status",
   "description",
   "logoUrl",
+  "bannerUrl",
   "email",
   "phone",
   "whatsapp",
+  "websiteUrl",
+  "instagramUrl",
+  "tiktokUrl",
   "addressLine1",
   "addressLine2",
   "city",
@@ -290,9 +299,13 @@ const serializePublicStoreIdentity = async (store: any) => {
       slug: "",
       description: "",
       logoUrl: "",
+      bannerUrl: "",
       email: "",
       phone: "",
       whatsapp: "",
+      websiteUrl: "",
+      instagramUrl: "",
+      tiktokUrl: "",
       addressLine1: "",
       addressLine2: "",
       city: "",
@@ -312,9 +325,13 @@ const serializePublicStoreIdentity = async (store: any) => {
     slug: toText(store.slug),
     description: toText(store.description),
     logoUrl: toText(store.logoUrl),
+    bannerUrl: toText(store.bannerUrl),
     email: toText(store.email),
     phone: toText(store.phone),
     whatsapp: toText(store.whatsapp),
+    websiteUrl: toText(store.websiteUrl),
+    instagramUrl: toText(store.instagramUrl),
+    tiktokUrl: toText(store.tiktokUrl),
     addressLine1: toText(store.addressLine1),
     addressLine2: toText(store.addressLine2),
     city: toText(store.city),
@@ -434,7 +451,7 @@ router.get("/header", async (req, res, next) => {
 });
 
 // GET /api/store/customization/identity
-// Response contract: { success: true, data: { id, name, slug, description, logoUrl, email, phone, whatsapp, addressLine1, addressLine2, city, province, postalCode, country, updatedAt, contract } }
+// Response contract: { success: true, data: { id, name, slug, description, logoUrl, bannerUrl, email, phone, whatsapp, websiteUrl, instagramUrl, tiktokUrl, addressLine1, addressLine2, city, province, postalCode, country, updatedAt, contract } }
 router.get("/identity", async (_req, res, next) => {
   try {
     const store = await resolvePrimaryPublicStore();
@@ -448,7 +465,7 @@ router.get("/identity", async (_req, res, next) => {
 });
 
 // GET /api/store/customization/identity/:slug
-// Response contract: { success: true, data: { id, name, slug, description, logoUrl, email, phone, whatsapp, addressLine1, addressLine2, city, province, postalCode, country, updatedAt, contract } }
+// Response contract: { success: true, data: { id, name, slug, description, logoUrl, bannerUrl, email, phone, whatsapp, websiteUrl, instagramUrl, tiktokUrl, addressLine1, addressLine2, city, province, postalCode, country, updatedAt, contract } }
 router.get("/identity/:slug", async (req, res, next) => {
   try {
     const normalizedSlug = normalizeSlug(req.params.slug);

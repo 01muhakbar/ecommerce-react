@@ -145,6 +145,10 @@ export type StoreCheckoutPreviewGroup = {
   paymentAvailable: boolean;
   paymentMethod: "QRIS" | null;
   paymentProfileStatus: "ACTIVE" | "PENDING" | "REJECTED" | "INACTIVE" | "MISSING" | string;
+  merchantName?: string | null;
+  accountName?: string | null;
+  qrisImageUrl?: string | null;
+  qrisPayload?: string | null;
   paymentInstruction?: string | null;
   warning?: string | null;
   items: StoreCheckoutPreviewItem[];
@@ -211,9 +215,13 @@ export type PublicStoreIdentity = {
   slug: string;
   description: string;
   logoUrl: string;
+  bannerUrl: string;
   email: string;
   phone: string;
   whatsapp: string;
+  websiteUrl: string;
+  instagramUrl: string;
+  tiktokUrl: string;
   addressLine1: string;
   addressLine2: string;
   city: string;
@@ -434,6 +442,20 @@ export const createStoreOrder = async (payload: {
       paymentMethod: "COD";
     };
   }>(url, payload, { withCredentials: true });
+  return data;
+};
+
+export const createMultiStoreCheckoutOrder = async (payload?: {
+  cartId?: number;
+  shippingAddressId?: number;
+  useDefaultShipping?: boolean;
+  customer?: { name?: string; phone?: string; address?: string; notes?: string };
+  shippingDetails?: StoreShippingDetails;
+  couponCode?: string | null;
+}) => {
+  const { data } = await api.post("/checkout/create-multi-store", payload ?? {}, {
+    withCredentials: true,
+  });
   return data;
 };
 

@@ -462,7 +462,7 @@ export default function SellerTeamPage() {
       : "-";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <SellerWorkspaceSectionHeader
         eyebrow="Seller Team"
         title="Seller team governance overview"
@@ -485,7 +485,7 @@ export default function SellerTeamPage() {
         </p>
       </SellerWorkspaceSectionHeader>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-4">
         <SellerWorkspaceStatCard
           label="Members"
           value={String(team?.summary?.totalMembers ?? 0)}
@@ -526,22 +526,22 @@ export default function SellerTeamPage() {
         />
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1fr_0.95fr]">
-        <SellerWorkspacePanel className="p-5">
+      <section className="grid gap-5 xl:grid-cols-[1fr_0.95fr]">
+        <SellerWorkspacePanel className="p-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-900 text-white">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white">
               <ShieldCheck className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-slate-900">Current Access Summary</h3>
+              <h3 className="text-base font-semibold text-slate-900">Current Access Summary</h3>
               <p className="text-sm text-slate-500">
                 Backend-resolved seller access for the current store context.
               </p>
             </div>
           </div>
 
-          <dl className="mt-5 grid gap-4 sm:grid-cols-2">
-            <SellerWorkspaceInset className="px-4 py-4">
+          <dl className="mt-4 grid gap-3.5 sm:grid-cols-2">
+            <SellerWorkspaceInset className="px-3.5 py-3.5">
               <dt className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
                 Membership Status
               </dt>
@@ -557,7 +557,7 @@ export default function SellerTeamPage() {
                     : "This actor can observe the team shell, but mutation lanes stay closed.")}
               </p>
             </SellerWorkspaceInset>
-            <SellerWorkspaceInset className="px-4 py-4">
+            <SellerWorkspaceInset className="px-3.5 py-3.5">
               <dt className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
                 Member Reference
               </dt>
@@ -570,11 +570,11 @@ export default function SellerTeamPage() {
             </SellerWorkspaceInset>
           </dl>
 
-          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <div className="mt-4 grid gap-3.5 lg:grid-cols-2">
             {accessGroups.map((group) => (
-              <SellerWorkspaceInset key={group.title} className="px-4 py-4">
+              <SellerWorkspaceInset key={group.title} className="px-3.5 py-3.5">
                 <h4 className="text-sm font-semibold text-slate-900">{group.title}</h4>
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="mt-3 flex flex-wrap gap-2">
                   {group.items.map((permissionKey) => (
                     <SellerWorkspaceBadge
                       key={permissionKey}
@@ -588,13 +588,13 @@ export default function SellerTeamPage() {
           </div>
         </SellerWorkspacePanel>
 
-        <SellerWorkspacePanel className="p-5">
+        <SellerWorkspacePanel className="p-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
               <Lock className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-slate-900">Team Actions</h3>
+              <h3 className="text-base font-semibold text-slate-900">Team Actions</h3>
               <p className="text-sm text-slate-500">Phase 1 subset only</p>
             </div>
           </div>
@@ -602,22 +602,22 @@ export default function SellerTeamPage() {
           {feedback ? (
             <SellerWorkspaceNotice
               type={feedback.type === "success" ? "success" : "error"}
-              className="mt-5"
+              className="mt-4"
             >
               {feedback.message}
             </SellerWorkspaceNotice>
           ) : null}
 
           {canManageMembers && canManageRoles ? (
-            <div className="mt-5 space-y-4">
+            <div className="mt-4 space-y-3.5">
               <form onSubmit={handleInviteSubmit}>
                 <SellerWorkspaceFilterBar className="border-amber-200 bg-amber-50 shadow-none">
                   <p className="text-sm font-semibold text-slate-900">Invite Existing User</p>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">
+                  <p className="mt-1 text-sm leading-5 text-slate-600">
                     This creates a pending membership with status <code>INVITED</code>. The target
                     user must already have an account, and no email automation is sent yet.
                   </p>
-                  <div className="mt-4 grid gap-3">
+                  <div className="mt-3.5 grid gap-3">
                     <input
                       type="email"
                       value={inviteForm.email}
@@ -643,7 +643,7 @@ export default function SellerTeamPage() {
                       ))}
                     </select>
                   </div>
-                  <div className="mt-4 flex justify-end">
+                  <div className="mt-3.5 flex justify-end">
                     <button
                       type="submit"
                       disabled={
@@ -664,11 +664,11 @@ export default function SellerTeamPage() {
               <form onSubmit={handleAttachSubmit}>
                 <SellerWorkspaceFilterBar className="shadow-none">
                   <p className="text-sm font-semibold text-slate-900">Attach Existing User</p>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">
+                  <p className="mt-1 text-sm leading-5 text-slate-600">
                     Use this lane only when the user should become active immediately. This keeps
                     the existing phase 1 behavior.
                   </p>
-                  <div className="mt-4 grid gap-3">
+                  <div className="mt-3.5 grid gap-3">
                     <input
                       type="email"
                       value={attachForm.email}
@@ -694,7 +694,7 @@ export default function SellerTeamPage() {
                       ))}
                     </select>
                   </div>
-                  <div className="mt-4 flex justify-end">
+                  <div className="mt-3.5 flex justify-end">
                     <button
                       type="submit"
                       disabled={
@@ -713,7 +713,7 @@ export default function SellerTeamPage() {
               </form>
             </div>
           ) : (
-            <SellerWorkspaceNotice type="warning" className="mt-5">
+            <SellerWorkspaceNotice type="warning" className="mt-4">
               Team mutations remain permission-gated. This actor can read the membership shell,
               but cannot perform attach, role change, or status change operations.
             </SellerWorkspaceNotice>
@@ -721,10 +721,10 @@ export default function SellerTeamPage() {
         </SellerWorkspacePanel>
       </section>
 
-      <SellerWorkspacePanel className="p-5">
+      <SellerWorkspacePanel className="p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-lg font-semibold text-slate-900">Store Members</h3>
+            <h3 className="text-base font-semibold text-slate-900">Store Members</h3>
             <p className="mt-1 text-sm text-slate-500">
               Tenant-scoped rows from <code>store_members</code> with store role snapshots.
             </p>
@@ -735,8 +735,8 @@ export default function SellerTeamPage() {
         </div>
 
         {members.length > 0 ? (
-          <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="grid grid-cols-[1.4fr_1.3fr_0.9fr_1fr_1.2fr] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3.5 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+          <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
+            <div className="grid grid-cols-[1.4fr_1.3fr_0.9fr_1fr_1.2fr] gap-3 border-b border-slate-200 bg-slate-50 px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
               <span>Member</span>
               <span>Role</span>
               <span>Status</span>
@@ -755,7 +755,7 @@ export default function SellerTeamPage() {
                 return (
                 <div
                   key={member.id}
-                  className="grid grid-cols-[1.4fr_1.3fr_0.9fr_1fr_1.2fr] gap-3 px-4 py-4 text-sm text-slate-700"
+                  className="grid grid-cols-[1.4fr_1.3fr_0.9fr_1fr_1.2fr] gap-3 px-3.5 py-3.5 text-sm text-slate-700"
                 >
                   <div>
                     <p className="font-semibold text-slate-900">{member.name || `User #${member.userId}`}</p>
@@ -933,15 +933,15 @@ export default function SellerTeamPage() {
         )}
       </SellerWorkspacePanel>
 
-      <SellerWorkspacePanel className="p-5">
-        <h3 className="text-lg font-semibold text-slate-900">Seeded Seller Roles</h3>
+      <SellerWorkspacePanel className="p-4">
+        <h3 className="text-base font-semibold text-slate-900">Seeded Seller Roles</h3>
         <p className="mt-1 text-sm text-slate-500">
           System roles currently available from the seller foundation seed.
         </p>
 
-        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+        <div className="mt-4 grid gap-3.5 lg:grid-cols-2">
           {(team?.roles || []).map((role) => (
-            <SellerWorkspaceInset key={role.id} className="px-4 py-4">
+            <SellerWorkspaceInset key={role.id} className="px-3.5 py-3.5">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h4 className="text-sm font-semibold text-slate-900">{role.name}</h4>

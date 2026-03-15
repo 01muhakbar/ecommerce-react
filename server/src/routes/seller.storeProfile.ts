@@ -109,8 +109,8 @@ const storeProfileFieldMatrix: StoreProfileFieldContract[] = [
   {
     key: "bannerUrl",
     label: "Banner URL",
-    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
-    notes: "Storefront hero and page banners currently come from store customization.",
+    storefrontUsage: STOREFRONT_USAGE.PUBLIC_STOREFRONT,
+    notes: "Used as the preferred public microsite hero artwork when present.",
   },
   {
     key: "email",
@@ -136,20 +136,20 @@ const storeProfileFieldMatrix: StoreProfileFieldContract[] = [
   {
     key: "websiteUrl",
     label: "Website URL",
-    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
-    notes: "No current storefront page links directly to Store.websiteUrl.",
+    storefrontUsage: STOREFRONT_USAGE.PUBLIC_STOREFRONT,
+    notes: "Shown as a public outbound link on the store microsite when present.",
   },
   {
     key: "instagramUrl",
     label: "Instagram URL",
-    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
-    notes: "No current storefront page links directly to Store.instagramUrl.",
+    storefrontUsage: STOREFRONT_USAGE.PUBLIC_STOREFRONT,
+    notes: "Shown as a public outbound link on the store microsite when present.",
   },
   {
     key: "tiktokUrl",
     label: "TikTok URL",
-    storefrontUsage: STOREFRONT_USAGE.NOT_SURFACED,
-    notes: "No current storefront page links directly to Store.tiktokUrl.",
+    storefrontUsage: STOREFRONT_USAGE.PUBLIC_STOREFRONT,
+    notes: "Shown as a public outbound link on the store microsite when present.",
   },
   {
     key: "addressLine1",
@@ -359,6 +359,7 @@ const buildStoreProfileContract = () => {
     notes: [
       "Backend seller profile remains the source of truth for editable fields.",
       "Store identity, microsite contact, and public identity surfaces read seller-owned Store fields directly.",
+      "Store microsite hero artwork and public social links now read seller-owned Store fields when present.",
       "Marketplace header copy, marketplace contact-page layout, and store microsite rich-about content remain customization-managed.",
       "Marketplace header phone, WhatsApp, and logo now prefer seller-owned Store fields before customization fallback.",
     ],

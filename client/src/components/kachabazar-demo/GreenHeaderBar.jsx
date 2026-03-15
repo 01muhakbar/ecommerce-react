@@ -42,17 +42,12 @@ export default function GreenHeaderBar({
           aria-label={`Go to ${safeBrandName} homepage`}
         >
           {logoSrc ? (
-            <span className="inline-flex min-w-0 items-center gap-2 sm:gap-2.5">
-              <span className={logoFrameClass}>
-                <img
-                  src={logoSrc}
-                  alt={`${safeBrandName} logo`}
-                  className="max-h-full w-auto max-w-full object-contain"
-                />
-              </span>
-              <span className="hidden max-w-[160px] truncate text-[11px] font-semibold tracking-[0.06em] text-white/90 md:inline">
-                {safeBrandName}
-              </span>
+            <span className={logoFrameClass}>
+              <img
+                src={logoSrc}
+                alt={`${safeBrandName} logo`}
+                className="max-h-full w-auto max-w-full object-contain"
+              />
             </span>
           ) : isHeaderLoading ? (
             <span className={`${logoFrameClass} rounded bg-white/20`} />

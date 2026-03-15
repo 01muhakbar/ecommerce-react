@@ -30,6 +30,15 @@ const toText = (value, fallback = "") => {
   return normalized || fallback;
 };
 
+const sanitizeHeaderBrandName = (value, fallback = "KACHA BAZAR") => {
+  const normalized = toText(value, fallback);
+  const lowered = normalized.toLowerCase();
+  if (lowered === "super admin" || lowered === "super-admin" || lowered === "super_admin") {
+    return fallback;
+  }
+  return normalized;
+};
+
 export default function StoreHeaderKacha({ onCartClick }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -87,7 +96,9 @@ export default function StoreHeaderKacha({ onCartClick }) {
     () => normalizePublicStoreIdentity(publicIdentityQuery.data),
     [publicIdentityQuery.data]
   );
-  const resolvedBrandName = resolvePreferredText(publicIdentity.name, "", "KACHA BAZAR");
+  const resolvedBrandName = sanitizeHeaderBrandName(
+    resolvePreferredText(publicIdentity.name, "", "KACHA BAZAR")
+  );
   const resolvedPhoneNumber = resolvePreferredText(
     headerContent.phoneNumber,
     publicIdentity.phone

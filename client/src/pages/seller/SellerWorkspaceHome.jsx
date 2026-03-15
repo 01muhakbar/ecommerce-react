@@ -31,10 +31,10 @@ import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
 const joinClassNames = (...items) => items.filter(Boolean).join(" ");
 
 const heroPrimaryButtonClass =
-  "inline-flex h-10 items-center justify-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-slate-900 transition hover:bg-slate-100";
+  "inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-white px-3.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-100";
 
 const heroSecondaryButtonClass =
-  "inline-flex h-10 items-center justify-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 text-sm font-semibold text-white transition hover:bg-white/15";
+  "inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-3.5 text-sm font-semibold text-white transition hover:bg-white/15";
 
 const priorityToneClass = (tone) =>
   tone === "emerald"
@@ -499,11 +499,11 @@ export default function SellerWorkspaceHome() {
   const quickLinksToRender = [...enabledQuickLinks, ...lockedQuickLinks];
 
   return (
-    <div className="space-y-6">
-      <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <SellerWorkspacePanel className="overflow-hidden border-slate-900 bg-[linear-gradient(135deg,#0f172a_0%,#111827_52%,#164e63_100%)] px-5 py-5 text-white sm:px-6">
-          <div className="flex h-full flex-col justify-between gap-6">
-            <div className="space-y-4">
+    <div className="space-y-5">
+      <section className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+        <SellerWorkspacePanel className="overflow-hidden border-slate-900 bg-[linear-gradient(135deg,#0f172a_0%,#111827_52%,#164e63_100%)] px-4 py-4 text-white sm:px-5">
+          <div className="flex h-full flex-col justify-between gap-5">
+            <div className="space-y-3.5">
               <div className="flex flex-wrap items-center gap-2">
                 <SellerWorkspaceBadge
                   label="Seller Home"
@@ -526,24 +526,24 @@ export default function SellerWorkspaceHome() {
                 <p className="text-xs font-semibold uppercase tracking-[0.26em] text-white/60">
                   Command Center
                 </p>
-                <h2 className="mt-3 text-3xl font-semibold tracking-tight">
+                <h2 className="mt-2 text-[1.9rem] font-semibold tracking-tight">
                   {summary?.store?.name || sellerContext?.store?.name || "Seller Workspace"}
                 </h2>
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-white/72">
+                <p className="mt-2.5 max-w-2xl text-sm leading-5 text-white/72">
                   Start here to see what needs attention first for the active store, then jump
                   straight into orders, payment review, payment setup, or store profile.
                 </p>
               </div>
 
               <div className="grid gap-3 md:grid-cols-3">
-                <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-4">
+                <div className="rounded-xl border border-white/10 bg-white/10 px-3.5 py-3.5">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/60">
                     Main Focus
                   </p>
                   <p className="mt-2 text-base font-semibold text-white">{primaryFocus.label}</p>
                   <p className="mt-2 text-sm leading-6 text-white/70">{primaryFocus.hint}</p>
                 </div>
-                <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-4">
+                <div className="rounded-xl border border-white/10 bg-white/10 px-3.5 py-3.5">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/60">
                     Your View
                   </p>
@@ -552,7 +552,7 @@ export default function SellerWorkspaceHome() {
                     This page only shows what your current seller role can safely access.
                   </p>
                 </div>
-                <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-4">
+                <div className="rounded-xl border border-white/10 bg-white/10 px-3.5 py-3.5">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/60">
                     Store Scope
                   </p>
@@ -624,7 +624,7 @@ export default function SellerWorkspaceHome() {
         </SellerWorkspaceSectionCard>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-4">
         <SellerWorkspaceStatCard
           label="Payment Setup"
           value={
@@ -681,7 +681,7 @@ export default function SellerWorkspaceHome() {
 
       {hasOperationalAccess ? (
         <>
-          <section className="grid gap-6 xl:grid-cols-2">
+          <section className="grid gap-5 xl:grid-cols-2">
             <SellerWorkspaceSectionCard
               title="Payment review"
               hint="Use this to see whether buyer proof review needs attention today."

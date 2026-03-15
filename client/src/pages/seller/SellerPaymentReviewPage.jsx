@@ -96,6 +96,8 @@ export default function SellerPaymentReviewPage() {
         queryClient.invalidateQueries({ queryKey: ["seller", "suborders", storeId] }),
         queryClient.invalidateQueries({ queryKey: ["seller", "suborder", "detail", storeId] }),
         queryClient.invalidateQueries({ queryKey: ["account", "order", "payment"] }),
+        queryClient.invalidateQueries({ queryKey: ["account", "orders"] }),
+        queryClient.invalidateQueries({ queryKey: ["account", "orders", "grouped"] }),
         queryClient.invalidateQueries({ queryKey: ["payment", variables.paymentId] }),
       ]);
       setNotes((prev) => ({ ...prev, [variables.paymentId]: "" }));
@@ -152,7 +154,7 @@ export default function SellerPaymentReviewPage() {
   const store = reviewQuery.data?.store || sellerContext?.store || null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <SellerWorkspaceSectionHeader
         eyebrow="Finance"
         title="Payment review"
@@ -179,7 +181,7 @@ export default function SellerPaymentReviewPage() {
         </p>
       </SellerWorkspaceSectionHeader>
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-3.5 md:grid-cols-3">
         <SellerWorkspaceStatCard
           label="Visible Records"
           value={String(reviewStats.total)}
@@ -235,7 +237,7 @@ export default function SellerPaymentReviewPage() {
         />
       ) : null}
 
-      <div className="space-y-4">
+      <div className="space-y-3.5">
         {items.map((entry) => {
           const payment = entry.payment;
           const proof = payment?.proof;
@@ -248,7 +250,7 @@ export default function SellerPaymentReviewPage() {
             reviewMutation.isPending && reviewMutation.variables?.paymentId === payment?.id;
 
           return (
-            <SellerWorkspacePanel key={entry.suborderId} className="p-5 sm:p-5">
+            <SellerWorkspacePanel key={entry.suborderId} className="p-4">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="space-y-4 xl:flex-1">
                   <div>
@@ -256,7 +258,7 @@ export default function SellerPaymentReviewPage() {
                       Seller payment review
                     </p>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <h3 className="text-xl font-semibold text-slate-900">
+                      <h3 className="text-lg font-semibold text-slate-900">
                         {entry.suborderNumber}
                       </h3>
                       <SellerWorkspaceBadge
@@ -276,7 +278,7 @@ export default function SellerPaymentReviewPage() {
                   </div>
 
                   <div className="grid gap-4 lg:grid-cols-2">
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm text-slate-700">
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Payment Snapshot
                       </p>
@@ -300,7 +302,7 @@ export default function SellerPaymentReviewPage() {
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm text-slate-700">
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Buyer
                       </p>
@@ -312,7 +314,7 @@ export default function SellerPaymentReviewPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Items
                     </p>
@@ -320,7 +322,7 @@ export default function SellerPaymentReviewPage() {
                       {entry.items.map((item) => (
                         <div
                           key={`${entry.suborderId}-${item.id || item.productId}`}
-                          className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
+                          className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm"
                         >
                           <div>
                             <p className="font-semibold text-slate-900">{item.productName}</p>
@@ -337,8 +339,8 @@ export default function SellerPaymentReviewPage() {
                   </div>
                 </div>
 
-                <div className="space-y-4 xl:w-[360px]">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                <div className="space-y-3.5 xl:w-[360px]">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm text-slate-700">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Proof Summary
                     </p>
@@ -377,7 +379,7 @@ export default function SellerPaymentReviewPage() {
                           </p>
                         ) : null}
                         {proof.proofImageUrl ? (
-                          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-3">
+                          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white p-3">
                             <img
                               src={proof.proofImageUrl}
                               alt={`Payment proof ${entry.suborderNumber}`}
@@ -393,7 +395,7 @@ export default function SellerPaymentReviewPage() {
                             </a>
                           </div>
                         ) : (
-                          <div className="mt-3 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center text-slate-400">
+                          <div className="mt-3 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-5 text-center text-slate-400">
                             <ImageIcon className="mx-auto h-5 w-5" />
                             <p className="mt-2 text-xs">Proof image is not available.</p>
                           </div>
@@ -404,7 +406,7 @@ export default function SellerPaymentReviewPage() {
                     )}
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Review Action
                     </p>

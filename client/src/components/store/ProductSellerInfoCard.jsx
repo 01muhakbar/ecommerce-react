@@ -69,6 +69,7 @@ export default function ProductSellerInfoCard({ sellerInfo }) {
       : null;
   const ratingAverage = formatRating(sellerInfo.ratingAverage);
   const ratingCount = Math.max(0, Number(sellerInfo.ratingCount || 0));
+  const statusLabel = toText(sellerInfo?.status?.label);
   const statusTone =
     sellerInfo?.status?.tone === "success"
       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
@@ -124,12 +125,12 @@ export default function ProductSellerInfoCard({ sellerInfo }) {
                 <h3 className="truncate text-lg font-bold tracking-tight text-slate-900 sm:text-[22px]">
                   {sellerInfo.name}
                 </h3>
-                {sellerInfo?.status?.label ? (
+                {statusLabel ? (
                   <span
                     className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] ${statusTone}`}
                   >
                     <BadgeCheck className="h-2.5 w-2.5" />
-                    Active
+                    {statusLabel}
                   </span>
                 ) : null}
               </div>

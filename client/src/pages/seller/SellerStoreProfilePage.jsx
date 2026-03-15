@@ -312,7 +312,7 @@ export default function SellerStoreProfilePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <SellerWorkspaceSectionHeader
         eyebrow="Store Profile"
         title="Seller store profile overview"
@@ -336,7 +336,7 @@ export default function SellerStoreProfilePage() {
         ]}
       />
 
-      <section className="grid gap-4 xl:grid-cols-3">
+      <section className="grid gap-3.5 xl:grid-cols-3">
         <SellerWorkspaceSectionCard
           title="Identity"
           hint="Store-scoped seller snapshot"
@@ -374,7 +374,7 @@ export default function SellerStoreProfilePage() {
           hint="Readiness for profile clarity"
           Icon={MapPin}
         >
-          <p className="text-3xl font-semibold text-slate-900">{completeness.score || 0}%</p>
+          <p className="text-[1.9rem] font-semibold leading-none text-slate-900">{completeness.score || 0}%</p>
           <p className="mt-2 text-sm text-slate-600">
             {completeness.completedFields || 0} of {completeness.totalFields || 0} core fields are
             filled.
@@ -405,8 +405,8 @@ export default function SellerStoreProfilePage() {
         </SellerWorkspaceSectionCard>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
-        <div className="space-y-6">
+      <section className="grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
+        <div className="space-y-5">
           <SellerWorkspaceSectionCard
             title="Media and Address Snapshot"
             hint="These fields stay store-scoped and follow the current profile contract."
@@ -447,8 +447,8 @@ export default function SellerStoreProfilePage() {
               </SellerWorkspaceNotice>
             ) : null}
 
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4">
+            <div className="mt-4 grid gap-3.5 md:grid-cols-2">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3.5">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-800">
                   Editable Here
                 </p>
@@ -468,7 +468,7 @@ export default function SellerStoreProfilePage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
                   Read-only Snapshot
                 </p>
@@ -488,8 +488,8 @@ export default function SellerStoreProfilePage() {
               </div>
             </div>
 
-            <div className="mt-4 grid gap-4 md:grid-cols-3">
-              <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-4">
+            <div className="mt-4 grid gap-3.5 md:grid-cols-3">
+              <div className="rounded-xl border border-sky-200 bg-sky-50 px-3.5 py-3.5">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-800">
                   Public Storefront
                 </p>
@@ -509,7 +509,7 @@ export default function SellerStoreProfilePage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3.5">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-900">
                   Operational Client
                 </p>
@@ -529,7 +529,7 @@ export default function SellerStoreProfilePage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
                   Not Surfaced
                 </p>
@@ -614,11 +614,11 @@ export default function SellerStoreProfilePage() {
               : "This actor can review the store profile but cannot submit updates. Editability stays controlled by backend seller permissions for the active store."}
           </SellerWorkspaceNotice>
 
-          <form id="seller-store-profile-form" onSubmit={handleSubmit} className="space-y-5">
+          <form id="seller-store-profile-form" onSubmit={handleSubmit} className="space-y-4">
             {formSections.map((section) => (
               <section
                 key={section.title}
-                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5"
               >
                 <div className="flex items-center justify-between gap-3">
                   <h4 className="text-sm font-semibold text-slate-900">{section.title}</h4>
@@ -627,7 +627,7 @@ export default function SellerStoreProfilePage() {
                     tone={isEditing ? "sky" : "stone"}
                   />
                 </div>
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <div className="mt-3.5 grid gap-3.5 md:grid-cols-2">
                   {section.fields.map((field) => (
                     (() => {
                       const fieldEditable = editableFieldSet.has(field.key);

@@ -751,7 +751,7 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
         </SellerWorkspaceNotice>
       ) : null}
 
-      <SellerWorkspacePanel className="p-4">
+      <SellerWorkspacePanel className="p-3.5 sm:p-4">
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <CompactSummaryItem label="Total" value={String(summary.totalProducts)} />
@@ -872,7 +872,7 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+          <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2.5">
               <ReviewQueueCard
                 label="All"
                 count={summary.totalProducts}

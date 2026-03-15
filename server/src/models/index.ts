@@ -7,6 +7,7 @@ import { StoreRole } from "./StoreRole.js";
 import { StoreMember } from "./StoreMember.js";
 import { StoreAuditLog } from "./StoreAuditLog.js";
 import { StorePaymentProfile } from "./StorePaymentProfile.js";
+import { StorePaymentProfileRequest } from "./StorePaymentProfileRequest.js";
 import { Product } from "./Product.js";
 import { Category } from "./Category.js";
 import { ProductCategory } from "./ProductCategory.js";
@@ -101,6 +102,7 @@ function initModels() {
   StoreMember.initModel(sequelize);
   StoreAuditLog.initModel(sequelize);
   StorePaymentProfile.initModel(sequelize);
+  StorePaymentProfileRequest.initModel(sequelize);
   Product.initModel(sequelize);
   Category.initModel(sequelize);
   ProductCategory.initModel(sequelize);
@@ -128,6 +130,7 @@ function initModels() {
     StoreMember,
     StoreAuditLog,
     StorePaymentProfile,
+    StorePaymentProfileRequest,
     Product,
     Category,
     ProductCategory,
@@ -265,6 +268,100 @@ async function backfillStoreAssignments() {
   }
 }
 
+async function backfillStorePaymentProfileFoundation() {
+  const profiles = await StorePaymentProfile.findAll({
+    attributes: [
+      "id",
+      "storeId",
+      "version",
+      "snapshotStatus",
+      "isActive",
+      "verificationStatus",
+      "verifiedByAdminId",
+      "verifiedAt",
+      "activatedByAdminId",
+      "activatedAt",
+    ],
+    order: [
+      ["storeId", "ASC"],
+      ["id", "ASC"],
+    ],
+  });
+
+  const activeProfileIdsByStore = new Map<number, number>();
+
+  for (const profile of profiles) {
+    const profileId = Number((profile as any).get?.("id") ?? (profile as any).id ?? 0);
+    const storeId = Number((profile as any).get?.("storeId") ?? (profile as any).storeId ?? 0);
+    const version = Number((profile as any).get?.("version") ?? (profile as any).version ?? 0);
+    const snapshotStatus = String(
+      (profile as any).get?.("snapshotStatus") ?? (profile as any).snapshotStatus ?? ""
+    ).toUpperCase();
+    const verificationStatus = String(
+      (profile as any).get?.("verificationStatus") ??
+        (profile as any).verificationStatus ??
+        ""
+    ).toUpperCase();
+    const isActive = Boolean((profile as any).get?.("isActive") ?? (profile as any).isActive);
+    const verifiedByAdminId =
+      Number((profile as any).get?.("verifiedByAdminId") ?? (profile as any).verifiedByAdminId ?? 0) ||
+      null;
+    const verifiedAt =
+      (profile as any).get?.("verifiedAt") ??
+      (profile as any).verifiedAt ??
+      null;
+    const activatedByAdminId =
+      Number(
+        (profile as any).get?.("activatedByAdminId") ??
+          (profile as any).activatedByAdminId ??
+          0
+      ) || null;
+    const activatedAt =
+      (profile as any).get?.("activatedAt") ??
+      (profile as any).activatedAt ??
+      null;
+
+    const nextVersion = version > 0 ? version : 1;
+    const nextSnapshotStatus =
+      isActive && verificationStatus === "ACTIVE" ? "ACTIVE" : "INACTIVE";
+
+    const updates: Record<string, unknown> = {};
+    if (version !== nextVersion) updates.version = nextVersion;
+    if (snapshotStatus !== nextSnapshotStatus) updates.snapshotStatus = nextSnapshotStatus;
+    if (nextSnapshotStatus === "ACTIVE" && !activatedAt) {
+      updates.activatedAt = verifiedAt || new Date();
+    }
+    if (nextSnapshotStatus === "ACTIVE" && !activatedByAdminId && verifiedByAdminId) {
+      updates.activatedByAdminId = verifiedByAdminId;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await profile.update(updates as any);
+    }
+
+    if (nextSnapshotStatus === "ACTIVE" && storeId > 0 && profileId > 0) {
+      activeProfileIdsByStore.set(storeId, profileId);
+    }
+  }
+
+  const stores = await Store.findAll({
+    attributes: ["id", "activeStorePaymentProfileId"],
+  });
+  for (const store of stores) {
+    const storeId = Number((store as any).get?.("id") ?? (store as any).id ?? 0);
+    const activeStorePaymentProfileId =
+      Number(
+        (store as any).get?.("activeStorePaymentProfileId") ??
+          (store as any).activeStorePaymentProfileId ??
+          0
+      ) || null;
+    const expectedProfileId = activeProfileIdsByStore.get(storeId) || null;
+    if (activeStorePaymentProfileId !== expectedProfileId) {
+      await store.update({ activeStorePaymentProfileId: expectedProfileId } as any);
+    }
+  }
+}
+
 // Helper untuk sync schema → langsung terlihat di phpMyAdmin
 export async function syncDb() {
   const queryInterface = sequelize.getQueryInterface() as any;
@@ -301,6 +398,7 @@ export async function syncDb() {
     await ensureSystemStoreRoles();
     await backfillProductCategoryAssignments();
     await backfillStoreAssignments();
+    await backfillStorePaymentProfileFoundation();
   } finally {
     queryInterface.removeConstraint = originalRemoveConstraint;
   }
@@ -318,6 +416,7 @@ export async function resetDbDev() {
     await sequelize.sync({ force: true });
     await ensureSystemStoreRoles();
     await backfillStoreAssignments();
+    await backfillStorePaymentProfileFoundation();
   } finally {
     await sequelize.query("SET FOREIGN_KEY_CHECKS = 1;");
   }
@@ -331,6 +430,7 @@ export {
   StoreMember,
   StoreAuditLog,
   StorePaymentProfile,
+  StorePaymentProfileRequest,
   Product,
   Category,
   ProductCategory,

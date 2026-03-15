@@ -137,7 +137,7 @@ export default function SellerTeamAuditPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <SellerWorkspaceSectionHeader
         eyebrow="Team Audit"
         title="Read-only team mutation trail"
@@ -152,7 +152,7 @@ export default function SellerTeamAuditPage() {
         ]}
       />
 
-      <section className="grid gap-4 md:grid-cols-2">
+      <section className="grid gap-3.5 md:grid-cols-2">
         <SellerWorkspaceStatCard
           label="Audit Rows"
           value={String(pagination.total || 0)}
@@ -169,9 +169,9 @@ export default function SellerTeamAuditPage() {
       </section>
 
       <SellerWorkspaceFilterBar>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-3.5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-slate-900">Filters</h3>
+            <h3 className="text-base font-semibold text-slate-900">Filters</h3>
             <p className="mt-1 text-sm text-slate-500">
               Narrow the audit trail to one mutation action if needed.
             </p>
@@ -199,10 +199,10 @@ export default function SellerTeamAuditPage() {
         </div>
       </SellerWorkspaceFilterBar>
 
-      <SellerWorkspacePanel className="p-5">
+      <SellerWorkspacePanel className="p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-lg font-semibold text-slate-900">Audit Timeline</h3>
+            <h3 className="text-base font-semibold text-slate-900">Audit Timeline</h3>
             <p className="mt-1 text-sm text-slate-500">
               Lightweight operational history for seller team mutations.
             </p>
@@ -214,8 +214,8 @@ export default function SellerTeamAuditPage() {
         </div>
 
         {items.length > 0 ? (
-          <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="grid grid-cols-[1.1fr_1fr_1fr_1.4fr_0.9fr] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3.5 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+          <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
+            <div className="grid grid-cols-[1.1fr_1fr_1fr_1.4fr_0.9fr] gap-3 border-b border-slate-200 bg-slate-50 px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
               <span>Action</span>
               <span>Actor</span>
               <span>Target</span>
@@ -226,7 +226,7 @@ export default function SellerTeamAuditPage() {
               {items.map((item) => (
                 <div
                   key={item.id}
-                  className="grid grid-cols-[1.1fr_1fr_1fr_1.4fr_0.9fr] gap-3 px-4 py-4 text-sm text-slate-700"
+                  className="grid grid-cols-[1.1fr_1fr_1fr_1.4fr_0.9fr] gap-3 px-3.5 py-3.5 text-sm text-slate-700"
                 >
                   <div className="space-y-2">
                     <SellerWorkspaceBadge
@@ -283,7 +283,7 @@ export default function SellerTeamAuditPage() {
             </div>
           </div>
         ) : (
-          <div className="mt-5">
+          <div className="mt-4">
             <SellerWorkspaceEmptyState
               title={
                 actionFilter ? "No team audit rows match this action filter" : "No team audit rows yet"
@@ -298,7 +298,7 @@ export default function SellerTeamAuditPage() {
           </div>
         )}
 
-        <div className="mt-5 flex items-center justify-between gap-3">
+        <div className="mt-4 flex items-center justify-between gap-3">
           <button
             type="button"
             onClick={() => setPage((current) => Math.max(1, current - 1))}

@@ -1,4 +1,4 @@
-import { Op } from "sequelize";
+import { Op, col, where as sqlWhere } from "sequelize";
 import { Router } from "express";
 import requireSellerStoreAccess from "../middleware/requireSellerStoreAccess.js";
 import { sellerHasPermission } from "../services/seller/resolveSellerAccess.js";
@@ -851,9 +851,9 @@ router.get(
         const likeKeyword = `%${keyword}%`;
         where[Op.or] = [
           { suborderNumber: { [Op.like]: likeKeyword } },
-          { "$order.invoiceNo$": { [Op.like]: likeKeyword } },
-          { "$order.customerName$": { [Op.like]: likeKeyword } },
-          { "$order.customerPhone$": { [Op.like]: likeKeyword } },
+          sqlWhere(col("order.invoice_no"), { [Op.like]: likeKeyword }),
+          sqlWhere(col("order.customer_name"), { [Op.like]: likeKeyword }),
+          sqlWhere(col("order.customer_phone"), { [Op.like]: likeKeyword }),
         ];
       }
 

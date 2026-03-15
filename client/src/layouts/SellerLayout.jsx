@@ -134,15 +134,15 @@ function SellerShellState({ title, description, tone = "neutral", children }) {
       : "border-slate-200 bg-white text-slate-700";
 
   return (
-    <div className={`${sellerShellPageClass} px-4 py-8 sm:px-6`}>
+    <div className={`${sellerShellPageClass} px-4 py-6 sm:px-6`}>
       <div className="mx-auto max-w-4xl">
-        <SellerWorkspacePanel className={`${toneClass} px-5 py-6 sm:px-6`}>
+        <SellerWorkspacePanel className={`${toneClass} px-4 py-5 sm:px-5`}>
           <p className="text-xs font-semibold uppercase tracking-[0.28em] opacity-70">
             Seller Workspace
           </p>
-          <h1 className="mt-3 text-3xl font-semibold text-slate-950">{title}</h1>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">{description}</p>
-          {children ? <div className="mt-6">{children}</div> : null}
+          <h1 className="mt-2.5 text-[1.8rem] font-semibold text-slate-950">{title}</h1>
+          <p className="mt-2.5 max-w-2xl text-sm leading-5 text-slate-600">{description}</p>
+          {children ? <div className="mt-5">{children}</div> : null}
         </SellerWorkspacePanel>
       </div>
     </div>
@@ -260,20 +260,20 @@ function SellerSidebar({ storeSlug, sellerContext }) {
     .filter((section) => section.items.length > 0);
 
   return (
-    <aside className="flex h-full min-h-screen w-full flex-col border-r border-slate-200 bg-white lg:sticky lg:top-0 lg:w-[274px]">
-      <div className="border-b border-slate-100 px-4 py-5">
+    <aside className="flex h-full min-h-screen w-full flex-col border-r border-slate-200 bg-white lg:sticky lg:top-0 lg:w-[266px]">
+      <div className="border-b border-slate-100 px-4 py-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
             <Store className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <p className="text-lg font-extrabold text-slate-900">Seller Hub</p>
+            <p className="text-base font-bold text-slate-900">Seller Hub</p>
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
               Admin-aligned workspace
             </p>
           </div>
         </div>
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+        <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             Active Store
           </p>
@@ -290,13 +290,13 @@ function SellerSidebar({ storeSlug, sellerContext }) {
         </div>
       </div>
 
-      <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-4" aria-label="Seller sidebar">
+      <nav className="flex-1 space-y-3 overflow-y-auto px-3 py-3.5" aria-label="Seller sidebar">
         {navSections.map((section) => (
           <div key={section.title}>
             <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
               {section.title}
             </p>
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               {section.items.map((item) =>
                 item.implemented ? (
                   <NavLink
@@ -305,7 +305,7 @@ function SellerSidebar({ storeSlug, sellerContext }) {
                     end={item.to === sellerRoutes.home()}
                     className={({ isActive }) =>
                       joinClassNames(
-                        "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition",
+                        "group relative flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition",
                         isActive
                           ? "bg-emerald-50 text-teal-700 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.12)]"
                           : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
@@ -316,14 +316,14 @@ function SellerSidebar({ storeSlug, sellerContext }) {
                       <>
                         <span
                           className={joinClassNames(
-                            "absolute inset-y-2 left-0 w-[3px] rounded-full",
+                            "absolute inset-y-1.5 left-0 w-[3px] rounded-full",
                             isActive ? "bg-emerald-500" : "bg-transparent"
                           )}
                           aria-hidden="true"
                         />
                         <span
                           className={joinClassNames(
-                            "flex h-9 w-9 items-center justify-center rounded-xl transition",
+                            "flex h-8 w-8 items-center justify-center rounded-xl transition",
                             isActive
                               ? "bg-emerald-100 text-emerald-700"
                               : "bg-slate-100 text-slate-500 group-hover:bg-white group-hover:text-slate-700"
@@ -347,9 +347,9 @@ function SellerSidebar({ storeSlug, sellerContext }) {
                 ) : (
                   <div
                     key={item.label}
-                    className="flex items-center gap-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-500"
+                    className="flex items-center gap-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-slate-500"
                   >
-                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-slate-400">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-slate-400">
                       <item.Icon className="h-[18px] w-[18px]" />
                     </span>
                     <span className="min-w-0 flex-1">
@@ -367,10 +367,10 @@ function SellerSidebar({ storeSlug, sellerContext }) {
         ))}
       </nav>
 
-      <div className="mt-auto border-t border-slate-100 px-4 py-4">
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900">
+      <div className="mt-auto border-t border-slate-100 px-4 py-3.5">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3.5 text-sm text-amber-900">
           <p className="font-semibold">Bridge Phase</p>
-          <p className="mt-2 leading-6 text-amber-800">
+          <p className="mt-1.5 leading-5 text-amber-800">
             Tenant access is live. Seller operations and finance lanes remain intentionally narrow while the workspace baseline is stabilized.
           </p>
         </div>
@@ -525,9 +525,9 @@ export default function SellerLayout() {
 
       <div className="layout__content min-w-0 flex-1 bg-slate-100">
         <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-          <div className="flex min-h-[72px] flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <div className="flex min-h-[64px] flex-wrap items-center justify-between gap-3 px-4 py-2.5 sm:px-6">
             <div className="flex min-w-0 flex-1 items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-emerald-700">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-emerald-700">
                 <Store className="h-[18px] w-[18px]" />
               </div>
               <div className="grid min-w-0 gap-0.5">
@@ -536,7 +536,7 @@ export default function SellerLayout() {
                 </p>
                 <p className="truncate text-[15px] font-bold text-slate-900">{pageMeta.title}</p>
               </div>
-              <div className="hidden h-11 min-w-[220px] max-w-[420px] flex-1 items-center rounded-[14px] border border-slate-200 bg-white px-4 shadow-[0_8px_18px_rgba(15,23,42,0.04)] lg:flex">
+              <div className="hidden h-10 min-w-[220px] max-w-[380px] flex-1 items-center rounded-xl border border-slate-200 bg-white px-3.5 shadow-[0_8px_18px_rgba(15,23,42,0.04)] lg:flex">
                 <Search className="h-4 w-4 text-slate-400" />
                 <span className="ml-3 truncate text-sm text-slate-500">
                   {sellerContext?.store?.name || "Store"} · {sellerContext?.store?.slug || "store"}
@@ -544,7 +544,7 @@ export default function SellerLayout() {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 rounded-[18px] border border-slate-200 bg-white px-3 py-2 shadow-[0_10px_20px_rgba(15,23,42,0.05)]">
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 shadow-[0_8px_18px_rgba(15,23,42,0.05)]">
               <SellerWorkspaceBadge
                 label={sellerContext?.access?.accessMode || "UNKNOWN"}
                 tone="amber"
@@ -558,7 +558,7 @@ export default function SellerLayout() {
                 tone="sky"
                 className="hidden sm:inline-flex"
               />
-              <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+              <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
                 <BadgeCheck className="h-3.5 w-3.5 text-emerald-600" />
                 {sellerContext?.access?.memberId ?? "Owner bridge"}
               </span>
@@ -566,18 +566,18 @@ export default function SellerLayout() {
           </div>
         </header>
 
-        <main className="w-full px-4 py-[26px] sm:px-6 sm:py-[26px]">
-          <div className="mx-auto w-full max-w-[1280px] space-y-5">
-            <SellerWorkspacePanel className="px-5 py-4 sm:px-6">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <main className="w-full px-4 py-5 sm:px-6 sm:py-5">
+          <div className="mx-auto w-full max-w-[1280px] space-y-4">
+            <SellerWorkspacePanel className="px-4 py-3.5 sm:px-5">
+              <div className="flex flex-col gap-2.5 lg:flex-row lg:items-end lg:justify-between">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                     Workspace Context
                   </p>
-                  <h1 className="mt-2 text-2xl font-semibold text-slate-900">
+                  <h1 className="mt-1.5 text-[1.5rem] font-semibold tracking-tight text-slate-900">
                     {sellerContext?.store?.name || "Store"}
                   </h1>
-                  <p className="mt-1 text-sm text-slate-500">{pageMeta.subtitle}</p>
+                  <p className="mt-1 text-sm leading-5 text-slate-500">{pageMeta.subtitle}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <SellerWorkspaceBadge label={sellerContext?.store?.slug || "store"} />

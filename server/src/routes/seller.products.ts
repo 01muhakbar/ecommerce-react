@@ -61,6 +61,26 @@ const normalizeOptionalInteger = (value: unknown) => {
   return Number.isFinite(parsed) ? Math.round(parsed) : Number.NaN;
 };
 
+const normalizeStoredImagePathList = (value: unknown) => {
+  if (Array.isArray(value)) {
+    return value.map((entry: unknown) => normalizeString(entry)).filter(Boolean);
+  }
+
+  const normalized = normalizeString(value);
+  if (!normalized) return [];
+
+  try {
+    const parsed = JSON.parse(normalized);
+    if (Array.isArray(parsed)) {
+      return parsed.map((entry: unknown) => normalizeString(entry)).filter(Boolean);
+    }
+  } catch {
+    // Fall through to a single-string path payload.
+  }
+
+  return [normalized];
+};
+
 const normalizeProductImageUrl = (value: unknown) => {
   const normalized = normalizeString(value);
   if (!normalized) return null;
@@ -1009,10 +1029,12 @@ const serializeProductDetail = (product: any, sellerAccess: any = null) => {
     : Array.isArray(product?.get?.("categories"))
       ? product.get("categories")
       : [];
-  const imagePaths = Array.isArray(getAttr(product, "imagePaths"))
-    ? getAttr(product, "imagePaths").map((entry: unknown) => normalizeString(entry)).filter(Boolean)
-    : [];
   const promoImageUrl = resolveProductPreviewImage(product);
+  const imagePaths = normalizeStoredImagePathList(getAttr(product, "imagePaths"));
+  const imageUrls =
+    promoImageUrl && !imagePaths.includes(promoImageUrl)
+      ? [promoImageUrl, ...imagePaths]
+      : imagePaths;
   const price = toNumber(getAttr(product, "price"));
   const salePriceRaw = getAttr(product, "salePrice");
   const salePrice =
@@ -1078,9 +1100,9 @@ const serializeProductDetail = (product: any, sellerAccess: any = null) => {
     },
     media: {
       promoImageUrl,
-      imageUrls: imagePaths,
+      imageUrls,
       videoUrl: getAttr(product, "videoPath") ? String(getAttr(product, "videoPath")) : null,
-      totalImages: imagePaths.length,
+      totalImages: imageUrls.length,
     },
     attributes: {
       weight: toNumber(getAttr(product, "weight"), 0) || null,

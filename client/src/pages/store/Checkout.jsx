@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useOutletContext } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Banknote, CreditCard, Trash2, WalletCards } from "lucide-react";
+import { Trash2, WalletCards } from "lucide-react";
 import { createOrderSchema } from "@ecommerce/schemas";
 import { useAuth } from "../../auth/useAuth.js";
 import { useCartStore } from "../../store/cart.store.ts";
 import {
-  createStoreOrder,
+  createMultiStoreCheckoutOrder,
   getStoreCustomization,
   previewCheckoutByStore,
   quoteStoreCoupon,
@@ -32,56 +32,15 @@ const INPUT_CLASS =
 
 const PAYMENT_OPTIONS = [
   {
-    id: "cash",
-    title: "Cash",
-    hint: "Pay after delivery",
-    Icon: Banknote,
-  },
-  {
-    id: "card",
-    title: "Card",
-    hint: "Visa / Mastercard",
-    Icon: CreditCard,
-  },
-  {
-    id: "razorpay",
-    title: "RazorPay",
-    hint: "Fast online payment",
+    id: "qris",
+    title: "QRIS by Store",
+    hint: "Each store keeps its own active QRIS destination during split checkout.",
     Icon: WalletCards,
   },
 ];
 
-const DEFAULT_STORE_SETTINGS_FLAGS = {
-  payments: {
-    cashOnDeliveryEnabled: false,
-    stripeEnabled: false,
-    razorPayEnabled: false,
-  },
-};
-
-const normalizeStoreSettingsFlags = (raw) => {
-  const source = raw && typeof raw === "object" ? raw : {};
-  const payments =
-    source.payments && typeof source.payments === "object" ? source.payments : {};
-  return {
-    payments: {
-      cashOnDeliveryEnabled:
-        typeof payments.cashOnDeliveryEnabled === "boolean"
-          ? payments.cashOnDeliveryEnabled
-          : DEFAULT_STORE_SETTINGS_FLAGS.payments.cashOnDeliveryEnabled,
-      stripeEnabled:
-        typeof payments.stripeEnabled === "boolean"
-          ? payments.stripeEnabled
-          : DEFAULT_STORE_SETTINGS_FLAGS.payments.stripeEnabled,
-      razorPayEnabled:
-        typeof payments.razorPayEnabled === "boolean"
-          ? payments.razorPayEnabled
-          : DEFAULT_STORE_SETTINGS_FLAGS.payments.razorPayEnabled,
-    },
-  };
-};
-
 const LAST_ORDER_REF_STORAGE_KEY = "store_last_order_ref";
+const checkoutCustomerSchema = createOrderSchema.shape.customer;
 const DEFAULT_CHECKOUT_COPY = {
   personalDetails: {
     sectionTitle: "Personal Details",
@@ -117,7 +76,7 @@ const DEFAULT_CHECKOUT_COPY = {
   },
   buttons: {
     continueButtonLabel: "Back to Cart",
-    confirmButtonLabel: "Place Order",
+    confirmButtonLabel: "Place an Order",
   },
   cartItemSection: {
     sectionTitle: "Cart Item Section",
@@ -308,10 +267,16 @@ const normalizeCheckoutCopy = (raw) => {
         buttons.continueButtonLabel,
         DEFAULT_CHECKOUT_COPY.buttons.continueButtonLabel
       ),
-      confirmButtonLabel: toCopyText(
-        buttons.confirmButtonLabel,
-        DEFAULT_CHECKOUT_COPY.buttons.confirmButtonLabel
-      ),
+      confirmButtonLabel:
+        toCopyText(
+          buttons.confirmButtonLabel,
+          DEFAULT_CHECKOUT_COPY.buttons.confirmButtonLabel
+        ).toLowerCase() === "confirm order"
+          ? "Place an Order"
+          : toCopyText(
+              buttons.confirmButtonLabel,
+              DEFAULT_CHECKOUT_COPY.buttons.confirmButtonLabel
+            ),
     },
     cartItemSection: {
       sectionTitle: toCopyText(
@@ -402,7 +367,7 @@ function resolveCouponReasonMessage(reason, minSpend) {
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
-  const { storeSettings } = useOutletContext() || {};
+  useOutletContext();
   const { user } = useAuth() || {};
   const queryClient = useQueryClient();
   const items = useCartStore((state) => state.items);
@@ -467,20 +432,7 @@ export default function CheckoutPage() {
     () => normalizeCheckoutCopy(checkoutCustomizationQuery.data?.customization?.checkout),
     [checkoutCustomizationQuery.data]
   );
-  const storeSettingsFlags = useMemo(
-    () => normalizeStoreSettingsFlags(storeSettings),
-    [storeSettings]
-  );
-  const paymentOptions = useMemo(
-    () =>
-      PAYMENT_OPTIONS.filter((option) => {
-        if (option.id === "cash") return storeSettingsFlags.payments.cashOnDeliveryEnabled;
-        if (option.id === "card") return storeSettingsFlags.payments.stripeEnabled;
-        if (option.id === "razorpay") return storeSettingsFlags.payments.razorPayEnabled;
-        return true;
-      }),
-    [storeSettingsFlags]
-  );
+  const paymentOptions = PAYMENT_OPTIONS;
 
   useEffect(() => {
     if (paymentOptions.length === 0) return;
@@ -585,7 +537,7 @@ export default function CheckoutPage() {
 
   const fullName = buildFullName(firstName, lastName);
   const phoneValue = phone.trim();
-  const paymentMethod = "COD";
+  const paymentMethod = "QRIS";
   const normalizedShippingForm = useMemo(
     () => toUserAddressPayload({ ...shippingForm, fullName, phoneNumber: phoneValue }),
     [shippingForm, fullName, phoneValue]
@@ -643,6 +595,10 @@ export default function CheckoutPage() {
   const previewHasPaymentBlocker = checkoutPreviewGroups.some(
     (group) => !group.paymentAvailable
   );
+  const couponBlocksSubmission = Boolean(appliedCouponMeta?.code);
+  const isPreviewBlockingSubmission =
+    !checkoutPreviewQuery.isError &&
+    (previewHasPaymentBlocker || checkoutPreviewInvalidItems.length > 0);
   const applyAddressToCheckoutForm = (address) => {
     const normalized = toUserAddressPayload(address || {});
     const fullNameParts = splitFullName(normalized.fullName);
@@ -900,8 +856,8 @@ export default function CheckoutPage() {
       return;
     }
 
-    const parsed = createOrderSchema.safeParse(payloadDraft);
-    if (!parsed.success) {
+    const parsedCustomer = checkoutCustomerSchema.safeParse(payloadDraft.customer);
+    if (!parsedCustomer.success) {
       const nextErrors = {
         firstName: "",
         lastName: "",
@@ -913,15 +869,15 @@ export default function CheckoutPage() {
         streetName: "",
         houseNumber: "",
       };
-      for (const issue of parsed.error.issues) {
+      for (const issue of parsedCustomer.error.issues) {
         const path = issue.path.join(".");
-        if (path === "customer.name") {
+        if (path === "name") {
           nextErrors.firstName = issue.message;
         }
-        if (path === "customer.phone") {
+        if (path === "phone") {
           nextErrors.phone = issue.message;
         }
-        if (path === "customer.address") {
+        if (path === "address") {
           nextErrors.streetName = issue.message;
         }
       }
@@ -944,15 +900,22 @@ export default function CheckoutPage() {
       return;
     }
 
+    if (couponBlocksSubmission) {
+      setError(
+        "Coupons are not supported in the current checkout lane yet. Remove the coupon before placing the order."
+      );
+      return;
+    }
+
     submitLockRef.current = true;
     setIsSubmitting(true);
     try {
       const submitPayload = {
-        ...parsed.data,
+        customer: parsedCustomer.data,
         useDefaultShipping,
         shippingDetails: useDefaultShipping ? undefined : shippingDetailsPayload,
       };
-      const response = await createStoreOrder(submitPayload);
+      const response = await createMultiStoreCheckoutOrder(submitPayload);
       const result = resolveOrderPayload(response);
       const resolvedOrderRef = [
         result?.invoiceNo,
@@ -975,16 +938,21 @@ export default function CheckoutPage() {
       await queryClient.invalidateQueries({
         queryKey: ["account", "orders", "my"],
       });
-      const successParams = new URLSearchParams();
-      if (resolvedOrderRef) {
-        successParams.set("ref", resolvedOrderRef);
+      const resolvedOrderId =
+        result?.orderId != null
+          ? String(result.orderId)
+          : result?.id != null
+            ? String(result.id)
+            : "";
+      if (!resolvedOrderId) {
+        throw new Error("Checkout completed without an order id.");
       }
-      navigate(
-        `/checkout/success${successParams.size > 0 ? `?${successParams.toString()}` : ""}`,
-        {
-          state: { ref: resolvedOrderRef || "" },
-        }
-      );
+      const paymentParams = new URLSearchParams();
+      paymentParams.set("checkoutCreated", "true");
+      if (resolvedOrderRef) {
+        paymentParams.set("ref", resolvedOrderRef);
+      }
+      navigate(`/user/my-orders/${resolvedOrderId}/payment?${paymentParams.toString()}`);
     } catch (err) {
       const data = err?.response?.data;
       const serverMessage =
@@ -995,7 +963,17 @@ export default function CheckoutPage() {
         navigate("/auth/login", { replace: true, state: { from: "/checkout" } });
         return;
       }
-      if (err?.response?.status === 400 && Array.isArray(data?.missing)) {
+      if (err?.response?.status === 409 && Array.isArray(data?.data?.invalidItems)) {
+        setError(
+          serverMessage ||
+            "Some cart items are no longer eligible for checkout. Remove or update them, then try again."
+        );
+      } else if (err?.response?.status === 409 && Array.isArray(data?.data?.groups)) {
+        setError(
+          serverMessage ||
+            "One or more stores are not ready for checkout yet. Fix the blocked store groups and try again."
+        );
+      } else if (err?.response?.status === 400 && Array.isArray(data?.missing)) {
         clearCart();
         setError("Cart items are no longer available. Please add them again.");
         setTimeout(() => navigate("/search"), 800);
@@ -1495,23 +1473,22 @@ export default function CheckoutPage() {
                 ) : null}
                 {checkoutPreviewQuery.isError ? (
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                    Grouped checkout preview is temporarily unavailable. Existing checkout can
-                    still continue with the current single-order flow.
+                    Grouped checkout preview is temporarily unavailable. Final submit will retry
+                    the same multi-store validation on the server.
                   </div>
                 ) : null}
                 {!checkoutPreviewQuery.isLoading && !checkoutPreviewQuery.isError ? (
                   <>
                     {previewHasPaymentBlocker ? (
                       <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                        Some stores do not have an active QRIS payment profile yet. This stage
-                        only shows readiness and does not block the existing submit flow.
+                        Some stores do not have an active QRIS payment profile yet. Fix store
+                        payment readiness before submitting this order.
                       </div>
                     ) : null}
                     {checkoutPreviewInvalidItems.length > 0 ? (
                       <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                        {checkoutPreviewInvalidItems.length} item(s) are not mapped to a store
-                        yet. They are excluded from the store-grouped preview until the product
-                        store mapping is completed.
+                        {checkoutPreviewInvalidItems.length} item(s) are no longer valid for
+                        checkout. Remove or update them before submitting this order.
                       </div>
                     ) : null}
                     {checkoutPreviewSummary ? (
@@ -1665,56 +1642,157 @@ export default function CheckoutPage() {
               <section className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4 sm:p-5">
                 <SectionTitle
                   number="04."
-                  title={checkoutCopy.shippingDetails.paymentMethodLabel}
-                  hint={checkoutCopy.shippingDetails.paymentMethodPlaceholder}
+                  title="Payment After Order Placement"
+                  hint={
+                    checkoutMode === "MULTI_STORE"
+                      ? "This marketplace order will split payment by store. QRIS, nominal, and proof upload stay on the next payment screen after the order is created."
+                      : "QRIS, nominal, deadline, and proof submission appear after the order is created."
+                  }
                 />
-                {paymentOptions.length > 0 ? (
-                  <div className="grid gap-3 lg:grid-cols-3">
-                    {paymentOptions.map((option) => {
-                      const selected = paymentOptionId === option.id;
-                      const Icon = option.Icon;
-                      return (
-                        <label
-                          key={option.id}
-                            className={`cursor-pointer rounded-2xl border p-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition ${
-                              selected
-                                ? "border-emerald-400 bg-emerald-50"
-                                : "border-slate-200 bg-white hover:border-slate-300"
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name="paymentOption"
-                            className="sr-only"
-                            checked={selected}
-                            onChange={() => setPaymentOptionId(option.id)}
-                          />
-                          <div className="flex items-center gap-2">
-                            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white text-slate-700">
-                              <Icon className="h-4 w-4" />
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
+                  {paymentOptions.map((option) => {
+                    const selected = paymentOptionId === option.id;
+                    const Icon = option.Icon;
+                    return (
+                      <label
+                        key={option.id}
+                        className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition ${
+                          selected
+                            ? "border-emerald-300 bg-white"
+                            : "border-slate-200 bg-white hover:border-slate-300"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="paymentOption"
+                          className="sr-only"
+                          checked={selected}
+                          onChange={() => setPaymentOptionId(option.id)}
+                        />
+                        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                          <Icon className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-slate-900">
+                            {option.title}
+                          </div>
+                          <div className="mt-1 text-xs leading-5 text-slate-600">
+                            {option.hint}
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                  <p className="mt-3 text-xs leading-5 text-emerald-900">
+                    Place the order first. After that, you will be redirected to the store-scoped
+                    QRIS payment page where each store shows its own QR image, exact nominal,
+                    deadline, and proof lane.
+                  </p>
+                </div>
+                <div className="grid gap-3">
+                  {checkoutPreviewGroups.map((group) => (
+                    <article
+                      key={`payment-${group.storeId}`}
+                      className={`rounded-2xl border p-4 ${
+                        group.paymentAvailable
+                          ? "border-slate-200 bg-slate-50"
+                          : "border-amber-200 bg-amber-50"
+                      }`}
+                    >
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-sm font-semibold text-slate-900">
+                              {group.storeName}
+                            </h3>
+                            <span
+                              className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${
+                                group.paymentAvailable
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : "bg-amber-100 text-amber-700"
+                              }`}
+                            >
+                              {group.paymentAvailable ? "QRIS Ready" : "QRIS Blocked"}
                             </span>
+                          </div>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {group.storeSlug ? `/${group.storeSlug}` : `Store ID ${group.storeId}`}
+                          </p>
+                        </div>
+                        <div className="grid gap-2 text-xs text-slate-600 sm:grid-cols-2 lg:text-right">
+                          <p>
+                            <span className="font-semibold text-slate-900">Payment type:</span>{" "}
+                            {group.paymentMethod || "Unavailable"}
+                          </p>
+                          <p>
+                            <span className="font-semibold text-slate-900">Snapshot:</span>{" "}
+                            {group.paymentProfileStatus}
+                          </p>
+                          <p>
+                            <span className="font-semibold text-slate-900">Merchant:</span>{" "}
+                            {group.merchantName || "-"}
+                          </p>
+                          <p>
+                            <span className="font-semibold text-slate-900">Account label:</span>{" "}
+                            {group.accountName || "-"}
+                          </p>
+                        </div>
+                      </div>
+                          {group.warning ? (
+                        <div className="mt-3 rounded-2xl border border-amber-200 bg-white px-3 py-2 text-xs leading-5 text-amber-800">
+                          {group.warning}
+                        </div>
+                      ) : null}
+                      <div className="mt-4 space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                              Buyer Guidance
+                            </p>
+                            <p className="mt-1 text-sm text-slate-700">
+                              {group.paymentAvailable
+                                ? "QRIS details stay hidden on checkout. After Place an Order, open the payment page for this store to scan the QR code, copy the exact amount, and submit proof."
+                                : "This store does not have an active approved QRIS setup yet, so the order cannot be submitted."}
+                            </p>
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-3">
                             <div>
-                              <div className="text-sm font-semibold text-slate-900">
-                                {option.title}
-                              </div>
-                              <div className="text-xs text-slate-500">{option.hint}</div>
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                                Store Total
+                              </p>
+                              <p className="mt-1 text-sm font-semibold text-slate-900">
+                                {formatCurrency(group.totalAmount)}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                                Deadline
+                              </p>
+                              <p className="mt-1 text-sm text-slate-700">
+                                Payment deadline starts after the order is created.
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                                Proof Lane
+                              </p>
+                              <p className="mt-1 text-sm text-slate-700">
+                                Submit proof separately for {group.storeName} after transfer.
+                              </p>
                             </div>
                           </div>
-                        </label>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                    No public payment options are configured right now. Please check the
-                    store settings before placing an order.
-                  </div>
-                )}
-                {paymentOptionId !== "cash" && paymentOptions.length > 0 ? (
-                  <p className="text-xs text-amber-600">
-                    For now, checkout is processed as COD in this environment.
-                  </p>
-                ) : null}
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                              Instructions
+                            </p>
+                            <p className="mt-1 text-sm leading-6 text-slate-700">
+                              {group.paymentInstruction ||
+                                "Follow the QRIS instructions on the payment page after the order is created."}
+                            </p>
+                          </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
               </section>
             </div>
 
@@ -1948,7 +2026,13 @@ export default function CheckoutPage() {
 
             <button
               type="submit"
-              disabled={isSubmitting || isRemoteSyncing || couponStatus === "loading"}
+              disabled={
+                isSubmitting ||
+                isRemoteSyncing ||
+                couponStatus === "loading" ||
+                isPreviewBlockingSubmission ||
+                couponBlocksSubmission
+              }
               aria-busy={isSubmitting}
               className="mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-emerald-600 px-7 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -1961,6 +2045,17 @@ export default function CheckoutPage() {
                 {isSubmitting ? "Processing..." : checkoutCopy.buttons.confirmButtonLabel}
               </span>
             </button>
+            {isPreviewBlockingSubmission ? (
+              <p className="mt-3 text-center text-xs leading-5 text-amber-600">
+                Resolve the blocked store groups or invalid items above before placing this order.
+              </p>
+            ) : null}
+            {couponBlocksSubmission ? (
+              <p className="mt-3 text-center text-xs leading-5 text-amber-600">
+                Remove the applied coupon before placing this order. Coupon settlement is not open
+                in the current split checkout flow yet.
+              </p>
+            ) : null}
             <p className="mt-3 text-center text-xs leading-5 text-slate-500">
               By placing this order, you confirm the contact and shipping details above.
             </p>

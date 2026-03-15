@@ -279,7 +279,7 @@ export default function Sidebar() {
           <BrandBagIcon />
         </span>
         <div className="sidebar__brand-copy">
-          <span className="sidebar__brand-title">Dashtar</span>
+          <span className="sidebar__brand-title">TP Preneurs</span>
           <span className="sidebar__brand-subtitle">Admin Workspace</span>
         </div>
       </div>

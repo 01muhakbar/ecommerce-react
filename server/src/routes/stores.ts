@@ -2,6 +2,10 @@ import { Router } from "express";
 import { z } from "zod";
 import requireAuth from "../middleware/requireAuth.js";
 import { Store, StorePaymentProfile, User } from "../models/index.js";
+import {
+  resolvePreferredStorePaymentProfile,
+  STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES,
+} from "../services/storePaymentProfileCompat.js";
 
 const router = Router();
 
@@ -25,23 +29,8 @@ const getAuthUser = (req: any) => {
 const isAdminRole = (role: string) =>
   role === "admin" || role === "super_admin" || role === "staff";
 
-const storeAttributes = ["id", "ownerUserId", "name", "slug", "status"] as const;
-const profileAttributes = [
-  "id",
-  "storeId",
-  "providerCode",
-  "paymentType",
-  "accountName",
-  "merchantName",
-  "merchantId",
-  "qrisImageUrl",
-  "qrisPayload",
-  "instructionText",
-  "isActive",
-  "verificationStatus",
-  "verifiedByAdminId",
-  "verifiedAt",
-] as const;
+const storeAttributes = ["id", "ownerUserId", "activeStorePaymentProfileId", "name", "slug", "status"] as const;
+const profileAttributes = [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES] as const;
 
 const serializePaymentProfile = (profile: any) => {
   if (!profile) return null;
@@ -67,11 +56,12 @@ const serializePaymentProfile = (profile: any) => {
 const serializeStore = (store: any) => {
   if (!store) return null;
   const owner = store.owner || store.get?.("owner") || null;
-  const paymentProfile =
-    store.paymentProfile || store.get?.("paymentProfile") || null;
+  const paymentProfile = resolvePreferredStorePaymentProfile(store);
   return {
     id: Number(store.id),
     ownerUserId: Number(store.ownerUserId),
+    activeStorePaymentProfileId:
+      store.activeStorePaymentProfileId != null ? Number(store.activeStorePaymentProfileId) : null,
     name: String(store.name || ""),
     slug: String(store.slug || ""),
     status: String(store.status || "ACTIVE"),
@@ -104,6 +94,12 @@ router.get("/mine", async (req, res) => {
           model: StorePaymentProfile,
           as: "paymentProfile",
           attributes: [...profileAttributes],
+        },
+        {
+          model: StorePaymentProfile,
+          as: "activePaymentProfile",
+          attributes: [...profileAttributes],
+          required: false,
         },
       ],
     });
@@ -138,6 +134,12 @@ router.get("/:storeId/payment-profile", async (req, res) => {
           model: StorePaymentProfile,
           as: "paymentProfile",
           attributes: [...profileAttributes],
+        },
+        {
+          model: StorePaymentProfile,
+          as: "activePaymentProfile",
+          attributes: [...profileAttributes],
+          required: false,
         },
       ],
     });
@@ -195,6 +197,12 @@ router.post("/:storeId/payment-profile", async (req, res) => {
           as: "paymentProfile",
           attributes: [...profileAttributes],
         },
+        {
+          model: StorePaymentProfile,
+          as: "activePaymentProfile",
+          attributes: [...profileAttributes],
+          required: false,
+        },
       ],
     });
 
@@ -226,7 +234,10 @@ router.post("/:storeId/payment-profile", async (req, res) => {
     };
 
     const existingProfile =
-      (store as any).paymentProfile ?? (store as any).get?.("paymentProfile") ?? null;
+      resolvePreferredStorePaymentProfile(store) ??
+      (store as any).paymentProfile ??
+      (store as any).get?.("paymentProfile") ??
+      null;
 
     if (existingProfile) {
       await existingProfile.update(payload);
@@ -242,6 +253,12 @@ router.post("/:storeId/payment-profile", async (req, res) => {
           model: StorePaymentProfile,
           as: "paymentProfile",
           attributes: [...profileAttributes],
+        },
+        {
+          model: StorePaymentProfile,
+          as: "activePaymentProfile",
+          attributes: [...profileAttributes],
+          required: false,
         },
       ],
     });

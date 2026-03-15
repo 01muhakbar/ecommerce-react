@@ -278,7 +278,7 @@ export default function SellerOrdersPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <SellerWorkspaceSectionHeader
         eyebrow="Seller Orders"
         title="Seller suborder overview"
@@ -376,7 +376,7 @@ export default function SellerOrdersPage() {
       ) : null}
 
       {!ordersQuery.isLoading && !ordersQuery.isError ? (
-        <SellerWorkspacePanel className="p-5 sm:p-5">
+        <SellerWorkspacePanel className="p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
@@ -410,19 +410,19 @@ export default function SellerOrdersPage() {
           </div>
 
           <div className="mt-4 grid gap-3 text-sm text-slate-600 md:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5">
               <p className="font-semibold text-slate-900">Safe later for seller</p>
               <p className="mt-2 leading-6">
                 {formatActionList(fulfillmentGovernance?.sellerCandidateActions)}
               </p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5">
               <p className="font-semibold text-slate-900">Read-only now</p>
               <p className="mt-2 leading-6">
                 {formatActionList(fulfillmentGovernance?.readOnlyActions)}
               </p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5">
               <p className="font-semibold text-slate-900">Still admin-only</p>
               <p className="mt-2 leading-6">
                 {formatActionList(fulfillmentGovernance?.adminOnlyActions)}
@@ -433,7 +433,7 @@ export default function SellerOrdersPage() {
       ) : null}
 
       {!ordersQuery.isLoading && !ordersQuery.isError ? (
-        <section className="grid gap-4 md:grid-cols-3">
+        <section className="grid gap-3.5 md:grid-cols-3">
           <SellerWorkspaceStatCard
             label="Visible Suborders"
             value={String(pagination.total || 0)}
@@ -488,16 +488,16 @@ export default function SellerOrdersPage() {
       ) : null}
 
       {!ordersQuery.isLoading && !ordersQuery.isError && items.length > 0 ? (
-        <div className="space-y-4">
+        <div className="space-y-3.5">
           {items.map((item) => (
-            <SellerWorkspacePanel key={item.suborderId} className="p-5 sm:p-5">
+            <SellerWorkspacePanel key={item.suborderId} className="p-4">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="space-y-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
                       Seller suborder
                     </p>
-                    <h3 className="mt-2 text-xl font-semibold text-slate-900">
+                    <h3 className="mt-1.5 text-lg font-semibold text-slate-900">
                       {item.suborderNumber}
                     </h3>
                     <p className="mt-2 text-sm text-slate-500">
@@ -574,7 +574,7 @@ export default function SellerOrdersPage() {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600 xl:w-[280px]">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5 text-sm text-slate-600 xl:w-[280px]">
                   <p className="font-semibold text-slate-900">Operational Snapshot</p>
                   <p className="mt-2">
                     Seller Status:{" "}
@@ -673,7 +673,7 @@ export default function SellerOrdersPage() {
             </SellerWorkspacePanel>
           ))}
 
-          <section className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+          <section className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
             <p className="text-sm text-slate-500">
               Page {pagination.page} of {totalPages} • {pagination.total} suborders
             </p>

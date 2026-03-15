@@ -25,6 +25,10 @@ import {
   recalculateParentOrderPaymentStatus,
 } from "../services/orderPaymentAggregation.service.js";
 import { appendPaymentStatusLog } from "../services/paymentStatusLog.service.js";
+import {
+  resolvePreferredStorePaymentProfile,
+  STORE_PAYMENT_PROFILE_CHECKOUT_ATTRIBUTES,
+} from "../services/storePaymentProfileCompat.js";
 import { getDefaultAddressByUser } from "../services/userAddress.service.js";
 
 const router = Router();
@@ -168,6 +172,14 @@ const getProductUnitPrice = (product: any) => {
   return rawSalePrice > 0 && rawSalePrice < rawPrice ? rawSalePrice : rawPrice;
 };
 
+const isStorefrontProductVisible = (product: any) => {
+  const status = String(getAttr(product, "status") || "").trim().toLowerCase();
+  const isPublished = Boolean(
+    getAttr(product, "isPublished") ?? getAttr(product, "published")
+  );
+  return status === "active" && isPublished;
+};
+
 const getAuthUser = (req: any) => {
   const userId = Number(req?.user?.id);
   return {
@@ -210,7 +222,7 @@ const buildCartInclude = (includePaymentMedia = false) => [
       "storeId",
       "stock",
       "status",
-      "published",
+      "isPublished",
       "userId",
       "categoryId",
     ],
@@ -224,21 +236,19 @@ const buildCartInclude = (includePaymentMedia = false) => [
       {
         model: Store,
         as: "store",
-        attributes: ["id", "name", "slug", "status"],
+        attributes: ["id", "activeStorePaymentProfileId", "name", "slug", "status"],
         include: [
           {
             model: StorePaymentProfile,
             as: "paymentProfile",
-            attributes: [
-              "id",
-              "storeId",
-              "providerCode",
-              "paymentType",
-              "isActive",
-              "verificationStatus",
-              "instructionText",
-              ...(includePaymentMedia ? ["qrisImageUrl", "qrisPayload"] : []),
-            ],
+            attributes: [...STORE_PAYMENT_PROFILE_CHECKOUT_ATTRIBUTES],
+            required: false,
+          },
+          {
+            model: StorePaymentProfile,
+            as: "activePaymentProfile",
+            attributes: [...STORE_PAYMENT_PROFILE_CHECKOUT_ATTRIBUTES],
+            required: false,
           },
         ],
       },
@@ -271,6 +281,10 @@ const serializePreviewGroup = (group: any) => ({
   paymentAvailable: group.paymentAvailable,
   paymentMethod: group.paymentMethod,
   paymentProfileStatus: group.paymentProfileStatus,
+  merchantName: group.merchantName,
+  accountName: group.accountName,
+  qrisImageUrl: group.qrisImageUrl,
+  qrisPayload: group.qrisPayload,
   paymentInstruction: group.paymentInstruction,
   warning: group.warning,
   items: group.items.map((item: any) => ({
@@ -300,8 +314,14 @@ const prepareCartGroups = (cartItems: any[]) => {
     const unitPrice = getProductUnitPrice(product);
     const lineTotal = unitPrice * quantity;
 
-    totalItems += quantity;
-    subtotalAmount += lineTotal;
+    if (!isStorefrontProductVisible(product)) {
+      invalidItems.push({
+        productId,
+        productName: String(getAttr(product, "name") || `Product #${productId}`),
+        reason: "PRODUCT_NOT_PUBLIC",
+      });
+      continue;
+    }
 
     if (!storeId) {
       invalidItems.push({
@@ -312,9 +332,11 @@ const prepareCartGroups = (cartItems: any[]) => {
       continue;
     }
 
+    totalItems += quantity;
+    subtotalAmount += lineTotal;
+
     const store = product?.store ?? product?.get?.("store") ?? null;
-    const paymentProfile =
-      store?.paymentProfile ?? store?.get?.("paymentProfile") ?? null;
+    const paymentProfile = resolvePreferredStorePaymentProfile(store);
     const paymentAvailable =
       Boolean(paymentProfile?.isActive) &&
       String(paymentProfile?.verificationStatus || "").toUpperCase() === "ACTIVE";
@@ -335,6 +357,10 @@ const prepareCartGroups = (cartItems: any[]) => {
         paymentAvailable,
         paymentMethod: paymentAvailable ? "QRIS" : null,
         paymentProfileStatus,
+        merchantName: paymentProfile?.merchantName ? String(paymentProfile.merchantName) : null,
+        accountName: paymentProfile?.accountName ? String(paymentProfile.accountName) : null,
+        qrisImageUrl: paymentProfile?.qrisImageUrl ? String(paymentProfile.qrisImageUrl) : null,
+        qrisPayload: paymentProfile?.qrisPayload ? String(paymentProfile.qrisPayload) : null,
         paymentInstruction: paymentProfile?.instructionText
           ? String(paymentProfile.instructionText)
           : null,
@@ -373,6 +399,10 @@ const prepareCartGroups = (cartItems: any[]) => {
     if (!group.paymentAvailable) {
       group.paymentMethod = null;
       group.paymentProfileStatus = paymentProfileStatus;
+      group.merchantName = paymentProfile?.merchantName ? String(paymentProfile.merchantName) : null;
+      group.accountName = paymentProfile?.accountName ? String(paymentProfile.accountName) : null;
+      group.qrisImageUrl = paymentProfile?.qrisImageUrl ? String(paymentProfile.qrisImageUrl) : null;
+      group.qrisPayload = paymentProfile?.qrisPayload ? String(paymentProfile.qrisPayload) : null;
     }
   }
 
@@ -413,7 +443,8 @@ const normalizeProofSummary = (proofs: any[]) => {
     .sort((left, right) => {
       const leftTime = new Date(getAttr(left, "createdAt") || 0).getTime();
       const rightTime = new Date(getAttr(right, "createdAt") || 0).getTime();
-      return rightTime - leftTime;
+      if (rightTime !== leftTime) return rightTime - leftTime;
+      return toNumber(getAttr(right, "id")) - toNumber(getAttr(left, "id"));
     })[0];
   return {
     id: toNumber(getAttr(latest, "id")),
@@ -677,6 +708,15 @@ const serializeSplitOrder = (order: any) => {
           : "ACTIVE",
         paymentAvailable: Boolean(payment),
         warning: payment ? null : "Payment record not found for this suborder.",
+        paymentInstruction: getAttr(suborder?.paymentProfile, "instructionText")
+          ? String(getAttr(suborder?.paymentProfile, "instructionText"))
+          : null,
+        merchantName: getAttr(suborder?.paymentProfile, "merchantName")
+          ? String(getAttr(suborder?.paymentProfile, "merchantName"))
+          : null,
+        accountName: getAttr(suborder?.paymentProfile, "accountName")
+          ? String(getAttr(suborder?.paymentProfile, "accountName"))
+          : null,
         items: items.map((item: any) => ({
           id: toNumber(getAttr(item, "id")),
           productId: toNumber(getAttr(item, "productId")),
@@ -705,6 +745,15 @@ const serializeSplitOrder = (order: any) => {
                 : null,
               qrPayload: getAttr(payment, "qrPayload")
                 ? String(getAttr(payment, "qrPayload"))
+                : null,
+              instructionText: getAttr(suborder?.paymentProfile, "instructionText")
+                ? String(getAttr(suborder?.paymentProfile, "instructionText"))
+                : null,
+              merchantName: getAttr(suborder?.paymentProfile, "merchantName")
+                ? String(getAttr(suborder?.paymentProfile, "merchantName"))
+                : null,
+              accountName: getAttr(suborder?.paymentProfile, "accountName")
+                ? String(getAttr(suborder?.paymentProfile, "accountName"))
                 : null,
               status: String(getAttr(payment, "status") || "CREATED"),
               expiresAt: getAttr(payment, "expiresAt") || null,
@@ -841,7 +890,7 @@ router.post("/create-multi-store", async (req, res) => {
         await tx.rollback();
         return res.status(409).json({
           success: false,
-          message: "Some cart items are not mapped to a store yet.",
+          message: "Some cart items are no longer eligible for checkout.",
           data: {
             invalidItems: prepared.invalidItems,
           },

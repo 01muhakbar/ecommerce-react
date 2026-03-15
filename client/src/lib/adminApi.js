@@ -29,7 +29,14 @@ const normalizeProductsMeta = (payload, params = {}) => {
   const rawTotalPages =
     meta.totalPages ?? (limit ? Math.ceil(total / limit) : 1);
   const totalPages = Math.max(1, Number(rawTotalPages || 1));
-  return { page, limit, total, totalPages };
+  return {
+    page,
+    limit,
+    total,
+    totalPages,
+    reviewQueue:
+      meta?.reviewQueue && typeof meta.reviewQueue === "object" ? meta.reviewQueue : undefined,
+  };
 };
 
 const normalizeProductsList = (payload, params = {}) => {

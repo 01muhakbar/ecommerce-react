@@ -52,7 +52,8 @@ const normalizeProofSummary = (proofs: any[]) => {
     .sort((left, right) => {
       const leftTime = new Date(getAttr(left, "createdAt") || 0).getTime();
       const rightTime = new Date(getAttr(right, "createdAt") || 0).getTime();
-      return rightTime - leftTime;
+      if (rightTime !== leftTime) return rightTime - leftTime;
+      return toNumber(getAttr(right, "id")) - toNumber(getAttr(left, "id"));
     })[0];
   const uploadedBy = latest?.uploadedByUser ?? latest?.get?.("uploadedByUser") ?? null;
   const reviewedBy = latest?.reviewedByUser ?? latest?.get?.("reviewedByUser") ?? null;

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import requireAuth from "../middleware/requireAuth.js";
 import { loadOrderWithSplitRelations, serializeSplitOrder } from "./checkout.js";
+import { expireOverduePaymentsForOrder } from "../services/paymentExpiry.service.js";
 
 const router = Router();
 
@@ -48,9 +49,12 @@ router.get("/:orderId/checkout-payment", async (req, res) => {
       });
     }
 
+    const expired = await expireOverduePaymentsForOrder(Number(order.get?.("id") ?? (order as any).id ?? 0));
+    const resolvedOrder = expired ? await loadOrderWithSplitRelations(lookup) : order;
+
     return res.json({
       success: true,
-      data: serializeSplitOrder(order),
+      data: serializeSplitOrder(resolvedOrder),
     });
   } catch (error) {
     console.error("[orders/checkout-payment] error", error);

@@ -5,6 +5,8 @@ export interface StorePaymentProfileAttributes {
   storeId: number;
   providerCode: "MANUAL_QRIS";
   paymentType: "QRIS_STATIC";
+  version: number;
+  snapshotStatus: "ACTIVE" | "SUPERSEDED" | "INACTIVE";
   accountName: string;
   merchantName: string;
   merchantId?: string | null;
@@ -13,8 +15,13 @@ export interface StorePaymentProfileAttributes {
   instructionText?: string | null;
   isActive: boolean;
   verificationStatus: "PENDING" | "ACTIVE" | "REJECTED" | "INACTIVE";
+  sourceRequestId?: number | null;
   verifiedByAdminId?: number | null;
   verifiedAt?: Date | null;
+  activatedByAdminId?: number | null;
+  activatedAt?: Date | null;
+  supersededByProfileId?: number | null;
+  supersededAt?: Date | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -24,13 +31,20 @@ type StorePaymentProfileCreationAttributes = Optional<
   | "id"
   | "providerCode"
   | "paymentType"
+  | "version"
+  | "snapshotStatus"
   | "merchantId"
   | "qrisPayload"
   | "instructionText"
   | "isActive"
   | "verificationStatus"
+  | "sourceRequestId"
   | "verifiedByAdminId"
   | "verifiedAt"
+  | "activatedByAdminId"
+  | "activatedAt"
+  | "supersededByProfileId"
+  | "supersededAt"
 >;
 
 export class StorePaymentProfile
@@ -44,6 +58,8 @@ export class StorePaymentProfile
   declare storeId: number;
   declare providerCode: "MANUAL_QRIS";
   declare paymentType: "QRIS_STATIC";
+  declare version: number;
+  declare snapshotStatus: "ACTIVE" | "SUPERSEDED" | "INACTIVE";
   declare accountName: string;
   declare merchantName: string;
   declare merchantId?: string | null;
@@ -52,8 +68,13 @@ export class StorePaymentProfile
   declare instructionText?: string | null;
   declare isActive: boolean;
   declare verificationStatus: "PENDING" | "ACTIVE" | "REJECTED" | "INACTIVE";
+  declare sourceRequestId?: number | null;
   declare verifiedByAdminId?: number | null;
   declare verifiedAt?: Date | null;
+  declare activatedByAdminId?: number | null;
+  declare activatedAt?: Date | null;
+  declare supersededByProfileId?: number | null;
+  declare supersededAt?: Date | null;
   declare readonly createdAt: Date;
   declare readonly updatedAt: Date;
 
@@ -66,6 +87,18 @@ export class StorePaymentProfile
       foreignKey: { name: "verifiedByAdminId", field: "verified_by_admin_id" },
       as: "verifiedByAdmin",
     });
+    StorePaymentProfile.belongsTo(models.User, {
+      foreignKey: { name: "activatedByAdminId", field: "activated_by_admin_id" },
+      as: "activatedByAdmin",
+    });
+    StorePaymentProfile.belongsTo(models.StorePaymentProfileRequest, {
+      foreignKey: { name: "sourceRequestId", field: "source_request_id" },
+      as: "sourceRequest",
+    });
+    StorePaymentProfile.belongsTo(models.StorePaymentProfile, {
+      foreignKey: { name: "supersededByProfileId", field: "superseded_by_profile_id" },
+      as: "supersededByProfile",
+    });
     StorePaymentProfile.hasMany(models.Suborder, {
       foreignKey: { name: "storePaymentProfileId", field: "store_payment_profile_id" },
       as: "suborders",
@@ -73,6 +106,14 @@ export class StorePaymentProfile
     StorePaymentProfile.hasMany(models.Payment, {
       foreignKey: { name: "storePaymentProfileId", field: "store_payment_profile_id" },
       as: "payments",
+    });
+    StorePaymentProfile.hasMany(models.StorePaymentProfileRequest, {
+      foreignKey: { name: "basedOnProfileId", field: "based_on_profile_id" },
+      as: "basedOnRequests",
+    });
+    StorePaymentProfile.hasMany(models.StorePaymentProfileRequest, {
+      foreignKey: { name: "promotedProfileId", field: "promoted_profile_id" },
+      as: "promotedRequests",
     });
   }
 
@@ -87,7 +128,6 @@ export class StorePaymentProfile
         storeId: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
-          unique: true,
           field: "store_id",
           references: {
             model: "stores",
@@ -105,6 +145,17 @@ export class StorePaymentProfile
           allowNull: false,
           defaultValue: "QRIS_STATIC",
           field: "payment_type",
+        },
+        version: {
+          type: DataTypes.INTEGER.UNSIGNED,
+          allowNull: false,
+          defaultValue: 1,
+        },
+        snapshotStatus: {
+          type: DataTypes.ENUM("ACTIVE", "SUPERSEDED", "INACTIVE"),
+          allowNull: false,
+          defaultValue: "INACTIVE",
+          field: "snapshot_status",
         },
         accountName: {
           type: DataTypes.STRING(160),
@@ -148,6 +199,15 @@ export class StorePaymentProfile
           defaultValue: "PENDING",
           field: "verification_status",
         },
+        sourceRequestId: {
+          type: DataTypes.INTEGER.UNSIGNED,
+          allowNull: true,
+          field: "source_request_id",
+          references: {
+            model: "store_payment_profile_requests",
+            key: "id",
+          },
+        },
         verifiedByAdminId: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: true,
@@ -161,6 +221,34 @@ export class StorePaymentProfile
           type: DataTypes.DATE,
           allowNull: true,
           field: "verified_at",
+        },
+        activatedByAdminId: {
+          type: DataTypes.INTEGER.UNSIGNED,
+          allowNull: true,
+          field: "activated_by_admin_id",
+          references: {
+            model: "users",
+            key: "id",
+          },
+        },
+        activatedAt: {
+          type: DataTypes.DATE,
+          allowNull: true,
+          field: "activated_at",
+        },
+        supersededByProfileId: {
+          type: DataTypes.INTEGER.UNSIGNED,
+          allowNull: true,
+          field: "superseded_by_profile_id",
+          references: {
+            model: "store_payment_profiles",
+            key: "id",
+          },
+        },
+        supersededAt: {
+          type: DataTypes.DATE,
+          allowNull: true,
+          field: "superseded_at",
         },
         createdAt: {
           type: DataTypes.DATE,
