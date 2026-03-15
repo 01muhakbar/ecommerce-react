@@ -231,10 +231,7 @@ export const normalizeStorefrontProduct = (rawProduct: any) => {
     0,
     Math.round(toSafeNumber(rawProduct?.reviewCount ?? rawProduct?.reviewsCount, 0))
   );
-  const published = toBoolean(
-    rawProduct?.published ?? rawProduct?.isPublished ?? rawProduct?.status,
-    true
-  );
+  const published = toBoolean(rawProduct?.published ?? rawProduct?.isPublished, false);
   const status = toText(rawProduct?.status) || (published ? "active" : "draft");
   const preorderDays = toNumberOrNull(rawProduct?.preorderDays);
 

@@ -5,7 +5,7 @@ import path from "path";
 import fs from "fs";
 import multer from "multer";
 import bcrypt from "bcrypt";
-import { Category, Product, User } from "../models/index.js";
+import { Category, Product, Store, User } from "../models/index.js";
 import { protect } from "../middleware/authMiddleware.js";
 import {
   clearUserNotifications,
@@ -50,6 +50,14 @@ const toProductListItem = (product: any) => {
     stock: product.stock ?? null,
   };
 };
+
+const buildPublicProductWhere = (extraWhere: Record<string, any> = {}) => ({
+  isPublished: { [Op.in]: [1, true] },
+  status: "active",
+  sellerSubmissionStatus: "none",
+  storeId: { [Op.not]: null },
+  ...extraWhere,
+});
 
 const listQuerySchema = z.object({
   category: z.string().optional(),
@@ -192,7 +200,7 @@ router.get("/products", async (req: Request, res: Response) => {
   const categoryParam = (parsed.data.category ?? "").trim();
 
   try {
-    const where: any = { isPublished: true, status: "active" };
+    const where: any = buildPublicProductWhere();
     if (search) {
       where.name = { [Op.like]: `%${search}%` };
     }
@@ -202,11 +210,12 @@ router.get("/products", async (req: Request, res: Response) => {
       if (Number.isFinite(categoryId)) {
         where.categoryId = categoryId;
       } else {
-        const category = await Category.findOne({
-          where: {
-            [Op.or]: [{ code: categoryParam }, { name: categoryParam }],
-          },
-        });
+          const category = await Category.findOne({
+            where: {
+              published: true,
+              [Op.or]: [{ code: categoryParam }, { name: categoryParam }],
+            },
+          });
         if (!category) {
           return res.json({
             success: true,
@@ -221,7 +230,16 @@ router.get("/products", async (req: Request, res: Response) => {
 
     const { rows, count } = await Product.findAndCountAll({
       where,
-      include: [{ model: Category, as: "category", attributes: ["id", "name", "code"] }],
+      include: [
+        { model: Category, as: "category", attributes: ["id", "name", "code"] },
+        {
+          model: Store,
+          as: "store",
+          attributes: ["id"],
+          required: true,
+          where: { status: "ACTIVE" } as any,
+        },
+      ],
       order: [["createdAt", "DESC"]],
       limit,
       offset,
@@ -254,11 +272,20 @@ router.get("/products/:slug", async (req: Request, res: Response) => {
   try {
     const isNumericId = /^\d+$/.test(raw);
     const where = isNumericId
-      ? { id: Number(raw), isPublished: true, status: "active" }
-      : { slug: raw, isPublished: true, status: "active" };
+      ? buildPublicProductWhere({ id: Number(raw) })
+      : buildPublicProductWhere({ slug: raw });
     const product = await Product.findOne({
       where,
-      include: [{ model: Category, as: "category", attributes: ["id", "name", "code"] }],
+      include: [
+        { model: Category, as: "category", attributes: ["id", "name", "code"] },
+        {
+          model: Store,
+          as: "store",
+          attributes: ["id"],
+          required: true,
+          where: { status: "ACTIVE" } as any,
+        },
+      ],
     });
 
     if (!product) {

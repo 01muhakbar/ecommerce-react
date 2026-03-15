@@ -49,6 +49,13 @@ const getAttr = (row: any, key: string) =>
   row?.dataValues?.[key] ??
   undefined;
 
+const normalizeSellerSubmissionStatus = (value: any) => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "submitted") return "submitted";
+  if (normalized === "needs_revision") return "needs_revision";
+  return "none";
+};
+
 const toCanonicalOrderStatus = (raw: any) => {
   const value = String(raw || "").toLowerCase().trim();
   if (!value) return "pending";
@@ -373,6 +380,14 @@ const toProductListItem = (product: any) => {
   };
 };
 
+const buildPublicProductWhere = (extraWhere: Record<string, any> = {}) => ({
+  status: "active",
+  isPublished: { [Op.in]: [1, true] },
+  sellerSubmissionStatus: "none",
+  storeId: { [Op.not]: null },
+  ...extraWhere,
+});
+
 const toText = (value: any, fallback = "") => {
   const normalized = String(value ?? "").trim();
   return normalized || fallback;
@@ -411,11 +426,9 @@ const serializePublicSellerInfo = async (store: any) => {
 
   if (storeId > 0) {
     productCount = await Product.count({
-      where: {
+      where: buildPublicProductWhere({
         storeId,
-        status: "active",
-        isPublished: { [Op.in]: [1, true] },
-      } as any,
+      }) as any,
     });
 
     const rows = (await sequelize.query(
@@ -428,6 +441,7 @@ const serializePublicSellerInfo = async (store: any) => {
         WHERE p.store_id = :storeId
           AND p.status = 'active'
           AND p.published IN (1, true)
+          AND COALESCE(p.seller_submission_status, 'none') = 'none'
       `,
       {
         replacements: { storeId },
@@ -590,10 +604,7 @@ router.get(
       const categoryParam = String(req.query.category || "").trim();
       const storeSlug = normalizeStoreSlug(req.query.storeSlug);
 
-      const where: any = {
-        status: "active",
-        isPublished: { [Op.in]: [1, true] },
-      };
+      const where: any = buildPublicProductWhere();
       if (search) {
         where.name = { [Op.like]: `%${search}%` };
       }
@@ -605,6 +616,7 @@ router.get(
         } else {
           const category = await Category.findOne({
             where: {
+              published: true,
               [Op.or]: [{ code: categoryParam }, { name: categoryParam }],
             },
           });
@@ -673,7 +685,16 @@ router.get(
             "reviewCount",
           ],
         ],
-        include: [{ model: Category, as: "category", attributes: ["id", "name", "code"] }],
+        include: [
+          { model: Category, as: "category", attributes: ["id", "name", "code"] },
+          {
+            model: Store,
+            as: "store",
+            attributes: ["id"],
+            required: true,
+            where: { status: "ACTIVE" } as any,
+          },
+        ],
         order: [["createdAt", "DESC"]],
         limit,
         offset,
@@ -729,11 +750,7 @@ router.get(
       }
 
       const product = await Product.findOne({
-        where: {
-          ...where,
-          status: "active",
-          isPublished: { [Op.in]: [1, true] },
-        },
+        where: buildPublicProductWhere(where),
         attributes: [
           "id",
           "name",
@@ -774,7 +791,8 @@ router.get(
               "whatsapp",
               "createdAt",
             ],
-            required: false,
+            required: true,
+            where: { status: "ACTIVE" } as any,
           },
         ],
       });
@@ -1715,11 +1733,9 @@ router.post(
         }
 
         const products = await Product.findAll({
-          where: {
+          where: buildPublicProductWhere({
             id: { [Op.in]: productIds },
-            status: "active",
-            isPublished: { [Op.in]: [1, true] },
-          },
+          }),
           attributes: [
             "id",
             "name",
@@ -1728,6 +1744,16 @@ router.post(
             "salePrice",
             "status",
             "isPublished",
+            "sellerSubmissionStatus",
+          ],
+          include: [
+            {
+              model: Store,
+              as: "store",
+              attributes: ["id"],
+              required: true,
+              where: { status: "ACTIVE" } as any,
+            },
           ],
           transaction: tx,
           lock: tx.LOCK.UPDATE,

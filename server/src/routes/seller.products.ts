@@ -777,13 +777,15 @@ const buildCatalogReadContract = () => ({
     tenantScope: "Product.storeId",
     status: "Product.status",
     publishFlag: "Product.isPublished",
-    storefrontVisibility: "Product.isPublished === true && Product.status === active",
+    submissionGate: "Product.sellerSubmissionStatus",
+    storefrontVisibility:
+      "Product.storeId valid && Product.isPublished === true && Product.status === active && Product.sellerSubmissionStatus === none",
   },
   supportedStatuses: ["active", "inactive", "draft"],
   notes: [
     "Seller catalog stays store-scoped through Product.storeId.",
-    "Current public storefront queries only gate product visibility by publish flag and active status.",
-    "Stock, pre-order, category publish state, and store status are not currently used as storefront visibility gates in product queries.",
+    "Current public storefront queries gate product visibility by store mapping, publish flag, active status, and a cleared seller submission state.",
+    "Stock, pre-order, and category publish state are still not used as hard storefront visibility gates in product queries.",
   ],
 });
 
@@ -799,8 +801,14 @@ const serializeProductStatus = (status: string) => ({
         : "Product is still draft and blocked from public storefront queries.",
 });
 
-const serializeProductVisibility = (isPublished: boolean, status: string) => {
-  const storefrontVisible = isPublished && status === "active";
+const serializeProductVisibility = (
+  isPublished: boolean,
+  status: string,
+  submissionStatus: string = "none"
+) => {
+  const normalizedSubmissionStatus = normalizeSellerSubmissionStatus(submissionStatus);
+  const reviewBlocked = normalizedSubmissionStatus !== "none";
+  const storefrontVisible = isPublished && status === "active" && !reviewBlocked;
   const blockingSignals = [];
 
   if (!isPublished) {
@@ -808,6 +816,12 @@ const serializeProductVisibility = (isPublished: boolean, status: string) => {
   }
   if (status !== "active") {
     blockingSignals.push("STATUS_NOT_ACTIVE");
+  }
+  if (normalizedSubmissionStatus === "submitted") {
+    blockingSignals.push("SELLER_REVIEW_PENDING");
+  }
+  if (normalizedSubmissionStatus === "needs_revision") {
+    blockingSignals.push("SELLER_REVISION_REQUIRED");
   }
 
   const stateCode = !isPublished
@@ -826,24 +840,40 @@ const serializeProductVisibility = (isPublished: boolean, status: string) => {
       ? "Private to seller and admin"
       : storefrontVisible
         ? "Visible in storefront"
+        : normalizedSubmissionStatus === "submitted"
+          ? "Published but waiting admin review"
+          : normalizedSubmissionStatus === "needs_revision"
+            ? "Published but revision is still required"
         : "Published but blocked",
     storefrontLabel: storefrontVisible ? "Visible in storefront" : "Hidden from storefront",
     storefrontReason: !isPublished
       ? "Public storefront queries exclude this product because the publish flag is off."
       : storefrontVisible
         ? "Public storefront queries include this product because publish is on and status is active."
+        : normalizedSubmissionStatus === "submitted"
+          ? "Publish is on, but this product is still waiting for the final admin review outcome and stays hidden from storefront queries."
+          : normalizedSubmissionStatus === "needs_revision"
+            ? "Publish is on, but this product is still in revision-required review state and stays hidden from storefront queries."
         : "Publish is on, but public storefront queries still exclude this product until status becomes active.",
     sellerHint: !isPublished
       ? "Seller can still review this product here, but customers cannot see it yet."
       : storefrontVisible
         ? "Seller and customer views are aligned for visibility."
+        : normalizedSubmissionStatus === "submitted"
+          ? "Seller can see that publish is on, but admin review still blocks storefront visibility."
+          : normalizedSubmissionStatus === "needs_revision"
+            ? "Seller can see that publish is on, but revision follow-up still blocks storefront visibility."
         : "Seller can review this product here, but customers will not see it until status becomes active.",
     blockingSignals,
     reasonCode: !isPublished
       ? "UNPUBLISHED"
-      : storefrontVisible
-        ? "STOREFRONT_VISIBLE"
-        : "STATUS_NOT_ACTIVE",
+      : normalizedSubmissionStatus === "submitted"
+        ? "REVIEW_PENDING"
+        : normalizedSubmissionStatus === "needs_revision"
+          ? "REVISION_REQUIRED"
+          : storefrontVisible
+            ? "STOREFRONT_VISIBLE"
+            : "STATUS_NOT_ACTIVE",
   };
 };
 
@@ -975,7 +1005,11 @@ const serializeProductListItem = (product: any, sellerAccess: any = null) => {
   const stock = toNumber(getAttr(product, "stock"));
   const isPublished = Boolean(getAttr(product, "isPublished"));
   const status = normalizeProductStatus(getAttr(product, "status"));
-  const visibility = serializeProductVisibility(isPublished, status);
+  const visibility = serializeProductVisibility(
+    isPublished,
+    status,
+    normalizeSellerSubmissionStatus(getAttr(product, "sellerSubmissionStatus"))
+  );
   const authoring = buildProductAuthoringState(status, sellerAccess, normalizeSellerSubmissionStatus(getAttr(product, "sellerSubmissionStatus")));
   const submissionGovernance = buildSellerSubmissionGovernance(sellerAccess, {
     hasConcreteProduct: true,
@@ -1043,7 +1077,11 @@ const serializeProductDetail = (product: any, sellerAccess: any = null) => {
       : toNumber(salePriceRaw, 0);
   const status = normalizeProductStatus(getAttr(product, "status"));
   const isPublished = Boolean(getAttr(product, "isPublished"));
-  const visibility = serializeProductVisibility(isPublished, status);
+  const visibility = serializeProductVisibility(
+    isPublished,
+    status,
+    normalizeSellerSubmissionStatus(getAttr(product, "sellerSubmissionStatus"))
+  );
   const authoring = buildProductAuthoringState(status, sellerAccess, normalizeSellerSubmissionStatus(getAttr(product, "sellerSubmissionStatus")));
   const submissionGovernance = buildSellerSubmissionGovernance(sellerAccess, {
     hasConcreteProduct: true,
@@ -1186,13 +1224,25 @@ const buildSellerProductSummary = async (storeId: number) => {
       } as any,
     }),
     Product.count({
-      where: { ...baseWhere, isPublished: true, status: "active" } as any,
+      where: {
+        ...baseWhere,
+        isPublished: true,
+        status: "active",
+        sellerSubmissionStatus: "none",
+      } as any,
     }),
     Product.count({
       where: {
         ...baseWhere,
         isPublished: true,
-        status: { [Op.ne]: "active" },
+        [Op.or]: [
+          { status: { [Op.ne]: "active" } },
+          {
+            sellerSubmissionStatus: {
+              [Op.in]: ["submitted", "needs_revision"],
+            },
+          },
+        ],
       } as any,
     }),
     Product.count({ where: { ...baseWhere, isPublished: false } as any }),
@@ -1249,9 +1299,25 @@ const buildSellerProductsWhere = (options: any = {}) => {
   if (options?.visibilityState === "internal_only") {
     andConditions.push({ isPublished: false });
   } else if (options?.visibilityState === "storefront_visible") {
-    andConditions.push({ isPublished: true }, { status: "active" });
+    andConditions.push(
+      { isPublished: true },
+      { status: "active" },
+      { sellerSubmissionStatus: "none" }
+    );
   } else if (options?.visibilityState === "published_blocked") {
-    andConditions.push({ isPublished: true }, { status: { [Op.ne]: "active" } });
+    andConditions.push(
+      { isPublished: true },
+      {
+        [Op.or]: [
+          { status: { [Op.ne]: "active" } },
+          {
+            sellerSubmissionStatus: {
+              [Op.in]: ["submitted", "needs_revision"],
+            },
+          },
+        ],
+      }
+    );
   }
 
   if (options?.keyword) {
@@ -1959,9 +2025,25 @@ router.get(
       if (visibilityState === "internal_only") {
         andConditions.push({ isPublished: false });
       } else if (visibilityState === "storefront_visible") {
-        andConditions.push({ isPublished: true }, { status: "active" });
+        andConditions.push(
+          { isPublished: true },
+          { status: "active" },
+          { sellerSubmissionStatus: "none" }
+        );
       } else if (visibilityState === "published_blocked") {
-        andConditions.push({ isPublished: true }, { status: { [Op.ne]: "active" } });
+        andConditions.push(
+          { isPublished: true },
+          {
+            [Op.or]: [
+              { status: { [Op.ne]: "active" } },
+              {
+                sellerSubmissionStatus: {
+                  [Op.in]: ["submitted", "needs_revision"],
+                },
+              },
+            ],
+          }
+        );
       }
 
       if (keyword) {

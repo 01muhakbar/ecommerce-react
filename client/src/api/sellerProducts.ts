@@ -67,12 +67,17 @@ const buildVisibility = (
   status: string,
   fallback: Record<string, any> = {}
 ) => {
-  const storefrontVisible = published && status === "active";
-  const reasonCode = !published
-    ? "UNPUBLISHED"
-    : storefrontVisible
-      ? "STOREFRONT_VISIBLE"
-      : "STATUS_NOT_ACTIVE";
+  const storefrontVisible =
+    typeof fallback?.storefrontVisible === "boolean"
+      ? fallback.storefrontVisible
+      : published && status === "active";
+  const reasonCode =
+    normalizeText(fallback?.reasonCode) ||
+    (!published
+      ? "UNPUBLISHED"
+      : storefrontVisible
+        ? "STOREFRONT_VISIBLE"
+        : "STATUS_NOT_ACTIVE");
   const blockingSignals = Array.isArray(fallback?.blockingSignals)
     ? fallback.blockingSignals
     : [
@@ -88,8 +93,9 @@ const buildVisibility = (
     isPublished: published,
     storefrontVisible,
     stateCode,
-    label: published ? "Published" : "Private",
-    publishLabel: published ? "Published" : "Private",
+    label: normalizeText(fallback?.label) || (published ? "Published" : "Private"),
+    publishLabel:
+      normalizeText(fallback?.publishLabel) || (published ? "Published" : "Private"),
     sellerLabel:
       fallback?.sellerLabel ||
       (!published
@@ -97,7 +103,9 @@ const buildVisibility = (
         : storefrontVisible
           ? "Visible in storefront"
           : "Published but blocked"),
-    storefrontLabel: storefrontVisible ? "Visible in storefront" : "Hidden from storefront",
+    storefrontLabel:
+      normalizeText(fallback?.storefrontLabel) ||
+      (storefrontVisible ? "Visible in storefront" : "Hidden from storefront"),
     storefrontReason:
       fallback?.storefrontReason ||
       (!published

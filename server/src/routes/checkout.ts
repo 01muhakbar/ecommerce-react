@@ -177,7 +177,18 @@ const isStorefrontProductVisible = (product: any) => {
   const isPublished = Boolean(
     getAttr(product, "isPublished") ?? getAttr(product, "published")
   );
-  return status === "active" && isPublished;
+  const submissionStatus = String(getAttr(product, "sellerSubmissionStatus") || "none")
+    .trim()
+    .toLowerCase();
+  const store = product?.store ?? product?.get?.("store") ?? null;
+  const storeStatus = String(store?.status || "").trim().toUpperCase();
+  return (
+    status === "active" &&
+    isPublished &&
+    submissionStatus === "none" &&
+    Boolean(getAttr(product, "storeId")) &&
+    storeStatus === "ACTIVE"
+  );
 };
 
 const getAuthUser = (req: any) => {
@@ -223,6 +234,7 @@ const buildCartInclude = (includePaymentMedia = false) => [
       "stock",
       "status",
       "isPublished",
+      "sellerSubmissionStatus",
       "userId",
       "categoryId",
     ],

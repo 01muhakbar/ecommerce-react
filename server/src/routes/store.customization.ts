@@ -213,6 +213,7 @@ const buildPublicStoreSummary = async (store: any) => {
       storeId,
       status: "active",
       isPublished: { [Op.in]: [1, true] },
+      sellerSubmissionStatus: "none",
     } as any,
   });
 
@@ -226,6 +227,7 @@ const buildPublicStoreSummary = async (store: any) => {
       WHERE p.store_id = :storeId
         AND p.status = 'active'
         AND p.published IN (1, true)
+        AND COALESCE(p.seller_submission_status, 'none') = 'none'
     `,
     {
       replacements: { storeId },
