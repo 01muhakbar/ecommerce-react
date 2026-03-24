@@ -39,7 +39,7 @@ const sanitizeHeaderBrandName = (value, fallback = "KACHA BAZAR") => {
   return normalized;
 };
 
-export default function StoreHeaderKacha({ onCartClick }) {
+export default function StoreHeaderKacha({ onCartClick, publicIdentityOverride = null }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const totalQty = useCartStore((state) => state.totalQty);
@@ -56,6 +56,7 @@ export default function StoreHeaderKacha({ onCartClick }) {
   const publicIdentityQuery = useQuery({
     queryKey: ["store-public-identity"],
     queryFn: getStorePublicIdentity,
+    enabled: !publicIdentityOverride,
     staleTime: 60_000,
     retry: 1,
     placeholderData: (previousData) => previousData,
@@ -92,31 +93,33 @@ export default function StoreHeaderKacha({ onCartClick }) {
       updatedAt: toText(headerContentRaw.updatedAt, DEFAULT_HEADER_CONTENT.updatedAt),
     };
   }, [headerQuery.data, hasHeaderPayload]);
-  const publicIdentity = useMemo(
-    () => normalizePublicStoreIdentity(publicIdentityQuery.data),
-    [publicIdentityQuery.data]
-  );
+  const publicIdentity = useMemo(() => {
+    if (publicIdentityOverride && typeof publicIdentityOverride === "object") {
+      return normalizePublicStoreIdentity({ data: publicIdentityOverride });
+    }
+    return normalizePublicStoreIdentity(publicIdentityQuery.data);
+  }, [publicIdentityOverride, publicIdentityQuery.data]);
   const resolvedBrandName = sanitizeHeaderBrandName(
     resolvePreferredText(publicIdentity.name, "", "KACHA BAZAR")
   );
-  const resolvedPhoneNumber = resolvePreferredText(
-    headerContent.phoneNumber,
-    publicIdentity.phone
-  );
-  const resolvedWhatsAppLink = toPreferredWhatsAppLink(
-    headerContent.whatsAppLink,
-    publicIdentity.whatsapp
-  );
-  const resolvedHeaderLogoUrl = resolvePreferredText(
-    headerContent.headerLogoUrl,
-    publicIdentity.logoUrl
-  );
+  const resolvedPhoneNumber = publicIdentityOverride
+    ? resolvePreferredText(publicIdentity.phone, headerContent.phoneNumber)
+    : resolvePreferredText(headerContent.phoneNumber, publicIdentity.phone);
+  const resolvedWhatsAppLink = publicIdentityOverride
+    ? toPreferredWhatsAppLink(publicIdentity.whatsapp, headerContent.whatsAppLink)
+    : toPreferredWhatsAppLink(headerContent.whatsAppLink, publicIdentity.whatsapp);
+  const resolvedHeaderLogoUrl = publicIdentityOverride
+    ? resolvePreferredText(publicIdentity.logoUrl, headerContent.headerLogoUrl)
+    : resolvePreferredText(headerContent.headerLogoUrl, publicIdentity.logoUrl);
   const isIdentityLoading =
+    !publicIdentityOverride &&
     !hasHeaderPayload &&
     !hasPublicIdentityPayload &&
     (headerQuery.isFetching || publicIdentityQuery.isFetching);
   const headerVersion = useMemo(() => {
-    const versionSource = resolvePreferredText(headerContent.updatedAt, publicIdentity.updatedAt);
+    const versionSource = publicIdentityOverride
+      ? resolvePreferredText(publicIdentity.updatedAt, headerContent.updatedAt)
+      : resolvePreferredText(headerContent.updatedAt, publicIdentity.updatedAt);
     const parsed = Date.parse(versionSource);
     return Number.isFinite(parsed)
       ? String(parsed)

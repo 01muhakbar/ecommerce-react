@@ -36,10 +36,19 @@ export type GroupedPaymentDetail = {
     | "EXPIRED"
     | "REJECTED"
     | string;
+  displayStatus?: string;
   expiresAt?: string | null;
   paidAt?: string | null;
   proofSubmitted?: boolean;
   proof?: GroupedPaymentProofSummary | null;
+  proofActionability?: {
+    canStartProof: boolean;
+    reason?: string | null;
+  };
+  cancelability?: {
+    canCancel: boolean;
+    reason?: string | null;
+  };
 };
 
 export type GroupedOrderPaymentResponse = {
@@ -107,6 +116,7 @@ export type PaymentDetailResponse = {
     paymentChannel: string;
     paymentType: string;
     status: string;
+    displayStatus?: string;
     qrImageUrl?: string | null;
     qrPayload?: string | null;
     instructionText?: string | null;
@@ -117,6 +127,14 @@ export type PaymentDetailResponse = {
     paidAt?: string | null;
     proofSubmitted?: boolean;
     proof?: GroupedPaymentProofSummary | null;
+    proofActionability?: {
+      canStartProof: boolean;
+      reason?: string | null;
+    };
+    cancelability?: {
+      canCancel: boolean;
+      reason?: string | null;
+    };
     logs?: Array<{
       id: number;
       oldStatus?: string | null;
@@ -158,6 +176,13 @@ export const submitPaymentProof = async (
   const { data } = await api.post<PaymentDetailResponse>(
     `/payments/${encodeURIComponent(String(paymentId))}/proof`,
     payload
+  );
+  return data;
+};
+
+export const cancelPaymentTransaction = async (paymentId: string | number) => {
+  const { data } = await api.post<PaymentDetailResponse>(
+    `/payments/${encodeURIComponent(String(paymentId))}/cancel`
   );
   return data;
 };

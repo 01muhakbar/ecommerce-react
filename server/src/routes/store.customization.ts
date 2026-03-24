@@ -131,8 +131,6 @@ const toPreferredWhatsAppLink = (preferredValue: unknown, fallbackValue: unknown
 const serializePublicStoreIdentityContract = () => ({
   authoritativeSource: "STORE",
   sellerOwnedFields: [
-    "name",
-    "slug",
     "description",
     "logoUrl",
     "bannerUrl",
@@ -149,6 +147,7 @@ const serializePublicStoreIdentityContract = () => ({
     "postalCode",
     "country",
   ],
+  adminOwnedFields: ["name", "slug", "status"],
   adminManagedSurfaces: [
     "marketplace-header-copy",
     "marketplace-contact-layout",
@@ -156,6 +155,7 @@ const serializePublicStoreIdentityContract = () => ({
   ],
   notes: [
     "Public store identity and store microsite contact fields read from Store.",
+    "Store.name, Store.slug, and Store.status remain admin-governed core identity fields.",
     "Store microsite hero artwork and public outbound links read seller-owned Store fields when present.",
     "Global marketplace header copy and contact-page layout remain admin customization-managed.",
     "Store description is the fallback for store microsite about content when rich-about customization is empty.",
@@ -265,14 +265,8 @@ const buildPublicStoreSummary = async (store: any) => {
 };
 
 const resolvePrimaryPublicStore = async () => {
-  const activeStore = await Store.findOne({
-    where: { status: "ACTIVE" } as any,
-    attributes: [...publicStoreIdentityAttributes],
-    order: [["id", "ASC"]],
-  });
-  if (activeStore) return activeStore;
-
   return Store.findOne({
+    where: { status: "ACTIVE" } as any,
     attributes: [...publicStoreIdentityAttributes],
     order: [["id", "ASC"]],
   });

@@ -13,6 +13,7 @@ import {
   Product,
   ProductReview,
   Store,
+  Suborder,
   User,
   sequelize,
 } from "../models/index.js";
@@ -21,6 +22,10 @@ import {
   createNewOrderNotification,
   createUserOrderPlacedNotification,
 } from "../services/notification.service.js";
+import {
+  buildBuyerOrderPaymentEntry,
+  resolveBuyerFacingPaymentStatus,
+} from "../services/paymentCheckoutView.service.js";
 import { getDefaultAddressByUser } from "../services/userAddress.service.js";
 import { protect } from "../middleware/authMiddleware.js";
 
@@ -138,6 +143,46 @@ const normalizeShippingDetailsOutput = (raw: any): Record<string, any> | null =>
   }
   if (typeof raw === "object") return raw;
   return null;
+};
+
+const resolveOrderAmountSnapshot = (order: any, computedSubtotal = 0) => {
+  const subtotalAmount = toNumber(
+    getAttr(order, "subtotalAmount") ?? order?.subtotalAmount ?? order?.subtotal_amount
+  );
+  const shippingAmount = toNumber(
+    getAttr(order, "shippingAmount") ??
+      order?.shippingAmount ??
+      order?.shipping_amount ??
+      getAttr(order, "shippingCost") ??
+      order?.shippingCost
+  );
+  const serviceFeeAmount = toNumber(
+    getAttr(order, "serviceFeeAmount") ??
+      order?.serviceFeeAmount ??
+      order?.service_fee_amount
+  );
+  const discountAmount = toNumber(
+    getAttr(order, "discountAmount") ?? order?.discountAmount ?? order?.discount_amount
+  );
+  const totalAmount = toNumber(
+    getAttr(order, "totalAmount") ?? order?.totalAmount ?? order?.total_amount
+  );
+
+  const subtotal = Number.isFinite(subtotalAmount) ? Number(subtotalAmount) : computedSubtotal;
+  const shipping = Number.isFinite(shippingAmount) ? Number(shippingAmount) : 0;
+  const serviceFee = Number.isFinite(serviceFeeAmount) ? Number(serviceFeeAmount) : 0;
+  const discount = Number.isFinite(discountAmount) ? Number(discountAmount) : 0;
+  const total = Number.isFinite(totalAmount)
+    ? Number(totalAmount)
+    : Math.max(0, subtotal + shipping + serviceFee - discount);
+
+  return {
+    subtotal,
+    shipping,
+    serviceFee,
+    discount,
+    total,
+  };
 };
 
 const getMissingShippingField = (
@@ -949,26 +994,107 @@ router.get(
       const userId = getAuthUserId(req, res);
       if (!userId) return;
 
-      const [rows] = await sequelize.query(
-        "SELECT id, invoice_no, checkout_mode, status, payment_status, total_amount, created_at, payment_method FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT 20",
+      const page = Math.max(1, Number.parseInt(String(req.query.page ?? "1"), 10) || 1);
+      const limit = Math.min(
+        50,
+        Math.max(1, Number.parseInt(String(req.query.limit ?? "20"), 10) || 20)
+      );
+      const offset = (page - 1) * limit;
+
+      const [[countRow]] = (await sequelize.query(
+        "SELECT COUNT(*) AS total FROM orders WHERE user_id = ?",
         { replacements: [userId] }
+      )) as any;
+
+      const [rows] = await sequelize.query(
+        "SELECT id, invoice_no, checkout_mode, status, payment_status, total_amount, created_at, payment_method FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        { replacements: [userId, limit, offset] }
       );
 
+      const orderRows = Array.isArray(rows) ? (rows as any[]) : [];
+      const orderIds = orderRows
+        .map((row: any) => Number(row?.id))
+        .filter((value) => Number.isFinite(value) && value > 0);
+
+      const paymentGroupsByOrderId = new Map<number, any[]>();
+      if (orderIds.length > 0) {
+        const placeholders = orderIds.map(() => "?").join(", ");
+        const paymentRows = (await sequelize.query(
+          `
+            SELECT
+              s.order_id AS orderId,
+              s.store_id AS storeId,
+              st.name AS storeName,
+              s.payment_status AS suborderPaymentStatus,
+              p.status AS paymentStatus,
+              p.expires_at AS paymentExpiresAt
+            FROM suborders s
+            LEFT JOIN payments p ON p.suborder_id = s.id
+            LEFT JOIN stores st ON st.id = s.store_id
+            WHERE s.order_id IN (${placeholders})
+            ORDER BY s.order_id ASC, s.id ASC
+          `,
+          {
+            replacements: orderIds,
+            type: QueryTypes.SELECT,
+          }
+        )) as any[];
+
+        for (const row of paymentRows) {
+          const orderId = Number((row as any)?.orderId ?? 0);
+          if (!Number.isFinite(orderId) || orderId <= 0) continue;
+          const displayStatus = resolveBuyerFacingPaymentStatus({
+            paymentStatus: (row as any)?.paymentStatus,
+            suborderPaymentStatus: (row as any)?.suborderPaymentStatus,
+            expiresAt: (row as any)?.paymentExpiresAt ?? null,
+          });
+          const current = paymentGroupsByOrderId.get(orderId) ?? [];
+          current.push({
+            storeId: Number((row as any)?.storeId ?? 0) || null,
+            storeName: String((row as any)?.storeName || "").trim() || null,
+            displayStatus,
+          });
+          paymentGroupsByOrderId.set(orderId, current);
+        }
+      }
+
+      const total = Number(countRow?.total ?? countRow?.count ?? 0);
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+
       res.json({
-        data: (rows as any[]).map((row: any) => ({
-          id: row.id,
-          invoiceNo: row.invoice_no ?? row.invoiceNo ?? null,
-          checkoutMode: String(row.checkout_mode ?? row.checkoutMode ?? "LEGACY")
-            .toUpperCase()
-            .trim() || "LEGACY",
-          status: toCanonicalOrderStatus(row.status ?? null),
-          paymentStatus: String(row.payment_status ?? row.paymentStatus ?? "UNPAID")
-            .toUpperCase()
-            .trim() || "UNPAID",
-          totalAmount: Number(row.total_amount ?? row.totalAmount ?? 0),
-          createdAt: row.created_at ?? row.createdAt ?? null,
-          paymentMethod: row.payment_method ?? row.paymentMethod ?? null,
-        })),
+        data: orderRows.map((row: any) => {
+          const orderId = Number(row.id ?? 0);
+          const paymentGroups = paymentGroupsByOrderId.get(orderId) ?? [];
+          const paymentEntry = buildBuyerOrderPaymentEntry(
+            paymentGroups.map((group: any) => group.displayStatus)
+          );
+          return {
+            id: row.id,
+            invoiceNo: row.invoice_no ?? row.invoiceNo ?? null,
+            checkoutMode: String(row.checkout_mode ?? row.checkoutMode ?? "LEGACY")
+              .toUpperCase()
+              .trim() || "LEGACY",
+            status: toCanonicalOrderStatus(row.status ?? null),
+            paymentStatus: String(row.payment_status ?? row.paymentStatus ?? "UNPAID")
+              .toUpperCase()
+              .trim() || "UNPAID",
+            totalAmount: Number(row.total_amount ?? row.totalAmount ?? 0),
+            createdAt: row.created_at ?? row.createdAt ?? null,
+            paymentMethod: row.payment_method ?? row.paymentMethod ?? null,
+            paymentEntry: {
+              ...paymentEntry,
+              targetPath: paymentEntry.visible ? `/user/my-orders/${orderId}/payment` : null,
+            },
+          };
+        }),
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages,
+          hasPrev: page > 1,
+          hasNext: page < totalPages,
+        },
       });
     } catch (error) {
       next(error);
@@ -998,6 +1124,9 @@ router.get(
           "checkoutMode",
           "status",
           "paymentStatus",
+          "subtotalAmount",
+          "shippingAmount",
+          "serviceFeeAmount",
           "totalAmount",
           "couponCode",
           "discountAmount",
@@ -1040,9 +1169,8 @@ router.get(
         (sum: number, item: any) => sum + Number(item.lineTotal || 0),
         0
       );
-      const discountAmount = Number((order as any).discountAmount || 0);
+      const amounts = resolveOrderAmountSnapshot(order, subtotal);
       const tax = 0;
-      const shipping = 0;
 
       return res.json({
         data: {
@@ -1058,11 +1186,16 @@ router.get(
             String((order as any).paymentStatus || order.get?.("paymentStatus") || "UNPAID")
               .toUpperCase()
               .trim() || "UNPAID",
-          totalAmount: Number(order.totalAmount || 0),
-          subtotal,
-          discount: discountAmount,
+          totalAmount: amounts.total,
+          subtotal: amounts.subtotal,
+          subtotalAmount: amounts.subtotal,
+          discount: amounts.discount,
           tax,
-          shipping,
+          shipping: amounts.shipping,
+          shippingCost: amounts.shipping,
+          serviceFeeAmount: amounts.serviceFee,
+          total: amounts.total,
+          grandTotal: amounts.total,
           couponCode: (order as any).couponCode ?? null,
           paymentMethod: order.paymentMethod ?? "COD",
           createdAt: order.createdAt,
@@ -1148,7 +1281,12 @@ router.get(
         attributes: [
           "id",
           "invoiceNo",
+          "checkoutMode",
           "status",
+          "paymentStatus",
+          "subtotalAmount",
+          "shippingAmount",
+          "serviceFeeAmount",
           "totalAmount",
           "couponCode",
           "discountAmount",
@@ -1169,6 +1307,27 @@ router.get(
                 model: Product,
                 as: "product",
                 attributes: ["id", "name"],
+              },
+            ],
+          },
+          {
+            model: Suborder,
+            as: "suborders",
+            attributes: [
+              "id",
+              "suborderNumber",
+              "storeId",
+              "totalAmount",
+              "paymentStatus",
+              "fulfillmentStatus",
+            ],
+            required: false,
+            include: [
+              {
+                model: Store,
+                as: "store",
+                attributes: ["id", "name", "slug"],
+                required: false,
               },
             ],
           },
@@ -1194,12 +1353,6 @@ router.get(
         (order as any).invoice_no ??
         order.get?.("invoice_no") ??
         null;
-      const totalAmount =
-        (order as any).totalAmount ??
-        order.get?.("totalAmount") ??
-        (order as any).total_amount ??
-        order.get?.("total_amount") ??
-        0;
       const paymentMethod =
         (order as any).paymentMethod ??
         order.get?.("paymentMethod") ??
@@ -1266,20 +1419,67 @@ router.get(
         (sum: number, item: any) => sum + Number(item.lineTotal || 0),
         0
       );
-      const discountAmount = Number((order as any).discountAmount || 0);
+      const amounts = resolveOrderAmountSnapshot(order, subtotal);
       const tax = 0;
-      const shipping = 0;
+      const storeSplits = Array.isArray((order as any).suborders)
+        ? [...((order as any).suborders as any[])].map((suborder: any) => {
+            const store =
+              suborder?.store ??
+              suborder?.get?.("store") ??
+              null;
+            return {
+              suborderId: Number(getAttr(suborder, "id") || 0),
+              suborderNumber: String(getAttr(suborder, "suborderNumber") || ""),
+              storeId: Number(getAttr(suborder, "storeId") || getAttr(store, "id") || 0) || null,
+              storeName: String(getAttr(store, "name") || `Store #${getAttr(suborder, "storeId")}`),
+              storeSlug: getAttr(store, "slug") ? String(getAttr(store, "slug")) : null,
+              totalAmount: Number(getAttr(suborder, "totalAmount") || 0),
+              paymentStatus:
+                String(getAttr(suborder, "paymentStatus") || "UNPAID").toUpperCase().trim() ||
+                "UNPAID",
+              fulfillmentStatus:
+                String(getAttr(suborder, "fulfillmentStatus") || "UNFULFILLED")
+                  .toUpperCase()
+                  .trim() || "UNFULFILLED",
+            };
+          })
+        : [];
 
       return res.json({
         data: {
           ref: invoiceNo || String(order.id),
           invoiceNo,
+          checkoutMode:
+            String(
+              (order as any).checkoutMode ??
+                order.get?.("checkoutMode") ??
+                (order as any).checkout_mode ??
+                order.get?.("checkout_mode") ??
+                "LEGACY"
+            )
+              .toUpperCase()
+              .trim() || "LEGACY",
           status: toCanonicalOrderStatus(status),
-          totalAmount: Number(totalAmount),
-          subtotal,
-          discount: discountAmount,
+          paymentStatus:
+            String(
+              (order as any).paymentStatus ??
+                order.get?.("paymentStatus") ??
+                (order as any).payment_status ??
+                order.get?.("payment_status") ??
+                "UNPAID"
+            )
+              .toUpperCase()
+              .trim() || "UNPAID",
+          totalAmount: amounts.total,
+          subtotal: amounts.subtotal,
+          subtotalAmount: amounts.subtotal,
+          discount: amounts.discount,
           tax,
-          shipping,
+          shipping: amounts.shipping,
+          shippingCost: amounts.shipping,
+          serviceFeeAmount: amounts.serviceFee,
+          total: amounts.total,
+          grandTotal: amounts.total,
           couponCode: (order as any).couponCode ?? null,
           paymentMethod,
           createdAt,
@@ -1288,6 +1488,7 @@ router.get(
           customerPhone,
           customerAddress,
           items,
+          storeSplits,
         },
       });
     } catch (error) {

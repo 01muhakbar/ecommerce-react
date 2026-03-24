@@ -25,7 +25,8 @@
     "db:sync": "tsx -e \"import('./src/models/index.ts').then(m=>m.syncDb())\"",
     "db:reset": "tsx src/scripts/reset-db.ts",
     "migrate": "node scripts/run-migrations.js",
-    "smoke:orders": "node scripts/smoke-orders-admin.mjs"
+    "smoke:orders": "node scripts/smoke-orders-admin.mjs",
+    "smoke:product-visibility": "tsx src/scripts/smokeProductVisibility.ts"
   },
   "dependencies": {
     "@ecommerce/schemas": "workspace:*",

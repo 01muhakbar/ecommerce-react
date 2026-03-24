@@ -5,6 +5,7 @@ import { Download, Printer } from "lucide-react";
 import { fetchStoreOrder } from "../../api/store.service.ts";
 import { formatCurrency } from "../../utils/format.js";
 import { getOrderStatusLabel } from "../../utils/orderStatus.js";
+import { PaymentStatusBadge } from "../../components/payments/PaymentReadModelBadges.jsx";
 import {
   UiEmptyState,
   UiErrorState,
@@ -39,6 +40,16 @@ const getItemImage = (item) =>
   item?.product?.image ??
   item?.product?.promoImagePath ??
   null;
+
+const getStoreSplitStatusClass = (status) => {
+  const value = String(status || "").toUpperCase().trim();
+  if (value === "DELIVERED") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (value === "SHIPPED" || value === "PROCESSING") {
+    return "border-sky-200 bg-sky-50 text-sky-700";
+  }
+  if (value === "CANCELLED") return "border-rose-200 bg-rose-50 text-rose-700";
+  return "border-slate-200 bg-slate-100 text-slate-700";
+};
 
 const getStatusBadgeClass = (status) => {
   const value = String(status || "").toLowerCase();
@@ -157,7 +168,9 @@ export default function StoreOrderTrackingPage() {
     order?.customerAddress || customer.address || order?.shippingAddress || "-";
   const paymentMethod = order?.paymentMethod || order?.method || "-";
   const items = order?.items || order?.orderItems || order?.products || [];
-  const shippingCost = order?.shippingCost ?? order?.shipping?.cost ?? order?.deliveryFee ?? 0;
+  const storeSplits = Array.isArray(order?.storeSplits) ? order.storeSplits : [];
+  const shippingCost =
+    order?.shippingCost ?? order?.shipping ?? order?.shipping?.cost ?? order?.deliveryFee ?? 0;
   const discount = order?.discount ?? order?.discountAmount ?? order?.discountTotal ?? 0;
   const totalAmount = order?.totalAmount ?? order?.total ?? order?.grandTotal ?? 0;
   const statusLabel = getOrderStatusLabel(order?.status);
@@ -368,6 +381,51 @@ export default function StoreOrderTrackingPage() {
           </div>
         )}
       </div>
+
+      {storeSplits.length > 0 ? (
+        <div className="no-print mb-6 rounded-[30px] border border-slate-200 bg-white px-4 py-5 shadow-[0_18px_34px_rgba(15,23,42,0.06)] sm:px-6 sm:py-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-600">
+                Store Split Status
+              </p>
+              <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+                Parent order and seller fulfillment are shown separately
+              </h2>
+            </div>
+            <p className="text-sm text-slate-500">
+              Parent: <span className="font-semibold text-slate-900">{statusLabel}</span>
+            </p>
+          </div>
+          <div className="mt-5 grid gap-3 lg:grid-cols-2">
+            {storeSplits.map((split) => (
+              <div
+                key={split.suborderId || split.suborderNumber || split.storeId || split.storeName}
+                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{split.storeName}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {split.suborderNumber || "Store split"} • {formatCurrency(split.totalAmount || 0)}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <span
+                      className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getStoreSplitStatusClass(
+                        split.fulfillmentStatus
+                      )}`}
+                    >
+                      Fulfillment {split.fulfillmentStatus || "UNFULFILLED"}
+                    </span>
+                    <PaymentStatusBadge status={split.paymentStatus} prefix="Payment" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className="print-area overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_45px_rgba(15,23,42,0.08)]">
         <div className="bg-slate-100/60 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">

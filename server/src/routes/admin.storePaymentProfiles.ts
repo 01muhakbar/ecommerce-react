@@ -21,6 +21,16 @@ const reviewSchema = z.object({
   adminReviewNote: z.string().trim().max(4_000).optional().nullable(),
 });
 
+const storeIdentityPatchSchema = z
+  .object({
+    name: z.string().trim().min(2).max(160).optional(),
+    status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "At least one identity field must be provided.",
+    path: ["name"],
+  });
+
 const getAttr = (row: any, key: string) =>
   row?.getDataValue?.(key) ?? row?.get?.(key) ?? row?.dataValues?.[key];
 
@@ -244,16 +254,87 @@ router.get("/payment-profiles", async (_req, res) => {
     const requestMap = await loadAdminVisibleRequestsByStore(
       stores.map((store) => Number(store.id))
     );
+    const seenStoreIds = new Set<number>();
+    const items = stores
+      .map((store) => serializeProfileRow(store, requestMap.get(Number(store.id)) || null))
+      .filter((entry) => {
+        const storeId = Number(entry?.store?.id || 0);
+        if (!storeId || seenStoreIds.has(storeId)) return false;
+        seenStoreIds.add(storeId);
+        return true;
+      });
 
     return res.json({
       success: true,
-      data: stores.map((store) => serializeProfileRow(store, requestMap.get(Number(store.id)) || null)),
+      data: items,
     });
   } catch (error) {
     console.error("[admin.store-payment-profiles list] error", error);
     return res.status(500).json({
       success: false,
       message: "Failed to load store payment profiles.",
+    });
+  }
+});
+
+router.patch("/:storeId/identity", async (req, res) => {
+  try {
+    const storeId = Number(req.params.storeId);
+    if (!Number.isFinite(storeId)) {
+      return res.status(400).json({ success: false, message: "Invalid store id." });
+    }
+
+    const parsed = storeIdentityPatchSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payload.",
+        errors: parsed.error.flatten(),
+      });
+    }
+
+    const store = await Store.findByPk(storeId, {
+      attributes: ["id", "ownerUserId", "activeStorePaymentProfileId", "name", "slug", "status"],
+      include: [
+        { model: User, as: "owner", attributes: ["id", "name", "email", "role"] },
+        {
+          model: StorePaymentProfile,
+          as: "paymentProfile",
+          attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+        },
+        {
+          model: StorePaymentProfile,
+          as: "activePaymentProfile",
+          attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+          required: false,
+        },
+      ],
+    });
+
+    if (!store) {
+      return res.status(404).json({ success: false, message: "Store not found." });
+    }
+
+    const updatePayload: Record<string, string> = {};
+    if (parsed.data.name !== undefined) {
+      updatePayload.name = parsed.data.name;
+    }
+    if (parsed.data.status !== undefined) {
+      updatePayload.status = parsed.data.status;
+    }
+
+    await store.update(updatePayload as any);
+
+    const refreshedRequestMap = await loadAdminVisibleRequestsByStore([storeId]);
+    return res.json({
+      success: true,
+      data: serializeProfileRow(store, refreshedRequestMap.get(storeId) || null),
+    });
+  } catch (error) {
+    console.error("[admin.store-payment-profiles identity] error", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update store identity.",
     });
   }
 });

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Eye } from "lucide-react";
+import { Eye, QrCode } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../../api/axios.ts";
 import { getStoreCustomization } from "../../api/store.service.ts";
@@ -192,6 +192,7 @@ export default function AccountOrdersPage() {
                     order.shippingCost ?? order.shipping?.cost ?? order.deliveryFee ?? null;
                   const totalAmount = order.totalAmount ?? order.total ?? 0;
                   const paymentMethod = order.paymentMethod || order.method || "COD";
+                  const paymentEntry = order.paymentEntry || null;
                   return (
                     <tr key={order.id} className="border-t border-slate-100 hover:bg-slate-50">
                       <td className="px-5 py-4">
@@ -211,6 +212,9 @@ export default function AccountOrdersPage() {
                             <span className={`ml-2 ${statusUI.text}`}>{statusUI.label}</span>
                           </span>
                           <PaymentStatusBadge status={order.paymentStatus} prefix="Payment" />
+                          {paymentEntry?.summaryLabel ? (
+                            <p className="text-xs text-slate-500">{paymentEntry.summaryLabel}</p>
+                          ) : null}
                         </div>
                       </td>
                       <td className="px-5 py-4 text-slate-700">{shippingProvider}</td>
@@ -223,17 +227,28 @@ export default function AccountOrdersPage() {
                         {money(totalAmount)}
                       </td>
                       <td className="px-5 py-4 text-right">
-                        {orderRef ? (
-                          <Link
-                            to={`/order/${encodeURIComponent(orderRef)}`}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-emerald-200 text-emerald-600 transition hover:bg-emerald-50 hover:text-emerald-800"
-                          >
-                            <Eye className="h-4 w-4" />
-                            <span className="sr-only">View order</span>
-                          </Link>
-                        ) : (
-                          <span className="text-xs text-slate-400">-</span>
-                        )}
+                        <div className="flex justify-end gap-2">
+                          {paymentEntry?.visible && paymentEntry?.targetPath ? (
+                            <Link
+                              to={paymentEntry.targetPath}
+                              className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-sky-200 px-3 text-xs font-semibold text-sky-700 transition hover:bg-sky-50"
+                            >
+                              <QrCode className="h-3.5 w-3.5" />
+                              {paymentEntry.label || "Order Payment"}
+                            </Link>
+                          ) : null}
+                          {orderRef ? (
+                            <Link
+                              to={`/order/${encodeURIComponent(orderRef)}`}
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-emerald-200 text-emerald-600 transition hover:bg-emerald-50 hover:text-emerald-800"
+                            >
+                              <Eye className="h-4 w-4" />
+                              <span className="sr-only">View order</span>
+                            </Link>
+                          ) : (
+                            <span className="text-xs text-slate-400">-</span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

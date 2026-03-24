@@ -280,12 +280,21 @@ const toOrderDetailPayload = (orderItem: any) => {
 
   const customer = (orderItem as any).customer ?? null;
 
-  const subtotal = items.reduce((sum: number, item: any) => {
+  const computedSubtotal = items.reduce((sum: number, item: any) => {
     return sum + Number(item.lineTotal || 0);
   }, 0);
+  const subtotalSnapshot = Number(getAttr(orderItem, "subtotalAmount"));
+  const shippingSnapshot = Number(
+    getAttr(orderItem, "shippingAmount") ?? getAttr(orderItem, "shippingCost") ?? 0
+  );
+  const serviceFeeAmount = Number(getAttr(orderItem, "serviceFeeAmount") || 0);
   const discount = Number(getAttr(orderItem, "discountAmount") || 0);
-  const shipping = Number(getAttr(orderItem, "shippingCost") || 0);
-  const totalAmount = Number(getAttr(orderItem, "totalAmount") || 0);
+  const subtotal = Number.isFinite(subtotalSnapshot) ? subtotalSnapshot : computedSubtotal;
+  const shipping = Number.isFinite(shippingSnapshot) ? shippingSnapshot : 0;
+  const totalSnapshot = Number(getAttr(orderItem, "totalAmount"));
+  const totalAmount = Number.isFinite(totalSnapshot)
+    ? totalSnapshot
+    : Math.max(0, subtotal + shipping + serviceFeeAmount - discount);
 
   return {
     id: getAttr(orderItem, "id"),
@@ -298,9 +307,13 @@ const toOrderDetailPayload = (orderItem: any) => {
       String(getAttr(orderItem, "paymentStatus") || "").toUpperCase().trim() || "UNPAID",
     totalAmount,
     subtotal,
+    subtotalAmount: subtotal,
     discount,
     shipping,
+    shippingCost: shipping,
+    serviceFeeAmount,
     total: totalAmount,
+    grandTotal: totalAmount,
     createdAt: getAttr(orderItem, "createdAt"),
     updatedAt: getAttr(orderItem, "updatedAt"),
     customerName: getAttr(orderItem, "customerName") ?? customer?.name ?? null,

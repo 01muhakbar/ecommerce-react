@@ -222,7 +222,10 @@ export default function StoreMicrositeShell({
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <StoreHeaderKacha onCartClick={() => setIsCartDrawerOpen(true)} />
+      <StoreHeaderKacha
+        onCartClick={() => setIsCartDrawerOpen(true)}
+        publicIdentityOverride={identity}
+      />
       <main className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
         <nav className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
           <Link to="/" className="hover:text-slate-700">

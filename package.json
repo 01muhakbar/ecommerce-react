@@ -24,6 +24,8 @@
     "seed:customers": "pnpm --filter server seed:customers",
     "qa:money": "node ./scripts/qa-money.mjs",
     "qa:mvf": "pnpm qa:money && powershell -ExecutionPolicy Bypass -File ./tools/qa/mvf-smoke.ps1",
+    "qa:mvf:visibility": "pnpm --filter server smoke:product-visibility && pnpm qa:mvf:visibility:frontend",
+    "qa:mvf:visibility:frontend": "tsx ./tools/qa/mvf-visibility-frontend.ts",
     "qa:ui": "node qa-ui.mjs",
     "qa:ui:install": "pnpm add -D playwright -w && npx playwright install --with-deps"
   },

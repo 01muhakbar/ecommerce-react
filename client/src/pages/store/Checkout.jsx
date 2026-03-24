@@ -480,7 +480,7 @@ export default function CheckoutPage() {
 
   const hasItems = items.length > 0;
   const lockAddressFields = isSubmitting || isAddressLoading || useDefaultShipping;
-  const shippingCost = 0;
+  const fallbackShippingCost = 0;
   const provinceOptions = useMemo(
     () => getProvinceOptions(shippingForm.province),
     [shippingForm.province]
@@ -526,14 +526,6 @@ export default function CheckoutPage() {
     staleTime: 10_000,
     retry: false,
   });
-
-  const subtotalValue = Number(subtotal || 0);
-  const discountValue = Number(discount || 0);
-  const taxValue = 0;
-  const quotedTotalValue = Number(appliedCouponMeta?.total);
-  const total = Number.isFinite(quotedTotalValue)
-    ? Math.max(0, quotedTotalValue)
-    : Math.max(0, subtotalValue + shippingCost - discountValue);
 
   const fullName = buildFullName(firstName, lastName);
   const phoneValue = phone.trim();
@@ -592,6 +584,23 @@ export default function CheckoutPage() {
   const checkoutPreviewInvalidItems = checkoutPreviewData?.invalidItems ?? [];
   const checkoutPreviewSummary = checkoutPreviewData?.summary ?? null;
   const checkoutMode = checkoutPreviewData?.checkoutMode ?? "SINGLE_STORE";
+  const previewSubtotalValue = Number(checkoutPreviewSummary?.subtotalAmount);
+  const previewShippingValue = Number(checkoutPreviewSummary?.shippingAmount);
+  const previewGrandTotalValue = Number(checkoutPreviewSummary?.grandTotal);
+  const subtotalValue = Number.isFinite(previewSubtotalValue)
+    ? previewSubtotalValue
+    : Number(subtotal || 0);
+  const shippingCost = Number.isFinite(previewShippingValue)
+    ? previewShippingValue
+    : fallbackShippingCost;
+  const discountValue = Number(discount || 0);
+  const taxValue = 0;
+  const quotedTotalValue = Number(appliedCouponMeta?.total);
+  const total = Number.isFinite(quotedTotalValue)
+    ? Math.max(0, quotedTotalValue)
+    : Number.isFinite(previewGrandTotalValue)
+      ? Math.max(0, previewGrandTotalValue)
+      : Math.max(0, subtotalValue + shippingCost - discountValue);
   const previewHasPaymentBlocker = checkoutPreviewGroups.some(
     (group) => !group.paymentAvailable
   );
@@ -2020,7 +2029,7 @@ export default function CheckoutPage() {
             </div>
 
             <div className="mt-6 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3.5 text-sm text-emerald-900">
-              After placing the order, you will be redirected to the success page with a trackable
+              After placing the order, you will be redirected to the payment page with a trackable
               order reference.
             </div>
 

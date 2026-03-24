@@ -161,7 +161,13 @@ export default function SellerStoreProfilePage() {
       {
         title: "Store Identity",
         fields: [
-          { key: "name", label: "Store Name", type: "text" },
+          {
+            key: "name",
+            label: "Store Name",
+            type: "text",
+            hint:
+              "Admin-governed core identity. Seller workspace can review this value, but final updates now come from admin.",
+          },
           {
             key: "description",
             label: "Description",
@@ -214,7 +220,6 @@ export default function SellerStoreProfilePage() {
     event.preventDefault();
     setStatus(null);
     const nextPayload = {
-      name: String(form.name || "").trim(),
       description: emptyToNull(form.description),
       email: emptyToNull(form.email),
       phone: emptyToNull(form.phone),
@@ -609,8 +614,8 @@ export default function SellerStoreProfilePage() {
           >
             {effectiveCanEdit
               ? isEditing
-                ? "Edit mode is open for seller-safe fields only. Public storefront pages still mostly read store customization, not this profile contract."
-                : "Seller-safe fields can be updated here when edit mode is open. Backend governance still decides which keys can be submitted."
+                ? "Edit mode is open for seller-owned profile, contact, and address fields only. Core store name and status remain admin-governed."
+                : "Seller-owned profile, contact, and address fields can be updated here when edit mode is open. Backend governance still decides which keys can be submitted."
               : "This actor can review the store profile but cannot submit updates. Editability stays controlled by backend seller permissions for the active store."}
           </SellerWorkspaceNotice>
 

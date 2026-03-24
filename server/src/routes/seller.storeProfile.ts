@@ -30,7 +30,6 @@ const storeProfileAttributes = [
 ] as const;
 
 const editableStoreProfileFields = [
-  "name",
   "description",
   "logoUrl",
   "bannerUrl",
@@ -48,7 +47,14 @@ const editableStoreProfileFields = [
   "country",
 ] as const;
 
-const readOnlyStoreProfileFields = ["id", "slug", "status", "createdAt", "updatedAt"] as const;
+const readOnlyStoreProfileFields = [
+  "id",
+  "name",
+  "slug",
+  "status",
+  "createdAt",
+  "updatedAt",
+] as const;
 
 const STOREFRONT_USAGE = {
   PUBLIC_STOREFRONT: "PUBLIC_STOREFRONT",
@@ -78,7 +84,7 @@ const storeProfileFieldMatrix: StoreProfileFieldContract[] = [
     label: "Store Name",
     storefrontUsage: STOREFRONT_USAGE.PUBLIC_STOREFRONT,
     notes:
-      "Authoritative public store identity for microsite, public identity endpoint, and marketplace header branding.",
+      "Authoritative public store identity for microsite, public identity endpoint, and marketplace header branding. Governance now remains admin-owned.",
   },
   {
     key: "slug",
@@ -203,7 +209,6 @@ const storeProfileFieldMatrix: StoreProfileFieldContract[] = [
 ] as const;
 
 const profileCompletenessFields = [
-  { key: "name", label: "Store name" },
   { key: "description", label: "Store description" },
   { key: "email", label: "Store email" },
   { key: "phone", label: "Store phone" },
@@ -310,15 +315,6 @@ const nullableSocialUrlField = (hosts: string[], label: string) =>
 
 const profilePatchSchema = z
   .object({
-    name: z
-      .preprocess(
-        (value) => {
-          if (value === undefined) return undefined;
-          return String(value).trim();
-        },
-        z.string().min(2).max(160).optional()
-      )
-      .optional(),
     description: nullableStringField(4000),
     logoUrl: nullableUrlField(),
     bannerUrl: nullableUrlField(),
@@ -357,8 +353,8 @@ const buildStoreProfileContract = () => {
 
   return {
     notes: [
-      "Backend seller profile remains the source of truth for editable fields.",
-      "Store identity, microsite contact, and public identity surfaces read seller-owned Store fields directly.",
+      "Backend seller profile remains the source of truth for seller-editable fields.",
+      "Core public store identity reads from Store, but store name, slug, and status now remain admin-governed.",
       "Store microsite hero artwork and public social links now read seller-owned Store fields when present.",
       "Marketplace header copy, marketplace contact-page layout, and store microsite rich-about content remain customization-managed.",
       "Marketplace header phone, WhatsApp, and logo now prefer seller-owned Store fields before customization fallback.",
@@ -476,9 +472,9 @@ const serializeSellerStoreProfile = (store: any, options: { canEdit?: boolean } 
       canEdit: Boolean(options.canEdit),
       editableFields: [...editableStoreProfileFields],
       readOnlyFields: [...readOnlyStoreProfileFields],
-      managedBy: "SELLER_WORKSPACE",
+      managedBy: "SELLER_WORKSPACE_WITH_ADMIN_CORE_GOVERNANCE",
       note: Boolean(options.canEdit)
-        ? "Editable metadata stays limited to seller-safe store identity fields."
+        ? "Editable metadata stays limited to seller-owned profile, contact, and address fields. Store name, slug, and status stay admin-governed."
         : "This actor can review the profile, but editing remains restricted by store permissions.",
     },
     contract: buildStoreProfileContract(),

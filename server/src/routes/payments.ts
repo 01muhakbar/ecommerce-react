@@ -15,6 +15,11 @@ import {
 import { recalculateParentOrderPaymentStatus } from "../services/orderPaymentAggregation.service.js";
 import { expirePaymentIfNeeded } from "../services/paymentExpiry.service.js";
 import { appendPaymentStatusLog } from "../services/paymentStatusLog.service.js";
+import {
+  buildBuyerCancelActionability,
+  buildBuyerProofActionability,
+  resolveBuyerFacingPaymentStatus,
+} from "../services/paymentCheckoutView.service.js";
 
 const router = Router();
 
@@ -101,6 +106,12 @@ const serializePaymentDetail = (payment: any) => {
   const paymentProfile =
     payment?.paymentProfile ?? payment?.get?.("paymentProfile") ?? suborder?.paymentProfile ?? null;
   const proofs = payment?.proofs ?? payment?.get?.("proofs") ?? [];
+  const proof = normalizeProofSummary(proofs);
+  const displayStatus = resolveBuyerFacingPaymentStatus({
+    paymentStatus: getAttr(payment, "status") || "CREATED",
+    suborderPaymentStatus: getAttr(suborder, "paymentStatus") || "UNPAID",
+    expiresAt: getAttr(payment, "expiresAt") || null,
+  });
   return {
     paymentId: toNumber(getAttr(payment, "id")),
     suborderId: toNumber(getAttr(payment, "suborderId")),
@@ -126,10 +137,13 @@ const serializePaymentDetail = (payment: any) => {
       ? String(getAttr(paymentProfile, "accountName"))
       : null,
     internalReference: String(getAttr(payment, "internalReference") || ""),
+    displayStatus,
     expiresAt: getAttr(payment, "expiresAt") || null,
     paidAt: getAttr(payment, "paidAt") || null,
     proofSubmitted: Array.isArray(proofs) && proofs.length > 0,
-    proof: normalizeProofSummary(proofs),
+    proof,
+    proofActionability: buildBuyerProofActionability(displayStatus),
+    cancelability: buildBuyerCancelActionability(displayStatus),
     logs: serializePaymentStatusLogs(payment?.statusLogs ?? payment?.get?.("statusLogs") ?? []),
   };
 };
@@ -385,6 +399,113 @@ router.post("/:paymentId/proof", async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to submit payment proof.",
+    });
+  }
+});
+
+router.post("/:paymentId/cancel", async (req, res) => {
+  try {
+    const authUser = getAuthUser(req);
+    if (!authUser.id) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const paymentId = Number(req.params.paymentId);
+    if (!Number.isFinite(paymentId) || paymentId <= 0) {
+      return res.status(400).json({ success: false, message: "Invalid payment id." });
+    }
+
+    const payment = await loadPaymentForActor(paymentId);
+    if (!payment) {
+      return res.status(404).json({ success: false, message: "Payment not found." });
+    }
+
+    const suborder = (payment as any)?.suborder ?? payment?.get?.("suborder") ?? null;
+    const ownerUserId = Number(getAttr(suborder?.order, "userId") || 0);
+    if (ownerUserId !== authUser.id) {
+      return res.status(403).json({
+        success: false,
+        message: "You do not have access to cancel this payment.",
+      });
+    }
+
+    const expired = await expirePaymentIfNeeded(paymentId);
+    const paymentForCancel = expired ? await loadPaymentForActor(paymentId) : payment;
+    if (!paymentForCancel) {
+      return res.status(404).json({ success: false, message: "Payment not found." });
+    }
+
+    const activeSuborder =
+      (paymentForCancel as any)?.suborder ?? paymentForCancel?.get?.("suborder") ?? null;
+    const displayStatus = resolveBuyerFacingPaymentStatus({
+      paymentStatus: getAttr(paymentForCancel, "status") || "CREATED",
+      suborderPaymentStatus: getAttr(activeSuborder, "paymentStatus") || "UNPAID",
+      expiresAt: getAttr(paymentForCancel, "expiresAt") || null,
+    });
+    const cancelability = buildBuyerCancelActionability(displayStatus);
+    if (!cancelability.canCancel) {
+      return res.status(409).json({
+        success: false,
+        code: "PAYMENT_CANCEL_NOT_ALLOWED",
+        message: cancelability.reason || "This payment can no longer be cancelled.",
+      });
+    }
+
+    const currentStatus = String(getAttr(paymentForCancel, "status") || "CREATED").toUpperCase();
+    const orderId = Number(getAttr(activeSuborder, "orderId") || 0);
+    const tx = await sequelize.transaction();
+    try {
+      await paymentForCancel.update(
+        {
+          status: "FAILED",
+          paidAt: null,
+        } as any,
+        { transaction: tx }
+      );
+
+      if (activeSuborder) {
+        await activeSuborder.update(
+          {
+            paymentStatus: "CANCELLED",
+            paidAt: null,
+          } as any,
+          { transaction: tx }
+        );
+      }
+
+      await appendPaymentStatusLog(
+        {
+          paymentId,
+          oldStatus: currentStatus,
+          newStatus: "CANCELLED",
+          actorType: "BUYER",
+          actorId: authUser.id,
+          note: "Buyer cancelled this payment before final confirmation.",
+        },
+        tx
+      );
+
+      if (orderId > 0) {
+        await recalculateParentOrderPaymentStatus(orderId, tx);
+      }
+
+      await tx.commit();
+    } catch (error) {
+      await tx.rollback();
+      throw error;
+    }
+
+    const refreshed = await loadPaymentForActor(paymentId);
+    return res.json({
+      success: true,
+      message: "Transaction cancelled successfully.",
+      data: serializePaymentDetail(refreshed),
+    });
+  } catch (error) {
+    console.error("[payments/cancel] error", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to cancel payment transaction.",
     });
   }
 });

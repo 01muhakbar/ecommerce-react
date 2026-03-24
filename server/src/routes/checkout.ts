@@ -26,6 +26,11 @@ import {
 } from "../services/orderPaymentAggregation.service.js";
 import { appendPaymentStatusLog } from "../services/paymentStatusLog.service.js";
 import {
+  buildBuyerCancelActionability,
+  buildBuyerProofActionability,
+  resolveBuyerFacingPaymentStatus,
+} from "../services/paymentCheckoutView.service.js";
+import {
   resolvePreferredStorePaymentProfile,
   STORE_PAYMENT_PROFILE_CHECKOUT_ATTRIBUTES,
 } from "../services/storePaymentProfileCompat.js";
@@ -80,7 +85,7 @@ const SHIPPING_REQUIRED_FIELDS = [
 ] as const;
 
 const SHIPPING_PER_STORE_FALLBACK = 0;
-const PAYMENT_EXPIRY_MINUTES = 120;
+const PAYMENT_EXPIRY_MINUTES = 240;
 
 type ShippingDetailsSnapshot = z.infer<typeof shippingDetailsSchema>;
 
@@ -700,6 +705,14 @@ const serializeSplitOrder = (order: any) => {
       const payments = Array.isArray(suborder?.payments) ? suborder.payments : [];
       const payment = payments[0] ?? null;
       const items = Array.isArray(suborder?.items) ? suborder.items : [];
+      const proof = normalizeProofSummary(payment?.proofs ?? []);
+      const displayStatus = resolveBuyerFacingPaymentStatus({
+        paymentStatus: getAttr(payment, "status") || "CREATED",
+        suborderPaymentStatus: getAttr(suborder, "paymentStatus") || "UNPAID",
+        expiresAt: getAttr(payment, "expiresAt") || null,
+      });
+      const proofActionability = buildBuyerProofActionability(displayStatus);
+      const cancelability = buildBuyerCancelActionability(displayStatus);
       return {
         suborderId: toNumber(getAttr(suborder, "id")),
         suborderNumber: String(getAttr(suborder, "suborderNumber") || ""),
@@ -768,11 +781,14 @@ const serializeSplitOrder = (order: any) => {
                 ? String(getAttr(suborder?.paymentProfile, "accountName"))
                 : null,
               status: String(getAttr(payment, "status") || "CREATED"),
+              displayStatus,
               expiresAt: getAttr(payment, "expiresAt") || null,
               paidAt: getAttr(payment, "paidAt") || null,
               proofSubmitted:
                 Array.isArray(payment?.proofs) && payment.proofs.length > 0,
-              proof: normalizeProofSummary(payment?.proofs ?? []),
+              proof,
+              proofActionability,
+              cancelability,
             }
           : null,
       };

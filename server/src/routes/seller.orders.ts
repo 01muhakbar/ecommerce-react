@@ -307,7 +307,16 @@ const normalizeProofSummary = (proofs: any[]) => {
 };
 
 const buildShippingSummary = (order: any) => {
-  const shippingDetails = getAttr(order, "shippingDetails") || null;
+  const rawShippingDetails = getAttr(order, "shippingDetails") || null;
+  let shippingDetails = rawShippingDetails;
+  if (typeof rawShippingDetails === "string") {
+    try {
+      const parsed = JSON.parse(rawShippingDetails);
+      shippingDetails = parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      shippingDetails = null;
+    }
+  }
   if (shippingDetails && typeof shippingDetails === "object") {
     const addressParts = [
       shippingDetails.streetName,
@@ -537,6 +546,7 @@ const listInclude = [
       "userId",
       "customerName",
       "customerPhone",
+      "customerAddress",
       "shippingDetails",
       "paymentStatus",
       "status",
