@@ -2,23 +2,31 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import {
+  AlertTriangle,
   Boxes,
+  CheckCircle2,
+  Clock3,
   Download,
+  Eye,
   Filter,
+  Layers3,
   Package,
   Pencil,
   Plus,
   RotateCcw,
   Search,
   Send,
+  Tag,
 } from "lucide-react";
 import {
   bulkSubmitSellerProductsForReview,
   exportSellerProducts,
   getSellerProducts,
+  setSellerProductPublished,
   submitSellerProductDraftForReview,
 } from "../../api/sellerProducts.ts";
 import { resolveAssetUrl } from "../../lib/assetUrl.js";
+import { prevData } from "../../lib/rq.ts";
 import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
 import { useSellerWorkspaceRoute } from "../../utils/sellerWorkspaceRoute.js";
 import {
@@ -143,6 +151,7 @@ function ReviewQueueCard({
   tone = "slate",
   active = false,
   onClick,
+  Icon = null,
 }) {
   const toneClass =
     tone === "sky"
@@ -166,14 +175,16 @@ function ReviewQueueCard({
       type="button"
       onClick={onClick}
       className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-medium transition ${toneClass}`}
+      title={label}
     >
+      {Icon ? <Icon className="h-3.5 w-3.5" /> : null}
       <span>{label}</span>
       <span className="rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-semibold">{count}</span>
     </button>
   );
 }
 
-function CompactSummaryItem({ label, value, tone = "slate" }) {
+function CompactSummaryItem({ label, value, tone = "slate", Icon = null }) {
   const toneClass =
     tone === "amber"
       ? "border-amber-200 bg-amber-50 text-amber-900"
@@ -184,10 +195,51 @@ function CompactSummaryItem({ label, value, tone = "slate" }) {
           : "border-slate-200 bg-white text-slate-900";
 
   return (
-    <div className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs ${toneClass}`}>
-      <span className="font-medium opacity-75">{label}</span>
-      <span className="text-sm font-semibold">{value}</span>
+    <div className={`rounded-2xl border px-3.5 py-3 ${toneClass}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] opacity-70">{label}</p>
+          <p className="mt-2 text-lg font-semibold leading-none">{value}</p>
+        </div>
+        {Icon ? <Icon className="mt-0.5 h-4 w-4 opacity-70" /> : null}
+      </div>
     </div>
+  );
+}
+
+function CompactMetricPill({ label, value, tone = "slate", Icon = null, title = "" }) {
+  const toneClass =
+    tone === "amber"
+      ? "border-amber-200 bg-amber-50 text-amber-900"
+      : tone === "sky"
+        ? "border-sky-200 bg-sky-50 text-sky-900"
+        : tone === "emerald"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+          : tone === "rose"
+            ? "border-rose-200 bg-rose-50 text-rose-700"
+            : "border-slate-200 bg-white text-slate-800";
+
+  return (
+    <span
+      className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium ${toneClass}`}
+      title={title || label}
+    >
+      {Icon ? <Icon className="h-3.5 w-3.5" /> : null}
+      <span>{label}</span>
+      <span className="font-semibold">{value}</span>
+    </span>
+  );
+}
+
+function CompactMetaItem({ Icon, label, title = "" }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[11px] text-slate-500"
+      title={title || label}
+    >
+      {Icon ? <Icon className="h-3.5 w-3.5 text-slate-400" /> : null}
+      <span>{label}</span>
+    </span>
   );
 }
 
@@ -212,15 +264,35 @@ const getSubmissionActionErrorMessage = (error) => {
   );
 };
 
+const getPublishActionErrorMessage = (error) => {
+  const code = String(error?.response?.data?.code || "").trim().toUpperCase();
+  const message = String(error?.response?.data?.message || "").trim();
+  const blockers = Array.isArray(error?.response?.data?.data?.blockers)
+    ? error.response.data.data.blockers
+    : [];
+
+  if (code === "SELLER_PRODUCT_PUBLISH_NOT_READY" && blockers.length > 0) {
+    return blockers.map((entry) => entry?.message).filter(Boolean).join(" ");
+  }
+
+  return (
+    message ||
+    getSellerRequestErrorMessage(error, {
+      permissionMessage: "Your current seller access does not include publish control.",
+      fallbackMessage: "Failed to update seller product visibility.",
+    })
+  );
+};
+
 const getCurrentLaneLabel = (filters) => {
-  if (filters.submissionStatus === "ready_to_submit") return "Ready to submit";
-  if (filters.submissionStatus === "review_queue") return "Review queue";
+  if (filters.submissionStatus === "ready_to_submit") return "Ready";
+  if (filters.submissionStatus === "review_queue") return "Queue";
   if (filters.submissionStatus === "submitted") return "Submitted";
-  if (filters.submissionStatus === "needs_revision") return "Needs revision";
+  if (filters.submissionStatus === "needs_revision") return "Revision";
   if (filters.status === "draft") return "Draft";
-  if (filters.visibilityState === "storefront_visible") return "Storefront visible";
-  if (filters.visibilityState === "published_blocked") return "Published blocked";
-  return "All products";
+  if (filters.visibilityState === "storefront_visible") return "Visible";
+  if (filters.visibilityState === "published_blocked") return "Blocked";
+  return "All";
 };
 
 const getSubmissionReason = (submission) =>
@@ -236,22 +308,20 @@ const compactTableCellClass = "px-3 py-2.5 align-top text-sm text-slate-700";
 const compactTextLinkClass =
   "inline-flex h-8 items-center whitespace-nowrap px-1 text-xs font-semibold text-slate-500 transition hover:text-slate-900";
 
-const getCompactStockLabel = (item) => {
+const getCompactStockMeta = (item) => {
   const stock = Number(item?.inventory?.stock ?? item?.availability?.stock ?? 0);
-  if (stock <= 0) return "Out";
-  if (stock <= 10) return "Low";
-  return "Ready";
+  if (stock <= 0) return { label: "Out of stock", toneClass: "text-rose-600" };
+  if (stock <= 10) return { label: "Low stock", toneClass: "text-amber-600" };
+  return { label: "Ready", toneClass: "text-emerald-600" };
 };
 
 const getCompactSubmissionHint = (item) => {
-  if (item?.submission?.status === "submitted") return "Sent to admin review";
-  if (item?.submission?.status === "needs_revision") {
-    return "Apply the requested changes, then send it again";
-  }
-  if (isReadyToSubmitItem(item)) return "Ready to send into admin review now";
-  if (item?.authoring?.canEditDraft) return "Keep editing in seller workspace";
-  if (item?.status === "draft") return "Draft stays in seller workspace for now";
-  return "Read-only in seller workspace";
+  if (item?.submission?.status === "submitted") return "In review";
+  if (item?.submission?.status === "needs_revision") return "Fix then resend";
+  if (isReadyToSubmitItem(item)) return "Ready now";
+  if (item?.authoring?.canEditDraft) return "Edit draft";
+  if (item?.status === "draft") return "Draft";
+  return "Read-only";
 };
 
 const getCompactSubmissionLabel = (item) => {
@@ -284,25 +354,12 @@ const getLifecycleTone = (item) => {
 };
 
 const getCompactVisibilityHint = (item) => {
-  if (item?.visibility?.storefrontVisible) return "Customers can see this product now";
+  if (item?.visibility?.storefrontVisible) return "Storefront on";
   if (item?.visibility?.stateCode === "PUBLISHED_BLOCKED") {
-    return "Publish is on, but lifecycle still blocks storefront visibility";
+    return "Publish on, state blocked";
   }
-  return "Only seller and admin can see this product";
+  return "Seller/Admin only";
 };
-
-const BULK_ACTION_OPTIONS = [
-  {
-    value: "submit_review",
-    label: "Submit selected drafts",
-    description: "Only draft products that have not been submitted yet.",
-  },
-  {
-    value: "resubmit_review",
-    label: "Resubmit selected revisions",
-    description: "Only draft products currently in needs revision.",
-  },
-];
 
 const isItemEligibleForBulkAction = (item, action) => {
   if (!item || action === "") return false;
@@ -339,12 +396,12 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
   const permissionKeys = sellerContext?.access?.permissionKeys || [];
   const canViewProducts = permissionKeys.includes("PRODUCT_VIEW");
   const canEditProducts = permissionKeys.includes("PRODUCT_EDIT");
+  const canPublishProducts = permissionKeys.includes("PRODUCT_PUBLISH");
   const [draftFilters, setDraftFilters] = useState(DEFAULT_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState(DEFAULT_FILTERS);
   const [actionNotice, setActionNotice] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
-  const [bulkAction, setBulkAction] = useState("");
   const [submittingProductId, setSubmittingProductId] = useState(null);
   const isLanding = variant === "landing";
 
@@ -352,6 +409,7 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
     queryKey: ["seller", "products", storeId, appliedFilters],
     queryFn: () => getSellerProducts(storeId, appliedFilters),
     enabled: Boolean(storeId) && canViewProducts,
+    placeholderData: prevData,
     retry: false,
   });
 
@@ -362,6 +420,12 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
       setActionNotice(null);
     },
     onSuccess: async (data, productId) => {
+      setSelectedIds((current) => {
+        if (!current.has(Number(productId))) return current;
+        const next = new Set(current);
+        next.delete(Number(productId));
+        return next;
+      });
       setActionNotice({
         type: "success",
         message:
@@ -410,7 +474,6 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
         if (successfulIds.size === 0) return current;
         return new Set([...current].filter((id) => !successfulIds.has(Number(id))));
       });
-      setBulkAction("");
       setActionNotice({
         type:
           successCount > 0 && failureCount > 0
@@ -443,6 +506,34 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
       setActionNotice({
         type: "error",
         message: getBulkActionErrorMessage(error),
+      });
+    },
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: ({ productId, published }) =>
+      setSellerProductPublished(storeId, productId, published),
+    onMutate: () => {
+      setActionNotice(null);
+    },
+    onSuccess: async (data) => {
+      setActionNotice({
+        type: "success",
+        message: data?.published
+          ? "Product published and synced to storefront visibility."
+          : "Product hidden from storefront.",
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["seller", "products", storeId] }),
+        queryClient.invalidateQueries({
+          queryKey: ["seller", "products", "detail", storeId, data?.id],
+        }),
+      ]);
+    },
+    onError: (error) => {
+      setActionNotice({
+        type: "error",
+        message: getPublishActionErrorMessage(error),
       });
     },
   });
@@ -504,14 +595,26 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
     [selectedIds]
   );
   const selectedCount = selectedIdList.length;
+  const isListRefreshing = productsQuery.isFetching && !productsQuery.isLoading;
   const allVisibleSelected = itemIds.length > 0 && itemIds.every((id) => selectedIds.has(id));
-  const selectedEligibleIds = useMemo(
+  const selectedReadyToSubmitIds = useMemo(
     () =>
-      selectedIdList.filter((id) => isItemEligibleForBulkAction(itemMap.get(id), bulkAction)),
-    [bulkAction, itemMap, selectedIdList]
+      selectedIdList.filter((id) =>
+        isItemEligibleForBulkAction(itemMap.get(id), "submit_review")
+      ),
+    [itemMap, selectedIdList]
   );
-  const skippedSelectionCount =
-    bulkAction && selectedCount > 0 ? selectedCount - selectedEligibleIds.length : 0;
+  const selectedRevisionIds = useMemo(
+    () =>
+      selectedIdList.filter((id) =>
+        isItemEligibleForBulkAction(itemMap.get(id), "resubmit_review")
+      ),
+    [itemMap, selectedIdList]
+  );
+  const selectedBlockedCount = Math.max(
+    0,
+    selectedCount - selectedReadyToSubmitIds.length - selectedRevisionIds.length
+  );
 
   useEffect(() => {
     setSelectedIds((current) => {
@@ -523,12 +626,14 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
   }, [itemIds]);
 
   const applyFilters = () => {
+    setSelectedIds(new Set());
     setAppliedFilters((current) => ({
       ...current,
       keyword: String(draftFilters.keyword || "").trim(),
       status: String(draftFilters.status || ""),
       submissionStatus: String(draftFilters.submissionStatus || ""),
       visibilityState: String(draftFilters.visibilityState || ""),
+      limit: Number(draftFilters.limit || 20) || 20,
       page: 1,
     }));
   };
@@ -536,6 +641,7 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
   const resetFilters = () => {
     setDraftFilters(DEFAULT_FILTERS);
     setAppliedFilters(DEFAULT_FILTERS);
+    setSelectedIds(new Set());
   };
 
   const emptyStateAction =
@@ -552,11 +658,13 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
     ) : null;
 
   const updatePage = (page) => {
+    setSelectedIds(new Set());
     setDraftFilters((current) => ({ ...current, page }));
     setAppliedFilters((current) => ({ ...current, page }));
   };
 
   const applyQuickLane = (nextPartial) => {
+    setSelectedIds(new Set());
     const nextDraft = {
       ...draftFilters,
       ...nextPartial,
@@ -657,15 +765,14 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
 
   const clearSelection = () => {
     setSelectedIds(new Set());
-    setBulkAction("");
   };
 
-  const handleApplyBulkAction = () => {
-    if (!canEditProducts || !bulkAction || selectedEligibleIds.length === 0) return;
+  const handleApplyBulkAction = (action, ids) => {
+    if (!canEditProducts || !action || !Array.isArray(ids) || ids.length === 0) return;
     bulkMutation.mutate({
-      action: bulkAction,
-      ids: selectedEligibleIds,
-      skippedCount: skippedSelectionCount,
+      action,
+      ids,
+      skippedCount: Math.max(0, selectedCount - ids.length),
     });
   };
 
@@ -709,22 +816,49 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
       <SellerWorkspaceSectionHeader
         eyebrow={null}
         title="Products"
-        description={null}
+        description="Seller catalog for drafts, review flow, and live state."
         actions={
-          canCreateDraft ? (
-            <Link to={workspaceRoutes.productCreate()} className={sellerPrimaryButtonClass}>
-              <Plus className="h-4 w-4" />
-              Add Product
-            </Link>
-          ) : null
+          <>
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={isExporting || bulkMutation.isPending}
+              className={sellerSecondaryButtonClass}
+            >
+              <Download className="h-4 w-4" />
+              {isExporting ? "Exporting..." : "Export"}
+            </button>
+            {canCreateDraft ? (
+              <Link to={workspaceRoutes.productCreate()} className={sellerPrimaryButtonClass}>
+                <Plus className="h-4 w-4" />
+                Add Product
+              </Link>
+            ) : null}
+          </>
         }
       >
         <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <span>{pagination.total} in result</span>
+          <span className="text-slate-300">/</span>
+          <span>{summary.totalProducts} in store</span>
+          <span className="text-slate-300">/</span>
           <span>{getCurrentLaneLabel(appliedFilters)}</span>
           {activeFilterCount > 0 ? (
             <>
               <span className="text-slate-300">/</span>
               <span>{activeFilterCount} filters</span>
+            </>
+          ) : null}
+          {selectedCount > 0 ? (
+            <>
+              <span className="text-slate-300">/</span>
+              <span>{selectedCount} selected</span>
+            </>
+          ) : null}
+          {isListRefreshing ? (
+            <>
+              <span className="text-slate-300">/</span>
+              <span className="font-medium text-slate-700">Refreshing...</span>
             </>
           ) : null}
         </div>
@@ -752,105 +886,162 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
       ) : null}
 
       <SellerWorkspacePanel className="p-3.5 sm:p-4">
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="space-y-4">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
             <CompactSummaryItem label="Total" value={String(summary.totalProducts)} />
             <CompactSummaryItem
               label="Result set"
               value={String(pagination.total)}
               tone={activeFilterCount > 0 ? "sky" : "slate"}
+              Icon={Filter}
             />
-            <CompactSummaryItem label="Drafts" value={String(summary.drafts)} tone="amber" />
+            <CompactSummaryItem
+              label="Drafts"
+              value={String(summary.drafts)}
+              tone="amber"
+              Icon={Pencil}
+            />
             {canEditProducts ? (
               <CompactSummaryItem
                 label="Ready"
                 value={String(summary.readyToSubmit || 0)}
                 tone="emerald"
+                Icon={CheckCircle2}
               />
             ) : null}
             <CompactSummaryItem
               label="Review queue"
               value={String(summary.reviewQueue)}
               tone="sky"
+              Icon={Clock3}
             />
             <CompactSummaryItem
               label="Needs revision"
               value={String(summary.needsRevision)}
               tone="amber"
+              Icon={AlertTriangle}
             />
-            <CompactSummaryItem label="Live" value={String(summary.storefrontVisible)} tone="emerald" />
-            <CompactSummaryItem label="Active" value={String(summary.active)} tone="emerald" />
-            <CompactSummaryItem label="Inactive" value={String(summary.inactive)} />
+            <CompactSummaryItem
+              label="Live"
+              value={String(summary.storefrontVisible)}
+              tone="emerald"
+              Icon={Eye}
+            />
+            <CompactSummaryItem
+              label="Blocked"
+              value={String(summary.publishedBlocked)}
+              tone="amber"
+              Icon={AlertTriangle}
+            />
+            <CompactSummaryItem
+              label="Internal"
+              value={String(summary.internalOnly)}
+              Icon={Boxes}
+            />
           </div>
 
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-            <div className="relative min-w-0 flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type="search"
-                value={draftFilters.keyword}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({
-                    ...current,
-                    keyword: event.target.value,
-                  }))
-                }
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") applyFilters();
-                }}
-                placeholder="Search name, slug, or SKU"
-                className={`${sellerFieldClass} h-9 pl-9`}
-              />
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+            <div className="w-full xl:max-w-md">
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                Search
+              </p>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="search"
+                  value={draftFilters.keyword}
+                  onChange={(event) =>
+                    setDraftFilters((current) => ({
+                      ...current,
+                      keyword: event.target.value,
+                    }))
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") applyFilters();
+                  }}
+                  placeholder="Search name, slug, or SKU"
+                  className={`${sellerFieldClass} h-10 pl-9`}
+                />
+              </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+            <div className="flex flex-wrap items-end gap-2 xl:justify-end">
+              <div>
+                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Lifecycle
+                </p>
+                <select
+                  value={draftFilters.status}
+                  onChange={(event) =>
+                    setDraftFilters((current) => ({
+                      ...current,
+                      status: event.target.value,
+                    }))
+                  }
+                  className={`${sellerFieldClass} h-10 w-full sm:w-[148px]`}
+                >
+                  <option value="">All lifecycle</option>
+                  <option value="draft">Draft</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+              <div>
+                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Submission
+                </p>
+                <select
+                  value={draftFilters.submissionStatus}
+                  onChange={(event) =>
+                    setDraftFilters((current) => ({
+                      ...current,
+                      submissionStatus: event.target.value,
+                    }))
+                  }
+                  className={`${sellerFieldClass} h-10 w-full sm:w-[172px]`}
+                >
+                  <option value="">All submission</option>
+                  {canEditProducts ? (
+                    <option value="ready_to_submit">Ready to submit</option>
+                  ) : null}
+                  <option value="none">Not submitted</option>
+                  <option value="submitted">Submitted</option>
+                  <option value="needs_revision">Needs revision</option>
+                  <option value="review_queue">Review queue</option>
+                </select>
+              </div>
+              <div>
+                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Visibility
+                </p>
+                <select
+                  value={draftFilters.visibilityState}
+                  onChange={(event) =>
+                    setDraftFilters((current) => ({
+                      ...current,
+                      visibilityState: event.target.value,
+                    }))
+                  }
+                  className={`${sellerFieldClass} h-10 w-full sm:w-[172px]`}
+                >
+                  <option value="">All visibility</option>
+                  <option value="internal_only">Internal only</option>
+                  <option value="storefront_visible">Storefront visible</option>
+                  <option value="published_blocked">Published blocked</option>
+                </select>
+              </div>
               <select
-                value={draftFilters.status}
+                value={String(draftFilters.limit || 20)}
                 onChange={(event) =>
                   setDraftFilters((current) => ({
                     ...current,
-                    status: event.target.value,
+                    limit: Number(event.target.value) || 20,
                   }))
                 }
-                className={`${sellerFieldClass} h-9 w-full sm:w-[132px]`}
+                className={`${sellerFieldClass} h-10 w-full sm:w-[128px]`}
               >
-                <option value="">All status</option>
-                <option value="draft">Draft</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
-              <select
-                value={draftFilters.submissionStatus}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({
-                    ...current,
-                    submissionStatus: event.target.value,
-                  }))
-                }
-                className={`${sellerFieldClass} h-9 w-full sm:w-[150px]`}
-              >
-                <option value="">All submission</option>
-                {canEditProducts ? (
-                  <option value="ready_to_submit">Ready to submit</option>
-                ) : null}
-                <option value="none">Not submitted</option>
-                <option value="submitted">Submitted</option>
-                <option value="needs_revision">Needs revision</option>
-                <option value="review_queue">Review queue</option>
-              </select>
-              <select
-                value={draftFilters.visibilityState}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({
-                    ...current,
-                    visibilityState: event.target.value,
-                  }))
-                }
-                className={`${sellerFieldClass} h-9 w-full sm:w-[150px]`}
-              >
-                <option value="">All visibility</option>
-                <option value="internal_only">Internal only</option>
-                <option value="storefront_visible">Storefront visible</option>
-                <option value="published_blocked">Published blocked</option>
+                <option value="20">20 rows</option>
+                <option value="30">30 rows</option>
+                <option value="50">50 rows</option>
               </select>
               <button type="button" onClick={applyFilters} className={sellerPrimaryButtonClass}>
                 <Filter className="h-4 w-4" />
@@ -860,22 +1051,34 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                 <RotateCcw className="h-4 w-4" />
                 Reset
               </button>
-              <button
-                type="button"
-                onClick={handleExport}
-                disabled={isExporting || bulkMutation.isPending}
-                className={sellerSecondaryButtonClass}
-              >
-                <Download className="h-4 w-4" />
-                {isExporting ? "Exporting..." : "Export"}
-              </button>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2.5">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-3.5 py-3">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <span className="font-semibold uppercase tracking-[0.08em] text-slate-700">
+                View
+              </span>
+              <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-700">
+                {getCurrentLaneLabel(appliedFilters)}
+              </span>
+              <span>{pagination.total} matching rows</span>
+              {activeFilterCount > 0 ? <span>{activeFilterCount} active filter(s)</span> : null}
+              {selectedCount > 0 ? <span>{selectedCount} selected</span> : null}
+            </div>
+          </div>
+
+          <div className="grid gap-3 border-t border-slate-100 pt-3 xl:grid-cols-[170px_minmax(0,1fr)] xl:items-start">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                Submission lane
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
               <ReviewQueueCard
                 label="All"
                 count={summary.totalProducts}
+                Icon={Boxes}
                 active={
                   !appliedFilters.status &&
                   !appliedFilters.submissionStatus &&
@@ -893,6 +1096,7 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                 label="Draft"
                 count={summary.drafts}
                 tone="amber"
+                Icon={Pencil}
                 active={appliedFilters.status === "draft"}
                 onClick={() =>
                   applyQuickLane({
@@ -907,6 +1111,7 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                   label="Ready"
                   count={summary.readyToSubmit || 0}
                   tone="emerald"
+                  Icon={CheckCircle2}
                   active={appliedFilters.submissionStatus === "ready_to_submit"}
                   onClick={() =>
                     applyQuickLane({
@@ -921,6 +1126,7 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                 label="Submitted"
                 count={summary.submitted}
                 tone="sky"
+                Icon={Clock3}
                 active={appliedFilters.submissionStatus === "submitted"}
                 onClick={() =>
                   applyQuickLane({
@@ -934,6 +1140,7 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                 label="Review queue"
                 count={summary.reviewQueue}
                 tone="sky"
+                Icon={Clock3}
                 active={appliedFilters.submissionStatus === "review_queue"}
                 onClick={() =>
                   applyQuickLane({
@@ -947,6 +1154,7 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                 label="Revision"
                 count={summary.needsRevision}
                 tone="amber"
+                Icon={AlertTriangle}
                 active={appliedFilters.submissionStatus === "needs_revision"}
                 onClick={() =>
                   applyQuickLane({
@@ -956,10 +1164,21 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                   })
                 }
               />
+            </div>
+          </div>
+
+          <div className="grid gap-3 xl:grid-cols-[170px_minmax(0,1fr)] xl:items-start">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                Catalog state
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
               <ReviewQueueCard
                 label="Active"
                 count={summary.active}
                 tone="emerald"
+                Icon={CheckCircle2}
                 active={appliedFilters.status === "active"}
                 onClick={() =>
                   applyQuickLane({
@@ -973,6 +1192,7 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                 label="Visible"
                 count={summary.storefrontVisible}
                 tone="emerald"
+                Icon={Eye}
                 active={appliedFilters.visibilityState === "storefront_visible"}
                 onClick={() =>
                   applyQuickLane({
@@ -986,6 +1206,7 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                 label="Blocked"
                 count={summary.publishedBlocked}
                 tone="amber"
+                Icon={AlertTriangle}
                 active={appliedFilters.visibilityState === "published_blocked"}
                 onClick={() =>
                   applyQuickLane({
@@ -998,6 +1219,7 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
               <ReviewQueueCard
                 label="Inactive"
                 count={summary.inactive}
+                Icon={Boxes}
                 active={appliedFilters.status === "inactive"}
                 onClick={() =>
                   applyQuickLane({
@@ -1007,6 +1229,7 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                   })
                 }
               />
+            </div>
           </div>
 
           {appliedFilterPills.length > 0 ? (
@@ -1047,7 +1270,7 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
       </SellerWorkspacePanel>
 
       <SellerWorkspacePanel className="p-4">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-semibold text-slate-900">Product list</h3>
             <p className="mt-1 text-xs text-slate-500">
@@ -1056,78 +1279,118 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
               {summary.totalProducts} total in this store
             </p>
           </div>
-          {canEditProducts && bulkAction && skippedSelectionCount > 0 ? (
-            <span className="text-xs text-amber-700">{skippedSelectionCount} skipped</span>
+          {isListRefreshing ? (
+            <span className="text-xs font-medium text-slate-500">Refreshing result set...</span>
           ) : null}
         </div>
 
         {items.length > 0 ? (
           <div className="mt-3">
             {canEditProducts ? (
-              <div className="mb-2 flex flex-col gap-2 border-b border-slate-100 pb-2 xl:flex-row xl:items-center xl:justify-between">
-                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                  {selectedCount > 0 ? (
-                    <>
-                      <span className="font-medium text-slate-700">{selectedCount} selected</span>
-                      {bulkAction && skippedSelectionCount > 0 ? (
-                        <span className="text-amber-700">{skippedSelectionCount} skipped</span>
-                      ) : null}
-                    </>
-                  ) : (
-                    <span>Bulk select draft rows for submit or resubmit.</span>
-                  )}
-                </div>
+              <div className="mb-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
                 {selectedCount > 0 ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <select
-                      value={bulkAction}
-                      onChange={(event) => setBulkAction(event.target.value)}
-                      className={`${sellerFieldClass} h-9 w-full min-w-[190px] xl:w-[220px]`}
-                      disabled={bulkMutation.isPending || !canEditProducts}
-                    >
-                      <option value="">Choose bulk action</option>
-                      {BULK_ACTION_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={handleApplyBulkAction}
-                      disabled={
-                        bulkMutation.isPending ||
-                        !canEditProducts ||
-                        !bulkAction ||
-                        selectedEligibleIds.length === 0
-                      }
-                      className={compactPrimaryActionButtonClass}
-                    >
-                      <Send className="h-3.5 w-3.5" />
-                      {bulkMutation.isPending ? "Applying..." : "Apply"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleExportSelected}
-                      disabled={isExporting}
-                      className={compactActionButtonClass}
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                      {isExporting ? "Exporting..." : "Export"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={clearSelection}
-                      className={compactActionButtonClass}
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" />
-                      Clear
-                    </button>
+                  <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <CompactMetricPill
+                        label="Selected"
+                        value={selectedCount}
+                        Icon={Layers3}
+                        title="Selected rows"
+                      />
+                      <CompactMetricPill
+                        label="Ready"
+                        value={selectedReadyToSubmitIds.length}
+                        tone="emerald"
+                        Icon={CheckCircle2}
+                        title="Draft rows ready to submit"
+                      />
+                      <CompactMetricPill
+                        label="Revision"
+                        value={selectedRevisionIds.length}
+                        tone="sky"
+                        Icon={Clock3}
+                        title="Revision rows ready to resubmit"
+                      />
+                      {selectedBlockedCount > 0 ? (
+                        <CompactMetricPill
+                          label="Blocked"
+                          value={selectedBlockedCount}
+                          tone="amber"
+                          Icon={AlertTriangle}
+                          title="Selected rows that cannot run the current seller action"
+                        />
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleApplyBulkAction("submit_review", selectedReadyToSubmitIds)
+                        }
+                        disabled={
+                          bulkMutation.isPending ||
+                          !canEditProducts ||
+                          selectedReadyToSubmitIds.length === 0
+                        }
+                        className={compactPrimaryActionButtonClass}
+                      >
+                        <Send className="h-3.5 w-3.5" />
+                        {bulkMutation.isPending
+                          ? "Submitting..."
+                          : `Submit drafts (${selectedReadyToSubmitIds.length})`}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleApplyBulkAction("resubmit_review", selectedRevisionIds)
+                        }
+                        disabled={
+                          bulkMutation.isPending ||
+                          !canEditProducts ||
+                          selectedRevisionIds.length === 0
+                        }
+                        className={compactActionButtonClass}
+                      >
+                        <Send className="h-3.5 w-3.5" />
+                        {bulkMutation.isPending
+                          ? "Resubmitting..."
+                          : `Resubmit revisions (${selectedRevisionIds.length})`}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleExportSelected}
+                        disabled={isExporting || selectedCount === 0}
+                        className={compactActionButtonClass}
+                        title="Export selected rows"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        {isExporting ? "Exporting..." : "Export"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={clearSelection}
+                        className={compactActionButtonClass}
+                        title="Clear current selection"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        Clear
+                      </button>
+                    </div>
                   </div>
-                ) : null}
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                    <CompactMetricPill label="Select rows" value="Bulk" Icon={Layers3} />
+                    <CompactMetricPill
+                      label="Seller actions"
+                      value="Submit / Resubmit / Export"
+                      Icon={Send}
+                      title="Seller bulk actions stay limited to review submission flow"
+                    />
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="mb-2 border-b border-slate-100 pb-2 text-xs text-slate-500">
+              <div className="mb-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-3 text-xs text-slate-500">
                 This role can review the current seller result set, but draft submit actions stay
                 hidden.
               </div>
@@ -1167,11 +1430,18 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                       canEditProducts &&
                         (item.submission?.canSubmit || item.submission?.canResubmit)
                     );
+                    const canPublish = Boolean(item.publishing?.canPublish && canPublishProducts);
+                    const canUnpublish = Boolean(item.publishing?.canUnpublish && canPublishProducts);
+                    const isSelected = selectedIds.has(Number(item.id));
                     const isSubmitting = submitMutation.isPending && submittingProductId === item.id;
+                    const isPublishing =
+                      publishMutation.isPending &&
+                      Number(publishMutation.variables?.productId) === Number(item.id);
                     const submissionReason = getSubmissionReason(item.submission);
                     const waitingForAdmin = item.submission?.status === "submitted";
                     const needsRevision = item.submission?.status === "needs_revision";
                     const readyToSubmit = isReadyToSubmitItem(item);
+                    const stockMeta = getCompactStockMeta(item);
                     const submissionHint =
                       item.submission?.nextActionDescription || getCompactSubmissionHint(item);
                     const submissionTimelineLabel = waitingForAdmin
@@ -1183,7 +1453,10 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                         : null;
 
                     return (
-                      <tr key={item.id}>
+                      <tr
+                        key={item.id}
+                        className={`transition ${isSelected ? "bg-emerald-50/50" : "hover:bg-slate-50/80"}`}
+                      >
                         {canEditProducts ? (
                           <td className={`${compactTableCellClass} align-top`}>
                             <input
@@ -1212,139 +1485,243 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                               <Link
                                 to={workspaceRoutes.productDetail(item.id)}
                                 className="line-clamp-2 text-sm font-semibold text-slate-900 hover:text-emerald-600"
+                                title={item.name}
                               >
                                 {item.name}
                               </Link>
-                              <p className="mt-1 truncate text-xs text-slate-500">
-                                {item.slug}
-                                {item.sku ? ` · SKU ${item.sku}` : ""}
-                              </p>
+                              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                                <CompactMetaItem Icon={Tag} label={item.slug} title={item.slug} />
+                                {item.sku ? (
+                                  <CompactMetaItem
+                                    Icon={Tag}
+                                    label={item.sku}
+                                    title={`SKU ${item.sku}`}
+                                  />
+                                ) : null}
+                                <CompactMetaItem Icon={Clock3} label={formatDateTime(item.updatedAt)} />
+                              </div>
                               <div className="mt-2 flex flex-wrap items-center gap-2">
                                 <SellerWorkspaceBadge
                                   label={getCompactLifecycleLabel(item)}
                                   tone={getLifecycleTone(item)}
                                   className="px-2.5 py-1 text-[11px]"
                                 />
-                              </div>
-                              <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
-                                <span>Updated {formatDateTime(item.updatedAt)}</span>
+                                {item.pricing?.salePrice ? (
+                                  <span
+                                    className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700"
+                                    title="Promo price active"
+                                  >
+                                    <Tag className="h-3.5 w-3.5" />
+                                    Promo
+                                  </span>
+                                ) : null}
                               </div>
                             </div>
                           </div>
                         </td>
                         <td className={compactTableCellClass}>
-                          <span className="text-sm text-slate-700">{item.category?.name || "Uncategorized"}</span>
+                          <span
+                            className="inline-flex min-h-6 items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700"
+                            title={item.category?.name || "Uncategorized"}
+                          >
+                            <Layers3 className="h-3.5 w-3.5" />
+                            {item.category?.name || "Uncategorized"}
+                          </span>
                           {item.category?.code ? (
                             <p className="mt-1 text-xs text-slate-400">{item.category.code}</p>
                           ) : null}
                         </td>
                         <td className={`${compactTableCellClass} text-right font-semibold text-slate-900`}>
-                          {formatCurrency(item.pricing?.price)}
+                          <div className="space-y-0.5">
+                            <div>{formatCurrency(item.pricing?.price)}</div>
+                            <div className="text-[10px] font-medium text-slate-400">Base</div>
+                          </div>
                         </td>
                         <td className={`${compactTableCellClass} text-right`}>
                           {item.pricing?.salePrice ? (
-                            <span className="font-semibold text-emerald-700">
-                              {formatCurrency(item.pricing.salePrice)}
-                            </span>
+                            <div className="space-y-0.5">
+                              <div className="font-semibold text-emerald-700">
+                                {formatCurrency(item.pricing.salePrice)}
+                              </div>
+                              <div className="text-[10px] font-medium text-emerald-600">Promo</div>
+                            </div>
                           ) : (
                             <span className="text-slate-400">No sale</span>
                           )}
                         </td>
                         <td className={compactTableCellClass}>
-                          <p className="font-medium text-slate-900">
+                          <p className="inline-flex items-center gap-1.5 font-medium text-slate-900">
+                            <Package className="h-3.5 w-3.5 text-slate-400" />
                             {item.inventory?.stock ?? item.availability?.stock ?? 0}
                           </p>
-                          <p className="mt-1 text-xs text-slate-500">{getCompactStockLabel(item)}</p>
-                        </td>
-                        <td className={compactTableCellClass}>
-                          <SellerWorkspaceBadge
-                            label={getCompactSubmissionLabel(item)}
-                            tone={getSubmissionTone(item)}
-                            className="px-2.5 py-1 text-[11px]"
-                          />
-                          <p className="mt-1 text-xs text-slate-500">{submissionHint}</p>
-                          {submissionTimelineLabel ? (
-                            <p className="mt-1 text-xs text-slate-400">{submissionTimelineLabel}</p>
-                          ) : null}
-                          {submissionReason ? (
-                            <p className="mt-1 line-clamp-2 text-xs text-amber-700">{submissionReason}</p>
-                          ) : null}
-                        </td>
-                        <td className={compactTableCellClass}>
-                          <SellerWorkspaceBadge
-                            label={getCompactVisibilityLabel(item)}
-                            tone={getVisibilityTone(item.visibility)}
-                            className="px-2.5 py-1 text-[11px]"
-                          />
-                          <p className="mt-1 text-xs text-slate-500">
-                            {getCompactVisibilityHint(item)}
+                          <p
+                            className={`mt-1 text-xs font-medium ${stockMeta.toneClass}`}
+                            title={stockMeta.label}
+                          >
+                            {stockMeta.label}
                           </p>
                         </td>
+                        <td className={compactTableCellClass}>
+                          <div className="space-y-1">
+                            <span
+                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700"
+                              title={submissionHint}
+                            >
+                              {needsRevision ? (
+                                <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                              ) : waitingForAdmin ? (
+                                <Clock3 className="h-3.5 w-3.5 text-sky-600" />
+                              ) : readyToSubmit ? (
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                              ) : (
+                                <Pencil className="h-3.5 w-3.5 text-slate-400" />
+                              )}
+                              {getCompactSubmissionLabel(item)}
+                            </span>
+                            {submissionTimelineLabel ? (
+                              <p className="text-[11px] text-slate-400" title={submissionTimelineLabel}>
+                                {submissionTimelineLabel}
+                              </p>
+                            ) : null}
+                          </div>
+                          {submissionReason ? (
+                            <p
+                              className="mt-1 line-clamp-1 text-[11px] text-amber-700"
+                              title={submissionReason}
+                            >
+                              {submissionReason}
+                            </p>
+                          ) : null}
+                        </td>
+                        <td className={compactTableCellClass}>
+                          <div className="space-y-1">
+                            <span
+                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700"
+                              title={getCompactVisibilityHint(item)}
+                            >
+                              {item.visibility?.storefrontVisible ? (
+                                <Eye className="h-3.5 w-3.5 text-emerald-600" />
+                              ) : item.visibility?.stateCode === "PUBLISHED_BLOCKED" ? (
+                                <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                              ) : (
+                                <Boxes className="h-3.5 w-3.5 text-slate-400" />
+                              )}
+                              {getCompactVisibilityLabel(item)}
+                            </span>
+                            <p className="text-[11px] text-slate-400">{getCompactVisibilityHint(item)}</p>
+                          </div>
+                        </td>
                         <td className={`${compactTableCellClass} whitespace-nowrap`}>
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            {readyToSubmit && canSubmit ? (
-                              <button
-                                type="button"
-                                onClick={() => submitMutation.mutate(item.id)}
-                                disabled={isSubmitting}
-                                className={compactPrimaryActionButtonClass}
-                              >
-                                <Send className="h-3.5 w-3.5" />
-                                {isSubmitting ? "Submitting..." : "Submit"}
-                              </button>
-                            ) : null}
-                            {canEditDraft ? (
-                              <Link
-                                to={workspaceRoutes.productEdit(item.id)}
-                                className={
-                                  needsRevision || !readyToSubmit
-                                    ? compactPrimaryActionButtonClass
-                                    : compactActionButtonClass
-                                }
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                                {needsRevision ? "Revise" : "Edit"}
-                              </Link>
-                            ) : null}
-                            {canSubmit && !readyToSubmit ? (
-                              <button
-                                type="button"
-                                onClick={() => submitMutation.mutate(item.id)}
-                                disabled={isSubmitting}
-                                className={compactActionButtonClass}
-                              >
-                                <Send className="h-3.5 w-3.5" />
-                                {isSubmitting ? "Submitting..." : needsRevision ? "Resubmit" : "Submit"}
-                              </button>
-                            ) : null}
-                            {!canEditDraft && !canSubmit && waitingForAdmin ? (
-                              <span className="text-xs font-medium text-sky-700">
-                                In review
+                            <div className="space-y-1.5">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {canPublish ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      publishMutation.mutate({
+                                        productId: item.id,
+                                        published: true,
+                                      })
+                                    }
+                                    disabled={isPublishing}
+                                    className={compactPrimaryActionButtonClass}
+                                  >
+                                    <Eye className="h-3.5 w-3.5" />
+                                    {isPublishing ? "Publishing..." : "Publish"}
+                                  </button>
+                                ) : null}
+                                {canUnpublish ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      publishMutation.mutate({
+                                        productId: item.id,
+                                        published: false,
+                                      })
+                                    }
+                                    disabled={isPublishing}
+                                    className={compactActionButtonClass}
+                                  >
+                                    <Boxes className="h-3.5 w-3.5" />
+                                    {isPublishing ? "Updating..." : "Unpublish"}
+                                  </button>
+                                ) : null}
+                                {readyToSubmit && canSubmit ? (
+                                  <button
+                                    type="button"
+                                  onClick={() => submitMutation.mutate(item.id)}
+                                  disabled={isSubmitting}
+                                  className={compactPrimaryActionButtonClass}
+                                >
+                                  <Send className="h-3.5 w-3.5" />
+                                  {isSubmitting ? "Submitting..." : "Submit"}
+                                </button>
+                              ) : null}
+                              {canEditDraft ? (
+                                <Link
+                                  to={workspaceRoutes.productEdit(item.id)}
+                                  className={
+                                    needsRevision || !readyToSubmit
+                                      ? compactPrimaryActionButtonClass
+                                      : compactActionButtonClass
+                                  }
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                  {needsRevision ? "Revise" : "Edit"}
+                                </Link>
+                              ) : null}
+                              {canSubmit && !readyToSubmit ? (
+                                <button
+                                  type="button"
+                                  onClick={() => submitMutation.mutate(item.id)}
+                                  disabled={isSubmitting}
+                                  className={compactActionButtonClass}
+                                >
+                                  <Send className="h-3.5 w-3.5" />
+                                  {isSubmitting
+                                    ? "Submitting..."
+                                    : needsRevision
+                                      ? "Resubmit"
+                                      : "Submit"}
+                                </button>
+                              ) : null}
+                              {(canSubmit ||
+                                canEditDraft ||
+                                waitingForAdmin ||
+                                item.visibility?.storefrontVisible) ? (
+                                <Link
+                                  to={workspaceRoutes.productDetail(item.id)}
+                                  className={compactTextLinkClass}
+                                  title="Open product detail"
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                  Open
+                                </Link>
+                              ) : (
+                                <Link
+                                  to={workspaceRoutes.productDetail(item.id)}
+                                  className={compactPrimaryActionButtonClass}
+                                  title="Open product detail"
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                  Open
+                                </Link>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 text-[10px] font-medium">
+                              {!canEditDraft && !canSubmit && waitingForAdmin ? (
+                                <span className="text-sky-700">In review</span>
+                              ) : item.visibility?.storefrontVisible ? (
+                                <span className="text-emerald-700">Live</span>
+                              ) : item.status === "inactive" ? (
+                                <span className="text-slate-500">Read-only</span>
+                              ) : null}
+                              <span className="text-slate-400">
+                                {item.publishing?.nextActionLabel ||
+                                  item.submission?.nextActionLabel ||
+                                  "Check status"}
                               </span>
-                            ) : item.visibility?.storefrontVisible ? (
-                              <span className="text-xs font-medium text-emerald-700">
-                                Live
-                              </span>
-                            ) : item.status === "inactive" ? (
-                              <span className="text-xs font-medium text-slate-500">
-                                Read-only
-                              </span>
-                            ) : null}
-                            {(canSubmit || canEditDraft || waitingForAdmin || item.visibility?.storefrontVisible) ? (
-                              <Link
-                                to={workspaceRoutes.productDetail(item.id)}
-                                className={compactTextLinkClass}
-                              >
-                                Open
-                              </Link>
-                            ) : (
-                              <Link
-                                to={workspaceRoutes.productDetail(item.id)}
-                                className={compactPrimaryActionButtonClass}
-                              >
-                                Open
-                              </Link>
-                            )}
+                            </div>
                           </div>
                         </td>
                       </tr>

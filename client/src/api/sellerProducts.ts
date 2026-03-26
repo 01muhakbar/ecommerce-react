@@ -22,12 +22,15 @@ type SellerProductDraftPayload = {
   name: string;
   description?: string | null;
   sku?: string | null;
+  barcode?: string | null;
+  slug?: string | null;
   categoryIds?: number[];
   defaultCategoryId?: number | null;
   price?: number;
   salePrice?: number | null;
   stock?: number;
   imageUrls?: string[];
+  tags?: string[];
 };
 
 const PRODUCT_STATUSES = new Set(["active", "inactive", "draft"]);
@@ -99,7 +102,9 @@ const buildVisibility = (
     sellerLabel:
       fallback?.sellerLabel ||
       (!published
-        ? "Private to seller and admin"
+        ? status === "draft"
+          ? "Draft in seller workspace"
+          : "Hidden from storefront"
         : storefrontVisible
           ? "Visible in storefront"
           : "Published but blocked"),
@@ -228,6 +233,33 @@ const normalizeProductAuthoring = (value: any) => {
   };
 };
 
+const normalizeProductPublishing = (value: any) => {
+  if (!value || typeof value !== "object") return null;
+
+  return {
+    stateCode: normalizeText(value.stateCode) || null,
+    label: normalizeText(value.label) || null,
+    isReady: Boolean(value.isReady),
+    canPublish: Boolean(value.canPublish),
+    canUnpublish: Boolean(value.canUnpublish),
+    nextActionLabel: normalizeText(value.nextActionLabel) || null,
+    hint: normalizeText(value.hint) || null,
+    blockedReasons: Array.isArray(value.blockedReasons)
+      ? value.blockedReasons
+          .map((entry: any) =>
+            entry && typeof entry === "object"
+              ? {
+                  field: normalizeText(entry.field) || null,
+                  code: normalizeText(entry.code) || null,
+                  message: normalizeText(entry.message) || null,
+                }
+              : null
+          )
+          .filter(Boolean)
+      : [],
+  };
+};
+
 const normalizeProductSubmission = (value: any) => {
   if (!value || typeof value !== "object") return null;
 
@@ -286,6 +318,7 @@ const normalizeProductListItem = (item: any) => {
       ...normalizeInventory(item.inventory),
       ...normalizeAvailability(item.availability, item.inventory),
     },
+    publishing: normalizeProductPublishing(item.publishing),
     authoring: normalizeProductAuthoring(item.authoring),
     submission: normalizeProductSubmission(item.submission),
     category: normalizeCategorySummary(item.category),
@@ -454,6 +487,7 @@ const normalizeProductDetail = (item: any) => {
       ...normalizeInventory(item.inventory),
       ...normalizeAvailability(item.availability, item.inventory),
     },
+    publishing: normalizeProductPublishing(item.publishing),
     authoring: normalizeProductAuthoring(item.authoring),
     submission: normalizeProductSubmission(item.submission),
     ownership: item.ownership && typeof item.ownership === "object" ? item.ownership : null,
@@ -474,6 +508,23 @@ const normalizeProductDetail = (item: any) => {
         : [],
       totalImages: asNumber(media.totalImages, 0),
     },
+    attributes:
+      item.attributes && typeof item.attributes === "object"
+        ? {
+            ...item.attributes,
+            barcode: normalizeText(item.attributes.barcode) || null,
+            gtin: normalizeText(item.attributes.gtin) || null,
+            tags: Array.isArray(item.attributes.tags)
+              ? item.attributes.tags
+                  .map((entry: unknown) => normalizeText(entry))
+                  .filter(Boolean)
+              : [],
+          }
+        : {
+            barcode: null,
+            gtin: null,
+            tags: [],
+          },
   };
 };
 
@@ -620,6 +671,8 @@ export const getSellerProductAuthoringMeta = async (storeId: number | string) =>
             name: normalizeText(payload.draftDefaults.name),
             description: normalizeText(payload.draftDefaults.description),
             sku: normalizeText(payload.draftDefaults.sku),
+            barcode: normalizeText(payload.draftDefaults.barcode),
+            slug: normalizeText(payload.draftDefaults.slug),
             categoryIds: Array.isArray(payload.draftDefaults.categoryIds)
               ? payload.draftDefaults.categoryIds
                   .map((value: unknown) => asNumber(value, 0))
@@ -636,6 +689,11 @@ export const getSellerProductAuthoringMeta = async (storeId: number | string) =>
             stock: asNumber(payload.draftDefaults.stock, 0),
             imageUrls: Array.isArray(payload.draftDefaults.imageUrls)
               ? payload.draftDefaults.imageUrls
+                  .map((value: unknown) => normalizeText(value))
+                  .filter(Boolean)
+              : [],
+            tags: Array.isArray(payload.draftDefaults.tags)
+              ? payload.draftDefaults.tags
                   .map((value: unknown) => normalizeText(value))
                   .filter(Boolean)
               : [],
@@ -680,6 +738,18 @@ export const submitSellerProductDraftForReview = async (
 ) => {
   const { data } = await api.post(
     `/seller/stores/${storeId}/products/${productId}/submit-review`
+  );
+  return normalizeProductDetail(data?.data ?? null);
+};
+
+export const setSellerProductPublished = async (
+  storeId: number | string,
+  productId: number | string,
+  published: boolean
+) => {
+  const { data } = await api.patch(
+    `/seller/stores/${storeId}/products/${productId}/published`,
+    { published: Boolean(published) }
   );
   return normalizeProductDetail(data?.data ?? null);
 };

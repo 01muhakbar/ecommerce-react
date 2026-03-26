@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   FileText,
+  Globe2,
   ImageIcon,
   Layers3,
   Package,
@@ -14,6 +15,7 @@ import {
 } from "lucide-react";
 import {
   getSellerProductDetail,
+  setSellerProductPublished,
   submitSellerProductDraftForReview,
 } from "../../api/sellerProducts.ts";
 import {
@@ -92,6 +94,26 @@ const getSubmissionErrorMessage = (error) => {
 const getSubmissionReason = (submission) =>
   submission?.reviewNote || submission?.revisionReason || submission?.revisionNote || null;
 
+const getPublishErrorMessage = (error) => {
+  const code = String(error?.response?.data?.code || "").trim().toUpperCase();
+  const message = String(error?.response?.data?.message || "").trim();
+  const blockers = Array.isArray(error?.response?.data?.data?.blockers)
+    ? error.response.data.data.blockers
+    : [];
+
+  if (code === "SELLER_PRODUCT_PUBLISH_NOT_READY" && blockers.length > 0) {
+    return blockers.map((entry) => entry?.message).filter(Boolean).join(" ");
+  }
+
+  return (
+    message ||
+    getSellerRequestErrorMessage(error, {
+      permissionMessage: "Your current seller access does not include publish control.",
+      fallbackMessage: "Failed to update seller product visibility.",
+    })
+  );
+};
+
 export default function SellerProductDetailPage() {
   const queryClient = useQueryClient();
   const { productId } = useParams();
@@ -136,6 +158,31 @@ export default function SellerProductDetailPage() {
       setSubmitStatus({
         type: "error",
         message: getSubmissionErrorMessage(error),
+      });
+    },
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: ({ published }) => setSellerProductPublished(storeId, productId, published),
+    onSuccess: async (data) => {
+      setSubmitStatus({
+        type: "success",
+        message: data?.published
+          ? "Product published and synced to storefront visibility."
+          : "Product hidden from storefront.",
+      });
+      queryClient.setQueryData(["seller", "products", "detail", storeId, productId], data);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["seller", "products", storeId] }),
+        queryClient.invalidateQueries({
+          queryKey: ["seller", "products", "authoring-meta", storeId],
+        }),
+      ]);
+    },
+    onError: (error) => {
+      setSubmitStatus({
+        type: "error",
+        message: getPublishErrorMessage(error),
       });
     },
   });
@@ -224,17 +271,23 @@ export default function SellerProductDetailPage() {
   const catalogGovernance = product?.governance ?? null;
   const authoringGovernance = catalogGovernance?.authoring ?? null;
   const productAuthoring = product?.authoring ?? null;
+  const publishing = product?.publishing ?? null;
   const submission = product?.submission ?? null;
   const submissionGovernance = catalogGovernance?.submissionGovernance ?? null;
   const canSubmitForReview = Boolean(
     submission?.canSubmit || submission?.canResubmit || submissionGovernance?.canSubmitWhenEnabled
   );
   const canEditDraft = Boolean(productAuthoring?.canEditDraft);
+  const canPublish = Boolean(publishing?.canPublish);
+  const canUnpublish = Boolean(publishing?.canUnpublish);
+  const publishBlockers = Array.isArray(publishing?.blockedReasons)
+    ? publishing.blockedReasons.filter((entry) => entry?.message)
+    : [];
   const revisionReason = getSubmissionReason(submission);
   const isSubmitted = submission?.status === "submitted";
   const isNeedsRevision = submission?.status === "needs_revision";
   const isStorefrontVisible = Boolean(product?.visibility?.storefrontVisible);
-  const editActionLabel = isNeedsRevision ? "Continue Revision" : "Edit Draft";
+  const editActionLabel = isNeedsRevision ? "Continue Revision" : "Edit Product";
   const submitButtonLabel =
     submission?.canResubmit || submission?.status === "needs_revision"
       ? "Resubmit for Review"
@@ -245,7 +298,7 @@ export default function SellerProductDetailPage() {
       <SellerWorkspaceSectionHeader
         eyebrow="Seller Product Detail"
         title={product?.name || "Product"}
-        description="Use this page to see whether the product is still a draft, already with admin review, or back for changes before deciding the next seller action."
+        description="Use this page to manage the seller-owned product state, storefront visibility, and any legacy review notes still attached to the item."
         actions={[
           backButton,
           canEditDraft ? (
@@ -257,6 +310,36 @@ export default function SellerProductDetailPage() {
               <Save className="h-4 w-4" />
               {editActionLabel}
             </Link>
+          ) : null,
+          canPublish ? (
+            <button
+              key="publish"
+              type="button"
+              onClick={() => {
+                setSubmitStatus(null);
+                publishMutation.mutate({ published: true });
+              }}
+              disabled={publishMutation.isPending}
+              className={sellerPrimaryButtonClass}
+            >
+              <Globe2 className="h-4 w-4" />
+              {publishMutation.isPending ? "Publishing..." : "Publish"}
+            </button>
+          ) : null,
+          canUnpublish ? (
+            <button
+              key="unpublish"
+              type="button"
+              onClick={() => {
+                setSubmitStatus(null);
+                publishMutation.mutate({ published: false });
+              }}
+              disabled={publishMutation.isPending}
+              className={sellerSecondaryButtonClass}
+            >
+              <Package className="h-4 w-4" />
+              {publishMutation.isPending ? "Updating..." : "Unpublish"}
+            </button>
           ) : null,
           canSubmitForReview ? (
             <button
@@ -340,8 +423,7 @@ export default function SellerProductDetailPage() {
 
       {isSubmitted ? (
         <SellerWorkspaceNotice type="info">
-          This draft is with admin review now. You can still check the detail here, but editing
-          stays locked until admin asks for changes or finishes the review.
+          Legacy admin review is still recorded for this product. Seller publish control remains active for the store, so use the visibility state below as the operational source of truth.
         </SellerWorkspaceNotice>
       ) : null}
 
@@ -352,8 +434,7 @@ export default function SellerProductDetailPage() {
               Revision requested
             </p>
             <p>
-              Admin asked for changes on this draft. Update the requested fields, then send it back
-              for review when ready.
+              Admin asked for changes on this product. You can update the product, resubmit for review, or publish directly once the required fields are ready.
             </p>
             {revisionReason ? <p>{revisionReason}</p> : null}
           </div>
@@ -361,11 +442,11 @@ export default function SellerProductDetailPage() {
       ) : null}
 
       <SellerWorkspaceSectionCard
-        title="Submission lifecycle"
-        hint="Use this panel to see the current review state and the next seller step."
+        title="Visibility and next action"
+        hint="Use this panel to confirm storefront state, publish readiness, and any optional review workflow that still applies."
         Icon={Send}
         actions={
-          canEditDraft || canSubmitForReview
+          canEditDraft || canSubmitForReview || canPublish || canUnpublish
             ? [
                 canEditDraft ? (
                   <Link
@@ -376,6 +457,36 @@ export default function SellerProductDetailPage() {
                     <Save className="h-4 w-4" />
                     {editActionLabel}
                   </Link>
+                ) : null,
+                canPublish ? (
+                  <button
+                    key="lifecycle-publish"
+                    type="button"
+                    onClick={() => {
+                      setSubmitStatus(null);
+                      publishMutation.mutate({ published: true });
+                    }}
+                    disabled={publishMutation.isPending}
+                    className={sellerPrimaryButtonClass}
+                  >
+                    <Globe2 className="h-4 w-4" />
+                    {publishMutation.isPending ? "Publishing..." : "Publish"}
+                  </button>
+                ) : null,
+                canUnpublish ? (
+                  <button
+                    key="lifecycle-unpublish"
+                    type="button"
+                    onClick={() => {
+                      setSubmitStatus(null);
+                      publishMutation.mutate({ published: false });
+                    }}
+                    disabled={publishMutation.isPending}
+                    className={sellerSecondaryButtonClass}
+                  >
+                    <Package className="h-4 w-4" />
+                    {publishMutation.isPending ? "Updating..." : "Unpublish"}
+                  </button>
                 ) : null,
                 canSubmitForReview ? (
                   <button
@@ -395,31 +506,32 @@ export default function SellerProductDetailPage() {
               ].filter(Boolean)
             : null
         }
-      >
+        >
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <SellerWorkspaceDetailItem
+            label="Visibility"
+            value={product?.visibility?.storefrontLabel || "Hidden from storefront"}
+            hint={product?.visibility?.storefrontReason || "-"}
+          />
+          <SellerWorkspaceDetailItem
+            label="Publish State"
+            value={publishing?.label || "Draft"}
+            hint={
+              publishing?.hint ||
+              publishBlockers[0]?.message ||
+              "Check the remaining blockers before publishing."
+            }
+          />
           <SellerWorkspaceDetailItem
             label="Submission Status"
             value={submission?.label || "Not submitted"}
             hint={submission?.reviewState || "NOT_SUBMITTED"}
           />
           <SellerWorkspaceDetailItem
-            label="Revision Reason"
-            value={revisionReason || "No revision request recorded."}
-            hint={
-              isNeedsRevision
-                ? "Address this note before resubmitting."
-                : "This stays empty until admin sends the product back for changes."
-            }
-          />
-          <SellerWorkspaceDetailItem
-            label="Storefront Visibility"
-            value={product?.visibility?.storefrontLabel || "Hidden from storefront"}
-            hint={product?.visibility?.storefrontReason || "-"}
-          />
-          <SellerWorkspaceDetailItem
             label="Next Recommended Action"
-            value={submission?.nextActionLabel || "Review product status"}
+            value={publishing?.nextActionLabel || submission?.nextActionLabel || "Review product status"}
             hint={
+              publishing?.hint ||
               submission?.nextActionDescription ||
               "No seller action is open for this product right now."
             }
@@ -451,7 +563,7 @@ export default function SellerProductDetailPage() {
 
       <SellerWorkspaceSectionCard
         title="Submission timeline"
-        hint="Sending a draft for review does not publish it. Admin still decides the final outcome."
+        hint="Review metadata is still visible here for continuity, but seller publish control is now the active storefront authority."
         Icon={Send}
       >
         {submissionGovernance?.note ? (

@@ -81,6 +81,20 @@ const normalizeStoredImagePathList = (value: unknown) => {
   return [normalized];
 };
 
+const normalizeTagListInput = (value: unknown) => {
+  if (typeof value === "undefined") return undefined;
+
+  const entries = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split(",")
+      : [value];
+
+  return Array.from(
+    new Set(entries.map((entry) => normalizeString(entry)).filter(Boolean))
+  ).slice(0, 24);
+};
+
 const normalizeProductImageUrl = (value: unknown) => {
   const normalized = normalizeString(value);
   if (!normalized) return null;
@@ -182,21 +196,28 @@ const resolveUniqueProductSlug = async (name: unknown, excludeProductId?: number
   return `${baseSlug}-${Date.now()}`;
 };
 
+const normalizeOptionalSlugInput = (value: unknown) => {
+  if (value === null || typeof value === "undefined" || value === "") return undefined;
+  return buildProductSlugBase(value);
+};
+
 const SELLER_AUTHORING_EDITABLE_FIELDS = [
   "name",
   "description",
   "sku",
+  "barcode",
+  "slug",
   "categoryIds",
   "defaultCategoryId",
   "price",
   "salePrice",
   "stock",
   "imageUrls",
+  "tags",
 ] as const;
 const SELLER_AUTHORING_DEFERRED_FIELDS = [
   "categories",
   "videoPath",
-  "tags",
   "notes",
   "status",
   "isPublished",
@@ -207,7 +228,6 @@ const SELLER_AUTHORING_DEFERRED_FIELDS = [
   "preorderDays",
   "weight",
   "dimensions",
-  "barcode",
   "gtin",
   "condition",
   "parentSku",
@@ -333,6 +353,7 @@ const buildAuthoringPermissions = (sellerAccess: any = null) => {
     canCreateDraft: sellerHasPermission(sellerAccess, "PRODUCT_CREATE"),
     canEditDrafts: sellerHasPermission(sellerAccess, "PRODUCT_EDIT"),
     canSubmitDrafts: sellerHasPermission(sellerAccess, "PRODUCT_EDIT"),
+    canPublishProducts: sellerHasPermission(sellerAccess, "PRODUCT_PUBLISH"),
   };
 };
 
@@ -363,16 +384,16 @@ const buildSellerSubmissionGovernance = (
     canResubmitWhenEnabled: canSubmit && isResubmission,
     canEditAfterSubmit: false,
     editLockAppliesWhenSubmitted: true,
-    sellerCanPublish: false,
+    sellerCanPublish: permissions.canPublishProducts,
     requiresSellerChanges: submissionStatus === "needs_revision",
     note:
       submissionStatus === "submitted"
-        ? "This draft is now with admin review. Seller editing stays locked until an admin asks for changes or finishes the review."
+        ? "Legacy review is still recorded for this product, but seller workspace may continue with direct edits or publish control."
         : submissionStatus === "needs_revision"
-          ? "Admin asked for changes on this draft. Seller editing is open again so the requested updates can be made and sent back."
+          ? "Legacy revision feedback is still recorded here. Seller may apply the changes and publish directly when the product is ready."
         : hasConcreteProduct
-          ? "This draft can be sent to admin review when it is ready. Final publishing still stays admin-owned."
-          : "You can send a product for review after the draft has been created.",
+          ? "Seller may publish directly from seller workspace. Review submission remains optional for stores that still use it operationally."
+          : "You can create a draft first, then publish it directly when the required fields are ready.",
   };
 };
 
@@ -507,7 +528,7 @@ const serializeSellerSubmissionState = (
 const buildProductAuthoringState = (
   status: string,
   sellerAccess: any = null,
-  submissionStatus: string = "none"
+  _submissionStatus: string = "none"
 ) => {
   const permissions = buildAuthoringPermissions(sellerAccess);
 
@@ -515,41 +536,31 @@ const buildProductAuthoringState = (
     return {
       canEditDraft: false,
       editBlockedReason: "PRODUCT_EDIT_PERMISSION_REQUIRED",
-      allowedStatuses: ["draft"],
+      allowedStatuses: ["draft", "active", "inactive"],
     };
   }
 
-  if (normalizeSellerSubmissionStatus(submissionStatus) === "submitted") {
+  if (!["draft", "active", "inactive"].includes(status)) {
     return {
       canEditDraft: false,
-      editBlockedReason: "PRODUCT_SUBMISSION_PENDING_REVIEW",
-      allowedStatuses: ["draft"],
-    };
-  }
-
-  if (status !== "draft") {
-    return {
-      canEditDraft: false,
-      editBlockedReason: "PRODUCT_STATUS_NOT_DRAFT",
-      allowedStatuses: ["draft"],
+      editBlockedReason: "PRODUCT_STATUS_NOT_EDITABLE",
+      allowedStatuses: ["draft", "active", "inactive"],
     };
   }
 
   return {
     canEditDraft: true,
     editBlockedReason: null,
-    allowedStatuses: ["draft"],
+    allowedStatuses: ["draft", "active", "inactive"],
   };
 };
 
 const buildFieldGovernance = () => ({
   sellerEditableNow: [...SELLER_AUTHORING_EDITABLE_FIELDS],
   sellerReadOnly: [
-    "slug",
     "promoImagePath",
     "imagePaths",
     "videoPath",
-    "tags",
     "notes",
     "status",
     "isPublished",
@@ -560,7 +571,6 @@ const buildFieldGovernance = () => ({
     "dangerousProduct",
     "preOrder",
     "preorderDays",
-    "barcode",
     "gtin",
     "condition",
     "parentSku",
@@ -603,11 +613,14 @@ const parseSellerProductDraftPayload = async (body: any = {}) => {
 
   const description = nullableString(body?.description);
   const sku = nullableString(body?.sku);
+  const barcode = nullableString(body?.barcode);
+  const slug = normalizeOptionalSlugInput(body?.slug);
   const categorySelection = await resolveSellerCategorySelection(body);
   const price = normalizeOptionalMoney(body?.price);
   const salePrice = normalizeOptionalMoney(body?.salePrice);
   const stock = normalizeOptionalInteger(body?.stock);
   const hasImageUrls = Array.isArray(body?.imageUrls);
+  const tags = normalizeTagListInput(body?.tags);
   const imageUrls = hasImageUrls
     ? Array.from(
         new Set(
@@ -622,6 +635,20 @@ const parseSellerProductDraftPayload = async (body: any = {}) => {
     const error = new Error("SKU must be 100 characters or fewer.");
     (error as any).status = 400;
     (error as any).code = "SELLER_PRODUCT_SKU_TOO_LONG";
+    throw error;
+  }
+
+  if (barcode && barcode.length > 100) {
+    const error = new Error("Barcode must be 100 characters or fewer.");
+    (error as any).status = 400;
+    (error as any).code = "SELLER_PRODUCT_BARCODE_TOO_LONG";
+    throw error;
+  }
+
+  if (typeof slug === "string" && !slug) {
+    const error = new Error("Slug is invalid.");
+    (error as any).status = 400;
+    (error as any).code = "SELLER_PRODUCT_SLUG_INVALID";
     throw error;
   }
 
@@ -692,6 +719,8 @@ const parseSellerProductDraftPayload = async (body: any = {}) => {
     name,
     description,
     sku,
+    barcode,
+    slug,
     categoryIds: categorySelection.categoryIds,
     defaultCategoryId: categorySelection.defaultCategoryId,
     categoryId: categorySelection.categoryId,
@@ -700,6 +729,89 @@ const parseSellerProductDraftPayload = async (body: any = {}) => {
       typeof salePrice === "number" ? (salePrice > 0 ? salePrice : null) : undefined,
     stock: typeof stock === "number" ? stock : undefined,
     imageUrls,
+    tags,
+  };
+};
+
+const buildSellerSubmissionResetPatch = () => ({
+  sellerSubmissionStatus: "none",
+  sellerSubmittedAt: null,
+  sellerSubmittedByUserId: null,
+  sellerRevisionRequestedAt: null,
+  sellerRevisionRequestedByUserId: null,
+  sellerRevisionNote: null,
+});
+
+const resolveSellerPublishReadiness = (product: any) => {
+  const blockers: Array<{ field: string; code: string; message: string }> = [];
+  const name = normalizeString(getAttr(product, "name"));
+  const slug = normalizeString(getAttr(product, "slug"));
+  const defaultCategoryId = toNumber(
+    getAttr(product, "defaultCategoryId") ?? getAttr(product, "categoryId"),
+    0
+  );
+  const price = Number(getAttr(product, "price"));
+  const salePriceRaw = getAttr(product, "salePrice");
+  const salePrice =
+    salePriceRaw === null || typeof salePriceRaw === "undefined"
+      ? null
+      : Number(salePriceRaw);
+  const stock = Number(getAttr(product, "stock"));
+
+  if (!name) {
+    blockers.push({
+      field: "name",
+      code: "NAME_REQUIRED",
+      message: "Product name is required before publishing.",
+    });
+  }
+
+  if (!slug) {
+    blockers.push({
+      field: "slug",
+      code: "SLUG_REQUIRED",
+      message: "Product slug is required before publishing.",
+    });
+  }
+
+  if (!Number.isInteger(defaultCategoryId) || defaultCategoryId <= 0) {
+    blockers.push({
+      field: "category",
+      code: "CATEGORY_REQUIRED",
+      message: "Choose a default category before publishing.",
+    });
+  }
+
+  if (!Number.isFinite(price) || price <= 0) {
+    blockers.push({
+      field: "price",
+      code: "PRICE_REQUIRED",
+      message: "Base price must be greater than zero before publishing.",
+    });
+  }
+
+  if (
+    salePrice !== null &&
+    (!Number.isFinite(salePrice) || salePrice < 0 || salePrice >= price)
+  ) {
+    blockers.push({
+      field: "salePrice",
+      code: "SALE_PRICE_INVALID",
+      message: "Sale price must stay lower than the base price.",
+    });
+  }
+
+  if (!Number.isFinite(stock) || stock < 0 || !Number.isInteger(stock)) {
+    blockers.push({
+      field: "stock",
+      code: "STOCK_INVALID",
+      message: "Stock must be a valid non-negative whole number before publishing.",
+    });
+  }
+
+  return {
+    isReady: blockers.length === 0,
+    blockers,
   };
 };
 
@@ -717,6 +829,8 @@ const findSellerScopedProductDetail = async (storeId: number, productId: number)
       "sku",
       "barcode",
       "gtin",
+      "categoryId",
+      "defaultCategoryId",
       "status",
       "isPublished",
       "sellerSubmissionStatus",
@@ -785,6 +899,7 @@ const buildCatalogReadContract = () => ({
   notes: [
     "Seller catalog stays store-scoped through Product.storeId.",
     "Current public storefront queries gate product visibility by store mapping, publish flag, active status, and a cleared seller submission state.",
+    "Seller publish and unpublish actions clear legacy submission blockers before the product returns to public visibility.",
     "Stock, pre-order, and category publish state are still not used as hard storefront visibility gates in product queries.",
   ],
 });
@@ -837,7 +952,9 @@ const serializeProductVisibility = (
     label: isPublished ? "Published" : "Private",
     publishLabel: isPublished ? "Published" : "Private",
     sellerLabel: !isPublished
-      ? "Private to seller and admin"
+      ? status === "draft"
+        ? "Draft in seller workspace"
+        : "Hidden from storefront"
       : storefrontVisible
         ? "Visible in storefront"
         : normalizedSubmissionStatus === "submitted"
@@ -874,6 +991,48 @@ const serializeProductVisibility = (
           : storefrontVisible
             ? "STOREFRONT_VISIBLE"
             : "STATUS_NOT_ACTIVE",
+  };
+};
+
+const serializeProductPublishing = (
+  product: any,
+  sellerAccess: any = null,
+  readiness = resolveSellerPublishReadiness(product)
+) => {
+  const permissions = buildAuthoringPermissions(sellerAccess);
+  const isPublished = Boolean(getAttr(product, "isPublished"));
+  const status = normalizeProductStatus(getAttr(product, "status"));
+  const canPublish = permissions.canPublishProducts && !isPublished && readiness.isReady;
+  const canUnpublish = permissions.canPublishProducts && isPublished;
+  const stateCode = isPublished ? "PUBLISHED" : status === "draft" ? "DRAFT" : "UNPUBLISHED";
+
+  return {
+    stateCode,
+    label:
+      stateCode === "PUBLISHED"
+        ? "Published"
+        : stateCode === "DRAFT"
+          ? "Draft"
+          : "Unpublished",
+    isReady: readiness.isReady,
+    canPublish,
+    canUnpublish,
+    blockedReasons: readiness.blockers,
+    nextActionLabel: canPublish
+      ? "Publish"
+      : canUnpublish
+        ? "Unpublish"
+        : stateCode === "DRAFT"
+          ? "Complete draft"
+          : "Update product",
+    hint: canPublish
+      ? "This product is ready for storefront visibility."
+      : canUnpublish
+        ? "This product is live and can be hidden from storefront at any time."
+        : readiness.blockers[0]?.message ||
+          (permissions.canPublishProducts
+            ? "Update the remaining required fields before publishing."
+            : "Your current seller access does not include publish control."),
   };
 };
 
@@ -918,23 +1077,23 @@ const buildCatalogGovernance = (sellerAccess: any = null, options: any = {}) => 
   );
 
   return {
-    mode: "DRAFT_FIRST_MVP",
+    mode: "FULL_AUTHORITY_PHASE_1",
     roleCode: sellerAccess?.roleCode ? String(sellerAccess.roleCode) : null,
     canCreate: permissions.canCreateDraft,
     canEdit: permissions.canEditDrafts,
     canDelete: false,
-    canPublish: false,
+    canPublish: permissions.canPublishProducts,
     canManagePricing: true,
     canManageInventory: true,
     canManageMedia: true,
-    sourceOfTruth: "ADMIN_PRODUCT_WORKSPACE",
+    sourceOfTruth: "SELLER_PRODUCT_WORKSPACE",
     note:
-      "Seller product authoring stays draft-first. Seller workspace may now fill core draft fields such as categories, pricing, stock, and a minimal product image set, while publish and deeper admin governance stay outside this lane.",
+      "Seller workspace owns store-scoped product authoring and publish visibility for the active store. Legacy review metadata may still appear, but publish and unpublish now stay seller-owned.",
     authoring: {
-      phase: "DRAFT_FIRST_PHASE_2",
-      phaseLabel: "Draft-first Phase 2",
+      phase: "FULL_AUTHORITY_PHASE_1",
+      phaseLabel: "Seller Full Authority",
       writeLaneActive: true,
-      recommendedPhase1: "DRAFT_FIRST_FIELD_EXPANSION",
+      recommendedPhase1: "SELLER_PUBLISH_AUTHORITY",
       legacySellerRoutesPresent: true,
       legacySellerRoutesMounted: false,
       canCreateDraft: permissions.canCreateDraft,
@@ -942,15 +1101,15 @@ const buildCatalogGovernance = (sellerAccess: any = null, options: any = {}) => 
       editBlockedReason: authoringState.editBlockedReason,
       allowedWriteStatuses: authoringState.allowedStatuses,
       note:
-        "Seller workspace may create and edit draft products with seller-safe core fields: name, description, SKU, categories, pricing, stock, and a minimal image set. Publish controls remain outside the active seller write lane.",
+        "Seller workspace may create and edit store-scoped products across draft, active, and inactive states with seller-safe core fields, then publish or unpublish them directly.",
     },
     submissionGovernance: buildSellerSubmissionGovernance(sellerAccess, options),
     statusGovernance: {
       productStatuses: ["draft", "active", "inactive"],
-      publishFlag: "admin-owned",
-      sellerStateTransitionsActive: false,
+      publishFlag: "seller-owned",
+      sellerStateTransitionsActive: true,
       note:
-        "The repo currently exposes product status and publish state, but seller workspace does not yet own a write contract for those transitions.",
+        "Seller publish actions set store-scoped products live by turning publish on and moving the lifecycle to active. Unpublish hides the product without removing store ownership.",
     },
     fieldGovernance: buildFieldGovernance(),
   };
@@ -1010,6 +1169,7 @@ const serializeProductListItem = (product: any, sellerAccess: any = null) => {
     status,
     normalizeSellerSubmissionStatus(getAttr(product, "sellerSubmissionStatus"))
   );
+  const publishing = serializeProductPublishing(product, sellerAccess);
   const authoring = buildProductAuthoringState(status, sellerAccess, normalizeSellerSubmissionStatus(getAttr(product, "sellerSubmissionStatus")));
   const submissionGovernance = buildSellerSubmissionGovernance(sellerAccess, {
     hasConcreteProduct: true,
@@ -1034,6 +1194,7 @@ const serializeProductListItem = (product: any, sellerAccess: any = null) => {
     statusMeta: serializeProductStatus(status),
     published: isPublished,
     visibility,
+    publishing,
     storefrontVisibilityState: visibility.stateCode,
     availability,
     pricing: {
@@ -1082,6 +1243,7 @@ const serializeProductDetail = (product: any, sellerAccess: any = null) => {
     status,
     normalizeSellerSubmissionStatus(getAttr(product, "sellerSubmissionStatus"))
   );
+  const publishing = serializeProductPublishing(product, sellerAccess);
   const authoring = buildProductAuthoringState(status, sellerAccess, normalizeSellerSubmissionStatus(getAttr(product, "sellerSubmissionStatus")));
   const submissionGovernance = buildSellerSubmissionGovernance(sellerAccess, {
     hasConcreteProduct: true,
@@ -1113,6 +1275,7 @@ const serializeProductDetail = (product: any, sellerAccess: any = null) => {
     statusMeta: serializeProductStatus(status),
     published: isPublished,
     visibility,
+    publishing,
     storefrontVisibilityState: visibility.stateCode,
     availability,
     descriptions: {
@@ -1517,12 +1680,15 @@ router.get(
           name: "",
           description: "",
           sku: "",
+          barcode: "",
+          slug: "",
           categoryIds: [],
           defaultCategoryId: null,
           price: 0,
           salePrice: null,
           stock: 0,
           imageUrls: [],
+          tags: [],
         },
         references: {
           categories: await resolveSellerCategoryReference(),
@@ -1541,13 +1707,14 @@ router.post(
       const storeId = Number(req.params.storeId);
       const actorUserId = Number((req as any).user?.id || 0);
       const payload = await parseSellerProductDraftPayload(req.body);
-      const slug = await resolveUniqueProductSlug(payload.name);
+      const slug = await resolveUniqueProductSlug(payload.slug || payload.name);
 
       const product = await Product.create({
         name: payload.name,
         slug,
         description: payload.description || undefined,
         sku: payload.sku,
+        barcode: payload.barcode,
         status: "draft",
         isPublished: false,
         sellerSubmissionStatus: "none",
@@ -1564,6 +1731,7 @@ router.post(
         defaultCategoryId: payload.defaultCategoryId,
         promoImagePath: Array.isArray(payload.imageUrls) ? payload.imageUrls[0] || null : null,
         imagePaths: Array.isArray(payload.imageUrls) ? payload.imageUrls : [],
+        tags: Array.isArray(payload.tags) ? payload.tags : undefined,
         userId: actorUserId,
         storeId,
       } as any);
@@ -1635,29 +1803,18 @@ router.patch(
       }
 
       const currentStatus = normalizeProductStatus(getAttr(product, "status"));
-      const currentSubmissionStatus = normalizeSellerSubmissionStatus(
-        getAttr(product, "sellerSubmissionStatus")
-      );
-      if (currentStatus !== "draft") {
+      if (!["draft", "active", "inactive"].includes(currentStatus)) {
         return res.status(409).json({
           success: false,
-          code: "SELLER_PRODUCT_DRAFT_REQUIRED",
-          message: "Only draft products can be edited in seller authoring MVP.",
-        });
-      }
-
-      if (currentSubmissionStatus === "submitted") {
-        return res.status(409).json({
-          success: false,
-          code: "SELLER_PRODUCT_SUBMISSION_LOCKED",
-          message:
-            "This seller product is already marked as submitted for review and is locked for draft editing.",
+          code: "SELLER_PRODUCT_EDIT_STATE_INVALID",
+          message: "This product is not editable from the seller product lane.",
         });
       }
 
       const nextSlug =
-        normalizeString(getAttr(product, "name")) !== payload.name
-          ? await resolveUniqueProductSlug(payload.name, productId)
+        normalizeString(getAttr(product, "name")) !== payload.name ||
+        normalizeString(getAttr(product, "slug")) !== normalizeString(payload.slug)
+          ? await resolveUniqueProductSlug(payload.slug || payload.name, productId)
           : normalizeString(getAttr(product, "slug"));
 
       await product.update({
@@ -1665,6 +1822,7 @@ router.patch(
         slug: nextSlug,
         description: payload.description,
         sku: payload.sku,
+        barcode: payload.barcode,
         price: typeof payload.price === "number" ? payload.price : getAttr(product, "price"),
         salePrice:
           typeof payload.salePrice !== "undefined"
@@ -1687,6 +1845,8 @@ router.patch(
           Array.isArray(payload.imageUrls)
             ? payload.imageUrls
             : getAttr(product, "imagePaths"),
+        tags:
+          typeof payload.tags !== "undefined" ? payload.tags : getAttr(product, "tags"),
       } as any);
 
       await syncProductCategoryAssignments(productId, payload.categoryIds);
@@ -1715,6 +1875,88 @@ router.patch(
       return res.status(500).json({
         success: false,
         message: "Failed to update seller product draft.",
+      });
+    }
+  }
+);
+
+router.patch(
+  "/stores/:storeId/products/:productId/published",
+  requireSellerStoreAccess(["PRODUCT_PUBLISH"]),
+  async (req, res) => {
+    try {
+      const sellerAccess = (req as any).sellerAccess;
+      const storeId = Number(req.params.storeId);
+      const productId = Number(req.params.productId);
+      const nextPublished = parseBooleanFilter(req.body?.published);
+
+      if (!Number.isInteger(productId) || productId <= 0) {
+        return res.status(400).json({
+          success: false,
+          code: "INVALID_PRODUCT_ID",
+          message: "Invalid product id.",
+        });
+      }
+
+      if (nextPublished === null) {
+        return res.status(400).json({
+          success: false,
+          code: "SELLER_PRODUCT_PUBLISHED_FLAG_REQUIRED",
+          message: "published must be provided as a boolean value.",
+        });
+      }
+
+      const product = await findSellerScopedProductDetail(storeId, productId);
+
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          code: "SELLER_PRODUCT_NOT_FOUND",
+          message: "Product not found for this seller store.",
+        });
+      }
+
+      if (nextPublished) {
+        const readiness = resolveSellerPublishReadiness(product);
+
+        if (!readiness.isReady) {
+          return res.status(409).json({
+            success: false,
+            code: "SELLER_PRODUCT_PUBLISH_NOT_READY",
+            message: readiness.blockers[0]?.message || "Product is not ready to publish.",
+            data: {
+              blockers: readiness.blockers,
+              requiredState: "active + published",
+            },
+          });
+        }
+
+        await (product as any).update({
+          status: "active",
+          isPublished: true,
+          ...buildSellerSubmissionResetPatch(),
+        });
+      } else {
+        await (product as any).update({
+          isPublished: false,
+          ...buildSellerSubmissionResetPatch(),
+        });
+      }
+
+      const detail = await findSellerScopedProductDetail(storeId, productId);
+
+      return res.json({
+        success: true,
+        data: {
+          ...serializeProductDetail(detail || product, sellerAccess),
+          contract: buildCatalogReadContract(),
+        },
+      });
+    } catch (error) {
+      console.error("[seller/products/published] error", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to update seller product visibility.",
       });
     }
   }

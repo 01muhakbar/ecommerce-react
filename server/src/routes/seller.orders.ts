@@ -2,6 +2,8 @@ import { Op, col, where as sqlWhere } from "sequelize";
 import { Router } from "express";
 import requireSellerStoreAccess from "../middleware/requireSellerStoreAccess.js";
 import { sellerHasPermission } from "../services/seller/resolveSellerAccess.js";
+import { createUserOrderStatusUpdatedNotification } from "../services/notification.service.js";
+import { recalculateParentOrderFulfillmentStatus } from "../services/orderPaymentAggregation.service.js";
 import {
   Order,
   Payment,
@@ -435,6 +437,14 @@ const resolveFulfillmentTransitionBlocker = (input: {
     return {
       code: "PARENT_ORDER_CANCELLED",
       message: "Parent order is cancelled, so seller fulfillment can no longer move forward.",
+    };
+  }
+
+  if (input.orderStatus === "delivered" || input.orderStatus === "completed") {
+    return {
+      code: "PARENT_ORDER_FINALIZED",
+      message:
+        "Parent order is already in a final delivered state, so seller fulfillment can no longer move forward.",
     };
   }
 
@@ -1098,6 +1108,10 @@ router.patch(
         fulfillmentStatus: actionDefinition.nextStatus,
       });
 
+      const parentOrderSync = await recalculateParentOrderFulfillmentStatus(
+        toNumber(getAttr(suborder, "orderId"), 0)
+      );
+
       const refreshed = await Suborder.findOne({
         where: { id: suborderId, storeId },
         attributes: [
@@ -1158,15 +1172,47 @@ router.patch(
         afterState,
       });
 
+      if (parentOrderSync?.changed && parentOrderSync.userId) {
+        try {
+          await createUserOrderStatusUpdatedNotification({
+            userId: parentOrderSync.userId,
+            orderId: toNumber(getAttr(refreshedOrder, "id"), 0),
+            invoiceNo:
+              parentOrderSync.invoiceNo ||
+              String(getAttr(refreshedOrder, "invoiceNo") || "").trim() ||
+              null,
+            statusFrom: parentOrderSync.previousStatus,
+            statusTo: parentOrderSync.nextStatus,
+          });
+        } catch (notifyError) {
+          console.warn(
+            "[seller/orders:fulfillment] failed to create user status notification",
+            notifyError
+          );
+        }
+      }
+
+      const successMessage = parentOrderSync?.changed
+        ? `${actionDefinition.successMessage} Parent order synced to ${serializeOrderStatusMeta(parentOrderSync.nextStatus).label.toLowerCase()}.`
+        : actionDefinition.successMessage;
+
       return res.json({
         success: true,
-        message: actionDefinition.successMessage,
+        message: successMessage,
         data: {
           action: actionDefinition.code,
           transition: {
             from: currentFulfillmentStatus,
             to: actionDefinition.nextStatus,
           },
+          parentOrderSync: parentOrderSync
+            ? {
+                changed: Boolean(parentOrderSync.changed),
+                from: parentOrderSync.previousStatus,
+                to: parentOrderSync.nextStatus,
+                source: "SUBORDER_FULFILLMENT_AGGREGATION",
+              }
+            : null,
           auditLogId: toNumber(getAttr(auditLog, "id"), 0) || null,
           suborder: serializeDetail(refreshed, req.sellerAccess),
         },

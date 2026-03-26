@@ -6,6 +6,7 @@ import { User } from "../models/User.js";
 import { OrderItem } from "../models/OrderItem.js";
 import { Product } from "../models/Product.js";
 import { createUserOrderStatusUpdatedNotification } from "../services/notification.service.js";
+import { inspectParentOrderFinalizationEligibility } from "../services/orderPaymentAggregation.service.js";
 
 const router = Router();
 type UiOrderStatus = "pending" | "processing" | "shipping" | "complete" | "cancelled";
@@ -587,6 +588,31 @@ router.patch("/:id/status", requireStaffOrAdmin, async (req, res) => {
 
   if (!existingOrder) {
     return res.status(404).json({ message: "Pesanan tidak ditemukan." });
+  }
+
+  if (normalizedStatus === "delivered") {
+    const finalizationCheck = await inspectParentOrderFinalizationEligibility(
+      Number(getAttr(existingOrder, "id"))
+    );
+
+    if (!finalizationCheck.allowed) {
+      const blockingStatuses = Array.from(
+        new Set(
+          finalizationCheck.blockingSuborders.map((suborder: any) => suborder.fulfillmentStatus)
+        )
+      );
+      const blockingCount = finalizationCheck.blockingSuborders.length;
+      const suborderLabel = blockingCount === 1 ? "suborder" : "suborders";
+      const verb = blockingCount === 1 ? "is" : "are";
+      const statusSummary = blockingStatuses.length > 0 ? blockingStatuses.join(", ") : "UNKNOWN";
+
+      return res.status(409).json({
+        success: false,
+        code: "PARENT_FINALIZATION_BLOCKED_BY_SUBORDER_FULFILLMENT",
+        message: `Cannot finalize parent order while ${blockingCount} active ${suborderLabel} ${verb} still not delivered (${statusSummary}).`,
+        data: finalizationCheck,
+      });
+    }
   }
 
   const previousStatus = toUiStatus(getAttr(existingOrder, "status"));
