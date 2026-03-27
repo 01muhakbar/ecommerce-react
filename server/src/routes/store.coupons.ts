@@ -1,38 +1,69 @@
 import { Router } from "express";
+import { Op } from "sequelize";
 import {
-  normalizeCouponRecord,
   quoteCoupon,
   validateCoupon,
 } from "../services/coupon.service.js";
-import { Coupon } from "../models/index.js";
-import { Op } from "sequelize";
+import { serializePublicCouponSnapshot } from "../services/sharedContracts/couponGovernance.js";
+import { Coupon, Store } from "../models/index.js";
 
 const router = Router();
 
+const normalizeStoreSlug = (value: any) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "");
+
+const resolveStoreScopeId = async (rawStoreId: any, rawStoreSlug: any) => {
+  const storeId = Number(rawStoreId);
+  if (Number.isFinite(storeId) && storeId > 0) {
+    const store = await Store.findByPk(storeId, {
+      attributes: ["id", "slug", "status"],
+    });
+    return store ? Number((store as any).id) : null;
+  }
+
+  const storeSlug = normalizeStoreSlug(rawStoreSlug);
+  if (!storeSlug) return null;
+  const store = await Store.findOne({
+    where: { slug: storeSlug } as any,
+    attributes: ["id", "slug", "status"],
+  });
+  return store ? Number((store as any).id) : null;
+};
+
+const buildActiveWindowWhere = (now: Date) => ({
+  active: true,
+  [Op.and]: [
+    {
+      [Op.or]: [{ startsAt: null }, { startsAt: { [Op.lte]: now } }],
+    },
+    {
+      [Op.or]: [{ expiresAt: null }, { expiresAt: { [Op.gte]: now } }],
+    },
+  ],
+});
+
 // GET /api/store/coupons
-router.get("/", async (_req, res, next) => {
+router.get("/", async (req, res, next) => {
   try {
     const now = new Date();
+    const scopedStoreId = await resolveStoreScopeId(req.query.storeId, req.query.storeSlug);
+    const where: any = {
+      ...buildActiveWindowWhere(now),
+      [Op.or]:
+        scopedStoreId && scopedStoreId > 0
+          ? [{ scopeType: "PLATFORM" }, { scopeType: "STORE", storeId: scopedStoreId }]
+          : [{ scopeType: "PLATFORM" }, { scopeType: null, storeId: null }],
+    };
     const coupons = await Coupon.findAll({
-      where: {
-        active: true,
-        [Op.or]: [{ expiresAt: null }, { expiresAt: { [Op.gte]: now } }],
-      },
+      where,
       order: [["createdAt", "DESC"]],
     });
 
     res.json({
-      data: coupons.map((coupon) => {
-        const normalized = normalizeCouponRecord(coupon);
-        return {
-          id: coupon.id,
-          code: normalized.code || coupon.code,
-          discountType: normalized.discountType || coupon.discountType,
-          amount: normalized.amount,
-          minSpend: normalized.minSpend,
-          expiresAt: coupon.expiresAt ?? null,
-        };
-      }),
+      data: coupons.map((coupon) => serializePublicCouponSnapshot(coupon)),
     });
   } catch (error) {
     next(error);
@@ -45,8 +76,11 @@ router.post("/quote", async (req, res, next) => {
     const code = req.body?.code;
     const subtotal = req.body?.subtotal;
     const shipping = req.body?.shipping ?? 0;
+    const scopedStoreId = await resolveStoreScopeId(req.body?.storeId, req.body?.storeSlug);
 
-    const quoted = await quoteCoupon(code, subtotal, shipping);
+    const quoted = await quoteCoupon(code, subtotal, shipping, {
+      storeId: scopedStoreId,
+    });
     if (!quoted.valid && quoted.reason === "invalid_input") {
       return res.status(400).json(quoted);
     }
@@ -62,20 +96,32 @@ router.post("/validate", async (req, res, next) => {
   try {
     const code = req.body?.code;
     const subtotal = req.body?.subtotal;
+    const scopedStoreId = await resolveStoreScopeId(req.body?.storeId, req.body?.storeSlug);
 
     if (typeof code !== "string" || code.trim() === "") {
       return res.status(400).json({ success: false, message: "Coupon code is required." });
     }
 
-    const quoted = await quoteCoupon(code, subtotal, 0);
+    const quoted = await quoteCoupon(code, subtotal, 0, {
+      storeId: scopedStoreId,
+    });
     if (!quoted.valid && quoted.reason === "invalid_input") {
       return res.status(400).json({ success: false, message: "Subtotal must be a number." });
     }
-    const result = await validateCoupon(code, subtotal);
+    const result = await validateCoupon(code, subtotal, {
+      storeId: scopedStoreId,
+    });
     if (!result.valid) {
       return res.json({
         success: true,
-        data: { valid: false, code: result.code, discountAmount: 0, message: result.message },
+        data: {
+          valid: false,
+          code: result.code,
+          discountAmount: 0,
+          scopeType: result.scopeType,
+          storeId: result.storeId,
+          message: result.message,
+        },
       });
     }
 
@@ -88,6 +134,8 @@ router.post("/validate", async (req, res, next) => {
         amount: result.amount,
         minSpend: result.minSpend,
         discountAmount: result.discountAmount,
+        scopeType: result.scopeType,
+        storeId: result.storeId,
       },
     };
     if (process.env.NODE_ENV !== "production") {
@@ -100,5 +148,3 @@ router.post("/validate", async (req, res, next) => {
 });
 
 export default router;
-
-

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { Globe, ImageIcon, MapPin, Save, ShieldCheck, Store } from "lucide-react";
 import {
   getSellerStoreProfile,
@@ -75,6 +76,17 @@ const getProfileValidationMessage = (error) => {
 
   return responseMessage || error?.message || "Failed to update seller store profile.";
 };
+
+const buildLocationLabel = (profile) =>
+  [
+    profile?.addressLine1,
+    profile?.addressLine2,
+    [profile?.city, profile?.province, profile?.postalCode].filter(Boolean).join(", "),
+    profile?.country,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(", ");
 
 function InputField({ label, hint, multiline = false, disabled = false, ...props }) {
   const inputClasses = multiline ? sellerTextareaClass : sellerFieldClass;
@@ -265,6 +277,10 @@ export default function SellerStoreProfilePage() {
     fieldMatrix: [],
   };
   const editableFieldSet = useMemo(() => new Set(editableFields), [editableFields]);
+  const storefrontPreviewHref = profile?.slug
+    ? `/store/${encodeURIComponent(profile.slug)}`
+    : null;
+  const storefrontLocationLabel = buildLocationLabel(profile);
 
   if (!canView) {
     return (
@@ -426,6 +442,66 @@ export default function SellerStoreProfilePage() {
               <SellerWorkspaceDetailItem label="Province" value={profile.province} />
               <SellerWorkspaceDetailItem label="Postal Code" value={profile.postalCode} />
               <SellerWorkspaceDetailItem label="Country" value={profile.country} />
+            </div>
+          </SellerWorkspaceSectionCard>
+
+          <SellerWorkspaceSectionCard
+            title="Public Storefront Preview"
+            hint="This preview follows the same seller store profile payload that public store identity uses."
+            Icon={Globe}
+            actions={
+              storefrontPreviewHref ? (
+                <Link to={storefrontPreviewHref} className={sellerSecondaryButtonClass}>
+                  Open /store/{profile.slug}
+                </Link>
+              ) : null
+            }
+          >
+            <SellerWorkspaceNotice type="info">
+              Seller-managed public-safe fields sync to the store slug page and product seller card after save. Admin still owns the core store name, slug, and final store status.
+            </SellerWorkspaceNotice>
+
+            <div className="mt-4 grid gap-3">
+              <SellerWorkspaceDetailItem
+                label="Public Store Name"
+                value={profile.name}
+                hint="Admin-governed core identity used by storefront."
+              />
+              <SellerWorkspaceDetailItem
+                label="Store Route"
+                value={storefrontPreviewHref || profile.slug || "-"}
+                hint="Slug route remains stable and is still read from backend store identity."
+              />
+              <SellerWorkspaceDetailItem
+                label="Bio / Short Description"
+                value={profile.description}
+                hint="Shown on store microsite header and used as fallback about content when rich-about customization is empty."
+              />
+              <SellerWorkspaceDetailItem
+                label="Logo / Cover"
+                value={
+                  [profile.logoUrl, profile.bannerUrl]
+                    .map((entry) => String(entry || "").trim())
+                    .filter(Boolean)
+                    .join(" | ") || "-"
+                }
+                hint="Public store page keeps safe fallback artwork when these fields are empty."
+              />
+              <SellerWorkspaceDetailItem
+                label="Public Contact"
+                value={
+                  [profile.phone, profile.email, profile.websiteUrl]
+                    .map((entry) => String(entry || "").trim())
+                    .filter(Boolean)
+                    .join(" | ") || "-"
+                }
+                hint="Public store contact actions only use storefront-safe contact channels."
+              />
+              <SellerWorkspaceDetailItem
+                label="Public Location"
+                value={storefrontLocationLabel}
+                hint="Location is rendered only from public-safe store address fields."
+              />
             </div>
           </SellerWorkspaceSectionCard>
 

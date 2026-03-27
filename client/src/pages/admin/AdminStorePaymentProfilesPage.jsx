@@ -12,6 +12,15 @@ const STATUS_STYLES = {
   ACTIVE: "border-emerald-200 bg-emerald-50 text-emerald-700",
   REJECTED: "border-rose-200 bg-rose-50 text-rose-700",
   INACTIVE: "border-slate-200 bg-slate-100 text-slate-700",
+  EMERALD: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  AMBER: "border-amber-200 bg-amber-50 text-amber-700",
+  ROSE: "border-rose-200 bg-rose-50 text-rose-700",
+  SKY: "border-sky-200 bg-sky-50 text-sky-700",
+  STONE: "border-slate-200 bg-slate-100 text-slate-700",
+  SUCCESS: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  WARNING: "border-amber-200 bg-amber-50 text-amber-700",
+  DANGER: "border-rose-200 bg-rose-50 text-rose-700",
+  NEUTRAL: "border-slate-200 bg-slate-100 text-slate-700",
 };
 
 const formatDate = (value) => {
@@ -118,11 +127,27 @@ export default function AdminStorePaymentProfilesPage() {
           {items.map((entry) => {
             const profile = entry.paymentProfile;
             const pendingRequest = entry.pendingRequest;
-            const currentStatus = String(profile?.verificationStatus || "NOT_CONFIGURED").toUpperCase();
-            const requestStatus = String(pendingRequest?.requestStatus || "").toUpperCase();
+            const workflow = entry.workflow || {};
+            const currentStatus = String(
+              profile?.activityMeta?.code || profile?.verificationStatus || "NOT_CONFIGURED"
+            ).toUpperCase();
+            const requestStatus = String(
+              workflow?.requestState?.code || pendingRequest?.requestStatus || ""
+            ).toUpperCase();
             const pendingStoreId = mutation.variables?.storeId;
             const isBusy =
               mutation.isPending && Number(pendingStoreId) === Number(entry.store.id);
+            const canApprovePromotion = Boolean(workflow?.governance?.canApprovePromotion);
+            const canRequestRevision = Boolean(workflow?.governance?.canRequestRevision);
+            const canToggleActiveSnapshot = Boolean(workflow?.governance?.canToggleActiveSnapshot);
+            const completeness = workflow?.completeness || {};
+            const missingFields = Array.isArray(completeness?.missingFields)
+              ? completeness.missingFields
+              : [];
+            const workspaceReadiness = entry.workspaceReadiness || null;
+            const readinessChecklist = Array.isArray(workspaceReadiness?.checklist)
+              ? workspaceReadiness.checklist
+              : [];
 
             return (
               <section
@@ -138,13 +163,28 @@ export default function AdminStorePaymentProfilesPage() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <StatusPill
-                      label={currentStatus === "NOT_CONFIGURED" ? "No Active Snapshot" : `Active ${currentStatus}`}
-                      status={currentStatus}
+                      label={
+                        workflow?.primaryStatus?.label ||
+                        (currentStatus === "NOT_CONFIGURED"
+                          ? "No Active Snapshot"
+                          : `Active ${currentStatus}`)
+                      }
+                      status={workflow?.primaryStatus?.tone || currentStatus}
                     />
                     {pendingRequest ? (
                       <StatusPill
-                        label={`Request ${requestStatus}`}
-                        status={requestStatus}
+                        label={`Request ${workflow?.requestState?.label || requestStatus}`}
+                        status={workflow?.requestState?.tone || requestStatus}
+                      />
+                    ) : null}
+                    <StatusPill
+                      label={`Review ${workflow?.reviewStatus?.label || "Not reviewed yet"}`}
+                      status={workflow?.reviewStatus?.tone || "NEUTRAL"}
+                    />
+                    {workspaceReadiness ? (
+                      <StatusPill
+                        label={`Readiness ${workspaceReadiness.summary?.label || "In progress"}`}
+                        status={workspaceReadiness.summary?.tone || "NEUTRAL"}
                       />
                     ) : null}
                   </div>
@@ -183,11 +223,13 @@ export default function AdminStorePaymentProfilesPage() {
 
                     {pendingRequest ? (
                       <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                        A seller payment setup request is waiting for admin action. Promoting it will create a new immutable active snapshot and switch the store pointer.
+                        {workflow?.primaryStatus?.description ||
+                          "A seller payment setup request is waiting for admin action. Promoting it will create a new immutable active snapshot and switch the store pointer."}
                       </div>
                     ) : (
                       <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                        No submitted payment setup request is waiting for review right now.
+                        {workflow?.nextStep?.description ||
+                          "No submitted payment setup request is waiting for review right now."}
                       </div>
                     )}
 
@@ -233,6 +275,75 @@ export default function AdminStorePaymentProfilesPage() {
                           </p>
                           <p className="mt-2 text-sm text-slate-700">{pendingRequest.sellerNote || "-"}</p>
                         </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Review Status
+                          </p>
+                          <p className="mt-2 text-sm text-slate-900">
+                            {workflow?.reviewStatus?.label || "-"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Required Fields
+                          </p>
+                          <p className="mt-2 text-sm text-slate-900">
+                            {`${completeness?.completedFields || 0}/${completeness?.totalFields || 0}`}
+                          </p>
+                        </div>
+                      </div>
+                    ) : null}
+                    {missingFields.length ? (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                        Missing required fields: {missingFields.map((field) => field.label).join(", ")}
+                      </div>
+                    ) : null}
+                    {workflow?.reviewStatus?.adminReviewNote ? (
+                      <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                        Admin review note: {workflow.reviewStatus.adminReviewNote}
+                      </div>
+                    ) : null}
+                    {workflow?.governance?.note ? (
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                        {workflow.governance.note}
+                      </div>
+                    ) : null}
+                    {workspaceReadiness ? (
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Seller Readiness
+                          </p>
+                          <span className="text-sm font-semibold text-slate-900">
+                            {workspaceReadiness.completionPercent || 0}% ({workspaceReadiness.completedItems || 0}/
+                            {workspaceReadiness.totalItems || 0})
+                          </span>
+                        </div>
+                        <p className="mt-2 text-sm text-slate-600">
+                          {workspaceReadiness.summary?.description ||
+                            "Seller readiness follows the current store, payment, and catalog state."}
+                        </p>
+                        <div className="mt-3 grid gap-2">
+                          {readinessChecklist
+                            .filter((item) => item.visible !== false)
+                            .map((item) => (
+                              <div
+                                key={item.key}
+                                className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3"
+                              >
+                                <div>
+                                  <p className="text-sm font-semibold text-slate-900">{item.label}</p>
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    {item.status?.description || "-"}
+                                  </p>
+                                </div>
+                                <StatusPill
+                                  label={item.status?.label || "Unknown"}
+                                  status={item.status?.tone || "NEUTRAL"}
+                                />
+                              </div>
+                            ))}
+                        </div>
                       </div>
                     ) : null}
                   </div>
@@ -264,7 +375,7 @@ export default function AdminStorePaymentProfilesPage() {
                             payload: { verificationStatus: "ACTIVE" },
                           })
                         }
-                        disabled={isBusy}
+                        disabled={isBusy || !canApprovePromotion}
                         className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {isBusy ? "Updating..." : "Approve & Promote"}
@@ -277,7 +388,7 @@ export default function AdminStorePaymentProfilesPage() {
                             payload: { verificationStatus: "REJECTED" },
                           })
                         }
-                        disabled={isBusy}
+                        disabled={isBusy || !canRequestRevision}
                         className="rounded-lg border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         Request Revision
@@ -296,7 +407,7 @@ export default function AdminStorePaymentProfilesPage() {
                           },
                         })
                       }
-                      disabled={isBusy}
+                      disabled={isBusy || !canToggleActiveSnapshot}
                       className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {profile.isActive ? "Deactivate Active Snapshot" : "Activate Current Snapshot"}

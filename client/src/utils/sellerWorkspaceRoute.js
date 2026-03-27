@@ -43,7 +43,8 @@ export const replaceSellerWorkspaceStorePath = (pathname, storeSlug) =>
 
 export const createSellerWorkspaceRoutes = (storeSlug) => ({
   home: () => buildSellerWorkspacePath(storeSlug),
-  profile: () => buildSellerWorkspacePath(storeSlug, "/profile"),
+  storeProfile: () => buildSellerWorkspacePath(storeSlug, "/store-profile"),
+  profile: () => buildSellerWorkspacePath(storeSlug, "/store-profile"),
   catalog: () => buildSellerWorkspacePath(storeSlug, "/catalog"),
   productCreate: () => buildSellerWorkspacePath(storeSlug, "/catalog/new"),
   productDetail: (productId) =>
@@ -55,6 +56,7 @@ export const createSellerWorkspaceRoutes = (storeSlug) => ({
     buildSellerWorkspacePath(storeSlug, `/orders/${encodeURIComponent(String(suborderId))}`),
   paymentReview: () => buildSellerWorkspacePath(storeSlug, "/payment-review"),
   paymentProfile: () => buildSellerWorkspacePath(storeSlug, "/payment-profile"),
+  coupons: () => buildSellerWorkspacePath(storeSlug, "/coupons"),
   team: () => buildSellerWorkspacePath(storeSlug, "/team"),
   teamAudit: () => buildSellerWorkspacePath(storeSlug, "/team/audit"),
   memberLifecycle: (memberId) =>

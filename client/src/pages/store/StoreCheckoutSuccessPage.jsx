@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
-import QueryState from "../../components/UI/QueryState.jsx";
+import QueryState from "../../components/primitives/ui/QueryState.jsx";
 
 const LAST_ORDER_REF_STORAGE_KEY = "store_last_order_ref";
 

@@ -170,6 +170,11 @@ const MENU = [
         perm: "SETTINGS_MANAGE",
       },
       {
+        label: "Store Profile",
+        to: "/admin/online-store/store-profile",
+        perm: "SETTINGS_MANAGE",
+      },
+      {
         label: "Store Settings",
         to: "/admin/store/store-settings",
         perm: "SETTINGS_MANAGE",

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { Op } from "sequelize";
 import { z } from "zod";
 import requireAuth from "../middleware/requireAuth.js";
 import {
@@ -25,6 +26,7 @@ import {
   recalculateParentOrderPaymentStatus,
 } from "../services/orderPaymentAggregation.service.js";
 import { appendPaymentStatusLog } from "../services/paymentStatusLog.service.js";
+import { quoteCoupon } from "../services/coupon.service.js";
 import {
   buildBuyerCancelActionability,
   buildBuyerProofActionability,
@@ -33,7 +35,7 @@ import {
 import {
   resolvePreferredStorePaymentProfile,
   STORE_PAYMENT_PROFILE_CHECKOUT_ATTRIBUTES,
-} from "../services/storePaymentProfileCompat.js";
+} from "../services/sharedContracts/storePaymentProfileCompat.js";
 import { getDefaultAddressByUser } from "../services/userAddress.service.js";
 
 const router = Router();
@@ -71,6 +73,16 @@ const createMultiStoreSchema = z.object({
     .optional(),
   shippingDetails: shippingDetailsSchema.nullable().optional(),
   couponCode: z.string().trim().min(1).optional().nullable(),
+  groupCoupons: z
+    .array(
+      z.object({
+        storeId: z.number().int().positive(),
+        couponCode: z.string().trim().min(1),
+      })
+    )
+    .max(20)
+    .optional()
+    .nullable(),
 });
 
 const SHIPPING_REQUIRED_FIELDS = [
@@ -196,6 +208,13 @@ const isStorefrontProductVisible = (product: any) => {
   );
 };
 
+const buildPublicProductWhere = (extraWhere: Record<string, any> = {}) => ({
+  ...extraWhere,
+  status: "active",
+  isPublished: true,
+  sellerSubmissionStatus: "none",
+});
+
 const getAuthUser = (req: any) => {
   const userId = Number(req?.user?.id);
   return {
@@ -215,6 +234,28 @@ const buildSuborderNumber = (invoiceNo: string, index: number) =>
 
 const buildInternalPaymentReference = (suborderNumber: string) =>
   `${suborderNumber}-PAY`;
+
+const buildAppliedCouponAttribution = (
+  quoted: Awaited<ReturnType<typeof quoteCoupon>> | null | undefined
+) => {
+  if (!quoted?.valid || !quoted.code) {
+    return {
+      appliedCouponId: null,
+      appliedCouponCode: null,
+      appliedCouponScopeType: null,
+    };
+  }
+
+  return {
+    appliedCouponId:
+      Number.isFinite(Number(quoted.couponId)) && Number(quoted.couponId) > 0
+        ? Number(quoted.couponId)
+        : null,
+    appliedCouponCode: String(quoted.code).trim().toUpperCase() || null,
+    appliedCouponScopeType:
+      quoted.scopeType === "PLATFORM" || quoted.scopeType === "STORE" ? quoted.scopeType : null,
+  };
+};
 
 const buildPaymentExpiry = () => {
   const expiresAt = new Date();
@@ -317,6 +358,23 @@ const serializePreviewGroup = (group: any) => ({
   })),
 });
 
+const buildInvalidCheckoutItem = (
+  product: any,
+  reason: string,
+  extras: { available?: number | null; requested?: number | null } = {}
+) => {
+  const productId = toNumber(getAttr(product, "id"));
+  return {
+    productId,
+    productName: String(getAttr(product, "name") || `Product #${productId}`),
+    reason,
+    available:
+      extras.available == null ? null : Math.max(0, Number(extras.available) || 0),
+    requested:
+      extras.requested == null ? null : Math.max(0, Number(extras.requested) || 0),
+  };
+};
+
 const prepareCartGroups = (cartItems: any[]) => {
   const groupsMap = new Map<number, any>();
   const invalidItems: any[] = [];
@@ -341,11 +399,27 @@ const prepareCartGroups = (cartItems: any[]) => {
     }
 
     if (!storeId) {
-      invalidItems.push({
-        productId,
-        productName: String(getAttr(product, "name") || `Product #${productId}`),
-        reason: "PRODUCT_STORE_UNMAPPED",
-      });
+      invalidItems.push(buildInvalidCheckoutItem(product, "PRODUCT_STORE_UNMAPPED"));
+      continue;
+    }
+
+    if (stock <= 0) {
+      invalidItems.push(
+        buildInvalidCheckoutItem(product, "PRODUCT_OUT_OF_STOCK", {
+          available: stock,
+          requested: quantity,
+        })
+      );
+      continue;
+    }
+
+    if (stock < quantity) {
+      invalidItems.push(
+        buildInvalidCheckoutItem(product, "PRODUCT_STOCK_REDUCED", {
+          available: stock,
+          requested: quantity,
+        })
+      );
       continue;
     }
 
@@ -445,6 +519,70 @@ const prepareCartGroups = (cartItems: any[]) => {
     groups,
     invalidItems,
   };
+};
+
+const lockVisibleProductsForCheckout = async (
+  productIds: number[],
+  transaction: any
+) => {
+  if (!Array.isArray(productIds) || productIds.length === 0) return new Map<number, any>();
+
+  const rows = await Product.findAll({
+    where: buildPublicProductWhere({
+      id: { [Op.in]: productIds },
+    }),
+    attributes: [
+      "id",
+      "name",
+      "slug",
+      "sku",
+      "price",
+      "salePrice",
+      "promoImagePath",
+      "imagePaths",
+      "storeId",
+      "stock",
+      "status",
+      "isPublished",
+      "sellerSubmissionStatus",
+      "userId",
+      "categoryId",
+    ],
+    include: [
+      {
+        model: Category,
+        as: "category",
+        attributes: ["id", "name", "code"],
+      },
+      {
+        model: Store,
+        as: "store",
+        attributes: ["id", "activeStorePaymentProfileId", "name", "slug", "status"],
+        required: true,
+        where: { status: "ACTIVE" } as any,
+        include: [
+          {
+            model: StorePaymentProfile,
+            as: "paymentProfile",
+            attributes: [...STORE_PAYMENT_PROFILE_CHECKOUT_ATTRIBUTES],
+            required: false,
+          },
+          {
+            model: StorePaymentProfile,
+            as: "activePaymentProfile",
+            attributes: [...STORE_PAYMENT_PROFILE_CHECKOUT_ATTRIBUTES],
+            required: false,
+          },
+        ],
+      },
+    ],
+    transaction,
+    lock: transaction.LOCK.UPDATE,
+  });
+
+  return new Map(
+    rows.map((product: any) => [toNumber(getAttr(product, "id")), product])
+  );
 };
 
 const serializeCheckoutPreview = (prepared: any) => ({
@@ -854,12 +992,20 @@ router.post("/create-multi-store", async (req, res) => {
     }
 
     const normalizedCouponCode = String(parsed.data.couponCode || "").trim().toUpperCase();
-    if (normalizedCouponCode) {
-      return res.status(400).json({
-        success: false,
-        message: "Coupon is not supported in multi-store checkout foundation yet.",
-      });
-    }
+    const normalizedGroupCoupons = Array.from(
+      new Map(
+        (Array.isArray(parsed.data.groupCoupons) ? parsed.data.groupCoupons : [])
+          .map((entry) => ({
+            storeId: toNumber(entry?.storeId, 0),
+            couponCode: String(entry?.couponCode || "").trim().toUpperCase(),
+          }))
+          .filter(
+            (entry) =>
+              Number.isFinite(entry.storeId) && entry.storeId > 0 && entry.couponCode.length > 0
+          )
+          .map((entry) => [entry.storeId, entry] as const)
+      ).values()
+    );
 
     const useDefaultShipping = parsed.data.useDefaultShipping === true;
     let shippingDetails = normalizeShippingDetails(parsed.data.shippingDetails);
@@ -913,7 +1059,37 @@ router.post("/create-multi-store", async (req, res) => {
         });
       }
 
-      const prepared = prepareCartGroups(cartItems);
+      const requestedProductIds = Array.from(
+        new Set(
+          cartItems
+            .map((item: any) => toNumber(getAttr(item, "id"), 0))
+            .filter((id: number): id is number => Number.isFinite(id) && id > 0)
+        )
+      ) as number[];
+      const lockedProductsById = await lockVisibleProductsForCheckout(
+        requestedProductIds,
+        tx
+      );
+      const missingLockedItems: any[] = [];
+      const lockedCartItems = cartItems
+        .map((item: any) => {
+          const productId = toNumber(getAttr(item, "id"), 0);
+          const lockedProduct = lockedProductsById.get(productId);
+          if (!lockedProduct) {
+            missingLockedItems.push(buildInvalidCheckoutItem(item, "PRODUCT_NOT_PUBLIC"));
+            return null;
+          }
+          lockedProduct.setDataValue?.("CartItem", item?.CartItem ?? null);
+          (lockedProduct as any).CartItem = item?.CartItem ?? null;
+          return lockedProduct;
+        })
+        .filter(Boolean);
+
+      const prepared = prepareCartGroups(lockedCartItems);
+      if (missingLockedItems.length > 0) {
+        prepared.invalidItems.unshift(...missingLockedItems);
+        prepared.summary.invalidItemCount = prepared.invalidItems.length;
+      }
       if (prepared.invalidItems.length > 0) {
         await tx.rollback();
         return res.status(409).json({
@@ -962,6 +1138,108 @@ router.post("/create-multi-store", async (req, res) => {
         }
       }
 
+      if (normalizedCouponCode && normalizedGroupCoupons.length > 0) {
+        await tx.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Use either an order-level coupon or store-group coupons, not both.",
+        });
+      }
+
+      let appliedCouponQuote: Awaited<ReturnType<typeof quoteCoupon>> | null = null;
+      const groupCouponQuotes = new Map<number, Awaited<ReturnType<typeof quoteCoupon>>>();
+      if (normalizedCouponCode) {
+        if (prepared.groups.length !== 1) {
+          await tx.rollback();
+          return res.status(400).json({
+            success: false,
+            message:
+              "Order-level coupon only supports single-store checkout. Use store-group coupons instead.",
+          });
+        }
+
+        const scopedGroup = prepared.groups[0];
+        appliedCouponQuote = await quoteCoupon(
+          normalizedCouponCode,
+          prepared.summary.subtotalAmount,
+          prepared.summary.shippingAmount,
+          { storeId: scopedGroup.storeId }
+        );
+
+        if (!appliedCouponQuote.valid) {
+          await tx.rollback();
+          return res.status(409).json({
+            success: false,
+            message:
+              appliedCouponQuote.message ||
+              "Coupon is not valid for the current single-store checkout.",
+            data: {
+              coupon: appliedCouponQuote,
+            },
+          });
+        }
+      }
+
+      if (normalizedGroupCoupons.length > 0) {
+        const groupsByStoreId = new Map(
+          prepared.groups.map((group: any) => [toNumber(group.storeId), group] as const)
+        );
+
+        for (const groupCoupon of normalizedGroupCoupons) {
+          const scopedGroup = groupsByStoreId.get(groupCoupon.storeId);
+          if (!scopedGroup) {
+            await tx.rollback();
+            return res.status(400).json({
+              success: false,
+              message: `Coupon store #${groupCoupon.storeId} is not part of this checkout.`,
+            });
+          }
+
+          const quoted = await quoteCoupon(
+            groupCoupon.couponCode,
+            scopedGroup.subtotalAmount,
+            scopedGroup.shippingAmount,
+            { storeId: scopedGroup.storeId }
+          );
+
+          if (!quoted.valid) {
+            await tx.rollback();
+            return res.status(409).json({
+              success: false,
+              message:
+                quoted.message ||
+                `Coupon is not valid for store ${scopedGroup.storeName || scopedGroup.storeId}.`,
+              data: {
+                storeId: scopedGroup.storeId,
+                coupon: quoted,
+              },
+            });
+          }
+
+          if (String(quoted.scopeType || "").toUpperCase() !== "STORE") {
+            await tx.rollback();
+            return res.status(409).json({
+              success: false,
+              message:
+                "Store-group coupons must be store-scoped. Platform coupons are not open in split checkout yet.",
+              data: {
+                storeId: scopedGroup.storeId,
+                coupon: quoted,
+              },
+            });
+          }
+
+          groupCouponQuotes.set(scopedGroup.storeId, quoted);
+        }
+      }
+
+      const orderLevelDiscountAmount = Math.max(0, Number(appliedCouponQuote?.discount || 0));
+      const groupDiscountAmount = Array.from(groupCouponQuotes.values()).reduce(
+        (sum, quoted) => sum + Math.max(0, Number(quoted?.discount || 0)),
+        0
+      );
+      const discountAmount = orderLevelDiscountAmount + groupDiscountAmount;
+      const discountedGrandTotal = Math.max(0, prepared.summary.grandTotal - discountAmount);
       const invoiceNo = buildInvoiceNo();
       const parentOrder = await Order.create(
         {
@@ -978,9 +1256,13 @@ router.post("/create-multi-store", async (req, res) => {
           customerAddress: resolvedCustomer.address,
           customerNotes: resolvedCustomer.notes,
           paymentMethod: "QRIS",
-          totalAmount: prepared.summary.grandTotal,
-          couponCode: null,
-          discountAmount: 0,
+          totalAmount: discountedGrandTotal,
+          couponCode:
+            appliedCouponQuote?.code ||
+            (groupCouponQuotes.size === 1 && prepared.groups.length === 1
+              ? Array.from(groupCouponQuotes.values())[0]?.code || null
+              : null),
+          discountAmount,
           status: "pending",
         } as any,
         { transaction: tx }
@@ -1000,16 +1282,32 @@ router.post("/create-multi-store", async (req, res) => {
         const group = prepared.groups[index];
         const paymentProfile = group.paymentProfile;
         const suborderNumber = buildSuborderNumber(invoiceNo, index);
+        const orderLevelGroupDiscount =
+          appliedCouponQuote && prepared.groups.length === 1 ? orderLevelDiscountAmount : 0;
+        const appliedGroupCouponQuote =
+          appliedCouponQuote && prepared.groups.length === 1
+            ? appliedCouponQuote
+            : groupCouponQuotes.get(group.storeId) || null;
+        const appliedCouponAttribution = buildAppliedCouponAttribution(appliedGroupCouponQuote);
+        const scopedGroupDiscount = Math.max(
+          0,
+          Number(groupCouponQuotes.get(group.storeId)?.discount || 0)
+        );
+        const totalGroupDiscount = orderLevelGroupDiscount + scopedGroupDiscount;
+        const discountedGroupTotal = Math.max(0, group.totalAmount - totalGroupDiscount);
         await Suborder.create(
           {
             orderId: parentOrder.id,
             suborderNumber,
             storeId: group.storeId,
             storePaymentProfileId: paymentProfile?.id ? Number(paymentProfile.id) : null,
+            appliedCouponId: appliedCouponAttribution.appliedCouponId,
+            appliedCouponCode: appliedCouponAttribution.appliedCouponCode,
+            appliedCouponScopeType: appliedCouponAttribution.appliedCouponScopeType,
             subtotalAmount: group.subtotalAmount,
             shippingAmount: group.shippingAmount,
             serviceFeeAmount: 0,
-            totalAmount: group.totalAmount,
+            totalAmount: discountedGroupTotal,
             paymentMethod: "QRIS",
             paymentStatus: "UNPAID",
             fulfillmentStatus: "UNFULFILLED",
@@ -1040,7 +1338,7 @@ router.post("/create-multi-store", async (req, res) => {
               paymentChannel: "QRIS",
               paymentType: "QRIS_STATIC",
               internalReference: buildInternalPaymentReference(suborderNumber),
-              amount: group.totalAmount,
+              amount: discountedGroupTotal,
               qrImageUrl: String(paymentProfile?.qrisImageUrl || ""),
               qrPayload: paymentProfile?.qrisPayload ? String(paymentProfile.qrisPayload) : null,
               status: "CREATED",
@@ -1087,7 +1385,7 @@ router.post("/create-multi-store", async (req, res) => {
         await Promise.allSettled([
           createNewOrderNotification({
             customerName: resolvedCustomer.name ?? null,
-            amount: prepared.summary.grandTotal,
+            amount: discountedGrandTotal,
             orderId: Number(parentOrder.id || 0),
             invoiceNo,
           }),

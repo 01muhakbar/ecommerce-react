@@ -247,9 +247,39 @@ const normalizeSellerPaymentProfile = (payload: any) => {
     governance: {
       canView: payload?.governance?.canView !== false,
       canEdit: Boolean(payload?.governance?.canEdit),
+      permissionCanEdit: Boolean(
+        payload?.governance?.permissionCanEdit ?? payload?.governance?.canEdit
+      ),
+      isReviewLocked: Boolean(payload?.governance?.isReviewLocked),
       mode: textOrFallback(payload?.governance?.mode, "READ_ONLY_SNAPSHOT"),
-      managedBy: textOrFallback(payload?.governance?.managedBy, "ACCOUNT_ADMIN"),
+      managedBy: textOrFallback(
+        payload?.governance?.managedBy,
+        "SELLER_REQUEST_ADMIN_FINAL_APPROVAL"
+      ),
+      lockReason: textOrNull(payload?.governance?.lockReason),
       note: textOrNull(payload?.governance?.note),
+      submittedAt: payload?.governance?.submittedAt || pendingRequest?.submittedAt || null,
+      reviewedAt:
+        payload?.governance?.reviewedAt || readModel.reviewStatus.reviewedAt || payload?.verifiedAt || null,
+      reviewStatus: payload?.governance?.reviewStatus
+        ? normalizeStatusChip(
+            payload.governance.reviewStatus,
+            readModel.reviewStatus.label || "Pending review",
+            readModel.reviewStatus.tone || "warning",
+            readModel.reviewStatus.code || "PENDING"
+          )
+        : { ...readModel.reviewStatus },
+      nextStep: payload?.governance?.nextStep
+        ? {
+            code: textOrFallback(payload.governance.nextStep.code, readModel.nextStep.code),
+            label: textOrFallback(payload.governance.nextStep.label, readModel.nextStep.label),
+            lane: textOrFallback(payload.governance.nextStep.lane, readModel.nextStep.lane),
+            actor: textOrFallback(payload.governance.nextStep.actor, readModel.nextStep.actor),
+            description:
+              textOrNull(payload.governance.nextStep.description) ||
+              textOrNull(readModel.nextStep.description),
+          }
+        : { ...readModel.nextStep },
       editableFields: Array.isArray(payload?.governance?.editableFields)
         ? payload.governance.editableFields
             .map((entry: unknown) => textOrNull(entry))

@@ -48,8 +48,11 @@ export default function EditCouponDrawer({
   onSubmit,
   isSubmitting,
   error,
+  storeOptions = [],
 }) {
   const [language, setLanguage] = useState("en");
+  const [scopeType, setScopeType] = useState("PLATFORM");
+  const [storeId, setStoreId] = useState("");
   const [discountType, setDiscountType] = useState("percent");
   const [amount, setAmount] = useState("");
   const [minSpend, setMinSpend] = useState("");
@@ -61,6 +64,8 @@ export default function EditCouponDrawer({
   useEffect(() => {
     if (!open || !coupon) return;
     setLanguage("en");
+    setScopeType(coupon?.governance?.scopeType || coupon?.scopeType || "PLATFORM");
+    setStoreId(String(coupon?.governance?.storeId ?? coupon?.storeId ?? ""));
     setDiscountType(coupon.discountType || "percent");
     setAmount(String(coupon.amount ?? ""));
     setMinSpend(String(coupon.minSpend ?? ""));
@@ -84,6 +89,10 @@ export default function EditCouponDrawer({
     const parsedAmount = toNumber(amount);
     const parsedMinSpend = toNumber(minSpend);
 
+    if (scopeType === "STORE" && !storeId) {
+      setValidationError("Store is required for store-scoped coupons.");
+      return;
+    }
     if (discountType === "percent" && (parsedAmount < 0 || parsedAmount > 100)) {
       setValidationError("Percent discount must be between 0 and 100.");
       return;
@@ -117,10 +126,13 @@ export default function EditCouponDrawer({
 
     setValidationError("");
     onSubmit({
+      scopeType,
+      storeId: scopeType === "STORE" ? Number(storeId) : null,
       discountType,
       amount: parsedAmount,
       minSpend: parsedMinSpend,
       active: Boolean(active),
+      startsAt: startDate ? new Date(`${startDate}T00:00:00`).toISOString() : null,
       expiresAt: endDate ? new Date(`${endDate}T23:59:59`).toISOString() : null,
     });
   };
@@ -179,8 +191,8 @@ export default function EditCouponDrawer({
               <CouponDrawerSectionHeader
                 eyebrow="Basic Info"
                 title="Review campaign identity before changing rules"
-                description="Keep the language and campaign code visible so edits stay aligned with the live promotion."
-                meta={coupon?.campaignName || coupon?.name || "Promotion"}
+                description="Keep the language, scope, and campaign code visible so edits stay aligned with the live promotion."
+                meta={`${scopeType} / ${coupon?.campaignName || coupon?.name || "Promotion"}`}
               />
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <div>
@@ -199,6 +211,25 @@ export default function EditCouponDrawer({
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Scope
+                  </label>
+                  <select
+                    value={scopeType}
+                    onChange={(event) => {
+                      setValidationError("");
+                      const nextScopeType = event.target.value;
+                      setScopeType(nextScopeType);
+                      if (nextScopeType !== "STORE") setStoreId("");
+                    }}
+                    className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none"
+                    disabled={isSubmitting}
+                  >
+                    <option value="PLATFORM">Platform / Global</option>
+                    <option value="STORE">Store-scoped</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Campaign Code
                   </label>
                   <input
@@ -207,6 +238,31 @@ export default function EditCouponDrawer({
                     className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700"
                   />
                 </div>
+                {scopeType === "STORE" ? (
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Linked Store
+                    </label>
+                    <select
+                      value={storeId}
+                      onChange={(event) => {
+                        setValidationError("");
+                        setStoreId(event.target.value);
+                      }}
+                      className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none"
+                      disabled={isSubmitting}
+                      required
+                    >
+                      <option value="">Select store</option>
+                      {storeOptions.map((store) => (
+                        <option key={store.id} value={store.id}>
+                          {store.name}
+                          {store.slug ? ` (${store.slug})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
               </div>
             </section>
 
@@ -272,6 +328,9 @@ export default function EditCouponDrawer({
               <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-500">
                 <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1">
                   {startDate ? `Starts ${startDate}` : "Start date optional"}
+                </span>
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1">
+                  {scopeType === "STORE" ? "Seller-owned / admin-governed" : "Admin-owned global"}
                 </span>
                 <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1">
                   {endDate ? `Ends ${endDate}` : "End date optional"}

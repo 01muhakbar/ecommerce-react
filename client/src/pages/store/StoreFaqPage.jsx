@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
-import { getStoreCustomization } from "../../api/store.service.ts";
+import { getStoreCustomization } from "../../api/public/storeCustomizationPublic.ts";
 import {
   UiEmptyState,
   UiErrorState,
-} from "../../components/ui-states/index.js";
+} from "../../components/primitives/state/index.js";
 
 const DEFAULT_LANG = "en";
 const FAQ_ITEMS_LENGTH = 8;

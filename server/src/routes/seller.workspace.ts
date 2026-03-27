@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { Op } from "sequelize";
 import requireSellerStoreAccess from "../middleware/requireSellerStoreAccess.js";
 import requireAuth from "../middleware/requireAuth.js";
 import {
@@ -7,16 +8,30 @@ import {
   PaymentProof,
   Store,
   StorePaymentProfile,
+  StorePaymentProfileRequest,
   Suborder,
 } from "../models/index.js";
 import {
   resolveSellerAccessBySlug,
+  listSellerAccessContexts,
   sellerHasPermission,
 } from "../services/seller/resolveSellerAccess.js";
 import {
   resolvePreferredStorePaymentProfile,
   STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES,
-} from "../services/storePaymentProfileCompat.js";
+} from "../services/sharedContracts/storePaymentProfileCompat.js";
+import {
+  buildWorkspaceReadinessSummary,
+  emptyProductPipelineSummary,
+  emptyTeamWorkspaceSummary,
+  loadProductPipelineSummaryByStoreIds,
+  loadTeamWorkspaceSummaryByStoreIds,
+} from "../services/sellerWorkspaceReadiness.js";
+import { loadSellerWorkspaceAnalyticsSummary } from "../services/sellerWorkspaceAnalytics.js";
+import {
+  openSellerPaymentRequestStatuses,
+  storePaymentProfileRequestAttributes,
+} from "../services/sharedContracts/storePaymentProfileState.js";
 
 const router = Router();
 
@@ -95,12 +110,12 @@ const buildPaymentProfileReadiness = (profile: any) => {
         description: "Admin review has not started because no payment profile snapshot exists yet.",
       },
       nextStep: {
-        code: "FOLLOW_EXISTING_SETUP_LANE",
-        label: "Follow existing setup lane",
-        lane: "ACCOUNT_ADMIN",
-        actor: "STORE_OWNER_OR_ADMIN",
+        code: "OPEN_SELLER_PAYMENT_SETUP",
+        label: "Open seller payment setup",
+        lane: "SELLER_PAYMENT_SETUP",
+        actor: "SELLER_OWNER_OR_ADMIN",
         description:
-          "Seller workspace remains read-only here. Use the existing account or admin payment profile flow to create the first snapshot.",
+          "Create the first store-scoped payment setup draft in the seller workspace. Admin remains the final reviewer before any setup can go live.",
       },
       governance: {
         mode: "READ_ONLY_SNAPSHOT",
@@ -132,7 +147,7 @@ const buildPaymentProfileReadiness = (profile: any) => {
     label = "Incomplete";
     tone = "amber";
     description =
-      "Some required payment destination fields are still missing. Complete them through the existing account or admin-managed flow.";
+      "Some required payment destination fields are still missing. Complete them in the seller payment setup lane, then submit for admin review.";
   } else if (verificationStatus === "REJECTED") {
     code = "REJECTED";
     label = "Rejected";
@@ -164,10 +179,10 @@ const buildPaymentProfileReadiness = (profile: any) => {
       : verificationStatus === "REJECTED"
         ? {
             code: verificationStatus,
-            label: "Rejected",
-            tone: "rose",
-            description:
-              "Admin review rejected this payment profile. The seller should update it through the existing account or admin lane.",
+          label: "Rejected",
+          tone: "rose",
+          description:
+              "Admin review rejected this payment profile. The seller should update the request in the seller payment setup lane before review can restart.",
           }
         : verificationStatus === "INACTIVE"
           ? {
@@ -196,20 +211,20 @@ const buildPaymentProfileReadiness = (profile: any) => {
   if (code === "INCOMPLETE") {
     nextStep = {
       code: "COMPLETE_PROFILE",
-      label: "Complete profile in existing lane",
-      lane: "ACCOUNT_PAYMENT_PROFILE",
-      actor: "STORE_OWNER_OR_ADMIN",
+      label: "Complete profile in seller lane",
+      lane: "SELLER_PAYMENT_SETUP",
+      actor: "SELLER_OWNER_OR_ADMIN",
       description:
-        "Complete the missing payment profile fields through the existing account payment profile flow, then wait for admin review.",
+        "Complete the missing payment profile fields in the seller payment setup lane, then submit for admin review.",
     };
   } else if (code === "REJECTED") {
     nextStep = {
       code: "UPDATE_AND_RESUBMIT",
-      label: "Update profile in existing lane",
-      lane: "ACCOUNT_PAYMENT_PROFILE",
-      actor: "STORE_OWNER_OR_ADMIN",
+      label: "Update profile in seller lane",
+      lane: "SELLER_PAYMENT_SETUP",
+      actor: "SELLER_OWNER_OR_ADMIN",
       description:
-        "Update the payment profile through the existing account payment profile flow before admin review can restart.",
+        "Update the payment profile request in the seller payment setup lane before admin review can restart.",
     };
   } else if (code === "READY") {
     nextStep = {
@@ -222,12 +237,12 @@ const buildPaymentProfileReadiness = (profile: any) => {
     };
   } else if (code === "INACTIVE") {
     nextStep = {
-      code: "FOLLOW_EXISTING_REVIEW_LANE",
-      label: "Follow up in existing lane",
-      lane: "ACCOUNT_ADMIN",
-      actor: "STORE_OWNER_OR_ADMIN",
+      code: "REVIEW_PAYMENT_SETUP",
+      label: "Review payment setup status",
+      lane: "SELLER_PAYMENT_SETUP",
+      actor: "SELLER_OWNER_OR_ADMIN",
       description:
-        "Seller workspace does not expose activation controls. Follow the existing account or admin-managed flow to understand why activation is still blocked.",
+        "Review the latest active snapshot and request history in seller workspace. Admin still controls activation when the setup is otherwise complete.",
     };
   }
 
@@ -246,7 +261,7 @@ const buildPaymentProfileReadiness = (profile: any) => {
     governance: {
       mode: "READ_ONLY_SNAPSHOT",
       note:
-        "Seller workspace only exposes a read-only payment setup snapshot. Changes still belong to the existing account or admin flow.",
+        "Seller workspace exposes the payment setup status for the active store, while admin remains the final reviewer and activation authority.",
     },
     profile: {
       id: toNumber(getAttr(profile, "id")),
@@ -417,7 +432,7 @@ const buildFinanceNextActions = (input: {
       tone: "amber",
       label: "Review payment setup lane",
       description:
-        "No payment setup snapshot exists yet for this store. Follow the existing account or admin setup lane before expecting live payment readiness.",
+        "No payment setup snapshot exists yet for this store. Start the first seller payment setup draft before expecting live payment readiness.",
     });
   } else if (
     canViewPaymentProfile &&
@@ -586,6 +601,31 @@ const buildSellerFinanceSummary = (input: {
   };
 };
 
+const findLatestOpenStorePaymentProfileRequest = async (storeId: number) =>
+  StorePaymentProfileRequest.findOne({
+    where: {
+      storeId,
+      requestStatus: { [Op.in]: [...openSellerPaymentRequestStatuses] },
+    },
+    attributes: [...storePaymentProfileRequestAttributes],
+    include: [
+      {
+        association: "submittedByUser",
+        attributes: ["id", "name", "email"],
+        required: false,
+      },
+      {
+        association: "reviewedByAdmin",
+        attributes: ["id", "name", "email"],
+        required: false,
+      },
+    ],
+    order: [
+      ["updatedAt", "DESC"],
+      ["id", "DESC"],
+    ],
+  });
+
 router.get("/stores/:storeId/context", requireSellerStoreAccess(), async (req, res) => {
   const sellerAccess = (req as any).sellerAccess;
 
@@ -594,6 +634,132 @@ router.get("/stores/:storeId/context", requireSellerStoreAccess(), async (req, r
     data: serializeSellerWorkspaceContext(sellerAccess),
   });
 });
+
+router.get("/stores", async (req, res, next) => {
+  requireAuth(req, res, async () => {
+    try {
+      const accessContexts = await listSellerAccessContexts({
+        userId: Number((req as any).user?.id),
+      });
+
+      const items = accessContexts
+        .map((access) => serializeSellerWorkspaceContext(access))
+        .sort((left, right) => {
+          const leftOwner = left?.access?.isOwner ? 1 : 0;
+          const rightOwner = right?.access?.isOwner ? 1 : 0;
+          if (leftOwner !== rightOwner) return rightOwner - leftOwner;
+          return String(left?.store?.name || "").localeCompare(String(right?.store?.name || ""));
+        });
+
+      return res.json({
+        success: true,
+        data: items,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  });
+});
+
+router.get(
+  "/stores/:storeId/workspace-readiness",
+  requireSellerStoreAccess(["STORE_VIEW"]),
+  async (req, res) => {
+    try {
+      const sellerAccess = (req as any).sellerAccess;
+      const storeId = Number(req.params.storeId);
+      const canViewPaymentProfile = sellerHasPermission(
+        sellerAccess,
+        "PAYMENT_PROFILE_VIEW"
+      );
+
+      const [store, pendingPaymentRequest, productSummaryMap, teamSummaryMap] = await Promise.all([
+        Store.findByPk(storeId, {
+          attributes: [
+            "id",
+            "name",
+            "slug",
+            "status",
+            "description",
+            "logoUrl",
+            "bannerUrl",
+            "email",
+            "phone",
+            "whatsapp",
+            "websiteUrl",
+            "instagramUrl",
+            "tiktokUrl",
+            "addressLine1",
+            "addressLine2",
+            "city",
+            "province",
+            "postalCode",
+            "country",
+            "activeStorePaymentProfileId",
+          ],
+          include: [
+            {
+              model: StorePaymentProfile,
+              as: "paymentProfile",
+              attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+              required: false,
+            },
+            {
+              model: StorePaymentProfile,
+              as: "activePaymentProfile",
+              attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+              required: false,
+            },
+          ],
+        }),
+        canViewPaymentProfile
+          ? findLatestOpenStorePaymentProfileRequest(storeId)
+          : Promise.resolve(null),
+        loadProductPipelineSummaryByStoreIds([storeId]),
+        loadTeamWorkspaceSummaryByStoreIds([storeId]),
+      ]);
+
+      if (!store) {
+        return res.status(404).json({
+          success: false,
+          message: "Store not found.",
+        });
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          store: {
+            id: Number(store.id),
+            name: String(store.name || ""),
+            slug: String(store.slug || ""),
+            status: String(store.status || "ACTIVE"),
+            roleCode: String(sellerAccess?.roleCode || ""),
+            accessMode: String(sellerAccess?.accessMode || ""),
+            membershipStatus: String(sellerAccess?.membershipStatus || ""),
+          },
+          ...buildWorkspaceReadinessSummary({
+            store,
+            activePaymentProfile: canViewPaymentProfile
+              ? resolvePreferredStorePaymentProfile(store)
+              : null,
+            pendingPaymentRequest,
+            productSummary: productSummaryMap.get(storeId) || emptyProductPipelineSummary(),
+            teamSummary: teamSummaryMap.get(storeId) || emptyTeamWorkspaceSummary(),
+            sellerAccess,
+            includeTeamInfo: true,
+          }),
+        },
+      });
+    } catch (error) {
+      console.error("[seller/workspace:readiness] error", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to load seller workspace readiness.",
+      });
+    }
+  }
+);
 
 router.get(
   "/stores/:storeId/finance-summary",
@@ -691,6 +857,31 @@ router.get(
       return res.status(500).json({
         success: false,
         message: "Failed to load seller finance summary.",
+      });
+    }
+  }
+);
+
+router.get(
+  "/stores/:storeId/analytics-summary",
+  requireSellerStoreAccess(["STORE_VIEW"]),
+  async (req, res) => {
+    try {
+      const sellerAccess = (req as any).sellerAccess;
+      const storeId = Number(req.params.storeId);
+
+      return res.json({
+        success: true,
+        data: await loadSellerWorkspaceAnalyticsSummary({
+          storeId,
+          sellerAccess,
+        }),
+      });
+    } catch (error) {
+      console.error("[seller/workspace:analytics-summary] error", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to load seller analytics summary.",
       });
     }
   }

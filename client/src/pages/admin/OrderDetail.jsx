@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchAdminOrderByInvoice, updateAdminOrderStatus } from "../../lib/adminApi.js";
 import { ORDER_STATUS_OPTIONS } from "../../constants/orderStatus.js";
-import QueryState from "../../components/UI/QueryState.jsx";
+import QueryState from "../../components/primitives/ui/QueryState.jsx";
 import OrderStatusBadge from "../../components/admin/OrderStatusBadge.jsx";
 import OrderStatusTimeline from "../../components/admin/OrderStatusTimeline.jsx";
 import useAdminLocale from "../../hooks/useAdminLocale.js";

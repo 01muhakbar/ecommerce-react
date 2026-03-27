@@ -1,12 +1,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { useAuth } from "../../auth/useAuth.js";
+import { useAdminAuth } from "../../auth/authDomainHooks.js";
 
 export default function AdminLoginPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { login } = useAuth();
+  const { login } = useAdminAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -44,8 +44,11 @@ export default function AdminLoginPage() {
 
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
           <div>
-            <label className="text-sm font-medium text-slate-600">Email</label>
+            <label htmlFor="admin-login-email" className="text-sm font-medium text-slate-600">
+              Email
+            </label>
             <input
+              id="admin-login-email"
               type="email"
               required
               value={email}
@@ -55,8 +58,11 @@ export default function AdminLoginPage() {
             />
           </div>
           <div>
-            <label className="text-sm font-medium text-slate-600">Password</label>
+            <label htmlFor="admin-login-password" className="text-sm font-medium text-slate-600">
+              Password
+            </label>
             <input
+              id="admin-login-password"
               type="password"
               required
               value={password}

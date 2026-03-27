@@ -18,7 +18,7 @@ import DeleteCouponModal from "../../components/admin/coupons/DeleteCouponModal.
 import {
   UiErrorState,
   UiSkeleton,
-} from "../../components/ui-states/index.js";
+} from "../../components/primitives/state/index.js";
 import {
   GENERIC_ERROR,
   NO_STAFF_FOUND,

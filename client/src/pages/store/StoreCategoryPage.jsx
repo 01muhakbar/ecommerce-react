@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { fetchStoreProducts } from "../../api/store.service.ts";
+import { fetchStoreProducts } from "../../api/public/storeProducts.ts";
 import { useCart } from "../../hooks/useCart.ts";
-import QueryState from "../../components/UI/QueryState.jsx";
+import QueryState from "../../components/primitives/ui/QueryState.jsx";
 import { formatCurrency } from "../../utils/format.js";
 import { resolveProductImageUrl } from "../../utils/productImage.js";
 import { useStoreCategories } from "../../hooks/useStoreCategories.ts";
@@ -186,33 +186,42 @@ export default function StoreCategoryPage() {
         onRetry={() => setRetryKey((prev) => prev + 1)}
       >
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {products.map((product) => (
-            <Link
-              key={product.id}
-              to={`/product/${encodeURIComponent(product.slug || product.id)}`}
-              className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
-            >
-              <div className="text-sm font-semibold">{product.name}</div>
-              <div className="text-xs text-slate-500">
-                {formatCurrency(Number(product.price || 0))}
-              </div>
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  add(product.id, 1, {
-                    name: product?.name || product?.title,
-                    price: product?.salePrice ?? product?.sellingPrice ?? product?.price,
-                    imageUrl: resolveProductImageUrl(product),
-                  });
-                }}
-                className="mt-auto self-start rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:border-slate-300"
+          {products.map((product) => {
+            const stockValue = Number(product?.stock);
+            const isOutOfStock = Number.isFinite(stockValue) && stockValue <= 0;
+            return (
+              <Link
+                key={product.id}
+                to={`/product/${encodeURIComponent(product.slug || product.id)}`}
+                className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
               >
-                Add to cart
-              </button>
-            </Link>
-          ))}
+                <div className="text-sm font-semibold">{product.name}</div>
+                <div className="text-xs text-slate-500">
+                  {formatCurrency(Number(product.price || 0))}
+                </div>
+                {isOutOfStock ? (
+                  <p className="text-xs font-medium text-rose-600">Out of stock</p>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (isOutOfStock) return;
+                    add(product.id, 1, {
+                      name: product?.name || product?.title,
+                      price: product?.salePrice ?? product?.sellingPrice ?? product?.price,
+                      imageUrl: resolveProductImageUrl(product),
+                    });
+                  }}
+                  disabled={isOutOfStock}
+                  className="mt-auto self-start rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isOutOfStock ? "Unavailable" : "Add to cart"}
+                </button>
+              </Link>
+            );
+          })}
         </div>
       </QueryState>
     </section>

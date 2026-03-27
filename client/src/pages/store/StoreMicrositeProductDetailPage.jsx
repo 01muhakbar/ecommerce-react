@@ -2,14 +2,12 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { ImageIcon, Star } from "lucide-react";
-import {
-  fetchStoreProductById,
-  getStorePublicIdentityBySlug,
-} from "../../api/store.service.ts";
+import { fetchStoreProductById } from "../../api/public/storeProducts.ts";
+import { getStorePublicIdentityBySlug } from "../../api/public/storePublicIdentity.ts";
 import { formatCurrency } from "../../utils/format.js";
 import { resolveAssetUrl } from "../../lib/assetUrl.js";
 import { normalizePublicStoreIdentity } from "../../utils/storePublicIdentity.ts";
-import { UiEmptyState, UiErrorState } from "../../components/ui-states/index.js";
+import { UiEmptyState, UiErrorState } from "../../components/primitives/state/index.js";
 import StoreMicrositeShell from "../../components/store/StoreMicrositeShell.jsx";
 
 const toText = (value, fallback = "") => {
@@ -91,6 +89,10 @@ export default function StoreMicrositeProductDetailPage() {
   const productImageSrc = resolveAssetUrl(product?.imageUrl);
   const isStoreNotFound = storeQuery.error?.response?.status === 404;
   const isProductNotFound = productQuery.error?.response?.status === 404;
+  const storeIdentityDescription = toText(
+    store.description,
+    "Shop public products from this store."
+  );
 
   if (!safeSlug || !safeProductSlug) {
     return (
@@ -157,7 +159,7 @@ export default function StoreMicrositeProductDetailPage() {
         safeSlug={safeSlug}
         currentLabel={safeProductSlug}
         compact
-        description="This route keeps product detail inside the store context. The requested public product could not be resolved for this store."
+        description={storeIdentityDescription}
       >
         <div className="mx-auto max-w-4xl">
           <UiEmptyState
@@ -207,7 +209,7 @@ export default function StoreMicrositeProductDetailPage() {
       safeSlug={safeSlug}
       currentLabel={product?.name || safeProductSlug}
       compact
-      description="The store identity, breadcrumb, and back path stay consistent while product detail remains isolated from the global product route."
+      description={storeIdentityDescription}
     >
       <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
           <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_20px_45px_rgba(15,23,42,0.08)]">

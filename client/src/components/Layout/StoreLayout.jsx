@@ -8,7 +8,7 @@ import { StoreCartDrawer } from "../../pages/store/StoreCartPage.jsx";
 import { useCartStore } from "../../store/cart.store.ts";
 import MobileMenuDrawer from "./MobileMenuDrawer.jsx";
 import { formatCurrency } from "../../utils/format.js";
-import { getStoreSettings } from "../../api/store.service.ts";
+import { getStoreSettings } from "../../api/public/storeCustomizationPublic.ts";
 
 const DEFAULT_PUBLIC_STORE_SETTINGS = {
   payments: {

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getStoreCustomization } from "../../api/store.service.ts";
-import { UiEmptyState, UiErrorState } from "../../components/ui-states/index.js";
+import { getStoreCustomization } from "../../api/public/storeCustomizationPublic.ts";
+import { UiEmptyState, UiErrorState } from "../../components/primitives/state/index.js";
 
 const DEFAULT_LANG = "en";
 const DEFAULT_OFFERS = {

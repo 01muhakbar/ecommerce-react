@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useCategories, useProducts } from "../../storefront.jsx";
-import { fetchStoreCoupons } from "../../api/store.service.ts";
+import { fetchStoreCoupons } from "../../api/public/storeCoupons.ts";
 import { formatCurrency } from "../../utils/format.js";
 import CouponPanel from "../../components/kachabazar-demo/CouponPanel.jsx";
 import FeatureStrip from "../../components/kachabazar-demo/FeatureStrip.jsx";
@@ -14,7 +14,7 @@ import {
   UiEmptyState,
   UiErrorState,
   UiSkeleton,
-} from "../../components/ui-states/index.js";
+} from "../../components/primitives/state/index.js";
 import { GENERIC_ERROR } from "../../constants/uiMessages.js";
 
 const slides = [

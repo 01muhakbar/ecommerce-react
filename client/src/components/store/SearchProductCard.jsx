@@ -21,6 +21,8 @@ export default function SearchProductCard({ product }) {
   const originalPrice = Number(product?.originalPrice ?? 0);
   const discountPercent = Number(product?.discountPercent ?? 0);
   const hasDiscount = discountPercent > 0 || (originalPrice > price && price > 0);
+  const stockValue = Number(product?.stock);
+  const isOutOfStock = Number.isFinite(stockValue) && stockValue <= 0;
 
   useEffect(() => {
     setImageSrc(resolvedImage);
@@ -39,7 +41,7 @@ export default function SearchProductCard({ product }) {
   const handleAdd = (event) => {
     event.preventDefault();
     event.stopPropagation();
-    if (isAdding) return;
+    if (isAdding || isOutOfStock) return;
     setIsAdding(true);
     add(product?.id, 1, {
       name: product?.name || product?.title,
@@ -98,12 +100,20 @@ export default function SearchProductCard({ product }) {
           </span>
           <button
             type="button"
-            aria-label={`Add ${productName} to cart`}
+            aria-label={
+              isOutOfStock ? `${productName} is out of stock` : `Add ${productName} to cart`
+            }
             onClick={handleAdd}
-            disabled={isAdding || isLoading}
+            disabled={isAdding || isLoading || isOutOfStock}
             className="absolute bottom-3 right-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 sm:h-10 sm:w-10"
           >
-            {isAdding ? <span className="text-base">✓</span> : <Plus className="h-4.5 w-4.5 sm:h-5 sm:w-5" />}
+            {isOutOfStock ? (
+              <span className="text-[10px] font-semibold">OOS</span>
+            ) : isAdding ? (
+              <span className="text-base">✓</span>
+            ) : (
+              <Plus className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
+            )}
           </button>
         </div>
 
@@ -125,6 +135,9 @@ export default function SearchProductCard({ product }) {
               </span>
             ) : null}
           </div>
+          {isOutOfStock ? (
+            <p className="text-[11px] font-medium text-rose-600">Out of stock</p>
+          ) : null}
         </div>
       </div>
     </article>

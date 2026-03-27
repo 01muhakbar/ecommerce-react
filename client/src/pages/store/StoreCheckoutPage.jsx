@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCartStore } from "../../store/cart.store.ts";
-import { createStoreOrder, validateStoreCoupon } from "../../api/store.service.ts";
+import { validateStoreCoupon } from "../../api/public/storeCoupons.ts";
+import { createStoreOrder } from "../../api/public/storeOrders.ts";
 import { formatCurrency } from "../../utils/format.js";
 
 export default function StoreCheckoutPage() {

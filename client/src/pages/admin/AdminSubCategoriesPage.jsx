@@ -15,7 +15,7 @@ import {
   X,
   ZoomIn,
 } from "lucide-react";
-import QueryState from "../../components/UI/QueryState.jsx";
+import QueryState from "../../components/primitives/ui/QueryState.jsx";
 import {
   createAdminCategory,
   deleteAdminCategory,

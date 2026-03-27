@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Download, Printer } from "lucide-react";
-import { fetchStoreOrder } from "../../api/store.service.ts";
+import { fetchStoreOrder } from "../../api/public/storeOrders.ts";
 import { formatCurrency } from "../../utils/format.js";
 import { getOrderStatusLabel } from "../../utils/orderStatus.js";
 import { PaymentStatusBadge } from "../../components/payments/PaymentReadModelBadges.jsx";
@@ -11,7 +11,7 @@ import {
   UiErrorState,
   UiSkeleton,
   UiUpdatingBadge,
-} from "../../components/ui-states/index.js";
+} from "../../components/primitives/state/index.js";
 import {
   GENERIC_ERROR,
   ORDER_NOT_FOUND,

@@ -14,6 +14,7 @@ import {
 import {
   createAdminCoupon,
   deleteAdminCoupon,
+  fetchAdminCouponMeta,
   fetchAdminCoupons,
   updateAdminCoupon,
 } from "../../lib/adminApi.js";
@@ -24,7 +25,7 @@ import EditCouponDrawer from "../../components/admin/coupons/EditCouponDrawer.js
 import {
   UiErrorState,
   UiSkeleton,
-} from "../../components/ui-states/index.js";
+} from "../../components/primitives/state/index.js";
 import {
   GENERIC_ERROR,
   NO_COUPONS_FOUND,
@@ -74,6 +75,23 @@ const resolveCampaignName = (coupon) => {
   );
 };
 
+const resolveCouponScope = (coupon) => {
+  const scopeType = String(
+    coupon?.governance?.scopeType || coupon?.scopeType || "PLATFORM"
+  ).toUpperCase();
+  const store = coupon?.governance?.store || coupon?.store || null;
+  return {
+    scopeType: scopeType === "STORE" ? "STORE" : "PLATFORM",
+    label: scopeType === "STORE" ? "Store-scoped" : "Platform",
+    ownership:
+      scopeType === "STORE" ? "Seller-owned / admin-governed" : "Admin-owned global",
+    storeLabel:
+      scopeType === "STORE"
+        ? store?.name || store?.slug || `Store #${coupon?.governance?.storeId || coupon?.storeId || "-"}`
+        : "All storefront lanes",
+  };
+};
+
 const resolvePublished = (coupon, overrideMap) => {
   const id = Number(coupon?.id);
   if (id && typeof overrideMap[id] === "boolean") {
@@ -93,12 +111,23 @@ const resolveEndDate = (coupon) => {
 };
 
 const resolveStatus = (coupon, published) => {
+  const startDate = resolveStartDate(coupon);
   const endDate = resolveEndDate(coupon);
+  const parsedStart = startDate ? new Date(startDate) : null;
   const parsedEnd = endDate ? new Date(endDate) : null;
+  const isScheduled =
+    parsedStart && !Number.isNaN(parsedStart.getTime()) ? parsedStart.getTime() > Date.now() : false;
   const isExpiredByDate = parsedEnd && !Number.isNaN(parsedEnd.getTime())
     ? parsedEnd.getTime() < Date.now()
     : false;
   const isExpired = isExpiredByDate || !published;
+
+  if (isScheduled && published) {
+    return {
+      label: "Scheduled",
+      tone: "scheduled",
+    };
+  }
 
   if (isExpired) {
     return {
@@ -114,12 +143,16 @@ const resolveStatus = (coupon, published) => {
 };
 
 function CouponStatusBadge({ status }) {
-  const tone = status?.tone === "expired" ? "expired" : "active";
+  const tone =
+    status?.tone === "expired" ? "expired" : status?.tone === "scheduled" ? "scheduled" : "active";
   const styles =
     tone === "expired"
       ? "border-rose-200 bg-rose-50 text-rose-700"
-      : "border-emerald-200 bg-emerald-50 text-emerald-700";
-  const dotClass = tone === "expired" ? "bg-rose-500" : "bg-emerald-500";
+      : tone === "scheduled"
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+        : "border-emerald-200 bg-emerald-50 text-emerald-700";
+  const dotClass =
+    tone === "expired" ? "bg-rose-500" : tone === "scheduled" ? "bg-amber-500" : "bg-emerald-500";
 
   return (
     <span
@@ -182,6 +215,10 @@ export default function AdminCouponsPage() {
     queryFn: () => fetchAdminCoupons(params),
     keepPreviousData: true,
   });
+  const couponMetaQuery = useQuery({
+    queryKey: ["admin-coupon-meta"],
+    queryFn: () => fetchAdminCouponMeta(),
+  });
 
   const createMutation = useMutation({
     mutationFn: createAdminCoupon,
@@ -228,6 +265,9 @@ export default function AdminCouponsPage() {
 
   const items = Array.isArray(couponsQuery.data?.data?.items)
     ? couponsQuery.data.data.items
+    : [];
+  const storeOptions = Array.isArray(couponMetaQuery.data?.data?.stores)
+    ? couponMetaQuery.data.data.stores
     : [];
   const meta = couponsQuery.data?.data?.meta || {
     page: 1,
@@ -508,7 +548,9 @@ export default function AdminCouponsPage() {
         <div className="flex flex-col gap-1.5">
           <div className="space-y-0.5">
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Coupons</h1>
-            <p className="text-sm text-slate-500">Manage discount codes and checkout validity.</p>
+            <p className="text-sm text-slate-500">
+              Manage platform coupons and monitor seller store-scoped coupons with explicit governance.
+            </p>
           </div>
           <p className="text-[11px] text-slate-500">
             {meta.total || 0} total
@@ -681,7 +723,8 @@ export default function AdminCouponsPage() {
                   </th>
                   <th className={`${tableHeadCell} w-[36%] min-w-[240px]`}>Coupon</th>
                   <th className={`${tableHeadCell} w-[17%] text-right`}>Discount</th>
-                  <th className={`${tableHeadCell} w-[20%]`}>Validity</th>
+                  <th className={`${tableHeadCell} w-[18%]`}>Scope</th>
+                  <th className={`${tableHeadCell} w-[18%]`}>Validity</th>
                   <th className={`${tableHeadCell} w-[15%] min-w-[180px]`}>Status</th>
                   <th className={`${tableHeadCell} w-[8%] text-right`}>Actions</th>
                 </tr>
@@ -695,6 +738,7 @@ export default function AdminCouponsPage() {
                   const status = resolveStatus(coupon, published);
                   const startDate = resolveStartDate(coupon);
                   const endDate = resolveEndDate(coupon);
+                  const scope = resolveCouponScope(coupon);
 
                   return (
                     <tr
@@ -719,6 +763,8 @@ export default function AdminCouponsPage() {
                             <p className="truncate text-sm font-semibold text-slate-900">{coupon.code || "-"}</p>
                             <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-slate-400">
                               <span className="truncate">{campaignName}</span>
+                              <span className="text-slate-300">•</span>
+                              <span className="truncate">{scope.ownership}</span>
                             </div>
                           </div>
                         </div>
@@ -732,15 +778,22 @@ export default function AdminCouponsPage() {
                           <div className="flex flex-col items-end gap-0.5">
                             <CouponDiscountTypeBadge coupon={coupon} />
                             <span className="text-[10px] text-slate-400">
-                              {coupon?.minimumAmount
-                                ? `Min ${formatCurrency(Number(coupon.minimumAmount || 0))}`
+                              {Number(coupon?.minSpend || 0) > 0
+                                ? `Min ${formatCurrency(Number(coupon.minSpend || 0))}`
                                 : "No min"}
                             </span>
                           </div>
                         </div>
                       </td>
 
-                      <td className={`${tableCell} w-[20%] whitespace-nowrap`}>
+                      <td className={`${tableCell} w-[18%]`}>
+                        <div className="space-y-0.5">
+                          <div className="font-medium text-slate-900">{scope.label}</div>
+                          <div className="text-[10px] text-slate-400">{scope.storeLabel}</div>
+                        </div>
+                      </td>
+
+                      <td className={`${tableCell} w-[18%] whitespace-nowrap`}>
                         <div className="space-y-0.5">
                           <div className="font-medium text-slate-900">
                             {formatDateLabel(startDate)} - {formatDateLabel(endDate)}
@@ -848,6 +901,7 @@ export default function AdminCouponsPage() {
         onClose={closeCreateDrawer}
         onSubmit={handleCreateSubmit}
         isSubmitting={createMutation.isPending}
+        storeOptions={storeOptions}
         error={
           createMutation.error?.response?.data?.message ||
           (createMutation.isError ? GENERIC_ERROR : "")
@@ -859,6 +913,7 @@ export default function AdminCouponsPage() {
         coupon={editingCoupon}
         onSubmit={handleUpdateSubmit}
         isSubmitting={updateMutation.isPending}
+        storeOptions={storeOptions}
         error={
           updateMutation.error?.response?.data?.message ||
           (updateMutation.isError ? GENERIC_ERROR : "")

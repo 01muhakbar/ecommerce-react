@@ -18,8 +18,8 @@ import {
 } from "lucide-react";
 import { useCart } from "../../hooks/useCart.ts";
 import { useProduct, useProducts } from "../../storefront.jsx";
-import QueryState from "../../components/UI/QueryState.jsx";
-import { UiEmptyState, UiErrorState, UiSkeleton } from "../../components/ui-states/index.js";
+import QueryState from "../../components/primitives/ui/QueryState.jsx";
+import { UiEmptyState, UiErrorState, UiSkeleton } from "../../components/primitives/state/index.js";
 import ProductSellerInfoCard from "../../components/store/ProductSellerInfoCard.jsx";
 import { formatCurrency } from "../../utils/format.js";
 import { resolveProductImageUrl } from "../../utils/productImage.js";
@@ -701,6 +701,7 @@ export default function StoreProductDetailPage() {
   }, [variationGroups]);
 
   const handleAddMainProduct = () => {
+    if (hasFiniteStock && stockValue <= 0) return;
     add(product.id, qty, {
       name: product?.name || product?.title,
       price: product?.salePrice ?? product?.sellingPrice ?? product?.price,
@@ -709,6 +710,8 @@ export default function StoreProductDetailPage() {
   };
 
   const handleAddRelated = (item) => {
+    const relatedStock = Number(item?.stock);
+    if (Number.isFinite(relatedStock) && relatedStock <= 0) return;
     const relatedImage = resolveProductImageUrl(item);
     add(item?.id, 1, {
       name: item?.name || item?.title,
@@ -1046,6 +1049,9 @@ export default function StoreProductDetailPage() {
               const relatedName = item?.name || item?.title || "Product";
               const relatedSlug = item?.slug || item?.id;
               const isAdding = addingRelatedId === item?.id;
+              const relatedStock = Number(item?.stock);
+              const isRelatedOutOfStock =
+                Number.isFinite(relatedStock) && relatedStock <= 0;
               return (
                 <article
                   key={item.id}
@@ -1064,10 +1070,21 @@ export default function StoreProductDetailPage() {
                     <button
                       type="button"
                       onClick={() => handleAddRelated(item)}
-                      aria-label={`Add ${relatedName} to cart`}
-                      className="absolute right-4 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm transition hover:bg-emerald-600"
+                      aria-label={
+                        isRelatedOutOfStock
+                          ? `${relatedName} is out of stock`
+                          : `Add ${relatedName} to cart`
+                      }
+                      disabled={isRelatedOutOfStock}
+                      className="absolute right-4 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-300"
                     >
-                      {isAdding ? <span className="text-xs font-semibold">OK</span> : <Plus className="h-4 w-4" />}
+                      {isRelatedOutOfStock ? (
+                        <span className="text-[10px] font-semibold">OOS</span>
+                      ) : isAdding ? (
+                        <span className="text-xs font-semibold">OK</span>
+                      ) : (
+                        <Plus className="h-4 w-4" />
+                      )}
                     </button>
                   </div>
                   <div className="space-y-1.5 p-4">
@@ -1086,6 +1103,9 @@ export default function StoreProductDetailPage() {
                     <div className="pt-1 text-lg font-bold text-slate-900">
                       {formatCurrency(toSafeNumber(item?.price, 0))}
                     </div>
+                    {isRelatedOutOfStock ? (
+                      <p className="text-xs font-medium text-rose-600">Out of stock</p>
+                    ) : null}
                   </div>
                 </article>
               );

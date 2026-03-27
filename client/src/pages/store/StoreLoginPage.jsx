@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useOutletContext } from "react-router-dom";
-import { useAuth } from "../../auth/useAuth.js";
+import { useAccountAuth } from "../../auth/authDomainHooks.js";
 import { api } from "../../api/axios.ts";
 import { useCart } from "../../hooks/useCart.ts";
 import * as cartApi from "../../api/cartApi.ts";
@@ -13,7 +13,7 @@ export default function StoreLoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { storeSettings } = useOutletContext() || {};
-  const { refreshSession, isAuthenticated } = useAuth();
+  const { refreshSession, isAuthenticated } = useAccountAuth();
   const { refreshCart } = useCart();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

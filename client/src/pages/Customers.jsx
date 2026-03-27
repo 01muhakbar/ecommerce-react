@@ -16,7 +16,7 @@ import DeleteCouponModal from "../components/admin/coupons/DeleteCouponModal.jsx
 import {
   UiErrorState,
   UiSkeleton,
-} from "../components/ui-states/index.js";
+} from "../components/primitives/state/index.js";
 import {
   GENERIC_ERROR,
   NO_CUSTOMERS_FOUND,

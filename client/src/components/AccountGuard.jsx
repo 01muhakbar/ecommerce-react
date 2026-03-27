@@ -1,36 +1,9 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "../api/axios.ts";
-
-const fetchMe = async () => {
-  const { data } = await api.get("/auth/me");
-  return data;
-};
+import { useAccountAuth } from "../auth/authDomainHooks.js";
 
 export default function AccountGuard() {
   const location = useLocation();
-  const shouldProbe = (() => {
-    try {
-      return (
-        Boolean(localStorage.getItem("authToken")) ||
-        localStorage.getItem("authSessionHint") === "true"
-      );
-    } catch {
-      return false;
-    }
-  })();
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["account", "me"],
-    queryFn: fetchMe,
-    retry: false,
-    enabled: shouldProbe,
-  });
-
-  if (!shouldProbe) {
-    return <Navigate to="/auth/login" replace state={{ from: location }} />;
-  }
-
-  const status = error?.response?.status;
+  const { user, isLoading, isAuthenticated } = useAccountAuth();
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
@@ -39,17 +12,9 @@ export default function AccountGuard() {
     );
   }
 
-  if (isError && status === 401) {
+  if (!isAuthenticated || !user) {
     return <Navigate to="/auth/login" replace state={{ from: location }} />;
   }
 
-  if (isError) {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-rose-600">
-        Failed to load session.
-      </div>
-    );
-  }
-
-  return <Outlet context={{ user: data?.data?.user }} />;
+  return <Outlet context={{ user }} />;
 }

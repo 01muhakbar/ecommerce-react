@@ -395,6 +395,11 @@ export const fetchAdminCoupons = async (params) => {
   return data;
 };
 
+export const fetchAdminCouponMeta = async () => {
+  const { data } = await adminApi.get("/admin/coupons/meta");
+  return data;
+};
+
 export const fetchAdminAttributes = async () => {
   const { data } = await adminApi.get("/admin/attributes");
   return data;

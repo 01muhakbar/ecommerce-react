@@ -10,11 +10,22 @@ import {
 import {
   resolvePreferredStorePaymentProfile,
   STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES,
-} from "../services/storePaymentProfileCompat.js";
+} from "../services/sharedContracts/storePaymentProfileCompat.js";
+import {
+  adminVisibleStorePaymentRequestStatuses as adminVisibleRequestStatuses,
+  buildEmptyStorePaymentProfileReadiness as buildEmptyReadiness,
+  getStorePaymentProfileAttr as getAttr,
+  serializeStorePaymentProfileActiveSnapshot as serializeActiveSnapshot,
+  serializeStorePaymentProfilePendingRequest as serializePendingRequest,
+  storePaymentProfileRequestAttributes as requestSummaryAttributes,
+} from "../services/sharedContracts/storePaymentProfileState.js";
+import {
+  buildWorkspaceReadinessSummary,
+  emptyProductPipelineSummary,
+  loadProductPipelineSummaryByStoreIds,
+} from "../services/sellerWorkspaceReadiness.js";
 
 const router = Router();
-
-const adminVisibleRequestStatuses = ["SUBMITTED", "NEEDS_REVISION"] as const;
 
 const reviewSchema = z.object({
   verificationStatus: z.enum(["ACTIVE", "REJECTED", "INACTIVE"]),
@@ -31,76 +42,166 @@ const storeIdentityPatchSchema = z
     path: ["name"],
   });
 
-const getAttr = (row: any, key: string) =>
-  row?.getDataValue?.(key) ?? row?.get?.(key) ?? row?.dataValues?.[key];
+const buildAdminWorkflow = (paymentProfile: any, pendingRequest: any) => {
+  const completenessSource = pendingRequest?.readiness || paymentProfile?.readiness || buildEmptyReadiness();
+  const requestStatus = String(pendingRequest?.requestStatus || "").toUpperCase();
 
-const requestSummaryAttributes = [
-  "id",
-  "storeId",
-  "basedOnProfileId",
-  "requestStatus",
-  "accountName",
-  "merchantName",
-  "merchantId",
-  "qrisImageUrl",
-  "qrisPayload",
-  "instructionText",
-  "sellerNote",
-  "adminReviewNote",
-  "submittedByUserId",
-  "submittedAt",
-  "reviewedByAdminId",
-  "reviewedAt",
-  "promotedProfileId",
-  "updatedAt",
-] as const;
+  let primaryStatus = {
+    code: "WAITING_SELLER",
+    label: "Waiting for seller setup",
+    tone: "neutral",
+    description: "No submitted seller payment setup request is waiting in the admin review lane.",
+  };
+  let requestState = {
+    code: pendingRequest ? requestStatus || "SUBMITTED" : "INACTIVE",
+    label: pendingRequest
+      ? requestStatus === "NEEDS_REVISION"
+        ? "Needs revision"
+        : "Submitted for review"
+      : "No open request",
+    tone: pendingRequest
+      ? requestStatus === "NEEDS_REVISION"
+        ? "danger"
+        : "warning"
+      : "neutral",
+    description: pendingRequest
+      ? requestStatus === "NEEDS_REVISION"
+        ? "Seller must revise and resubmit this request before a new snapshot can be promoted."
+        : "This seller request is waiting for admin review and promotion decision."
+      : "Admin review becomes actionable after seller submits a request.",
+  };
+  let reviewStatus = pendingRequest
+    ? {
+        code: requestStatus || "SUBMITTED",
+        label: requestStatus === "NEEDS_REVISION" ? "Needs revision" : "Pending review",
+        tone: requestStatus === "NEEDS_REVISION" ? "danger" : "warning",
+        description:
+          requestStatus === "NEEDS_REVISION"
+            ? "Admin already reviewed this request and asked the seller to revise it."
+            : "Admin review is still pending for the current seller request.",
+        reviewedAt: pendingRequest.reviewedAt || null,
+        reviewedBy: pendingRequest.reviewedBy || null,
+        adminReviewNote: pendingRequest.adminReviewNote || null,
+        source: "PENDING_REQUEST",
+      }
+    : {
+        code: String(paymentProfile?.verificationStatus || "NOT_CONFIGURED"),
+        label: paymentProfile?.verificationMeta?.label || "Not reviewed yet",
+        tone: paymentProfile?.verificationMeta?.tone || "neutral",
+        description:
+          paymentProfile?.verificationMeta?.description ||
+          "No active payment snapshot is waiting for admin review.",
+        reviewedAt: paymentProfile?.verifiedAt || null,
+        reviewedBy: null,
+        adminReviewNote: null,
+        source: "ACTIVE_SNAPSHOT",
+      };
+  let nextStep = {
+    code: "WAIT_FOR_SUBMISSION",
+    label: "Wait for seller submission",
+    lane: "SELLER_PAYMENT_SETUP",
+    actor: "SELLER",
+    description: "Admin review actions remain idle until seller submits a store-scoped request.",
+  };
 
-const serializePendingRequest = (request: any) => {
-  if (!request) return null;
-  const submittedByUser = request?.submittedByUser ?? request?.get?.("submittedByUser") ?? null;
-  const reviewedByAdmin = request?.reviewedByAdmin ?? request?.get?.("reviewedByAdmin") ?? null;
+  if (pendingRequest && requestStatus === "SUBMITTED") {
+    primaryStatus = {
+      code: "PENDING_ADMIN_REVIEW",
+      label: "Pending admin review",
+      tone: "warning",
+      description:
+        "A submitted seller request is ready for admin approval or revision feedback. The active snapshot stays unchanged until promotion.",
+    };
+    nextStep = {
+      code: "REVIEW_AND_DECIDE",
+      label: "Review and decide",
+      lane: "ADMIN_REVIEW",
+      actor: "ADMIN",
+      description:
+        "Approve to promote a new immutable active snapshot, or request revision to send the request back to seller.",
+    };
+  } else if (pendingRequest && requestStatus === "NEEDS_REVISION") {
+    primaryStatus = {
+      code: "WAITING_SELLER_REVISION",
+      label: "Waiting for seller revision",
+      tone: "danger",
+      description:
+        "Admin feedback has been sent. The request remains visible here for audit context while seller revises it.",
+    };
+    nextStep = {
+      code: "WAIT_FOR_RESUBMISSION",
+      label: "Wait for seller revision",
+      lane: "SELLER_PAYMENT_SETUP",
+      actor: "SELLER",
+      description: "Seller must update the request and resubmit before admin can promote a new snapshot.",
+    };
+  } else if (paymentProfile?.readiness?.isReady) {
+    primaryStatus = {
+      code: "ACTIVE_APPROVED",
+      label: "Active approved snapshot",
+      tone: "success",
+      description: "The current active snapshot is complete, approved, and available to checkout.",
+    };
+    reviewStatus = {
+      ...reviewStatus,
+      label: paymentProfile?.verificationMeta?.label || "Verified",
+      tone: paymentProfile?.verificationMeta?.tone || "success",
+    };
+    nextStep = {
+      code: "MONITOR_ACTIVE_SNAPSHOT",
+      label: "Monitor active snapshot",
+      lane: "ADMIN_REVIEW",
+      actor: "ADMIN",
+      description: "No request is pending. Admin can keep the active snapshot as-is or toggle activation if needed.",
+    };
+  }
 
   return {
-    id: Number(getAttr(request, "id") || 0),
-    storeId: Number(getAttr(request, "storeId") || 0),
-    basedOnProfileId: Number(getAttr(request, "basedOnProfileId") || 0) || null,
-    requestStatus: String(getAttr(request, "requestStatus") || "DRAFT"),
-    accountName: String(getAttr(request, "accountName") || ""),
-    merchantName: String(getAttr(request, "merchantName") || ""),
-    merchantId: getAttr(request, "merchantId") ? String(getAttr(request, "merchantId")) : null,
-    qrisImageUrl: getAttr(request, "qrisImageUrl") ? String(getAttr(request, "qrisImageUrl")) : null,
-    qrisPayload: getAttr(request, "qrisPayload") ? String(getAttr(request, "qrisPayload")) : null,
-    instructionText: getAttr(request, "instructionText")
-      ? String(getAttr(request, "instructionText"))
-      : null,
-    sellerNote: getAttr(request, "sellerNote") ? String(getAttr(request, "sellerNote")) : null,
-    adminReviewNote: getAttr(request, "adminReviewNote")
-      ? String(getAttr(request, "adminReviewNote"))
-      : null,
-    submittedAt: getAttr(request, "submittedAt") || null,
-    reviewedAt: getAttr(request, "reviewedAt") || null,
-    updatedAt: getAttr(request, "updatedAt") || null,
-    promotedProfileId: Number(getAttr(request, "promotedProfileId") || 0) || null,
-    submittedBy: submittedByUser
-      ? {
-          id: Number(getAttr(submittedByUser, "id") || 0) || null,
-          name: String(getAttr(submittedByUser, "name") || ""),
-          email: String(getAttr(submittedByUser, "email") || ""),
-        }
-      : null,
-    reviewedBy: reviewedByAdmin
-      ? {
-          id: Number(getAttr(reviewedByAdmin, "id") || 0) || null,
-          name: String(getAttr(reviewedByAdmin, "name") || ""),
-          email: String(getAttr(reviewedByAdmin, "email") || ""),
-        }
-      : null,
+    primaryStatus,
+    requestState,
+    reviewStatus,
+    completeness: {
+      completedFields: Number(completenessSource?.completedFields || 0),
+      totalFields: Number(completenessSource?.totalFields || 0),
+      allRequiredPresent: Array.isArray(completenessSource?.missingFields)
+        ? completenessSource.missingFields.length === 0
+        : false,
+      missingFields: Array.isArray(completenessSource?.missingFields)
+        ? completenessSource.missingFields
+        : [],
+    },
+    nextStep,
+    governance: {
+      managedBy: "ADMIN_FINAL_APPROVAL",
+      canApprovePromotion: requestStatus === "SUBMITTED",
+      canRequestRevision: Boolean(pendingRequest),
+      canToggleActiveSnapshot: Boolean(paymentProfile),
+      note:
+        "Admin remains the final review and activation authority. Seller request edits never promote a snapshot by themselves.",
+    },
   };
 };
 
-const serializeProfileRow = (store: any, pendingRequest: any = null) => {
+const serializeProfileRow = (
+  store: any,
+  pendingRequest: any = null,
+  productSummary: any = null
+) => {
   const owner = store.owner || store.get?.("owner") || null;
   const profile = resolvePreferredStorePaymentProfile(store);
+  const paymentProfile = serializeActiveSnapshot(profile);
+  const serializedPendingRequest = serializePendingRequest(pendingRequest, profile);
+  const workflow = buildAdminWorkflow(paymentProfile, serializedPendingRequest);
+  const workspaceReadiness = buildWorkspaceReadinessSummary({
+    store,
+    activePaymentProfile: profile,
+    pendingPaymentRequest: pendingRequest,
+    productSummary: productSummary || emptyProductPipelineSummary(),
+    sellerAccess: {
+      permissionKeys: ["STORE_VIEW", "PRODUCT_VIEW", "PAYMENT_PROFILE_VIEW"],
+    },
+    includeTeamInfo: false,
+  });
   return {
     store: {
       id: Number(store.id),
@@ -119,29 +220,11 @@ const serializeProfileRow = (store: any, pendingRequest: any = null) => {
           role: String(owner.role || ""),
         }
       : null,
-    paymentProfile: profile
-      ? {
-          id: Number(profile.id),
-          storeId: Number(profile.storeId),
-          providerCode: String(profile.providerCode || "MANUAL_QRIS"),
-          paymentType: String(profile.paymentType || "QRIS_STATIC"),
-          accountName: String(profile.accountName || ""),
-          merchantName: String(profile.merchantName || ""),
-          merchantId: profile.merchantId ? String(profile.merchantId) : null,
-          qrisImageUrl: String(profile.qrisImageUrl || ""),
-          qrisPayload: profile.qrisPayload ? String(profile.qrisPayload) : null,
-          instructionText: profile.instructionText ? String(profile.instructionText) : null,
-          isActive: Boolean(profile.isActive),
-          verificationStatus: String(profile.verificationStatus || "PENDING"),
-          verifiedByAdminId:
-            profile.verifiedByAdminId != null ? Number(profile.verifiedByAdminId) : null,
-          verifiedAt: profile.verifiedAt || null,
-          version: Number(profile.version || 1),
-          snapshotStatus: String(profile.snapshotStatus || "INACTIVE"),
-          updatedAt: profile.updatedAt || null,
-        }
-      : null,
-    pendingRequest: serializePendingRequest(pendingRequest),
+    paymentProfile,
+    pendingRequest: serializedPendingRequest,
+    workflow,
+    reviewStatus: workflow.reviewStatus,
+    workspaceReadiness,
   };
 };
 
@@ -232,6 +315,14 @@ router.get("/payment-profiles", async (_req, res) => {
         "name",
         "slug",
         "status",
+        "description",
+        "logoUrl",
+        "email",
+        "phone",
+        "addressLine1",
+        "city",
+        "province",
+        "country",
         "createdAt",
       ],
       include: [
@@ -254,9 +345,18 @@ router.get("/payment-profiles", async (_req, res) => {
     const requestMap = await loadAdminVisibleRequestsByStore(
       stores.map((store) => Number(store.id))
     );
+    const productSummaryMap = await loadProductPipelineSummaryByStoreIds(
+      stores.map((store) => Number(store.id))
+    );
     const seenStoreIds = new Set<number>();
     const items = stores
-      .map((store) => serializeProfileRow(store, requestMap.get(Number(store.id)) || null))
+      .map((store) =>
+        serializeProfileRow(
+          store,
+          requestMap.get(Number(store.id)) || null,
+          productSummaryMap.get(Number(store.id)) || emptyProductPipelineSummary()
+        )
+      )
       .filter((entry) => {
         const storeId = Number(entry?.store?.id || 0);
         if (!storeId || seenStoreIds.has(storeId)) return false;
@@ -294,7 +394,22 @@ router.patch("/:storeId/identity", async (req, res) => {
     }
 
     const store = await Store.findByPk(storeId, {
-      attributes: ["id", "ownerUserId", "activeStorePaymentProfileId", "name", "slug", "status"],
+      attributes: [
+        "id",
+        "ownerUserId",
+        "activeStorePaymentProfileId",
+        "name",
+        "slug",
+        "status",
+        "description",
+        "logoUrl",
+        "email",
+        "phone",
+        "addressLine1",
+        "city",
+        "province",
+        "country",
+      ],
       include: [
         { model: User, as: "owner", attributes: ["id", "name", "email", "role"] },
         {
@@ -326,9 +441,14 @@ router.patch("/:storeId/identity", async (req, res) => {
     await store.update(updatePayload as any);
 
     const refreshedRequestMap = await loadAdminVisibleRequestsByStore([storeId]);
+    const productSummaryMap = await loadProductPipelineSummaryByStoreIds([storeId]);
     return res.json({
       success: true,
-      data: serializeProfileRow(store, refreshedRequestMap.get(storeId) || null),
+      data: serializeProfileRow(
+        store,
+        refreshedRequestMap.get(storeId) || null,
+        productSummaryMap.get(storeId) || emptyProductPipelineSummary()
+      ),
     });
   } catch (error) {
     console.error("[admin.store-payment-profiles identity] error", error);
@@ -361,7 +481,22 @@ router.patch("/:storeId/payment-profile/review", async (req, res) => {
     }
 
     const store = await Store.findByPk(storeId, {
-      attributes: ["id", "ownerUserId", "activeStorePaymentProfileId", "name", "slug", "status"],
+      attributes: [
+        "id",
+        "ownerUserId",
+        "activeStorePaymentProfileId",
+        "name",
+        "slug",
+        "status",
+        "description",
+        "logoUrl",
+        "email",
+        "phone",
+        "addressLine1",
+        "city",
+        "province",
+        "country",
+      ],
       include: [
         { model: User, as: "owner", attributes: ["id", "name", "email", "role"] },
         {
@@ -487,7 +622,22 @@ router.patch("/:storeId/payment-profile/review", async (req, res) => {
     }
 
     const refreshed = await Store.findByPk(storeId, {
-      attributes: ["id", "ownerUserId", "activeStorePaymentProfileId", "name", "slug", "status"],
+      attributes: [
+        "id",
+        "ownerUserId",
+        "activeStorePaymentProfileId",
+        "name",
+        "slug",
+        "status",
+        "description",
+        "logoUrl",
+        "email",
+        "phone",
+        "addressLine1",
+        "city",
+        "province",
+        "country",
+      ],
       include: [
         { model: User, as: "owner", attributes: ["id", "name", "email", "role"] },
         {
@@ -504,10 +654,15 @@ router.patch("/:storeId/payment-profile/review", async (req, res) => {
       ],
     });
     const refreshedRequestMap = await loadAdminVisibleRequestsByStore([storeId]);
+    const productSummaryMap = await loadProductPipelineSummaryByStoreIds([storeId]);
 
     return res.json({
       success: true,
-      data: serializeProfileRow(refreshed, refreshedRequestMap.get(storeId) || null),
+      data: serializeProfileRow(
+        refreshed,
+        refreshedRequestMap.get(storeId) || null,
+        productSummaryMap.get(storeId) || emptyProductPipelineSummary()
+      ),
     });
   } catch (error) {
     console.error("[admin.store-payment-profiles review] error", error);

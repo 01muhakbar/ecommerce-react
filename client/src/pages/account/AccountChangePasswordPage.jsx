@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { changeUserPassword } from "../../api/userPassword.ts";
-import { useAuth } from "../../auth/useAuth.js";
+import { useAccountAuth } from "../../auth/authDomainHooks.js";
 
 export default function AccountChangePasswordPage() {
   const navigate = useNavigate();
-  const { logout } = useAuth() || {};
+  const { logout } = useAccountAuth();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");

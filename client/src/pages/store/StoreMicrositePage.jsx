@@ -11,15 +11,13 @@ import {
   Star,
   Store as StoreIcon,
 } from "lucide-react";
-import {
-  fetchStoreProducts,
-  getStoreMicrositeRichAboutBySlug,
-  getStorePublicIdentityBySlug,
-} from "../../api/store.service.ts";
+import { fetchStoreProducts } from "../../api/public/storeProducts.ts";
+import { getStoreMicrositeRichAboutBySlug } from "../../api/public/storeCustomizationPublic.ts";
+import { getStorePublicIdentityBySlug } from "../../api/public/storePublicIdentity.ts";
 import { formatCurrency } from "../../utils/format.js";
 import { resolveAssetUrl } from "../../lib/assetUrl.js";
 import { normalizePublicStoreIdentity } from "../../utils/storePublicIdentity.ts";
-import { UiEmptyState, UiErrorState } from "../../components/ui-states/index.js";
+import { UiEmptyState, UiErrorState } from "../../components/primitives/state/index.js";
 import StoreMicrositeShell from "../../components/store/StoreMicrositeShell.jsx";
 
 const toText = (value, fallback = "") => {

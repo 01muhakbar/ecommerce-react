@@ -138,12 +138,12 @@ const createFallbackProfile = (store, storeId, canEdit) => ({
     },
     nextStep: {
       code: canEdit ? "COMPLETE_PROFILE" : "WAIT_OWNER",
-      label: canEdit ? "Start payment request" : "Wait for owner or admin setup",
-      lane: canEdit ? "SELLER_PAYMENT_SETUP" : "ACCOUNT_ADMIN",
+      label: canEdit ? "Start payment request" : "Wait for owner or admin action",
+      lane: "SELLER_PAYMENT_SETUP",
       actor: canEdit ? "SELLER_EDITOR" : "STORE_OWNER_OR_ADMIN",
       description: canEdit
         ? "Save draft or submit after the required request fields are complete."
-        : "Your current seller access is view-only for payment setup.",
+        : "Your current seller access is view-only for payment setup in the seller workspace.",
     },
     boundaries: {
       sellerWorkspaceMode:
@@ -209,6 +209,9 @@ const toNullableText = (value) => {
 
 const getErrorMessage = (error) => {
   const payload = error?.response?.data || {};
+  if (String(payload?.code || "").toUpperCase() === "PAYMENT_PROFILE_REVIEW_LOCKED") {
+    return "This payment setup request is already under admin review and is temporarily locked for editing.";
+  }
   if (String(payload?.code || "").toUpperCase() === "PAYMENT_PROFILE_INCOMPLETE") {
     const labels = Array.isArray(payload?.fields)
       ? payload.fields.map((field) => field?.label).filter(Boolean)
@@ -269,7 +272,12 @@ export default function SellerPaymentProfilePage() {
   const reviewStatus = effectiveProfile.reviewFeedback || readModel.reviewStatus || {};
   const completeness = readModel.completeness || activeSnapshot?.readiness || {};
   const missingFields = completeness.missingFields || [];
-  const canEdit = Boolean(effectiveProfile.governance?.canEdit ?? fallbackCanEdit);
+  const governance = effectiveProfile.governance || {};
+  const canEdit = Boolean(governance.canEdit ?? fallbackCanEdit);
+  const permissionCanEdit = Boolean(governance.permissionCanEdit ?? fallbackCanEdit);
+  const isReviewLocked = Boolean(governance.isReviewLocked);
+  const governanceReviewStatus = governance.reviewStatus || reviewStatus;
+  const governanceNextStep = governance.nextStep || readModel.nextStep || {};
   const busy = profileQuery.isLoading;
 
   const buildPayload = () => ({
@@ -511,15 +519,24 @@ export default function SellerPaymentProfilePage() {
             hint="Seller edits only the separate request block below. Saving here does not overwrite the active snapshot."
             Icon={CreditCard}
           >
-            {!canEdit ? (
+            {!permissionCanEdit ? (
               <SellerWorkspaceNotice type="warning">
                 This seller access can view payment readiness, but only roles with payment setup edit permission can prepare or submit a request.
               </SellerWorkspaceNotice>
             ) : (
               <form className="space-y-5">
                 <SellerWorkspaceNotice type="info">
-                  {readModel.boundaries?.sellerWorkspaceMode || effectiveProfile.governance?.note}
+                  {readModel.boundaries?.sellerWorkspaceMode || governance.note}
                 </SellerWorkspaceNotice>
+                {isReviewLocked ? (
+                  <SellerWorkspaceNotice type="warning">
+                    {governance.lockReason ||
+                      "This request is locked while admin review is in progress."}{" "}
+                    {governanceReviewStatus?.label
+                      ? `Current review status: ${governanceReviewStatus.label}.`
+                      : ""}
+                  </SellerWorkspaceNotice>
+                ) : null}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -560,7 +577,7 @@ export default function SellerPaymentProfilePage() {
                           setStatus(null);
                           fileInputRef.current?.click();
                         }}
-                        disabled={disabled || busy}
+                        disabled={disabled || busy || !canEdit}
                         className={sellerSecondaryButtonClass}
                       >
                         <Upload className="h-4 w-4" />
@@ -610,28 +627,28 @@ export default function SellerPaymentProfilePage() {
                   <Field
                     label="Account Name"
                     hint="Required store-scoped destination account name."
-                    disabled={disabled || busy}
+                    disabled={disabled || busy || !canEdit}
                     value={form.accountName}
                     onChange={(event) => setForm((current) => ({ ...current, accountName: event.target.value }))}
                   />
                   <Field
                     label="Merchant Name"
                     hint="Required store-scoped merchant label."
-                    disabled={disabled || busy}
+                    disabled={disabled || busy || !canEdit}
                     value={form.merchantName}
                     onChange={(event) => setForm((current) => ({ ...current, merchantName: event.target.value }))}
                   />
                   <Field
                     label="Merchant ID"
                     hint="Optional store-scoped identifier."
-                    disabled={disabled || busy}
+                    disabled={disabled || busy || !canEdit}
                     value={form.merchantId}
                     onChange={(event) => setForm((current) => ({ ...current, merchantId: event.target.value }))}
                   />
                   <Field
                     label="QRIS Image URL"
                     hint="Required. Buyer checkout will still use the active snapshot until admin approves a later promotion flow."
-                    disabled={disabled || busy}
+                    disabled={disabled || busy || !canEdit}
                     value={form.qrisImageUrl}
                     onChange={(event) => setForm((current) => ({ ...current, qrisImageUrl: event.target.value }))}
                   />
@@ -641,7 +658,7 @@ export default function SellerPaymentProfilePage() {
                       hint="Optional raw payload or QR identifier."
                       multiline
                       rows={4}
-                      disabled={disabled || busy}
+                      disabled={disabled || busy || !canEdit}
                       value={form.qrisPayload}
                       onChange={(event) => setForm((current) => ({ ...current, qrisPayload: event.target.value }))}
                     />
@@ -652,7 +669,7 @@ export default function SellerPaymentProfilePage() {
                       hint="Optional buyer instruction text to be carried by a future approved snapshot."
                       multiline
                       rows={4}
-                      disabled={disabled || busy}
+                      disabled={disabled || busy || !canEdit}
                       value={form.instructionText}
                       onChange={(event) =>
                         setForm((current) => ({ ...current, instructionText: event.target.value }))
@@ -665,7 +682,7 @@ export default function SellerPaymentProfilePage() {
                       hint="Optional note for the current seller request."
                       multiline
                       rows={3}
-                      disabled={disabled || busy}
+                      disabled={disabled || busy || !canEdit}
                       value={form.sellerNote}
                       onChange={(event) => setForm((current) => ({ ...current, sellerNote: event.target.value }))}
                     />
@@ -690,7 +707,7 @@ export default function SellerPaymentProfilePage() {
                       setStatus(null);
                       setForm(createFormState(effectiveProfile));
                     }}
-                    disabled={disabled || busy}
+                    disabled={disabled || busy || !canEdit}
                     className={sellerSecondaryButtonClass}
                   >
                     <RotateCcw className="h-4 w-4" />
@@ -702,7 +719,7 @@ export default function SellerPaymentProfilePage() {
                       setStatus(null);
                       saveDraftMutation.mutate(buildPayload());
                     }}
-                    disabled={disabled || busy}
+                    disabled={disabled || busy || !canEdit}
                     className={sellerSecondaryButtonClass}
                   >
                     <Save className="h-4 w-4" />
@@ -714,16 +731,22 @@ export default function SellerPaymentProfilePage() {
                       setStatus(null);
                       submitMutation.mutate(buildPayload());
                     }}
-                    disabled={disabled || busy || !submitReady}
+                    disabled={disabled || busy || !canEdit || !submitReady}
                     className={sellerPrimaryButtonClass}
                   >
                     <SendHorizonal className="h-4 w-4" />
                     {submitMutation.isPending ? "Submitting..." : "Submit for Review"}
                   </button>
                 </div>
-                {!submitReady ? (
+                {!submitReady && canEdit ? (
                   <p className="text-xs text-slate-500">
                     Complete `Account Name`, `Merchant Name`, and `QRIS Image URL` before submit.
+                  </p>
+                ) : null}
+                {!canEdit ? (
+                  <p className="text-xs text-slate-500">
+                    {governanceNextStep?.description ||
+                      "This request is not editable right now. Wait for admin review or follow the next review step."}
                   </p>
                 ) : null}
               </form>

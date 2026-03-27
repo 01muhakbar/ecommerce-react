@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchStoreCategories } from "../api/store.service.ts";
+import { fetchStoreCategories } from "../api/public/storeProducts.ts";
 
 export const STORE_CATEGORIES_QUERY_KEY = ["storeCategories"];
 

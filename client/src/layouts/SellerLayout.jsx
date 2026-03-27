@@ -30,6 +30,7 @@ import {
   normalizeSellerStoreParam,
   replaceSellerWorkspaceStorePath,
 } from "../utils/sellerWorkspaceRoute.js";
+import { useSellerAuth } from "../auth/authDomainHooks.js";
 
 const getErrorMessage = (error, fallback) =>
   error?.response?.data?.message || error?.message || fallback;
@@ -114,7 +115,14 @@ const getSellerPageMeta = (pathname) => {
     };
   }
 
-  if (pathname.endsWith("/profile")) {
+  if (pathname.endsWith("/coupons")) {
+    return {
+      title: "Coupons",
+      subtitle: "Store-scoped coupon management for the active seller store.",
+    };
+  }
+
+  if (pathname.endsWith("/store-profile") || pathname.endsWith("/profile")) {
     return {
       title: "Store Profile",
       subtitle: "Seller-managed identity and contact metadata for this store.",
@@ -168,7 +176,7 @@ function SellerSidebar({ storeSlug, sellerContext }) {
         },
         {
           label: "Store Profile",
-          to: sellerRoutes.profile(),
+          to: sellerRoutes.storeProfile(),
           Icon: Store,
           enabled: hasPermission("STORE_VIEW"),
           implemented: true,
@@ -244,11 +252,11 @@ function SellerSidebar({ storeSlug, sellerContext }) {
         },
         {
           label: "Coupons",
-          to: "#",
+          to: sellerRoutes.coupons(),
           Icon: TicketPercent,
           enabled: hasPermission("COUPON_VIEW"),
-          implemented: false,
-          meta: "Soon",
+          implemented: true,
+          meta: "Store coupon lane",
         },
       ],
     },
@@ -382,6 +390,7 @@ function SellerSidebar({ storeSlug, sellerContext }) {
 export default function SellerLayout() {
   const { storeSlug } = useParams();
   const { pathname, search, hash } = useLocation();
+  const sellerAuth = useSellerAuth();
   const normalizedStoreSlug = normalizeSellerStoreParam(storeSlug);
   const isLegacyIdRoute = isLegacySellerStoreIdParam(normalizedStoreSlug);
 
@@ -397,7 +406,7 @@ export default function SellerLayout() {
       isLegacyIdRoute
         ? getSellerWorkspaceContext(normalizedStoreSlug)
         : getSellerWorkspaceContextBySlug(normalizedStoreSlug),
-    enabled: Boolean(normalizedStoreSlug),
+    enabled: Boolean(normalizedStoreSlug) && !sellerAuth.isLoading,
     retry: false,
   });
 
@@ -431,7 +440,11 @@ export default function SellerLayout() {
     return (
       <SellerShellState
         title="Loading Seller Workspace"
-        description="Resolving store context and seller access from the backend."
+        description={
+          sellerAuth.isLoading
+            ? "Checking shared session and seller workspace access."
+            : "Resolving store context and seller access from the backend."
+        }
       />
     );
   }
@@ -452,7 +465,11 @@ export default function SellerLayout() {
       return (
         <SellerShellState
           title="Seller Session Required"
-          description="Sign in first to continue to the seller workspace."
+          description={
+            sellerAuth.isAdminSession
+              ? "This current session is admin-oriented. Sign in with a storefront account that already has seller workspace access for this store."
+              : "Sign in with a storefront account that already has seller workspace access for this store."
+          }
           tone="danger"
         >
           <div className="flex flex-wrap gap-3">
@@ -460,13 +477,7 @@ export default function SellerLayout() {
               to="/auth/login"
               className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
             >
-              Store Login
-            </Link>
-            <Link
-              to="/admin/login"
-              className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
-            >
-              Admin Login
+              Storefront Login
             </Link>
           </div>
         </SellerShellState>
@@ -482,7 +493,14 @@ export default function SellerLayout() {
             "This account does not have access to the selected seller workspace."
           )}
           tone="danger"
-        />
+        >
+          {sellerAuth.isAdminSession ? (
+            <p className="text-sm leading-5 text-slate-600">
+              Admin session remains valid for admin workspace only. Seller workspace requires a
+              storefront account with seller membership on this store.
+            </p>
+          ) : null}
+        </SellerShellState>
       );
     }
 

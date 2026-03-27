@@ -1,5 +1,5 @@
-import StatusBadge from "../UI/StatusBadge.jsx";
-import ActionButtons from "../UI/ActionButtons.jsx";
+import StatusBadge from "../internal-table-kit/StatusBadge.jsx";
+import ActionButtons from "../internal-table-kit/ActionButtons.jsx";
 import { formatCurrency } from "../../utils/format.js";
 import "./OrderTable.css";
 

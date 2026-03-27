@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
+  BarChart3,
   BadgeCheck,
   CreditCard,
   FolderPlus,
@@ -11,9 +12,14 @@ import {
   ShieldCheck,
   ShoppingBag,
   Store,
+  TicketPercent,
   WalletCards,
 } from "lucide-react";
-import { getSellerFinanceSummary } from "../../api/sellerWorkspace.ts";
+import {
+  getSellerAnalyticsSummary,
+  getSellerFinanceSummary,
+  getSellerWorkspaceReadiness,
+} from "../../api/sellerWorkspace.ts";
 import { getSellerProductAuthoringMeta } from "../../api/sellerProducts.ts";
 import {
   SellerWorkspaceBadge,
@@ -52,7 +58,8 @@ const routeByLane = (workspaceRoutes, lane) => {
   if (lane === "PAYMENT_REVIEW") return workspaceRoutes.paymentReview();
   if (lane === "ORDERS") return workspaceRoutes.orders();
   if (lane === "CATALOG") return workspaceRoutes.catalog();
-  if (lane === "STORE_PROFILE") return workspaceRoutes.profile();
+  if (lane === "COUPONS") return workspaceRoutes.coupons();
+  if (lane === "STORE_PROFILE") return workspaceRoutes.storeProfile();
   return workspaceRoutes.home();
 };
 
@@ -169,7 +176,7 @@ const getFallbackActions = ({
         "Your role is centered on store identity and storefront information. Keep those details complete and current.",
       tone: "sky",
       priority: "today",
-      to: workspaceRoutes.profile(),
+      to: workspaceRoutes.storeProfile(),
     });
   }
 
@@ -305,7 +312,7 @@ const getQuickLinks = ({
     description: canEditStore
       ? "Update store identity, contact, and profile details."
       : "Review store identity, contact, and profile details.",
-    to: workspaceRoutes.profile(),
+    to: workspaceRoutes.storeProfile(),
     enabled: canViewStore,
     Icon: Store,
     reason: "Store profile is available only when store visibility is granted.",
@@ -343,6 +350,7 @@ export default function SellerWorkspaceHome() {
   const canEditStore = hasPermission("STORE_EDIT");
   const canViewCatalog = hasPermission("PRODUCT_VIEW");
   const canCreateProduct = hasPermission("PRODUCT_CREATE");
+  const canViewCoupons = hasPermission("COUPON_VIEW");
   const canViewOrders = hasPermission("ORDER_VIEW");
   const canViewPaymentReview = canViewOrders && hasPermission("PAYMENT_STATUS_VIEW");
   const canViewPaymentProfile = hasPermission("PAYMENT_PROFILE_VIEW");
@@ -352,6 +360,20 @@ export default function SellerWorkspaceHome() {
   const financeSummaryQuery = useQuery({
     queryKey: ["seller", "workspace", "finance-summary", storeId],
     queryFn: () => getSellerFinanceSummary(storeId),
+    enabled: Boolean(storeId) && canViewStore,
+    retry: false,
+  });
+
+  const readinessQuery = useQuery({
+    queryKey: ["seller", "workspace", "readiness", storeId],
+    queryFn: () => getSellerWorkspaceReadiness(storeId),
+    enabled: Boolean(storeId) && canViewStore,
+    retry: false,
+  });
+
+  const analyticsQuery = useQuery({
+    queryKey: ["seller", "workspace", "analytics-summary", storeId],
+    queryFn: () => getSellerAnalyticsSummary(storeId),
     enabled: Boolean(storeId) && canViewStore,
     retry: false,
   });
@@ -392,10 +414,25 @@ export default function SellerWorkspaceHome() {
   );
 
   const summary = financeSummaryQuery.data;
+  const readiness = readinessQuery.data;
+  const analytics = analyticsQuery.data;
+  const readinessSummary = readiness?.summary;
+  const readinessChecklist = Array.isArray(readiness?.checklist) ? readiness.checklist : [];
+  const readinessNextStep = readiness?.nextStep;
+  const storeProfileChecklist = readinessChecklist.find((item) => item.key === "store_profile");
+  const paymentChecklist = readinessChecklist.find((item) => item.key === "payment_profile");
+  const productChecklist = readinessChecklist.find((item) => item.key === "products");
   const paymentReadiness = summary?.paymentProfileReadiness;
   const paymentReviewCounts = summary?.paymentReviewCounts;
   const suborderSummary = summary?.suborderPaymentSummary;
   const eligiblePaidSummary = summary?.eligiblePaidSubordersSummary;
+  const analyticsOrderSnapshot = analytics?.orderSnapshot;
+  const analyticsRevenueSnapshot = analytics?.revenueSnapshot;
+  const analyticsCouponSnapshot = analytics?.couponSnapshot;
+  const analyticsCouponAttributionSnapshot = analytics?.couponAttributionSnapshot;
+  const analyticsProductSnapshot = analytics?.productSnapshot;
+  const analyticsInsights = Array.isArray(analytics?.insights) ? analytics.insights : [];
+  const couponAttributionReadiness = analytics?.couponAttributionReadiness;
   const backendActions = Array.isArray(summary?.nextActions) ? summary.nextActions : [];
   const primaryFocus = getPrimaryFocus({
     canViewOrders,
@@ -416,7 +453,21 @@ export default function SellerWorkspaceHome() {
   });
 
   const priorityActions = useMemo(() => {
-    const normalized = backendActions
+    const readinessActions =
+      readinessNextStep && readinessNextStep.code !== "NO_ACTION_REQUIRED"
+        ? [
+            {
+              code: `WORKSPACE_${readinessNextStep.code}`,
+              lane: readinessNextStep.lane,
+              priority: "high",
+              tone: readinessSummary?.tone || "sky",
+              label: readinessNextStep.label,
+              description: readinessNextStep.description,
+            },
+          ]
+        : [];
+
+    const normalized = [...readinessActions, ...backendActions]
       .map((action) => ({
         ...action,
         priority: action.priority || "today",
@@ -452,6 +503,8 @@ export default function SellerWorkspaceHome() {
     canViewPaymentProfile,
     canViewPaymentReview,
     canViewStore,
+    readinessNextStep,
+    readinessSummary?.tone,
     paymentReadiness,
     workspaceRoutes,
   ]);
@@ -467,7 +520,7 @@ export default function SellerWorkspaceHome() {
     );
   }
 
-  if (financeSummaryQuery.isLoading) {
+  if (financeSummaryQuery.isLoading || readinessQuery.isLoading) {
     return (
       <SellerWorkspaceStatePanel
         title="Loading seller workspace home"
@@ -477,11 +530,12 @@ export default function SellerWorkspaceHome() {
     );
   }
 
-  if (financeSummaryQuery.isError) {
+  if (financeSummaryQuery.isError || readinessQuery.isError) {
+    const error = financeSummaryQuery.error || readinessQuery.error;
     return (
       <SellerWorkspaceStatePanel
         title="Failed to load seller workspace home"
-        description={getSellerRequestErrorMessage(financeSummaryQuery.error, {
+        description={getSellerRequestErrorMessage(error, {
           permissionMessage:
             "Your current seller access does not include seller workspace home visibility.",
           fallbackMessage: "Failed to load seller workspace home.",
@@ -515,6 +569,13 @@ export default function SellerWorkspaceHome() {
                   tone="stone"
                   className="border-white/10 bg-white/10 text-white"
                 />
+                {readinessSummary ? (
+                  <SellerWorkspaceBadge
+                    label={readinessSummary.label}
+                    tone="stone"
+                    className="border-white/10 bg-white/10 text-white"
+                  />
+                ) : null}
                 <SellerWorkspaceBadge
                   label={summary?.store?.roleCode || sellerContext?.access?.roleCode || "SELLER"}
                   tone="stone"
@@ -580,7 +641,7 @@ export default function SellerWorkspaceHome() {
                 </Link>
               ) : null}
               {!canViewOrders && canEditStore ? (
-                <Link to={workspaceRoutes.profile()} className={heroPrimaryButtonClass}>
+                <Link to={workspaceRoutes.storeProfile()} className={heroPrimaryButtonClass}>
                   <Store className="h-4 w-4" />
                   Review Store Profile
                 </Link>
@@ -624,23 +685,149 @@ export default function SellerWorkspaceHome() {
         </SellerWorkspaceSectionCard>
       </section>
 
+      <section className="grid gap-5 xl:grid-cols-[0.82fr_1.18fr]">
+        <SellerWorkspaceSectionCard
+          title="Workspace readiness"
+          hint="This backend checklist shows the minimum seller onboarding state for the active store."
+          Icon={ShieldCheck}
+          actions={[
+            <SellerWorkspaceBadge
+              key="readiness-status"
+              label={readinessSummary?.label || "In progress"}
+              tone={readinessSummary?.tone || "stone"}
+            />,
+            <SellerWorkspaceBadge
+              key="readiness-progress"
+              label={`${readinessSummary?.completedItems || 0}/${readinessSummary?.totalItems || 0} ready`}
+              tone={readinessSummary?.completionPercent === 100 ? "emerald" : "sky"}
+            />,
+          ]}
+        >
+          <p className="text-[2rem] font-semibold leading-none text-slate-900">
+            {readinessSummary?.completionPercent || 0}%
+          </p>
+          <p className="mt-2 text-sm text-slate-600">
+            {readinessSummary?.description ||
+              "Seller onboarding summary is derived from backend readiness signals."}
+          </p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <SellerWorkspaceDetailItem
+              label="Store Profile"
+              value={storeProfileChecklist?.status?.label || "-"}
+              hint={storeProfileChecklist?.status?.description || "-"}
+            />
+            <SellerWorkspaceDetailItem
+              label="Payment Profile"
+              value={paymentChecklist?.status?.label || "-"}
+              hint={paymentChecklist?.status?.description || "-"}
+            />
+            <SellerWorkspaceDetailItem
+              label="Products"
+              value={productChecklist?.status?.label || "-"}
+              hint={productChecklist?.status?.description || "-"}
+            />
+            <SellerWorkspaceDetailItem
+              label="Next Step"
+              value={readinessNextStep?.label || "No action required"}
+              hint={readinessNextStep?.description || "-"}
+            />
+          </div>
+          {readiness?.boundaries?.sourceOfTruth ? (
+            <SellerWorkspaceNotice type="info" className="mt-5">
+              {readiness.boundaries.sourceOfTruth}
+            </SellerWorkspaceNotice>
+          ) : null}
+        </SellerWorkspaceSectionCard>
+
+        <SellerWorkspaceSectionCard
+          title="Onboarding checklist"
+          hint="Each checklist item stays tied to an existing seller lane. No new workflow is introduced here."
+          Icon={Store}
+        >
+          <div className="space-y-3">
+            {readinessChecklist.map((item, index) => {
+              const to = item?.cta ? routeByLane(workspaceRoutes, item.cta.lane) : workspaceRoutes.home();
+              return (
+                <div
+                  key={item.key || index}
+                  className={joinClassNames(
+                    "rounded-2xl border px-4 py-4",
+                    priorityToneClass(item.status?.tone)
+                  )}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold text-slate-900">
+                          {index + 1}. {item.label}
+                        </p>
+                        <SellerWorkspaceBadge
+                          label={item.status?.label || "Unknown"}
+                          tone={item.status?.tone || "stone"}
+                        />
+                        {item.infoOnly ? (
+                          <SellerWorkspaceBadge label="Info only" tone="sky" />
+                        ) : null}
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-slate-600">
+                        {item.status?.description || "Review this checklist item in its current lane."}
+                      </p>
+                      {item.progress?.total ? (
+                        <p className="mt-2 text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
+                          Progress {item.progress.completed}/{item.progress.total}
+                        </p>
+                      ) : null}
+                      {item.progress?.missingFields?.length ? (
+                        <p className="mt-2 text-xs leading-5 text-slate-500">
+                          Missing: {item.progress.missingFields.map((field) => field.label).join(", ")}
+                        </p>
+                      ) : null}
+                      {item.reviewStatus?.label ? (
+                        <p className="mt-2 text-xs leading-5 text-slate-500">
+                          Review: {item.reviewStatus.label}
+                        </p>
+                      ) : null}
+                    </div>
+                    {item.cta ? (
+                      <Link
+                        to={to}
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+                      >
+                        {item.cta.label}
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </SellerWorkspaceSectionCard>
+      </section>
+
       <section className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-4">
         <SellerWorkspaceStatCard
           label="Payment Setup"
           value={
-            paymentReadiness?.visible
-              ? paymentReadiness.label
-              : canViewPaymentProfile
-                ? "Not ready"
-                : "Role limited"
+            paymentChecklist
+              ? paymentChecklist.status?.label
+              : paymentReadiness?.visible
+                ? paymentReadiness.label
+                : canViewPaymentProfile
+                  ? "Not ready"
+                  : "Role limited"
           }
           hint={
-            paymentReadiness?.visible
-              ? paymentReadiness.description
+            paymentChecklist
+              ? paymentChecklist.status?.description
+              : canViewPaymentProfile
+                ? paymentReadiness?.visible
+                  ? paymentReadiness.description
+                  : "Payment setup details are limited to finance-capable roles."
               : "Payment setup details are limited to finance-capable roles."
           }
           Icon={CreditCard}
-          tone={paymentReadiness?.visible ? paymentReadiness.tone : "stone"}
+          tone={paymentChecklist?.status?.tone || (paymentReadiness?.visible ? paymentReadiness.tone : "stone")}
         />
         <SellerWorkspaceStatCard
           label="Awaiting Review"
@@ -677,6 +864,584 @@ export default function SellerWorkspaceHome() {
           Icon={WalletCards}
           tone={(eligiblePaidSummary?.grossAmount || 0) > 0 ? "emerald" : "stone"}
         />
+      </section>
+
+      <section className="space-y-5">
+        <SellerWorkspaceSectionCard
+          title="Analytics baseline"
+          hint="A simple seller baseline for orders, revenue, coupons, and products in the active store."
+          Icon={BarChart3}
+          actions={[
+            <SellerWorkspaceBadge
+              key="analytics-scope"
+              label={analytics?.store?.slug || summary?.store?.slug || sellerContext?.store?.slug || "store"}
+              tone="sky"
+            />,
+          ]}
+        >
+          {analyticsQuery.isLoading ? (
+            <SellerWorkspaceNotice type="info">
+              Loading seller analytics baseline for the active store.
+            </SellerWorkspaceNotice>
+          ) : analyticsQuery.isError ? (
+            <SellerWorkspaceNotice type="warning">
+              {getSellerRequestErrorMessage(analyticsQuery.error, {
+                permissionMessage:
+                  "Your current seller access does not include analytics baseline visibility.",
+                fallbackMessage: "Failed to load seller analytics baseline.",
+              })}
+            </SellerWorkspaceNotice>
+          ) : (
+            <div className="space-y-5">
+              <div className="grid gap-3 md:grid-cols-2">
+                {analyticsInsights.map((insight) => (
+                  <Link
+                    key={insight.code}
+                    to={routeByLane(workspaceRoutes, insight.lane)}
+                    className={joinClassNames(
+                      "block rounded-2xl border px-4 py-4 transition hover:border-slate-300",
+                      priorityToneClass(insight.tone)
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-slate-900">{insight.label}</p>
+                          <SellerWorkspaceBadge
+                            label={insight.tone === "emerald" ? "good" : insight.tone}
+                            tone={insight.tone}
+                          />
+                        </div>
+                        <p className="mt-2 text-sm leading-6 text-slate-600">
+                          {insight.description || "Open the related seller lane for details."}
+                        </p>
+                      </div>
+                      <ArrowRight className="mt-1 h-4 w-4 text-slate-500" />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+
+              <div className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-4">
+                <SellerWorkspaceStatCard
+                  label="Total Orders"
+                  value={
+                    analyticsOrderSnapshot?.visible
+                      ? String(analyticsOrderSnapshot.totalOrders || 0)
+                      : canViewOrders
+                        ? "0"
+                        : "Role limited"
+                  }
+                  hint={
+                    analyticsOrderSnapshot?.visible
+                      ? analyticsOrderSnapshot.hint
+                      : "Order analytics are limited to seller roles with order visibility."
+                  }
+                  Icon={ShoppingBag}
+                  tone={(analyticsOrderSnapshot?.totalOrders || 0) > 0 ? "emerald" : "stone"}
+                />
+                <SellerWorkspaceStatCard
+                  label="Paid Revenue"
+                  value={
+                    analyticsRevenueSnapshot?.visible
+                      ? formatCurrency(analyticsRevenueSnapshot.paidGrossAmount || 0)
+                      : "Role limited"
+                  }
+                  hint={
+                    analyticsRevenueSnapshot?.visible
+                      ? analyticsRevenueSnapshot.hint
+                      : "Revenue baseline follows order visibility."
+                  }
+                  Icon={WalletCards}
+                  tone={
+                    (analyticsRevenueSnapshot?.paidGrossAmount || 0) > 0 ? "emerald" : "stone"
+                  }
+                />
+                <SellerWorkspaceStatCard
+                  label="Average Order Value"
+                  value={
+                    analyticsRevenueSnapshot?.visible
+                      ? formatCurrency(analyticsRevenueSnapshot.averageOrderValue || 0)
+                      : "Role limited"
+                  }
+                  hint="Derived from paid store-owned suborders only, not from settlement data."
+                  Icon={BarChart3}
+                  tone={
+                    (analyticsRevenueSnapshot?.averageOrderValue || 0) > 0 ? "sky" : "stone"
+                  }
+                />
+                <SellerWorkspaceStatCard
+                  label="Active Coupons"
+                  value={
+                    analyticsCouponSnapshot?.visible
+                      ? String(analyticsCouponSnapshot.activeCoupons || 0)
+                      : canViewCoupons
+                        ? "0"
+                        : "Role limited"
+                  }
+                  hint={
+                    analyticsCouponSnapshot?.visible
+                      ? analyticsCouponSnapshot.hint
+                      : "Coupon baseline is limited to roles with coupon visibility."
+                  }
+                  Icon={TicketPercent}
+                  tone={
+                    (analyticsCouponSnapshot?.activeCoupons || 0) > 0 ? "amber" : "stone"
+                  }
+                />
+              </div>
+
+              <div className="grid gap-5 xl:grid-cols-2">
+                <SellerWorkspaceSectionCard
+                  title="Operational order snapshot"
+                  hint="This baseline focuses on store-owned suborders and their current lifecycle."
+                  Icon={ShoppingBag}
+                >
+                  {analyticsOrderSnapshot?.visible && analyticsRevenueSnapshot?.visible ? (
+                    <>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <SellerWorkspaceDetailItem
+                          label="Paid Orders"
+                          value={String(analyticsOrderSnapshot.paidOrders || 0)}
+                        />
+                        <SellerWorkspaceDetailItem
+                          label="Processing / Shipped"
+                          value={String(analyticsOrderSnapshot.processingOrders || 0)}
+                        />
+                        <SellerWorkspaceDetailItem
+                          label="Completed"
+                          value={String(analyticsOrderSnapshot.completedOrders || 0)}
+                        />
+                        <SellerWorkspaceDetailItem
+                          label="Waiting Payment"
+                          value={String(analyticsOrderSnapshot.pendingPaymentOrders || 0)}
+                        />
+                        <SellerWorkspaceDetailItem
+                          label="Exceptions"
+                          value={String(analyticsOrderSnapshot.exceptionOrders || 0)}
+                        />
+                        <SellerWorkspaceDetailItem
+                          label="Completed Revenue"
+                          value={formatCurrency(analyticsRevenueSnapshot.completedGrossAmount || 0)}
+                          hint="Paid suborders already delivered in the current seller scope."
+                        />
+                        <SellerWorkspaceDetailItem
+                          label="In-flight Revenue"
+                          value={formatCurrency(analyticsRevenueSnapshot.processingGrossAmount || 0)}
+                          hint="Paid suborders still in processing or shipped state."
+                        />
+                        <SellerWorkspaceDetailItem
+                          label="Average Order Value"
+                          value={formatCurrency(analyticsRevenueSnapshot.averageOrderValue || 0)}
+                        />
+                      </div>
+                      <SellerWorkspaceNotice type="warning" className="mt-5">
+                        {analyticsRevenueSnapshot.boundaryNote ||
+                          "This seller baseline is operational only and not a payout or settlement statement."}
+                      </SellerWorkspaceNotice>
+                    </>
+                  ) : (
+                    <EmptyStateNotice
+                      title="Order analytics are outside this role"
+                      description="This baseline follows the same order visibility boundary as the seller orders lane."
+                      ctaLabel={canViewOrders ? "Open orders" : undefined}
+                      to={canViewOrders ? workspaceRoutes.orders() : undefined}
+                      type="warning"
+                    />
+                  )}
+                </SellerWorkspaceSectionCard>
+
+                <SellerWorkspaceSectionCard
+                  title="Coupon and product snapshot"
+                  hint="A quick check on coupon inventory, discount activity, and the products currently leading the store."
+                  Icon={Package}
+                >
+                  <div className="space-y-5">
+                    {analyticsCouponSnapshot?.visible ? (
+                      <>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <SellerWorkspaceDetailItem
+                            label="Total Coupons"
+                            value={String(analyticsCouponSnapshot.totalCoupons || 0)}
+                          />
+                          <SellerWorkspaceDetailItem
+                            label="Active"
+                            value={String(analyticsCouponSnapshot.activeCoupons || 0)}
+                          />
+                          <SellerWorkspaceDetailItem
+                            label="Scheduled"
+                            value={String(analyticsCouponSnapshot.scheduledCoupons || 0)}
+                          />
+                          <SellerWorkspaceDetailItem
+                            label="Inactive / Expired"
+                            value={String(
+                              (analyticsCouponSnapshot.inactiveCoupons || 0) +
+                                (analyticsCouponSnapshot.expiredCoupons || 0)
+                            )}
+                          />
+                          <SellerWorkspaceDetailItem
+                            label="Discount Activity"
+                            value={String(analyticsCouponSnapshot.discountedOrders || 0)}
+                            hint="Best-effort discounted-order activity inside this store scope, not per-code attribution."
+                          />
+                          <SellerWorkspaceDetailItem
+                            label="Paid Discount Activity"
+                            value={String(analyticsCouponSnapshot.discountedPaidOrders || 0)}
+                          />
+                        </div>
+                        <SellerWorkspaceNotice type="info" className="mt-5">
+                          {analyticsCouponSnapshot.boundaryNote ||
+                            "Coupon baseline shows store inventory and discounted-order activity only."}
+                        </SellerWorkspaceNotice>
+                        {analyticsCouponAttributionSnapshot?.visible ? (
+                          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-semibold text-slate-900">
+                                Coupon attribution snapshot
+                              </p>
+                              <SellerWorkspaceBadge
+                                label={
+                                  analyticsCouponAttributionSnapshot.label || "No attributed activity yet"
+                                }
+                                tone={analyticsCouponAttributionSnapshot.tone || "stone"}
+                              />
+                            </div>
+                            <p className="mt-2 text-sm leading-6 text-slate-600">
+                              {analyticsCouponAttributionSnapshot.summary ||
+                                "Coupon attribution snapshot is not available for this role."}
+                            </p>
+                            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                              <SellerWorkspaceDetailItem
+                                label="Attributed Suborders"
+                                value={String(
+                                  analyticsCouponAttributionSnapshot.attributedSuborders || 0
+                                )}
+                              />
+                              <SellerWorkspaceDetailItem
+                                label="Attributed Paid Suborders"
+                                value={String(
+                                  analyticsCouponAttributionSnapshot.attributedPaidSuborders || 0
+                                )}
+                              />
+                              <SellerWorkspaceDetailItem
+                                label="Attributed Discount"
+                                value={formatCurrency(
+                                  analyticsCouponAttributionSnapshot.totalDiscountAmount || 0
+                                )}
+                                hint="Discount total derived only from suborders that carry coupon metadata."
+                              />
+                              <SellerWorkspaceDetailItem
+                                label="Paid Attributed Discount"
+                                value={formatCurrency(
+                                  analyticsCouponAttributionSnapshot.paidDiscountAmount || 0
+                                )}
+                              />
+                              <SellerWorkspaceDetailItem
+                                label="Coverage"
+                                value={`${String(
+                                  analyticsCouponAttributionSnapshot.coverage
+                                    ?.attributedCoveragePercent || 0
+                                )}%`}
+                                hint={`${String(
+                                  analyticsCouponAttributionSnapshot.coverage
+                                    ?.attributedDiscountedSuborders || 0
+                                )} of ${String(
+                                  analyticsCouponAttributionSnapshot.coverage
+                                    ?.discountedSuborders || 0
+                                )} discounted suborder(s) currently carry coupon metadata.`}
+                              />
+                              <SellerWorkspaceDetailItem
+                                label="Unattributed Discounted"
+                                value={String(
+                                  analyticsCouponAttributionSnapshot.unattributedDiscountedSuborders ||
+                                    0
+                                )}
+                              />
+                            </div>
+                            {analyticsCouponAttributionSnapshot.topCouponCodes?.length ? (
+                              <div className="mt-4 rounded-xl border border-slate-200 bg-white px-3.5 py-3">
+                                <div className="flex items-center justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-semibold text-slate-900">
+                                      Top attributed coupon codes
+                                    </p>
+                                    <p className="mt-1 text-xs text-slate-500">
+                                      Ranked from visible discounted suborders that already carry coupon metadata.
+                                    </p>
+                                  </div>
+                                  {canViewCoupons ? (
+                                    <Link
+                                      to={workspaceRoutes.coupons()}
+                                      className="text-sm font-semibold text-slate-900 underline"
+                                    >
+                                      Open coupons
+                                    </Link>
+                                  ) : null}
+                                </div>
+                                <div className="mt-4 space-y-3">
+                                  {analyticsCouponAttributionSnapshot.topCouponCodes.map((entry) => (
+                                    <div
+                                      key={entry.code}
+                                      className="rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-3"
+                                    >
+                                      <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <div>
+                                          <p className="text-sm font-semibold text-slate-900">
+                                            {entry.code}
+                                          </p>
+                                          <p className="mt-1 text-xs text-slate-500">
+                                            Used in {entry.attributedSuborders} attributed suborder(s) • Paid{" "}
+                                            {entry.attributedPaidSuborders}
+                                          </p>
+                                        </div>
+                                        <SellerWorkspaceBadge
+                                          label={entry.scopeType === "STORE" ? "Store scope" : entry.scopeType}
+                                          tone={entry.scopeType === "STORE" ? "emerald" : "sky"}
+                                        />
+                                      </div>
+                                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                        <SellerWorkspaceDetailItem
+                                          label="Attributed Discount"
+                                          value={formatCurrency(entry.totalDiscountAmount || 0)}
+                                        />
+                                        <SellerWorkspaceDetailItem
+                                          label="Paid Attributed Discount"
+                                          value={formatCurrency(entry.paidDiscountAmount || 0)}
+                                        />
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
+                            {analyticsCouponAttributionSnapshot.scopeBreakdown?.length ? (
+                              <div className="mt-4 rounded-xl border border-slate-200 bg-white px-3.5 py-3">
+                                <p className="text-sm font-semibold text-slate-900">
+                                  Scope usage summary
+                                </p>
+                                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                  {analyticsCouponAttributionSnapshot.scopeBreakdown.map((entry) => (
+                                    <div
+                                      key={entry.scopeType}
+                                      className="rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-3"
+                                    >
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <p className="text-sm font-semibold text-slate-900">
+                                          {entry.scopeType === "STORE"
+                                            ? "Store-scoped"
+                                            : entry.scopeType === "PLATFORM"
+                                              ? "Platform-scoped"
+                                              : entry.scopeType}
+                                        </p>
+                                        <SellerWorkspaceBadge
+                                          label={`${entry.attributedSuborders} use`}
+                                          tone={entry.scopeType === "STORE" ? "emerald" : "sky"}
+                                        />
+                                      </div>
+                                      <p className="mt-2 text-xs text-slate-500">
+                                        Paid attributed suborders {entry.attributedPaidSuborders}
+                                      </p>
+                                      <p className="mt-2 text-sm font-semibold text-slate-900">
+                                        {formatCurrency(entry.totalDiscountAmount || 0)}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
+                            {analyticsCouponAttributionSnapshot.coverage?.note ? (
+                              <SellerWorkspaceNotice type="warning" className="mt-4">
+                                {analyticsCouponAttributionSnapshot.coverage.note}
+                              </SellerWorkspaceNotice>
+                            ) : null}
+                            {analyticsCouponAttributionSnapshot.boundaryNote ? (
+                              <SellerWorkspaceNotice type="info" className="mt-4">
+                                {analyticsCouponAttributionSnapshot.boundaryNote}
+                              </SellerWorkspaceNotice>
+                            ) : null}
+                          </div>
+                        ) : analyticsCouponSnapshot?.visible ? (
+                          <SellerWorkspaceNotice type="warning" className="mt-4">
+                            Coupon attribution snapshot follows both coupon and order visibility, so it stays hidden for roles that cannot read store-owned suborders.
+                          </SellerWorkspaceNotice>
+                        ) : null}
+                        {couponAttributionReadiness?.visible ? (
+                          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-semibold text-slate-900">
+                                Coupon attribution readiness
+                              </p>
+                              <SellerWorkspaceBadge
+                                label={couponAttributionReadiness.label || "Hidden"}
+                                tone={couponAttributionReadiness.tone || "stone"}
+                              />
+                            </div>
+                            <p className="mt-2 text-sm leading-6 text-slate-600">
+                              {couponAttributionReadiness.summary ||
+                                "Coupon attribution readiness is not available for this role."}
+                            </p>
+                            {couponAttributionReadiness.signals?.length ? (
+                              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                                {couponAttributionReadiness.signals.map((signal) => (
+                                  <div
+                                    key={signal.key}
+                                    className="rounded-xl border border-slate-200 bg-white px-3.5 py-3"
+                                  >
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <p className="text-sm font-semibold text-slate-900">
+                                        {signal.label}
+                                      </p>
+                                      <SellerWorkspaceBadge
+                                        label={signal.status}
+                                        tone={
+                                          signal.status === "READY"
+                                            ? "emerald"
+                                            : signal.status === "PARTIAL"
+                                              ? "amber"
+                                              : "stone"
+                                        }
+                                      />
+                                    </div>
+                                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                                      {signal.description}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                            {couponAttributionReadiness.recommendedNextStep ? (
+                              <SellerWorkspaceNotice type="warning" className="mt-4">
+                                {couponAttributionReadiness.recommendedNextStep}
+                              </SellerWorkspaceNotice>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </>
+                    ) : (
+                      <EmptyStateNotice
+                        title="Coupon analytics are outside this role"
+                        description="Coupon inventory and discounted-order activity follow seller coupon visibility."
+                        ctaLabel={canViewCoupons ? "Open coupons" : undefined}
+                        to={canViewCoupons ? workspaceRoutes.coupons() : undefined}
+                        type="warning"
+                      />
+                    )}
+
+                    {analyticsProductSnapshot?.visible ? (
+                      <>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <SellerWorkspaceDetailItem
+                            label="Total Products"
+                            value={String(analyticsProductSnapshot.totalProducts || 0)}
+                          />
+                          <SellerWorkspaceDetailItem
+                            label="Storefront Visible"
+                            value={String(analyticsProductSnapshot.storefrontVisibleProducts || 0)}
+                          />
+                          <SellerWorkspaceDetailItem
+                            label="Active"
+                            value={String(analyticsProductSnapshot.activeProducts || 0)}
+                          />
+                          <SellerWorkspaceDetailItem
+                            label="Drafts"
+                            value={String(analyticsProductSnapshot.draftProducts || 0)}
+                          />
+                          <SellerWorkspaceDetailItem
+                            label="Review Queue"
+                            value={String(analyticsProductSnapshot.reviewQueue || 0)}
+                          />
+                        </div>
+
+                        {analyticsProductSnapshot.topProducts?.length ? (
+                          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-semibold text-slate-900">Top products</p>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  Ranked from paid store-owned suborder items only. This is an operational seller snapshot, not a merchandising report.
+                                </p>
+                              </div>
+                              {canViewCatalog ? (
+                                <Link
+                                  to={workspaceRoutes.catalog()}
+                                  className="text-sm font-semibold text-slate-900 underline"
+                                >
+                                  Open catalog
+                                </Link>
+                              ) : null}
+                            </div>
+                            <div className="mt-4 space-y-3">
+                              {analyticsProductSnapshot.topProducts.map((product, index) => {
+                                const productTo = canViewCatalog
+                                  ? workspaceRoutes.productDetail(product.productId)
+                                  : null;
+                                const body = (
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <p className="text-sm font-semibold text-slate-900">
+                                        {index + 1}. {product.name}
+                                      </p>
+                                      <p className="mt-1 text-xs text-slate-500">
+                                        Sold {product.qtySold} item(s) • Revenue{" "}
+                                        {formatCurrency(product.revenueAmount || 0)}
+                                      </p>
+                                      <p className="mt-1 text-xs text-slate-500">
+                                        Status {product.status} • Stock {product.stock}
+                                      </p>
+                                    </div>
+                                    <SellerWorkspaceBadge
+                                      label={product.storefrontVisible ? "Visible" : "Internal"}
+                                      tone={product.storefrontVisible ? "emerald" : "stone"}
+                                    />
+                                  </div>
+                                );
+
+                                return productTo ? (
+                                  <Link
+                                    key={product.productId}
+                                    to={productTo}
+                                    className="block rounded-xl border border-slate-200 bg-white px-3.5 py-3 transition hover:border-slate-300"
+                                  >
+                                    {body}
+                                  </Link>
+                                ) : (
+                                  <div
+                                    key={product.productId}
+                                    className="rounded-xl border border-slate-200 bg-white px-3.5 py-3"
+                                  >
+                                    {body}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : (
+                          <EmptyStateNotice
+                            title="No top product signal yet"
+                            description={
+                              analyticsProductSnapshot.hint ||
+                              "Top products will appear after this store records paid order activity."
+                            }
+                            ctaLabel={canViewCatalog ? "Open catalog" : undefined}
+                            to={canViewCatalog ? workspaceRoutes.catalog() : undefined}
+                          />
+                        )}
+                      </>
+                    ) : (
+                      <EmptyStateNotice
+                        title="Product analytics are outside this role"
+                        description="Catalog counts and top products follow seller product visibility."
+                        ctaLabel={canViewCatalog ? "Open catalog" : undefined}
+                        to={canViewCatalog ? workspaceRoutes.catalog() : undefined}
+                        type="warning"
+                      />
+                    )}
+                  </div>
+                </SellerWorkspaceSectionCard>
+              </div>
+            </div>
+          )}
+        </SellerWorkspaceSectionCard>
       </section>
 
       {hasOperationalAccess ? (
@@ -936,7 +1701,7 @@ export default function SellerWorkspaceHome() {
             </div>
             {canEditStore ? (
               <Link
-                to={workspaceRoutes.profile()}
+                to={workspaceRoutes.storeProfile()}
                 className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900 underline"
               >
                 Open store profile

@@ -62,17 +62,18 @@ import AccountNotificationsPage from "./pages/account/AccountNotificationsPage.j
 import AccountMyAccountPage from "./pages/account/AccountMyAccountPage.jsx";
 import AccountChangePasswordPage from "./pages/account/AccountChangePasswordPage.jsx";
 import AccountShippingAddressPage from "./pages/account/AccountShippingAddressPage.jsx";
-import AccountStorePaymentProfilePage from "./pages/account/AccountStorePaymentProfilePage.jsx";
-import AccountStorePaymentReviewPage from "./pages/account/AccountStorePaymentReviewPage.jsx";
 import AccountStoreInvitationsPage from "./pages/account/AccountStoreInvitationsPage.jsx";
+import AccountLegacySellerRoutePage from "./pages/account/AccountLegacySellerRoutePage.jsx";
 import AdminStorePaymentPage from "./pages/admin/AdminStorePaymentPage.jsx";
 import AdminStorePaymentReviewPage from "./pages/admin/AdminStorePaymentReviewPage.jsx";
+import AdminStoreProfilePage from "./pages/admin/AdminStoreProfilePage.jsx";
 import SellerLayout from "./layouts/SellerLayout.jsx";
 import SellerOrderDetailPage from "./pages/seller/SellerOrderDetailPage.jsx";
 import SellerOrdersPage from "./pages/seller/SellerOrdersPage.jsx";
 import SellerPaymentReviewPage from "./pages/seller/SellerPaymentReviewPage.jsx";
 import SellerPaymentProfilePage from "./pages/seller/SellerPaymentProfilePage.jsx";
 import SellerStoreProfilePage from "./pages/seller/SellerStoreProfilePage.jsx";
+import SellerCouponsPage from "./pages/seller/SellerCouponsPage.jsx";
 import SellerTeamAuditPage from "./pages/seller/SellerTeamAuditPage.jsx";
 import SellerMemberLifecyclePage from "./pages/seller/SellerMemberLifecyclePage.jsx";
 import SellerCatalogPage from "./pages/seller/SellerCatalogPage.jsx";
@@ -93,6 +94,14 @@ const AdminStorePaymentProfilesPage = lazy(() =>
 function LegacyAccountOrderDetailRedirect() {
   const { id } = useParams();
   const target = id ? `/user/my-orders/${id}` : "/user/my-orders";
+  return <Navigate to={target} replace />;
+}
+
+function LegacySellerStoreProfileRedirect() {
+  const { storeSlug } = useParams();
+  const target = storeSlug
+    ? `/seller/stores/${encodeURIComponent(storeSlug)}/store-profile`
+    : "/seller/stores";
   return <Navigate to={target} replace />;
 }
 
@@ -151,11 +160,11 @@ export default function App() {
                 <Route path="shipping-address" element={<AccountShippingAddressPage />} />
                 <Route
                   path="store-payment-profile"
-                  element={<Navigate to="/admin/online-store/store-payment" replace />}
+                  element={<AccountLegacySellerRoutePage lane="paymentProfile" />}
                 />
                 <Route
                   path="store-payment-review"
-                  element={<Navigate to="/admin/online-store/payment-review" replace />}
+                  element={<AccountLegacySellerRoutePage lane="paymentReview" />}
                 />
                 <Route path="store-invitations" element={<AccountStoreInvitationsPage />} />
                 <Route path="update-profile" element={<AccountProfilePage />} />
@@ -183,10 +192,14 @@ export default function App() {
 
           <Route path="/admin/login" element={<AdminLoginPage />} />
           <Route path="/admin/forbidden" element={<AdminForbiddenPage />} />
+          <Route
+            path="/seller/stores/:storeSlug/profile"
+            element={<LegacySellerStoreProfileRedirect />}
+          />
           <Route path="/seller/stores/:storeSlug" element={<SellerLayout />}>
             <Route index element={<SellerWorkspaceHome />} />
             <Route path="dashboard" element={<SellerWorkspaceHome />} />
-            <Route path="profile" element={<SellerStoreProfilePage />} />
+            <Route path="store-profile" element={<SellerStoreProfilePage />} />
             <Route path="team" element={<SellerTeamPage />} />
             <Route path="team/:memberId" element={<SellerMemberLifecyclePage />} />
             <Route path="team/audit" element={<SellerTeamAuditPage />} />
@@ -201,6 +214,7 @@ export default function App() {
             <Route path="orders/:suborderId" element={<SellerOrderDetailPage />} />
             <Route path="payment-review" element={<SellerPaymentReviewPage />} />
             <Route path="payment-profile" element={<SellerPaymentProfilePage />} />
+            <Route path="coupons" element={<SellerCouponsPage />} />
           </Route>
           <Route path="/admin" element={<AdminGuard />}>
             <Route element={<AdminLayout />}>
@@ -345,6 +359,14 @@ export default function App() {
                 element={
                   <RequirePerm perm="SETTINGS_MANAGE">
                     <CurrenciesPage />
+                  </RequirePerm>
+                }
+              />
+              <Route
+                path="online-store/store-profile"
+                element={
+                  <RequirePerm perm="SETTINGS_MANAGE">
+                    <AdminStoreProfilePage />
                   </RequirePerm>
                 }
               />

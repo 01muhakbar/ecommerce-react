@@ -1,11 +1,9 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Mail, MapPin, PhoneCall } from "lucide-react";
-import {
-  getStoreCustomization,
-  getStorePublicIdentity,
-} from "../../api/store.service.ts";
-import { UiEmptyState, UiErrorState } from "../../components/ui-states/index.js";
+import { getStoreCustomization } from "../../api/public/storeCustomizationPublic.ts";
+import { getStorePublicIdentity } from "../../api/public/storePublicIdentity.ts";
+import { UiEmptyState, UiErrorState } from "../../components/primitives/state/index.js";
 import {
   normalizePublicStoreIdentity,
   resolvePreferredText,

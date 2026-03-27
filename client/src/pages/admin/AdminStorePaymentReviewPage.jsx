@@ -1,5 +1,5 @@
-import AccountStorePaymentReviewPage from "../account/AccountStorePaymentReviewPage.jsx";
+import { Navigate } from "react-router-dom";
 
 export default function AdminStorePaymentReviewPage() {
-  return <AccountStorePaymentReviewPage mode="admin" />;
+  return <Navigate to="/admin/store/payment-profiles" replace />;
 }

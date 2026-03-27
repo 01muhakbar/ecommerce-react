@@ -9,7 +9,7 @@ import {
   fetchStoreCategories,
   fetchStoreProductById,
   fetchStoreProducts,
-} from "./api/store.service.ts";
+} from "./api/public/storeProducts.ts";
 
 const getImageSrc = (product) => resolveProductImageUrl(product);
 
@@ -162,6 +162,8 @@ export function ProductCard({ product, variant = "default" }) {
   const isSearchVariant = variant === "search";
   const ratingValue = Number(product?.rating ?? product?.averageRating ?? 0);
   const displayRating = Number.isFinite(ratingValue) && ratingValue > 0 ? ratingValue : 4.5;
+  const stockValue = Number(product?.stock);
+  const isOutOfStock = Number.isFinite(stockValue) && stockValue <= 0;
 
   useEffect(() => {
     setImageSrc(resolvedSrc);
@@ -175,7 +177,7 @@ export function ProductCard({ product, variant = "default" }) {
   const handleAdd = (event) => {
     event.preventDefault();
     event.stopPropagation();
-    if (isAdding) return;
+    if (isAdding || isOutOfStock) return;
     setIsAdding(true);
     add(product?.id, 1, {
       name: product?.name || product?.title,
@@ -236,15 +238,27 @@ export function ProductCard({ product, variant = "default" }) {
         <button
           type="button"
           onClick={handleAdd}
-          aria-label={`Add ${productName} to cart`}
-          disabled={isAdding || isLoading}
+          aria-label={
+            isOutOfStock ? `${productName} is out of stock` : `Add ${productName} to cart`
+          }
+          disabled={isAdding || isLoading || isOutOfStock}
           className={
             isSearchVariant
               ? "inline-flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500 text-lg font-semibold text-white shadow-sm transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
               : "inline-flex h-10 w-full items-center justify-center rounded-full border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-60 sm:h-9 sm:w-auto sm:text-xs"
           }
         >
-          {isSearchVariant ? (isAdding ? "✓" : "+") : isAdding ? "Added" : "Add to cart"}
+          {isSearchVariant
+            ? isOutOfStock
+              ? "!"
+              : isAdding
+                ? "✓"
+                : "+"
+            : isOutOfStock
+              ? "Out of stock"
+              : isAdding
+                ? "Added"
+                : "Add to cart"}
         </button>
       </div>
     </div>

@@ -1062,7 +1062,7 @@ const serializeProductAvailability = (
         : "Out of stock",
     storefrontImpact: "NO_VISIBILITY_CHANGE",
     storefrontReason:
-      "Current storefront product queries do not hide products based on stock or pre-order flags.",
+      "Storefront listing visibility stays unchanged, but add-to-cart and checkout now block items that are out of stock or no longer purchasable.",
   };
 };
 

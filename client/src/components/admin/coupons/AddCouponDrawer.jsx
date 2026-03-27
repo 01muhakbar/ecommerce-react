@@ -6,6 +6,8 @@ const initialForm = {
   language: "en",
   campaignName: "",
   code: "",
+  scopeType: "PLATFORM",
+  storeId: "",
   startDate: "",
   endDate: "",
   discountType: "percent",
@@ -46,6 +48,7 @@ export default function AddCouponDrawer({
   onSubmit,
   isSubmitting,
   error,
+  storeOptions = [],
 }) {
   const [form, setForm] = useState(initialForm);
   const [bannerFile, setBannerFile] = useState(null);
@@ -112,6 +115,10 @@ export default function AddCouponDrawer({
       setValidationError("Campaign Code is required.");
       return;
     }
+    if (form.scopeType === "STORE" && !form.storeId) {
+      setValidationError("Store is required for store-scoped coupons.");
+      return;
+    }
     if (form.discountType === "percent" && (amount < 0 || amount > 100)) {
       setValidationError("Percent discount must be between 0 and 100.");
       return;
@@ -136,7 +143,10 @@ export default function AddCouponDrawer({
     onSubmit({
       campaignName,
       code,
+      scopeType: form.scopeType,
+      storeId: form.scopeType === "STORE" ? Number(form.storeId) : null,
       startDate: hasStartDate ? form.startDate : null,
+      startsAt: hasStartDate ? new Date(`${form.startDate}T00:00:00`).toISOString() : null,
       discountType: form.discountType,
       amount,
       minSpend,
@@ -200,8 +210,8 @@ export default function AddCouponDrawer({
               <CouponDrawerSectionHeader
                 eyebrow="Basic Info"
                 title="Define campaign identity first"
-                description="Set the code and campaign label that admin will recognize during checkout reviews."
-                meta={form.code ? `Code ${form.code}` : "Code pending"}
+                description="Set the code, scope, and campaign label that admin will recognize during checkout reviews."
+                meta={form.code ? `${form.scopeType} / ${form.code}` : `${form.scopeType} / Code pending`}
               />
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <div>
@@ -219,6 +229,25 @@ export default function AddCouponDrawer({
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Scope
+                  </label>
+                  <select
+                    value={form.scopeType}
+                    onChange={(event) =>
+                      setField({
+                        scopeType: event.target.value,
+                        storeId: event.target.value === "STORE" ? form.storeId : "",
+                      })
+                    }
+                    className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none"
+                    disabled={isSubmitting}
+                  >
+                    <option value="PLATFORM">Platform / Global</option>
+                    <option value="STORE">Store-scoped</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Campaign Code
                   </label>
                   <input
@@ -232,6 +261,28 @@ export default function AddCouponDrawer({
                     required
                   />
                 </div>
+                {form.scopeType === "STORE" ? (
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Linked Store
+                    </label>
+                    <select
+                      value={form.storeId}
+                      onChange={(event) => setField({ storeId: event.target.value })}
+                      className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none"
+                      disabled={isSubmitting}
+                      required
+                    >
+                      <option value="">Select store</option>
+                      {storeOptions.map((store) => (
+                        <option key={store.id} value={store.id}>
+                          {store.name}
+                          {store.slug ? ` (${store.slug})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
                 <div className="sm:col-span-2">
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Campaign Name
@@ -407,6 +458,9 @@ export default function AddCouponDrawer({
               <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-500">
                 <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1">
                   {form.startDate ? `Starts ${form.startDate}` : "Start date optional"}
+                </span>
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1">
+                  {form.scopeType === "STORE" ? "Seller-owned / admin-governed" : "Admin-owned global"}
                 </span>
                 <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1">
                   {form.endDate ? `Ends ${form.endDate}` : "End date optional"}

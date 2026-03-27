@@ -14,7 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { api } from "../../api/axios.ts";
-import { UiErrorState, UiSkeleton } from "../../components/ui-states/index.js";
+import { UiErrorState, UiSkeleton } from "../../components/primitives/state/index.js";
 import EditAttributeDrawer from "../../components/admin/attributes/EditAttributeDrawer.jsx";
 import {
   GENERIC_ERROR,

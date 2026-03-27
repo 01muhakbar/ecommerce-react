@@ -1,8 +1,18 @@
 import { Router } from "express";
-import { Op, QueryTypes } from "sequelize";
+import { QueryTypes } from "sequelize";
 import { sequelize } from "../models/index.js";
-import { Product, Store } from "../models/index.js";
-import { sanitizeCustomization } from "./admin.storeCustomization.js";
+import { Store } from "../models/index.js";
+import {
+  PUBLIC_STORE_IDENTITY_ATTRIBUTES,
+  serializePublicStoreIdentityPayload,
+} from "../services/sharedContracts/publicStoreIdentity.js";
+import {
+  buildEffectiveStoreMicrositeRichAboutPayload,
+  buildPublicStoreCustomizationHeaderSettings,
+  normalizeStoreCustomizationRichAboutPayload,
+  parseStoredCustomization,
+  sanitizeStoreCustomization,
+} from "../services/sharedContracts/storeCustomizationSanitizer.js";
 
 const router = Router();
 
@@ -58,15 +68,6 @@ const getCustomizationRow = async (lang: string) => {
   return rows[0] || null;
 };
 
-const parseCustomization = (raw: string | null) => {
-  if (!raw) return sanitizeCustomization({});
-  try {
-    return sanitizeCustomization(JSON.parse(raw));
-  } catch {
-    return sanitizeCustomization({});
-  }
-};
-
 const parseRawCustomization = (raw: string | null) => {
   if (!raw) return {};
   try {
@@ -77,197 +78,16 @@ const parseRawCustomization = (raw: string | null) => {
   }
 };
 
-const toText = (value: unknown, fallback = "") => {
-  const normalized = String(value ?? "").trim();
-  return normalized || fallback;
-};
-
-const toIsoString = (value: unknown) => {
-  if (!value) return "";
-  const parsed = Date.parse(String(value));
-  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : "";
-};
-
-const pickLatestIsoString = (...values: unknown[]) => {
-  const timestamps = values
-    .map((value) => {
-      const iso = toIsoString(value);
-      if (!iso) return null;
-      const parsed = Date.parse(iso);
-      return Number.isFinite(parsed) ? parsed : null;
-    })
-    .filter((value): value is number => value !== null);
-
-  if (!timestamps.length) return "";
-  return new Date(Math.max(...timestamps)).toISOString();
-};
-
 const normalizeSlug = (value: unknown) =>
   String(value || "")
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "");
 
-const toPreferredWhatsAppLink = (preferredValue: unknown, fallbackValue: unknown) => {
-  const preferred = toText(preferredValue);
-  if (preferred) {
-    const lowered = preferred.toLowerCase();
-    if (
-      lowered.startsWith("https://wa.me/") ||
-      lowered.startsWith("https://api.whatsapp.com/")
-    ) {
-      return preferred;
-    }
-
-    const digits = preferred.replace(/\D+/g, "");
-    if (digits) {
-      return `https://wa.me/${digits}`;
-    }
-  }
-
-  return toText(fallbackValue);
-};
-
-const serializePublicStoreIdentityContract = () => ({
-  authoritativeSource: "STORE",
-  sellerOwnedFields: [
-    "description",
-    "logoUrl",
-    "bannerUrl",
-    "email",
-    "phone",
-    "whatsapp",
-    "websiteUrl",
-    "instagramUrl",
-    "tiktokUrl",
-    "addressLine1",
-    "addressLine2",
-    "city",
-    "province",
-    "postalCode",
-    "country",
-  ],
-  adminOwnedFields: ["name", "slug", "status"],
-  adminManagedSurfaces: [
-    "marketplace-header-copy",
-    "marketplace-contact-layout",
-    "store-microsite-rich-about",
-  ],
-  notes: [
-    "Public store identity and store microsite contact fields read from Store.",
-    "Store.name, Store.slug, and Store.status remain admin-governed core identity fields.",
-    "Store microsite hero artwork and public outbound links read seller-owned Store fields when present.",
-    "Global marketplace header copy and contact-page layout remain admin customization-managed.",
-    "Store description is the fallback for store microsite about content when rich-about customization is empty.",
-  ],
-});
-
-const publicStoreIdentityAttributes = [
-  "id",
-  "name",
-  "slug",
-  "status",
-  "description",
-  "logoUrl",
-  "bannerUrl",
-  "email",
-  "phone",
-  "whatsapp",
-  "websiteUrl",
-  "instagramUrl",
-  "tiktokUrl",
-  "addressLine1",
-  "addressLine2",
-  "city",
-  "province",
-  "postalCode",
-  "country",
-  "createdAt",
-  "updatedAt",
-] as const;
-
-const buildPublicStoreSummary = async (store: any) => {
-  if (!store?.id) {
-    return {
-      status: {
-        code: "UNKNOWN",
-        label: "Unavailable",
-        tone: "neutral",
-      },
-      productCount: null,
-      ratingAverage: null,
-      ratingCount: 0,
-      followerCount: null,
-      responseRate: null,
-      responseTimeLabel: null,
-      joinedAt: "",
-      chatMode: "disabled",
-      canChat: false,
-      canContact: false,
-    };
-  }
-
-  const storeId = Number(store.id);
-  const productCount = await Product.count({
-    where: {
-      storeId,
-      status: "active",
-      isPublished: { [Op.in]: [1, true] },
-      sellerSubmissionStatus: "none",
-    } as any,
-  });
-
-  const rows = (await sequelize.query(
-    `
-      SELECT
-        ROUND(AVG(pr.rating), 1) AS ratingAverage,
-        COUNT(pr.id) AS ratingCount
-      FROM product_reviews pr
-      INNER JOIN products p ON p.id = pr.product_id
-      WHERE p.store_id = :storeId
-        AND p.status = 'active'
-        AND p.published IN (1, true)
-        AND COALESCE(p.seller_submission_status, 'none') = 'none'
-    `,
-    {
-      replacements: { storeId },
-      type: QueryTypes.SELECT,
-    }
-  )) as Array<{ ratingAverage?: number | string | null; ratingCount?: number | string | null }>;
-
-  const aggregate = rows[0] || {};
-  const ratingAverageRaw = Number(aggregate.ratingAverage);
-  const ratingAverage = Number.isFinite(ratingAverageRaw) && ratingAverageRaw > 0
-    ? Number(ratingAverageRaw.toFixed(1))
-    : null;
-  const ratingCount = Math.max(0, Number(aggregate.ratingCount || 0));
-  const storeStatus = toText(store.status, "ACTIVE").toUpperCase();
-  const hasWhatsApp = Boolean(toPreferredWhatsAppLink(store.whatsapp, ""));
-  const hasContact = Boolean(toText(store.email) || toText(store.phone) || hasWhatsApp);
-
-  return {
-    status: {
-      code: storeStatus,
-      label: storeStatus === "ACTIVE" ? "Active" : "Unavailable",
-      tone: storeStatus === "ACTIVE" ? "success" : "neutral",
-    },
-    productCount: Number(productCount) || 0,
-    ratingAverage,
-    ratingCount,
-    followerCount: null,
-    responseRate: null,
-    responseTimeLabel: null,
-    joinedAt: toIsoString(store.createdAt),
-    chatMode: hasWhatsApp ? "enabled" : hasContact ? "contact_fallback" : "disabled",
-    canChat: hasWhatsApp,
-    canContact: hasContact,
-  };
-};
-
 const resolvePrimaryPublicStore = async () => {
   return Store.findOne({
     where: { status: "ACTIVE" } as any,
-    attributes: [...publicStoreIdentityAttributes],
+    attributes: [...PUBLIC_STORE_IDENTITY_ATTRIBUTES],
     order: [["id", "ASC"]],
   });
 };
@@ -281,147 +101,8 @@ const resolvePublicStoreBySlug = async (slug: string) => {
       slug: normalizedSlug,
       status: "ACTIVE",
     } as any,
-    attributes: [...publicStoreIdentityAttributes],
+    attributes: [...PUBLIC_STORE_IDENTITY_ATTRIBUTES],
   });
-};
-
-const serializePublicStoreIdentity = async (store: any) => {
-  const summary = await buildPublicStoreSummary(store);
-
-  if (!store) {
-    return {
-      id: null,
-      name: "",
-      slug: "",
-      description: "",
-      logoUrl: "",
-      bannerUrl: "",
-      email: "",
-      phone: "",
-      whatsapp: "",
-      websiteUrl: "",
-      instagramUrl: "",
-      tiktokUrl: "",
-      addressLine1: "",
-      addressLine2: "",
-      city: "",
-      province: "",
-      postalCode: "",
-      country: "",
-      createdAt: "",
-      updatedAt: "",
-      summary,
-      contract: serializePublicStoreIdentityContract(),
-    };
-  }
-
-  return {
-    id: Number(store.id),
-    name: toText(store.name),
-    slug: toText(store.slug),
-    description: toText(store.description),
-    logoUrl: toText(store.logoUrl),
-    bannerUrl: toText(store.bannerUrl),
-    email: toText(store.email),
-    phone: toText(store.phone),
-    whatsapp: toText(store.whatsapp),
-    websiteUrl: toText(store.websiteUrl),
-    instagramUrl: toText(store.instagramUrl),
-    tiktokUrl: toText(store.tiktokUrl),
-    addressLine1: toText(store.addressLine1),
-    addressLine2: toText(store.addressLine2),
-    city: toText(store.city),
-    province: toText(store.province),
-    postalCode: toText(store.postalCode),
-    country: toText(store.country),
-    createdAt: toIsoString(store.createdAt),
-    updatedAt: toIsoString(store.updatedAt),
-    summary,
-    contract: serializePublicStoreIdentityContract(),
-  };
-};
-
-const normalizeRichAboutPayload = (raw: unknown) => {
-  const source = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
-  const title = toText(
-    (source as any).title ?? (source as any).heading ?? (source as any).label,
-    ""
-  );
-  const body = toText(
-    (source as any).body ?? (source as any).content ?? (source as any).text ?? (source as any).description,
-    ""
-  );
-
-  return {
-    title,
-    body,
-    hasContent: Boolean(title || body),
-  };
-};
-
-const extractHeaderSettings = (
-  lang: string,
-  customization: Record<string, any>,
-  store: any,
-  updatedAt?: string | null
-) => {
-  const headerSource =
-    customization?.home && typeof customization.home === "object"
-      ? customization.home.header || {}
-      : {};
-  const storePhone = toText(store?.phone);
-  const storeWhatsApp = toPreferredWhatsAppLink(store?.whatsapp, "");
-  const storeLogoUrl = toText(store?.logoUrl);
-  const customizationPhone = toText(headerSource.phoneNumber, "");
-  const customizationWhatsApp = toText(headerSource.whatsAppLink, "");
-  const customizationHeaderLogoUrl = toText(
-    headerSource.headerLogoUrl ?? headerSource.logoDataUrl,
-    ""
-  );
-
-  return {
-    language: lang,
-    headerText: toText(headerSource.headerText, "Need help?"),
-    phoneNumber: storePhone || customizationPhone,
-    whatsAppLink: storeWhatsApp || customizationWhatsApp,
-    headerLogoUrl: storeLogoUrl || customizationHeaderLogoUrl,
-    updatedAt:
-      pickLatestIsoString(store?.updatedAt, updatedAt) || new Date().toISOString(),
-    contract: {
-      authoritativeFields: {
-        headerText: "STORE_CUSTOMIZATION",
-        phoneNumber: storePhone ? "STORE" : "STORE_CUSTOMIZATION",
-        whatsAppLink: storeWhatsApp ? "STORE" : "STORE_CUSTOMIZATION",
-        headerLogoUrl: storeLogoUrl ? "STORE" : "STORE_CUSTOMIZATION",
-      },
-      fallbackOrder: {
-        phoneNumber: ["STORE.phone", "customization.home.header.phoneNumber"],
-        whatsAppLink: ["STORE.whatsapp", "customization.home.header.whatsAppLink"],
-        headerLogoUrl: ["STORE.logoUrl", "customization.home.header.headerLogoUrl"],
-      },
-      notes: [
-        "Marketplace header copy stays admin customization-managed.",
-        "Seller-owned store phone, WhatsApp, and logo override customization header fallback when present.",
-      ],
-    },
-  };
-};
-
-const buildEffectiveRichAboutPayload = (store: any, richAbout: { title: string; body: string; hasContent: boolean }) => {
-  const fallbackBody = toText(store?.description);
-  const effectiveTitle = toText(richAbout.title, "About This Store");
-  const effectiveBody = toText(richAbout.body, fallbackBody);
-  const source = richAbout.hasContent
-    ? "STORE_CUSTOMIZATION"
-    : fallbackBody
-      ? "STORE_DESCRIPTION_FALLBACK"
-      : "EMPTY";
-
-  return {
-    title: effectiveTitle,
-    body: effectiveBody,
-    source,
-  };
 };
 
 // GET /api/store/customization/header?lang=en
@@ -433,13 +114,19 @@ router.get("/header", async (req, res, next) => {
     const row = await getCustomizationRow(lang);
     const fallbackRow = !row && lang !== "en" ? await getCustomizationRow("en") : null;
     const sourceRow = row || fallbackRow;
-    const sourcePayload = sourceRow ? parseCustomization(sourceRow.data) : sanitizeCustomization({});
-    const sanitized = sanitizeCustomization(sourcePayload);
+    const sanitized = sourceRow
+      ? parseStoredCustomization(sourceRow.data)
+      : sanitizeStoreCustomization({});
     const store = await resolvePrimaryPublicStore();
 
     return res.json({
       success: true,
-      data: extractHeaderSettings(lang, sanitized, store, sourceRow?.updatedAt),
+      data: buildPublicStoreCustomizationHeaderSettings(
+        lang,
+        sanitized,
+        store,
+        sourceRow?.updatedAt
+      ),
     });
   } catch (error) {
     return next(error);
@@ -447,13 +134,13 @@ router.get("/header", async (req, res, next) => {
 });
 
 // GET /api/store/customization/identity
-// Response contract: { success: true, data: { id, name, slug, description, logoUrl, bannerUrl, email, phone, whatsapp, websiteUrl, instagramUrl, tiktokUrl, addressLine1, addressLine2, city, province, postalCode, country, updatedAt, contract } }
+// Response contract: { success: true, data: { name, slug, description, logoUrl, bannerUrl, email, phone, whatsapp, websiteUrl, instagramUrl, tiktokUrl, addressLine1, addressLine2, city, province, postalCode, country, updatedAt, contract } }
 router.get("/identity", async (_req, res, next) => {
   try {
     const store = await resolvePrimaryPublicStore();
     return res.json({
       success: true,
-      data: await serializePublicStoreIdentity(store),
+      data: await serializePublicStoreIdentityPayload(store),
     });
   } catch (error) {
     return next(error);
@@ -461,7 +148,7 @@ router.get("/identity", async (_req, res, next) => {
 });
 
 // GET /api/store/customization/identity/:slug
-// Response contract: { success: true, data: { id, name, slug, description, logoUrl, bannerUrl, email, phone, whatsapp, websiteUrl, instagramUrl, tiktokUrl, addressLine1, addressLine2, city, province, postalCode, country, updatedAt, contract } }
+// Response contract: { success: true, data: { name, slug, description, logoUrl, bannerUrl, email, phone, whatsapp, websiteUrl, instagramUrl, tiktokUrl, addressLine1, addressLine2, city, province, postalCode, country, updatedAt, contract } }
 router.get("/identity/:slug", async (req, res, next) => {
   try {
     const normalizedSlug = normalizeSlug(req.params.slug);
@@ -482,7 +169,7 @@ router.get("/identity/:slug", async (req, res, next) => {
 
     return res.json({
       success: true,
-      data: await serializePublicStoreIdentity(store),
+      data: await serializePublicStoreIdentityPayload(store),
     });
   } catch (error) {
     return next(error);
@@ -533,10 +220,10 @@ router.get("/microsites/:slug/rich-about", async (req, res, next) => {
       !Array.isArray(micrositesSource[normalizedSlug])
         ? micrositesSource[normalizedSlug]
         : {};
-    const richAbout = normalizeRichAboutPayload(
+    const richAbout = normalizeStoreCustomizationRichAboutPayload(
       (storeMicrositeSource as any).richAbout ?? (storeMicrositeSource as any).about
     );
-    const effective = buildEffectiveRichAboutPayload(store, richAbout);
+    const effective = buildEffectiveStoreMicrositeRichAboutPayload(store, richAbout);
 
     return res.json({
       success: true,
@@ -546,10 +233,11 @@ router.get("/microsites/:slug/rich-about", async (req, res, next) => {
         richAbout,
         effective,
         updatedAt:
-          pickLatestIsoString(
-            richAbout.hasContent ? sourceRow?.updatedAt : null,
-            effective.source === "STORE_DESCRIPTION_FALLBACK" ? store?.updatedAt : null
-          ) || "",
+          effective.source === "STORE_CUSTOMIZATION" && sourceRow?.updatedAt
+            ? new Date(sourceRow.updatedAt).toISOString()
+            : effective.source === "STORE_DESCRIPTION_FALLBACK" && store?.updatedAt
+              ? new Date(store.updatedAt).toISOString()
+              : "",
         contract: {
           authoritativeSource: "STORE_CUSTOMIZATION",
           fallbackOrder: {
@@ -597,11 +285,11 @@ router.get("/", async (req, res, next) => {
     const row = await getCustomizationRow(lang);
     const fallbackRow = !row && lang !== "en" ? await getCustomizationRow("en") : null;
     const sourcePayload = row
-      ? parseCustomization(row.data)
+      ? parseStoredCustomization(row.data)
       : fallbackRow
-        ? parseCustomization(fallbackRow.data)
-        : sanitizeCustomization({});
-    const sanitized = sanitizeCustomization(sourcePayload);
+        ? parseStoredCustomization(fallbackRow.data)
+        : sanitizeStoreCustomization({});
+    const sanitized = sanitizeStoreCustomization(sourcePayload);
     const customization: Record<string, unknown> = {};
 
     if (includeAboutUs) {

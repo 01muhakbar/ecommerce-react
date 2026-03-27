@@ -1,5 +1,7 @@
 import { DataTypes, Model, Sequelize, Optional } from "sequelize";
 
+export type CouponScopeType = "PLATFORM" | "STORE";
+
 interface CouponAttributes {
   id: number;
   code: string;
@@ -7,11 +9,17 @@ interface CouponAttributes {
   amount: number;
   minSpend: number;
   active: boolean;
+  scopeType: CouponScopeType;
+  storeId?: number | null;
+  startsAt?: Date | null;
   expiresAt?: Date | null;
 }
 
 interface CouponCreationAttributes
-  extends Optional<CouponAttributes, "id" | "active" | "discountType" | "minSpend" | "expiresAt"> {}
+  extends Optional<
+    CouponAttributes,
+    "id" | "active" | "discountType" | "minSpend" | "scopeType" | "storeId" | "startsAt" | "expiresAt"
+  > {}
 
 export class Coupon extends Model<CouponAttributes, CouponCreationAttributes> implements CouponAttributes {
   declare id: number;
@@ -20,10 +28,20 @@ export class Coupon extends Model<CouponAttributes, CouponCreationAttributes> im
   declare amount: number;
   declare minSpend: number;
   declare active: boolean;
+  declare scopeType: CouponScopeType;
+  declare storeId: number | null;
+  declare startsAt: Date | null;
   declare expiresAt?: Date | null;
 
   declare readonly createdAt: Date;
   declare readonly updatedAt: Date;
+
+  static associate(models: any) {
+    Coupon.belongsTo(models.Store, {
+      foreignKey: { name: "storeId", field: "store_id" },
+      as: "store",
+    });
+  }
 
   static initModel(sequelize: Sequelize): typeof Coupon {
     Coupon.init(
@@ -53,6 +71,26 @@ export class Coupon extends Model<CouponAttributes, CouponCreationAttributes> im
         active: {
           type: DataTypes.BOOLEAN,
           defaultValue: true,
+        },
+        scopeType: {
+          type: DataTypes.ENUM("PLATFORM", "STORE"),
+          allowNull: false,
+          defaultValue: "PLATFORM",
+          field: "scope_type",
+        },
+        storeId: {
+          type: DataTypes.INTEGER.UNSIGNED,
+          allowNull: true,
+          field: "store_id",
+          references: {
+            model: "stores",
+            key: "id",
+          },
+        },
+        startsAt: {
+          type: DataTypes.DATE,
+          allowNull: true,
+          field: "starts_at",
         },
         expiresAt: DataTypes.DATE,
       },

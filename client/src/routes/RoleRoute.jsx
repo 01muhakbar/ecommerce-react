@@ -1,8 +1,9 @@
 import { Navigate, Outlet } from "react-router-dom";
-import { useAuth } from "../auth/useAuth.js";
+import { useAdminAuth } from "../auth/authDomainHooks.js";
 
+// Legacy admin-oriented role guard. Do not reuse for seller/account routes.
 export default function RoleRoute({ allowedRoles = [] }) {
-  const { isAuthenticated, isLoading, role } = useAuth();
+  const { isAuthenticated, isLoading, role } = useAdminAuth();
 
   if (isLoading) {
     return <div style={{ padding: "24px" }}>Loading session...</div>;

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useOutletContext } from "react-router-dom";
 import { CheckCircle, Eye, RotateCw, ShoppingCart, Truck } from "lucide-react";
 import { api } from "../../api/axios.ts";
-import { getStoreCustomization } from "../../api/store.service.ts";
+import { getStoreCustomization } from "../../api/public/storeCustomizationPublic.ts";
 import { formatCurrency } from "../../utils/format.js";
 import {
   getOrderStatusBadgeClass,

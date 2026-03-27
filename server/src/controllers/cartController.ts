@@ -3,6 +3,7 @@ import { Cart } from '../models/Cart.js';
 import { CartItem } from '../models/CartItem.js';
 import { Product } from '../models/Product.js';
 import { sequelize } from "../models/index.js";
+import { Store } from "../models/index.js";
 
 const asSingle = (v: unknown) => (Array.isArray(v) ? v[0] : v);
 const toId = (v: unknown): number | null => {
@@ -57,6 +58,81 @@ const toCartItemPayload = (row: any) => {
   };
 };
 
+const isStorefrontCartEligible = (product: any) => {
+  const status = String(getAttr(product, "status") || "").trim().toLowerCase();
+  const isPublished = Boolean(
+    getAttr(product, "isPublished") ?? getAttr(product, "published")
+  );
+  const submissionStatus = String(getAttr(product, "sellerSubmissionStatus") || "none")
+    .trim()
+    .toLowerCase();
+  const storeId = Number(getAttr(product, "storeId") ?? product?.storeId ?? 0);
+  const store = product?.store ?? product?.get?.("store") ?? null;
+  const storeStatus = String(store?.status || "").trim().toUpperCase();
+  return (
+    status === "active" &&
+    isPublished &&
+    submissionStatus === "none" &&
+    Number.isFinite(storeId) &&
+    storeId > 0 &&
+    storeStatus === "ACTIVE"
+  );
+};
+
+const loadCartProductForMutation = async (
+  productId: number,
+  transaction?: any
+) =>
+  Product.findByPk(productId, {
+    attributes: [
+      "id",
+      "name",
+      "stock",
+      "status",
+      "isPublished",
+      "sellerSubmissionStatus",
+      "storeId",
+    ],
+    include: [
+      {
+        model: Store,
+        as: "store",
+        attributes: ["id", "status"],
+        required: false,
+      },
+    ],
+    transaction,
+    lock: transaction?.LOCK?.UPDATE,
+  });
+
+const validateCartMutationProduct = (
+  product: any,
+  requestedQty: number
+) => {
+  if (!product) {
+    const error: any = new Error("Product not found.");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (!isStorefrontCartEligible(product)) {
+    const error: any = new Error("Product is no longer available for purchase.");
+    error.statusCode = 409;
+    error.code = "PRODUCT_NOT_AVAILABLE";
+    throw error;
+  }
+
+  const stock = Number(getAttr(product, "stock") ?? 0);
+  if (!Number.isFinite(stock) || stock < requestedQty) {
+    const error: any = new Error(
+      `Not enough stock. Only ${Math.max(0, Number.isFinite(stock) ? stock : 0)} items available.`
+    );
+    error.statusCode = 409;
+    error.code = "INSUFFICIENT_STOCK";
+    throw error;
+  }
+};
+
 // --- CONTROLLER FUNCTIONS ---
 
 export const addToCart = async (
@@ -77,69 +153,67 @@ export const addToCart = async (
       res.status(400).json({ message: "Product ID is required." });
       return;
     }
+    let responsePayload: any = null;
 
-    let cart = await Cart.findOne({ where: { userId } });
-    if (!cart) {
-      cart = await Cart.create({ userId });
-    }
-    const cartId = await resolveCartId(cart, userId);
-    if (!cartId) {
-      res.status(500).json({ message: "Failed to resolve cart id." });
-      return;
-    }
-
-    const existingItem = await CartItem.findOne({
-      where: { cartId, productId: productId },
-    });
-
-    if (existingItem) {
-      const currentQty = Number(getAttr(existingItem, "quantity") ?? 0);
-      existingItem.set("quantity", currentQty + quantity);
-      await existingItem.save();
-
-      const fresh = await CartItem.findOne({
-        where: { cartId, productId: productId },
-        order: [["id", "DESC"]],
+    await sequelize.transaction(async (t) => {
+      let cart = await Cart.findOne({
+        where: { userId },
+        transaction: t,
+        lock: t.LOCK.UPDATE,
       });
-      if (!fresh) {
-        res.status(500).json({ message: "Failed to resolve cart item." });
+      if (!cart) {
+        cart = await Cart.create({ userId }, { transaction: t });
+      }
+      const cartId = await resolveCartId(cart, userId);
+      if (!cartId) {
+        throw new Error("Failed to resolve cart id.");
+      }
+
+      const product = await loadCartProductForMutation(Number(productId), t);
+      const existingItem = await CartItem.findOne({
+        where: { cartId, productId: productId },
+        transaction: t,
+        lock: t.LOCK.UPDATE,
+      });
+      const currentQty = Number(getAttr(existingItem, "quantity") ?? 0);
+      const nextQty = currentQty + Math.max(1, Number(quantity) || 1);
+      validateCartMutationProduct(product, nextQty);
+
+      if (existingItem) {
+        existingItem.set("quantity", nextQty);
+        await existingItem.save({ transaction: t });
+        responsePayload = toCartItemPayload(existingItem);
         return;
       }
 
-      res.status(200).json({
-        message: "Product added to cart successfully.",
-        cartItem: toCartItemPayload(fresh),
-      });
-      return;
-    }
-
-    await CartItem.create({
-      quantity: quantity,
-      productId: productId,
-      cartId,
+      const created = await CartItem.create(
+        {
+          quantity: Math.max(1, Number(quantity) || 1),
+          productId: productId,
+          cartId,
+        },
+        { transaction: t }
+      );
+      responsePayload = toCartItemPayload(created);
     });
-
-    const fresh = await CartItem.findOne({
-      where: { cartId, productId: productId },
-      order: [["id", "DESC"]],
-    });
-    if (!fresh) {
-      res.status(500).json({ message: "Failed to resolve cart item." });
-      return;
-    }
 
     res.status(200).json({
       message: "Product added to cart successfully.",
-      cartItem: toCartItemPayload(fresh),
+      cartItem: responsePayload,
     });
   } catch (error) {
     console.error("ADD TO CART ERROR:", error);
-    res
-      .status(500)
-      .json({
-        message: "Failed to add product to cart.",
-        error: (error as Error).message,
-      });
+    const statusCode = Number((error as any)?.statusCode || 500);
+    res.status(statusCode).json({
+      message:
+        statusCode >= 400 && statusCode < 500
+          ? (error as Error).message
+          : "Failed to add product to cart.",
+      error: (error as Error).message,
+      ...(String((error as any)?.code || "").trim()
+        ? { code: String((error as any).code) }
+        : {}),
+    });
   }
 };
 
@@ -360,6 +434,9 @@ export const setCartItemQty = async (
         return;
       }
 
+      const product = await loadCartProductForMutation(productId, t);
+      validateCartMutationProduct(product, qty);
+
       if (cartItem) {
         const currentQty = Number(getAttr(cartItem, "quantity") ?? 0);
         if (currentQty !== qty) {
@@ -378,9 +455,16 @@ export const setCartItemQty = async (
     res.status(200).json({ message: "Cart updated successfully." });
   } catch (error) {
     console.error("SET CART ITEM QTY ERROR:", error);
-    res.status(500).json({
-      message: "Failed to set cart item quantity.",
+    const statusCode = Number((error as any)?.statusCode || 500);
+    res.status(statusCode).json({
+      message:
+        statusCode >= 400 && statusCode < 500
+          ? (error as Error).message
+          : "Failed to set cart item quantity.",
       error: (error as Error).message,
+      ...(String((error as any)?.code || "").trim()
+        ? { code: String((error as any).code) }
+        : {}),
     });
   }
 };

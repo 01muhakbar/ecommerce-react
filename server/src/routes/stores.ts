@@ -5,7 +5,7 @@ import { Store, StorePaymentProfile, User } from "../models/index.js";
 import {
   resolvePreferredStorePaymentProfile,
   STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES,
-} from "../services/storePaymentProfileCompat.js";
+} from "../services/sharedContracts/storePaymentProfileCompat.js";
 
 const router = Router();
 

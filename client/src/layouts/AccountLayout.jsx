@@ -11,9 +11,9 @@ import {
   Star,
   User,
 } from "lucide-react";
-import { useAuth } from "../auth/useAuth.js";
+import { useAccountAuth } from "../auth/authDomainHooks.js";
 import { useCartStore } from "../store/cart.store.ts";
-import { getStoreCustomization } from "../api/store.service.ts";
+import { getStoreCustomization } from "../api/public/storeCustomizationPublic.ts";
 
 const toText = (value, fallback) => {
   const normalized = String(value ?? "").trim();
@@ -142,7 +142,7 @@ function AccountSidebar({ user, onLogout, isLoggingOut, dashboardSettingCopy }) 
 export default function AccountLayout() {
   const navigate = useNavigate();
   const { user } = useOutletContext() || {};
-  const { logout } = useAuth() || {};
+  const { logout } = useAccountAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const dashboardSettingQuery = useQuery({
     queryKey: ["store-customization", "dashboard-setting", "en"],

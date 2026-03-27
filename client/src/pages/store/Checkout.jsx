@@ -7,10 +7,10 @@ import { useAuth } from "../../auth/useAuth.js";
 import { useCartStore } from "../../store/cart.store.ts";
 import {
   createMultiStoreCheckoutOrder,
-  getStoreCustomization,
   previewCheckoutByStore,
-  quoteStoreCoupon,
-} from "../../api/store.service.ts";
+} from "../../api/public/storeCheckout.ts";
+import { quoteStoreCoupon } from "../../api/public/storeCoupons.ts";
+import { getStoreCustomization } from "../../api/public/storeCustomizationPublic.ts";
 import { getDefaultAddress } from "../../api/userAddresses.ts";
 import { formatCurrency } from "../../utils/format.js";
 import { GENERIC_ERROR, ORDER_FAILED } from "../../constants/uiMessages.js";
@@ -356,12 +356,38 @@ function resolveCouponReasonMessage(reason, minSpend) {
       return "Coupon not found";
     case "inactive":
       return "Coupon is inactive";
+    case "not_started":
+      return "Coupon is not active yet";
     case "expired":
       return "Coupon has expired";
     case "minSpend":
       return `Minimum purchase ${formatCurrency(Number(minSpend || 0))} required`;
+    case "scope_required":
+      return "This coupon only applies to its linked store";
+    case "scope_mismatch":
+      return "This coupon does not match the store in this checkout";
     default:
       return GENERIC_ERROR;
+  }
+}
+
+function resolveInvalidCheckoutItemMessage(item) {
+  const available = Number(item?.available);
+  const requested = Number(item?.requested);
+  switch (String(item?.reason || "").trim().toUpperCase()) {
+    case "PRODUCT_OUT_OF_STOCK":
+      return "This item is out of stock and cannot be checked out.";
+    case "PRODUCT_STOCK_REDUCED":
+      if (Number.isFinite(available) && Number.isFinite(requested)) {
+        return `Requested ${requested}, but only ${Math.max(0, available)} left in stock.`;
+      }
+      return "Stock changed before checkout. Update the cart quantity and try again.";
+    case "PRODUCT_NOT_PUBLIC":
+      return "This item is no longer available in the storefront.";
+    case "PRODUCT_STORE_UNMAPPED":
+      return "This item is missing store binding and is blocked from checkout.";
+    default:
+      return "This item is currently blocked from checkout.";
   }
 }
 
@@ -393,6 +419,8 @@ export default function CheckoutPage() {
   const [appliedCouponMeta, setAppliedCouponMeta] = useState(null);
   const [couponBaseline, setCouponBaseline] = useState(null);
   const [discount, setDiscount] = useState(0);
+  const [groupCouponCodes, setGroupCouponCodes] = useState({});
+  const [groupCouponStates, setGroupCouponStates] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({
@@ -582,8 +610,32 @@ export default function CheckoutPage() {
   const checkoutPreviewData = checkoutPreviewQuery.data?.data;
   const checkoutPreviewGroups = checkoutPreviewData?.groups ?? [];
   const checkoutPreviewInvalidItems = checkoutPreviewData?.invalidItems ?? [];
+  const checkoutPreviewInvalidMessages = checkoutPreviewInvalidItems.map((item) => ({
+    ...item,
+    message: resolveInvalidCheckoutItemMessage(item),
+  }));
   const checkoutPreviewSummary = checkoutPreviewData?.summary ?? null;
   const checkoutMode = checkoutPreviewData?.checkoutMode ?? "SINGLE_STORE";
+  const singleStoreCheckoutGroup =
+    checkoutMode === "SINGLE_STORE" && checkoutPreviewGroups.length === 1
+      ? checkoutPreviewGroups[0]
+      : null;
+  const appliedGroupCoupons = useMemo(
+    () =>
+      checkoutPreviewGroups
+        .map((group) => {
+          const storeKey = String(group.storeId);
+          const appliedMeta = groupCouponStates?.[storeKey]?.appliedMeta ?? null;
+          if (!appliedMeta?.code) return null;
+          return {
+            storeId: Number(group.storeId),
+            couponCode: String(appliedMeta.code).trim().toUpperCase(),
+            discount: Number(appliedMeta.discount || 0),
+          };
+        })
+        .filter(Boolean),
+    [checkoutPreviewGroups, groupCouponStates]
+  );
   const previewSubtotalValue = Number(checkoutPreviewSummary?.subtotalAmount);
   const previewShippingValue = Number(checkoutPreviewSummary?.shippingAmount);
   const previewGrandTotalValue = Number(checkoutPreviewSummary?.grandTotal);
@@ -593,18 +645,26 @@ export default function CheckoutPage() {
   const shippingCost = Number.isFinite(previewShippingValue)
     ? previewShippingValue
     : fallbackShippingCost;
-  const discountValue = Number(discount || 0);
+  const orderLevelDiscountValue = Number(discount || 0);
+  const groupDiscountValue = appliedGroupCoupons.reduce(
+    (sum, entry) => sum + Number(entry?.discount || 0),
+    0
+  );
+  const discountValue = orderLevelDiscountValue + groupDiscountValue;
   const taxValue = 0;
-  const quotedTotalValue = Number(appliedCouponMeta?.total);
-  const total = Number.isFinite(quotedTotalValue)
-    ? Math.max(0, quotedTotalValue)
-    : Number.isFinite(previewGrandTotalValue)
-      ? Math.max(0, previewGrandTotalValue)
-      : Math.max(0, subtotalValue + shippingCost - discountValue);
+  const baseGrandTotal = Number.isFinite(previewGrandTotalValue)
+    ? previewGrandTotalValue
+    : subtotalValue + shippingCost;
+  const total = Math.max(0, baseGrandTotal - discountValue);
   const previewHasPaymentBlocker = checkoutPreviewGroups.some(
     (group) => !group.paymentAvailable
   );
-  const couponBlocksSubmission = Boolean(appliedCouponMeta?.code);
+  const couponBlocksSubmission =
+    checkoutMode === "MULTI_STORE" && Boolean(appliedCouponMeta?.code);
+  const hasGroupCouponLoading = checkoutPreviewGroups.some((group) => {
+    const storeKey = String(group.storeId);
+    return groupCouponStates?.[storeKey]?.status === "loading";
+  });
   const isPreviewBlockingSubmission =
     !checkoutPreviewQuery.isError &&
     (previewHasPaymentBlocker || checkoutPreviewInvalidItems.length > 0);
@@ -683,6 +743,25 @@ export default function CheckoutPage() {
     setCouponMessage(message);
   };
 
+  const clearGroupCoupon = (storeId, message = "", status = "idle", nextCode = null) => {
+    const storeKey = String(storeId);
+    setGroupCouponStates((prev) => ({
+      ...prev,
+      [storeKey]: {
+        status,
+        message,
+        appliedMeta: null,
+        baseline: null,
+      },
+    }));
+    if (nextCode !== null) {
+      setGroupCouponCodes((prev) => ({
+        ...prev,
+        [storeKey]: nextCode,
+      }));
+    }
+  };
+
   const handleApplyCoupon = async () => {
     if (couponStatus === "loading") return;
 
@@ -697,6 +776,19 @@ export default function CheckoutPage() {
       return;
     }
 
+    if (checkoutMode === "MULTI_STORE") {
+      clearAppliedCoupon(
+        "Use the coupon field inside each store group during multi-store checkout.",
+        "error"
+      );
+      return;
+    }
+
+    if (!singleStoreCheckoutGroup?.storeId && !singleStoreCheckoutGroup?.storeSlug) {
+      clearAppliedCoupon("Store scope is still loading. Try again in a moment.", "error");
+      return;
+    }
+
     setCouponStatus("loading");
     setCouponMessage("");
     try {
@@ -704,6 +796,8 @@ export default function CheckoutPage() {
         code,
         subtotal: subtotalValue,
         shipping: shippingCost,
+        storeId: singleStoreCheckoutGroup?.storeId,
+        storeSlug: singleStoreCheckoutGroup?.storeSlug || undefined,
       });
 
       if (!quoted?.valid) {
@@ -721,9 +815,12 @@ export default function CheckoutPage() {
       setDiscount(Number.isFinite(normalizedDiscount) ? normalizedDiscount : 0);
       setAppliedCouponMeta({
         code: normalizedCode,
+        discount: Number.isFinite(normalizedDiscount) ? normalizedDiscount : 0,
         discountType: quoted.discountType || "percent",
         discountValue: Number(quoted.discountValue || 0),
         minSpend: Number(quoted.minSpend || 0),
+        scopeType: quoted.scopeType || null,
+        storeId: Number.isFinite(Number(quoted.storeId)) ? Number(quoted.storeId) : null,
         total: Number.isFinite(normalizedTotal) ? normalizedTotal : 0,
       });
       setCouponBaseline({
@@ -746,6 +843,101 @@ export default function CheckoutPage() {
     clearAppliedCoupon("Coupon removed.", "idle");
   };
 
+  const handleApplyGroupCoupon = async (group) => {
+    const storeId = Number(group?.storeId);
+    const storeKey = String(storeId);
+    const code = String(groupCouponCodes?.[storeKey] || "")
+      .trim()
+      .toUpperCase();
+    const currentState = groupCouponStates?.[storeKey] || null;
+
+    if (!storeId || currentState?.status === "loading") return;
+
+    if (!code) {
+      if (currentState?.appliedMeta?.code) {
+        clearGroupCoupon(storeId, "Coupon removed.", "idle", "");
+        return;
+      }
+      clearGroupCoupon(storeId, "Please enter coupon code.", "error");
+      return;
+    }
+
+    setGroupCouponStates((prev) => ({
+      ...prev,
+      [storeKey]: {
+        ...(prev?.[storeKey] || {}),
+        status: "loading",
+        message: "",
+      },
+    }));
+
+    try {
+      const quoted = await quoteStoreCoupon({
+        code,
+        subtotal: Number(group?.subtotalAmount || 0),
+        shipping: Number(group?.shippingAmount || 0),
+        storeId,
+        storeSlug: group?.storeSlug || undefined,
+      });
+
+      if (!quoted?.valid) {
+        clearGroupCoupon(
+          storeId,
+          resolveCouponReasonMessage(quoted?.reason, quoted?.minSpend),
+          "error"
+        );
+        return;
+      }
+
+      if (String(quoted.scopeType || "").toUpperCase() !== "STORE") {
+        clearGroupCoupon(
+          storeId,
+          "Only store-scoped coupons can be claimed inside a store group.",
+          "error"
+        );
+        return;
+      }
+
+      const normalizedCode = String(quoted.code || code).trim().toUpperCase();
+      const normalizedDiscount = Number(quoted.discount || 0);
+      setGroupCouponCodes((prev) => ({
+        ...prev,
+        [storeKey]: normalizedCode,
+      }));
+      setGroupCouponStates((prev) => ({
+        ...prev,
+        [storeKey]: {
+          status: "applied",
+          message: `Coupon ${normalizedCode} applied to ${group.storeName}.`,
+          appliedMeta: {
+            code: normalizedCode,
+            discount: Number.isFinite(normalizedDiscount) ? normalizedDiscount : 0,
+            discountType: quoted.discountType || "percent",
+            discountValue: Number(quoted.discountValue || 0),
+            minSpend: Number(quoted.minSpend || 0),
+            scopeType: quoted.scopeType || null,
+            storeId: Number.isFinite(Number(quoted.storeId)) ? Number(quoted.storeId) : storeId,
+            total: Number(quoted.total || 0),
+          },
+          baseline: {
+            subtotal: Number(group?.subtotalAmount || 0),
+            shipping: Number(group?.shippingAmount || 0),
+          },
+        },
+      }));
+    } catch (err) {
+      const serverMessage =
+        typeof err?.response?.data?.message === "string"
+          ? err.response.data.message
+          : "";
+      clearGroupCoupon(storeId, serverMessage || GENERIC_ERROR, "error");
+    }
+  };
+
+  const handleRemoveGroupCoupon = (storeId) => {
+    clearGroupCoupon(storeId, "Coupon removed.", "idle", "");
+  };
+
   useEffect(() => {
     if (!appliedCouponMeta || !couponBaseline) return;
     const hasSubtotalChanged = Number(couponBaseline.subtotal) !== Number(subtotalValue);
@@ -754,6 +946,70 @@ export default function CheckoutPage() {
 
     clearAppliedCoupon("Cart updated. Please re-apply coupon.", "idle");
   }, [appliedCouponMeta, couponBaseline, subtotalValue, shippingCost]);
+
+  useEffect(() => {
+    if (!appliedCouponMeta?.code) return;
+    if (checkoutMode !== "MULTI_STORE") return;
+    clearAppliedCoupon(
+      "Cart now spans multiple stores. Use the coupon field inside each store group.",
+      "idle"
+    );
+  }, [appliedCouponMeta, checkoutMode]);
+
+  useEffect(() => {
+    if (checkoutMode === "MULTI_STORE") return;
+    if (Object.keys(groupCouponStates).length === 0 && Object.keys(groupCouponCodes).length === 0) {
+      return;
+    }
+    setGroupCouponStates({});
+    setGroupCouponCodes({});
+  }, [checkoutMode, groupCouponCodes, groupCouponStates]);
+
+  useEffect(() => {
+    if (Object.keys(groupCouponStates).length === 0) return;
+
+    const groupsByStore = new Map(
+      checkoutPreviewGroups.map((group) => [String(group.storeId), group])
+    );
+
+    setGroupCouponStates((prev) => {
+      let changed = false;
+      const next = { ...prev };
+
+      Object.entries(prev).forEach(([storeKey, state]) => {
+        if (!state?.appliedMeta) return;
+        const group = groupsByStore.get(storeKey);
+        if (!group) {
+          next[storeKey] = {
+            status: "idle",
+            message: "Store group changed. Please re-apply coupon.",
+            appliedMeta: null,
+            baseline: null,
+          };
+          changed = true;
+          return;
+        }
+
+        const baselineSubtotal = Number(state?.baseline?.subtotal || 0);
+        const baselineShipping = Number(state?.baseline?.shipping || 0);
+        const currentSubtotal = Number(group?.subtotalAmount || 0);
+        const currentShipping = Number(group?.shippingAmount || 0);
+        if (baselineSubtotal === currentSubtotal && baselineShipping === currentShipping) {
+          return;
+        }
+
+        next[storeKey] = {
+          status: "idle",
+          message: "Store cart updated. Please re-apply coupon.",
+          appliedMeta: null,
+          baseline: null,
+        };
+        changed = true;
+      });
+
+      return changed ? next : prev;
+    });
+  }, [checkoutPreviewGroups, groupCouponStates]);
 
   const handleQtyDecrement = (item) => {
     const currentQty = Math.max(1, Number(item.qty ?? 1));
@@ -911,7 +1167,7 @@ export default function CheckoutPage() {
 
     if (couponBlocksSubmission) {
       setError(
-        "Coupons are not supported in the current checkout lane yet. Remove the coupon before placing the order."
+        "Order-level coupon only supports single-store checkout. Use store-group coupons for multi-store carts."
       );
       return;
     }
@@ -921,6 +1177,14 @@ export default function CheckoutPage() {
     try {
       const submitPayload = {
         customer: parsedCustomer.data,
+        couponCode: appliedCouponMeta?.code || undefined,
+        groupCoupons:
+          checkoutMode === "MULTI_STORE"
+            ? appliedGroupCoupons.map((entry) => ({
+                storeId: Number(entry.storeId),
+                couponCode: String(entry.couponCode),
+              }))
+            : undefined,
         useDefaultShipping,
         shippingDetails: useDefaultShipping ? undefined : shippingDetailsPayload,
       };
@@ -1637,10 +1901,121 @@ export default function CheckoutPage() {
                                 Store Total
                               </p>
                               <p className="mt-1 text-sm font-semibold text-slate-900">
-                                {formatCurrency(group.totalAmount)}
+                                {formatCurrency(
+                                  Math.max(
+                                    0,
+                                    Number(group.totalAmount || 0) -
+                                      Number(
+                                        groupCouponStates?.[String(group.storeId)]?.appliedMeta
+                                          ?.discount || 0
+                                      )
+                                  )
+                                )}
                               </p>
                             </div>
                           </div>
+                          {checkoutMode === "MULTI_STORE" ? (
+                            <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                                Store Coupon
+                              </p>
+                              <p className="mt-1 text-sm text-slate-600">
+                                Apply a seller coupon that belongs only to {group.storeName}.
+                              </p>
+                              <div className="mt-3 flex items-center gap-2.5">
+                                <input
+                                  type="text"
+                                  value={groupCouponCodes?.[String(group.storeId)] || ""}
+                                  onChange={(event) =>
+                                    setGroupCouponCodes((prev) => ({
+                                      ...prev,
+                                      [String(group.storeId)]: event.target.value.toUpperCase(),
+                                    }))
+                                  }
+                                  disabled={
+                                    isSubmitting ||
+                                    groupCouponStates?.[String(group.storeId)]?.status ===
+                                      "loading"
+                                  }
+                                  placeholder={`Coupon for ${group.storeName}`}
+                                  className="h-11 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm focus:border-emerald-400 focus:outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleApplyGroupCoupon(group)}
+                                  disabled={
+                                    isSubmitting ||
+                                    groupCouponStates?.[String(group.storeId)]?.status ===
+                                      "loading"
+                                  }
+                                  className="h-11 w-24 shrink-0 rounded-2xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-28"
+                                >
+                                  {groupCouponStates?.[String(group.storeId)]?.status ===
+                                  "loading"
+                                    ? "Applying..."
+                                    : "Apply"}
+                                </button>
+                              </div>
+                              {groupCouponStates?.[String(group.storeId)]?.appliedMeta?.code ? (
+                                <div className="mt-2 flex items-center justify-between gap-2">
+                                  <p className="text-xs font-medium text-emerald-600">
+                                    Applied:{" "}
+                                    {
+                                      groupCouponStates?.[String(group.storeId)]?.appliedMeta?.code
+                                    }
+                                  </p>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveGroupCoupon(group.storeId)}
+                                    disabled={
+                                      isSubmitting ||
+                                      groupCouponStates?.[String(group.storeId)]?.status ===
+                                        "loading"
+                                    }
+                                    className="text-xs font-semibold text-rose-600 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              ) : null}
+                              {groupCouponStates?.[String(group.storeId)]?.message ? (
+                                <p
+                                  className={`mt-2 text-xs ${
+                                    groupCouponStates?.[String(group.storeId)]?.status === "error"
+                                      ? "text-rose-600"
+                                      : groupCouponStates?.[String(group.storeId)]?.status ===
+                                          "applied"
+                                        ? "text-emerald-600"
+                                        : "text-slate-500"
+                                  }`}
+                                >
+                                  {groupCouponStates?.[String(group.storeId)]?.message}
+                                </p>
+                              ) : null}
+                              {groupCouponStates?.[String(group.storeId)]?.appliedMeta?.discount ? (
+                                <p className="mt-2 text-xs font-medium text-slate-600">
+                                  Discount:{" "}
+                                  {formatCurrency(
+                                    Number(
+                                      groupCouponStates?.[String(group.storeId)]?.appliedMeta
+                                        ?.discount || 0
+                                    )
+                                  )}{" "}
+                                  • Payable total:{" "}
+                                  {formatCurrency(
+                                    Math.max(
+                                      0,
+                                      Number(group.totalAmount || 0) -
+                                        Number(
+                                          groupCouponStates?.[String(group.storeId)]?.appliedMeta
+                                            ?.discount || 0
+                                        )
+                                    )
+                                  )}
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </article>
                       ))}
                     </div>
@@ -1937,56 +2312,96 @@ export default function CheckoutPage() {
               })}
             </div>
 
-            <div className="mt-6 border-t border-slate-200 pt-5">
-              <p className="text-xs font-semibold uppercase text-slate-600">Coupon Code</p>
-              <div className="mt-2 flex items-center gap-2.5">
-                <input
-                  type="text"
-                  value={couponCode}
-                  onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
-                  disabled={isSubmitting || couponStatus === "loading"}
-                  placeholder="Coupon Code"
-                  className="h-11 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm focus:border-emerald-400 focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={handleApplyCoupon}
-                  disabled={isSubmitting || couponStatus === "loading"}
-                  className="h-11 w-24 shrink-0 rounded-2xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-28"
-                >
-                  {couponStatus === "loading"
-                    ? "Applying..."
-                    : checkoutCopy.cartItemSection.applyButtonLabel}
-                </button>
-              </div>
-              {appliedCouponMeta?.code ? (
-                <div className="mt-2 flex items-center justify-between gap-2">
-                  <p className="text-xs font-medium text-emerald-600">
-                    Applied: {appliedCouponMeta.code}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleRemoveCoupon}
-                    disabled={isSubmitting || couponStatus === "loading"}
-                    className="text-xs font-semibold text-rose-600 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    Remove
-                  </button>
+            {checkoutPreviewInvalidMessages.length > 0 ? (
+              <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-semibold">Checkout blockers</p>
+                  <span className="rounded-full bg-white/70 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                    {checkoutPreviewInvalidMessages.length} item
+                    {checkoutPreviewInvalidMessages.length === 1 ? "" : "s"}
+                  </span>
                 </div>
-              ) : null}
-              {couponMessage ? (
-                <p
-                  className={`mt-2 text-xs ${
-                    couponStatus === "error"
-                      ? "text-rose-600"
-                      : couponStatus === "applied"
-                        ? "text-emerald-600"
-                        : "text-slate-500"
-                  }`}
-                >
-                  {couponMessage}
-                </p>
-              ) : null}
+                <div className="mt-3 space-y-2">
+                  {checkoutPreviewInvalidMessages.map((item) => (
+                    <div
+                      key={`${item.productId}-${item.reason}`}
+                      className="rounded-2xl border border-amber-200 bg-white/80 px-3 py-3"
+                    >
+                      <p className="text-sm font-semibold text-slate-900">{item.productName}</p>
+                      <p className="mt-1 text-xs leading-5 text-amber-800">{item.message}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-6 border-t border-slate-200 pt-5">
+              {checkoutMode === "MULTI_STORE" ? (
+                <>
+                  <p className="text-xs font-semibold uppercase text-slate-600">
+                    Checkout Coupons
+                  </p>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    Seller coupons are now applied inside each store group above. Order-level
+                    coupon settlement stays off in multi-store checkout to avoid ambiguous scope.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs font-semibold uppercase text-slate-600">Coupon Code</p>
+                  <div className="mt-2 flex items-center gap-2.5">
+                    <input
+                      type="text"
+                      value={couponCode}
+                      onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
+                      disabled={isSubmitting || couponStatus === "loading"}
+                      placeholder="Coupon Code"
+                      className="h-11 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm focus:border-emerald-400 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleApplyCoupon}
+                      disabled={isSubmitting || couponStatus === "loading"}
+                      className="h-11 w-24 shrink-0 rounded-2xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-28"
+                    >
+                      {couponStatus === "loading"
+                        ? "Applying..."
+                        : checkoutCopy.cartItemSection.applyButtonLabel}
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">
+                    Use this single field for either a platform coupon or the linked store coupon.
+                  </p>
+                  {appliedCouponMeta?.code ? (
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <p className="text-xs font-medium text-emerald-600">
+                        Applied: {appliedCouponMeta.code}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleRemoveCoupon}
+                        disabled={isSubmitting || couponStatus === "loading"}
+                        className="text-xs font-semibold text-rose-600 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : null}
+                  {couponMessage ? (
+                    <p
+                      className={`mt-2 text-xs ${
+                        couponStatus === "error"
+                          ? "text-rose-600"
+                          : couponStatus === "applied"
+                            ? "text-emerald-600"
+                            : "text-slate-500"
+                      }`}
+                    >
+                      {couponMessage}
+                    </p>
+                  ) : null}
+                </>
+              )}
             </div>
 
             <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5">
@@ -2039,6 +2454,7 @@ export default function CheckoutPage() {
                 isSubmitting ||
                 isRemoteSyncing ||
                 couponStatus === "loading" ||
+                hasGroupCouponLoading ||
                 isPreviewBlockingSubmission ||
                 couponBlocksSubmission
               }
@@ -2061,8 +2477,8 @@ export default function CheckoutPage() {
             ) : null}
             {couponBlocksSubmission ? (
               <p className="mt-3 text-center text-xs leading-5 text-amber-600">
-                Remove the applied coupon before placing this order. Coupon settlement is not open
-                in the current split checkout flow yet.
+                Remove the order-level coupon before placing this order. Multi-store checkout uses
+                store-group coupons instead.
               </p>
             ) : null}
             <p className="mt-3 text-center text-xs leading-5 text-slate-500">

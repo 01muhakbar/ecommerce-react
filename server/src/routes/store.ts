@@ -18,6 +18,7 @@ import {
   sequelize,
 } from "../models/index.js";
 import { validateCoupon } from "../services/coupon.service.js";
+import { serializePublicSellerInfo } from "../services/sharedContracts/publicStoreIdentity.js";
 import {
   createNewOrderNotification,
   createUserOrderPlacedNotification,
@@ -436,143 +437,6 @@ const buildPublicProductWhere = (extraWhere: Record<string, any> = {}) => ({
 const toText = (value: any, fallback = "") => {
   const normalized = String(value ?? "").trim();
   return normalized || fallback;
-};
-
-const toPreferredWhatsAppLink = (preferredValue: any) => {
-  const preferred = toText(preferredValue);
-  if (!preferred) return "";
-
-  const lowered = preferred.toLowerCase();
-  if (
-    lowered.startsWith("https://wa.me/") ||
-    lowered.startsWith("https://api.whatsapp.com/")
-  ) {
-    return preferred;
-  }
-
-  const digits = preferred.replace(/\D+/g, "");
-  if (!digits) return "";
-  return `https://wa.me/${digits}`;
-};
-
-const serializePublicSellerInfo = async (store: any) => {
-  if (!store) return null;
-
-  const readStoreAttr = (key: string) => getAttr(store, key) ?? store?.[key];
-  const storeId = Number(readStoreAttr("id") || 0);
-  const storeSlug = toText(readStoreAttr("slug"));
-  const storeWhatsApp = toPreferredWhatsAppLink(readStoreAttr("whatsapp"));
-  const storePhone = toText(readStoreAttr("phone"));
-  const storeEmail = toText(readStoreAttr("email"));
-
-  let productCount: number | null = null;
-  let ratingAverage: number | null = null;
-  let ratingCount = 0;
-
-  if (storeId > 0) {
-    productCount = await Product.count({
-      where: buildPublicProductWhere({
-        storeId,
-      }) as any,
-    });
-
-    const rows = (await sequelize.query(
-      `
-        SELECT
-          ROUND(AVG(pr.rating), 1) AS ratingAverage,
-          COUNT(pr.id) AS ratingCount
-        FROM product_reviews pr
-        INNER JOIN products p ON p.id = pr.product_id
-        WHERE p.store_id = :storeId
-          AND p.status = 'active'
-          AND p.published IN (1, true)
-          AND COALESCE(p.seller_submission_status, 'none') = 'none'
-      `,
-      {
-        replacements: { storeId },
-        type: QueryTypes.SELECT,
-      }
-    )) as Array<{ ratingAverage?: number | string | null; ratingCount?: number | string | null }>;
-
-    const aggregate = rows[0] || {};
-    const parsedRatingAverage = toNumber(aggregate.ratingAverage);
-    ratingAverage =
-      Number.isFinite(Number(parsedRatingAverage)) && Number(parsedRatingAverage) > 0
-        ? Number(Number(parsedRatingAverage).toFixed(1))
-        : null;
-    ratingCount = Math.max(0, Math.round(toSafeNumber(aggregate.ratingCount, 0)));
-  }
-
-  const canVisitStore = Boolean(storeSlug);
-  const hasContactFallback = canVisitStore && Boolean(storePhone || storeEmail);
-  const chatMode = storeWhatsApp
-    ? "enabled"
-    : hasContactFallback
-      ? "contact_fallback"
-      : "disabled";
-
-  return {
-    storeId: storeId || null,
-    name: toText(readStoreAttr("name"), "Store"),
-    slug: storeSlug,
-    logoUrl: toText(readStoreAttr("logoUrl")) || null,
-    shortDescription: toText(readStoreAttr("description")) || null,
-    status: {
-      code: toText(readStoreAttr("status"), "ACTIVE"),
-      label:
-        toText(readStoreAttr("status"), "ACTIVE").toUpperCase() === "ACTIVE"
-          ? "Active"
-          : "Unavailable",
-      tone:
-        toText(readStoreAttr("status"), "ACTIVE").toUpperCase() === "ACTIVE"
-          ? "success"
-          : "neutral",
-    },
-    productCount,
-    ratingAverage,
-    ratingCount,
-    followerCount: null,
-    responseRate: null,
-    responseTimeLabel: null,
-    joinedAt: readStoreAttr("createdAt") || null,
-    canVisitStore,
-    visitStoreHref: canVisitStore ? `/store/${encodeURIComponent(storeSlug)}` : null,
-    canChat: chatMode !== "disabled",
-    chatMode,
-    chatHref:
-      chatMode === "enabled"
-        ? storeWhatsApp
-        : hasContactFallback
-          ? `/store/${encodeURIComponent(storeSlug)}`
-          : null,
-    chatLabel:
-      chatMode === "enabled"
-        ? "Chat Toko"
-        : hasContactFallback
-          ? "Hubungi Toko"
-          : "Chat segera hadir",
-    chatHelper:
-      chatMode === "enabled"
-        ? "Opens the store WhatsApp contact in a new tab."
-        : hasContactFallback
-          ? "Store contact details are currently shown on the public store page."
-          : "Direct seller chat is not available in this storefront yet.",
-    publicContact: {
-      phone: storePhone || null,
-      email: storeEmail || null,
-      whatsapp: storeWhatsApp || null,
-    },
-    contract: {
-      sourceOfTruth: "STORE",
-      productCountScope: "PUBLIC_ACTIVE_PUBLISHED_PRODUCTS",
-      ratingScope: "PUBLIC_PRODUCT_REVIEWS_FOR_THIS_STORE",
-      notes: [
-        "Only public-safe store identity is exposed in the PDP seller card.",
-        "Follower, response rate, and response speed remain null until a validated source of truth exists.",
-        "Chat CTA uses WhatsApp when the store has a public WhatsApp contact. Otherwise it falls back to the public store page when contact details are available there.",
-      ],
-    },
-  };
 };
 
 // GET /api/store/categories
@@ -2057,6 +1921,7 @@ router.post(
         }
 
         let subtotal = 0;
+        const orderStoreIds = new Set<number>();
           const responseItems: Array<{
             productId: number;
             name: string;
@@ -2066,6 +1931,15 @@ router.post(
           }> = [];
           const orderItemsPayload = itemsNorm.map((item) => {
             const product = byId.get(item.productId)!;
+            const storeId = Number(
+              product?.store?.id ??
+                product?.get?.("store")?.id ??
+                product?.dataValues?.store?.id ??
+                0
+            );
+            if (Number.isFinite(storeId) && storeId > 0) {
+              orderStoreIds.add(storeId);
+            }
             const unitPrice = getUnitPrice(product);
             subtotal += unitPrice * item.qty;
             const pid = getProductId(product);
@@ -2098,7 +1972,9 @@ router.post(
         let discountAmount = 0;
         let appliedCouponCode: string | null = null;
           if (normalizedCouponCode) {
-            const result = await validateCoupon(normalizedCouponCode, subtotal);
+            const result = await validateCoupon(normalizedCouponCode, subtotal, {
+              storeIds: Array.from(orderStoreIds),
+            });
             if (!result.valid) {
               await tx.rollback();
               return res.status(400).json({

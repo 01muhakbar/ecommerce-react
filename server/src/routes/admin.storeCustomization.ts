@@ -4,6 +4,14 @@ import fs from "fs";
 import path from "path";
 import multer from "multer";
 import { sequelize, Store } from "../models/index.js";
+import {
+  buildAdminStoreCustomizationHeaderSettings as extractHeaderSettings,
+  isSafeWhatsAppLink,
+  normalizeStoreCustomizationRichAboutPayload as normalizeRichAboutPayload,
+  parseStoredCustomization as parseRowData,
+  sanitizeStoreCustomization as sanitizeCustomization,
+  WHATSAPP_LINK_ERROR_MESSAGE,
+} from "../services/sharedContracts/storeCustomizationSanitizer.js";
 
 const router = Router();
 
@@ -551,37 +559,6 @@ const mergeDeep = (base: any, source: any): any => {
 const toText = (value: unknown, fallback = "") => {
   const normalized = String(value ?? "").trim();
   return normalized || fallback;
-};
-
-const normalizeRichAboutPayload = (raw: unknown) => {
-  const source = isPlainObject(raw) ? raw : {};
-  const title = toText(
-    source.title ?? source.heading ?? source.label,
-    ""
-  );
-  const body = toText(
-    source.body ?? source.content ?? source.text ?? source.description,
-    ""
-  );
-
-  return {
-    title,
-    body,
-    hasContent: Boolean(title || body),
-  };
-};
-
-const WHATSAPP_LINK_ERROR_MESSAGE =
-  "Invalid WhatsApp link. Use https://wa.me/... or https://api.whatsapp.com/...";
-
-const isSafeWhatsAppLink = (value: unknown) => {
-  const normalized = toText(value);
-  if (!normalized) return true;
-  const lowered = normalized.toLowerCase();
-  return (
-    lowered.startsWith("https://wa.me/") ||
-    lowered.startsWith("https://api.whatsapp.com/send")
-  );
 };
 
 const toBool = (value: unknown, fallback = false) => {
@@ -1838,51 +1815,6 @@ const normalizeDashboardSetting = (root: Record<string, any>) => {
   };
 };
 
-export const sanitizeCustomization = (rawData: unknown) => {
-  const source = isPlainObject(rawData) ? rawData : {};
-  const merged = mergeDeep(cloneDefaults(), source);
-  const normalizedHome = normalizeHome(source);
-  const normalizedProductSlugPage = normalizeProductSlugPage(source);
-  const normalizedAboutUs = normalizeAboutUs(source);
-  const normalizedPrivacyPolicy = normalizePolicyPage(source, "privacyPolicy");
-  const normalizedTermsAndConditions = normalizePolicyPage(
-    source,
-    "termsAndConditions"
-  );
-  const normalizedFaqs = normalizeFaqs(source);
-  const normalizedOffers = normalizeOffers(source);
-  const normalizedContactUs = normalizeContactUs(source);
-  const normalizedCheckout = normalizeCheckout(source);
-  const normalizedDashboardSetting = normalizeDashboardSetting(source);
-  const normalizedSeoSettings = normalizeSeoSettings(source);
-  const output = {
-    ...merged,
-    home: normalizedHome,
-    productSlugPage: normalizedProductSlugPage,
-    aboutUs: normalizedAboutUs,
-    privacyPolicy: normalizedPrivacyPolicy,
-    termsAndConditions: normalizedTermsAndConditions,
-    faqs: normalizedFaqs,
-    offers: normalizedOffers,
-    contactUs: normalizedContactUs,
-    checkout: normalizedCheckout,
-    dashboardSetting: normalizedDashboardSetting,
-    seoSettings: normalizedSeoSettings,
-  };
-  delete output.homePage;
-  return output;
-};
-
-const parseRowData = (raw: string | null) => {
-  if (!raw) return cloneDefaults();
-  try {
-    const parsed = JSON.parse(raw);
-    return sanitizeCustomization(parsed);
-  } catch {
-    return cloneDefaults();
-  }
-};
-
 const ensureStoreCustomizationsTable = async () => {
   await sequelize.query(`
     CREATE TABLE IF NOT EXISTS store_customizations (
@@ -1922,30 +1854,6 @@ const upsertCustomization = async (lang: string, payload: Record<string, any>) =
     `,
     { replacements: { lang, data: serialized } }
   );
-};
-
-const extractHeaderSettings = (
-  lang: string,
-  customization: Record<string, any>,
-  updatedAt?: string | null
-) => {
-  const defaults = cloneDefaults().home.header;
-  const headerSource = isPlainObject(customization?.home?.header)
-    ? customization.home.header
-    : {};
-  const headerLogoUrl = toText(
-    headerSource.headerLogoUrl ?? headerSource.logoDataUrl,
-    defaults.headerLogoUrl
-  );
-
-  return {
-    language: lang,
-    headerText: toText(headerSource.headerText, defaults.headerText),
-    phoneNumber: toText(headerSource.phoneNumber, defaults.phoneNumber),
-    whatsAppLink: toText(headerSource.whatsAppLink, defaults.whatsAppLink),
-    headerLogoUrl,
-    updatedAt: updatedAt ? new Date(updatedAt).toISOString() : new Date().toISOString(),
-  };
 };
 
 const headerLogoUploadDir = path.resolve(process.cwd(), "uploads", "store");

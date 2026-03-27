@@ -2692,7 +2692,7 @@ export default function StoreCustomizationPage() {
     queryKey: ["admin-coupons", "offers-select"],
     enabled: activeTab === "offers",
     staleTime: 60_000,
-    queryFn: () => fetchAdminCoupons({ page: 1, limit: 100 }),
+    queryFn: () => fetchAdminCoupons({ page: 1, limit: 100, scopeType: "PLATFORM" }),
   });
 
   useEffect(() => {

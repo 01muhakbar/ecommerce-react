@@ -1,5 +1,4 @@
 import { Eye, Printer } from "lucide-react";
-import StatusBadge from "../UI/StatusBadge.jsx";
 import { ORDER_STATUS_OPTIONS, toUIStatus } from "../../constants/orderStatus.js";
 
 const getStatusBadgeClass = (status) => {

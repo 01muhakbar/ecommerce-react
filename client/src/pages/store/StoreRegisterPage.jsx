@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate, useOutletContext } from "react-router-dom";
-import { useAuth } from "../../auth/useAuth.js";
+import { useAccountAuth } from "../../auth/authDomainHooks.js";
 import { api } from "../../api/axios.ts";
 import { useCart } from "../../hooks/useCart.ts";
 import * as cartApi from "../../api/cartApi.ts";
@@ -13,7 +13,7 @@ export default function StoreRegisterPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { storeSettings } = useOutletContext() || {};
-  const { refreshSession } = useAuth();
+  const { refreshSession } = useAccountAuth();
   const { refreshCart } = useCart();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");

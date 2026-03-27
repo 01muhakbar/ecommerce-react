@@ -63,11 +63,13 @@ export default function ProductCardKacha({ product }) {
   const showStruckPrice = originalPriceValue > price && price > 0;
   const displayRating = ratingAvg > 0 ? ratingAvg.toFixed(1) : "0.0";
   const displayReviewCount = Number.isFinite(reviewCount) ? reviewCount : 0;
+  const stockValue = Number(product?.stock);
+  const isOutOfStock = Number.isFinite(stockValue) && stockValue <= 0;
 
   const handleAdd = (event) => {
     event.preventDefault();
     event.stopPropagation();
-    if (isAdding || !product?.id) return;
+    if (isAdding || !product?.id || isOutOfStock) return;
     setIsAdding(true);
     add(product.id, 1, {
       name: productName,
@@ -112,12 +114,12 @@ export default function ProductCardKacha({ product }) {
           <button
             type="button"
             onClick={handleAdd}
-            aria-label="Add to cart"
-            title="Add to cart"
-            disabled={isAdding || isLoading}
+            aria-label={isOutOfStock ? "Out of stock" : "Add to cart"}
+            title={isOutOfStock ? "Out of stock" : "Add to cart"}
+            disabled={isAdding || isLoading || isOutOfStock}
             className="absolute bottom-3 right-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-70 sm:h-10 sm:w-10"
           >
-            {isAdding ? "✓" : <ShoppingBag className="h-5 w-5" />}
+            {isOutOfStock ? "!" : isAdding ? "✓" : <ShoppingBag className="h-5 w-5" />}
           </button>
         </div>
         <div className="mt-3 space-y-1.5">
@@ -139,7 +141,9 @@ export default function ProductCardKacha({ product }) {
               </span>
             ) : null}
           </div>
-          <p className="text-[11px] text-slate-500">{unit}</p>
+          <p className="text-[11px] text-slate-500">
+            {isOutOfStock ? "Out of stock" : unit}
+          </p>
         </div>
       </Link>
     </article>

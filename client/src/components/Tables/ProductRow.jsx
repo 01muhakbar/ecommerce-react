@@ -1,6 +1,6 @@
-import StatusBadge from "../UI/StatusBadge.jsx";
-import ToggleSwitch from "../UI/ToggleSwitch.jsx";
-import ActionButtons from "../UI/ActionButtons.jsx";
+import StatusBadge from "../internal-table-kit/StatusBadge.jsx";
+import ToggleSwitch from "../internal-table-kit/ToggleSwitch.jsx";
+import ActionButtons from "../internal-table-kit/ActionButtons.jsx";
 import { formatCurrency } from "../../utils/format.js";
 import "./ProductRow.css";
 

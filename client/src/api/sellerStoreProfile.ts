@@ -142,7 +142,7 @@ const normalizeStoreProfile = (payload: any) => {
 };
 
 export const getSellerStoreProfile = async (storeId: number | string) => {
-  const { data } = await api.get(`/seller/stores/${storeId}/profile`);
+  const { data } = await api.get(`/seller/stores/${storeId}/store-profile`);
   return normalizeStoreProfile(data?.data ?? null);
 };
 
@@ -150,6 +150,6 @@ export const updateSellerStoreProfile = async (
   storeId: number | string,
   payload: Record<string, unknown>
 ) => {
-  const { data } = await api.patch(`/seller/stores/${storeId}/profile`, payload);
+  const { data } = await api.patch(`/seller/stores/${storeId}/store-profile`, payload);
   return normalizeStoreProfile(data?.data ?? null);
 };

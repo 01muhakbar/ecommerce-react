@@ -1,5 +1,5 @@
-import AccountStorePaymentProfilePage from "../account/AccountStorePaymentProfilePage.jsx";
+import { Navigate } from "react-router-dom";
 
 export default function AdminStorePaymentPage() {
-  return <AccountStorePaymentProfilePage mode="admin" />;
+  return <Navigate to="/admin/store/payment-profiles" replace />;
 }

@@ -4,10 +4,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useCartStore } from "../../store/cart.store.ts";
 import { useStoreCategories } from "../../hooks/useStoreCategories.ts";
 import { useAuth } from "../../auth/useAuth.js";
-import {
-  getStoreHeaderCustomization,
-  getStorePublicIdentity,
-} from "../../api/store.service.ts";
+import { getStoreHeaderCustomization } from "../../api/public/storeCustomizationPublic.ts";
+import { getStorePublicIdentity } from "../../api/public/storePublicIdentity.ts";
 import {
   normalizePublicStoreIdentity,
   resolvePreferredText,

@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useMemo, useState } from "react";
 import { useCategories, useProducts, ProductCard } from "../../storefront.jsx";
-import QueryState from "../../components/UI/QueryState.jsx";
+import QueryState from "../../components/primitives/ui/QueryState.jsx";
 import HeroSlider from "../../components/kachabazar-demo/HeroSlider.jsx";
 import PopularProductsGrid from "../../components/kachabazar-demo/PopularProductsGrid.jsx";
 import FeaturedCategoriesMega from "../../components/kachabazar-demo/FeaturedCategoriesMega.jsx";

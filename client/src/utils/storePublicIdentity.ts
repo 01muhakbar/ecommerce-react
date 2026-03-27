@@ -1,5 +1,4 @@
 export type NormalizedPublicStoreIdentity = {
-  id: number | null;
   name: string;
   slug: string;
   description: string;
@@ -57,10 +56,8 @@ export const normalizePublicStoreIdentity = (
   payload: { data?: Partial<NormalizedPublicStoreIdentity> | null } | null | undefined
 ): NormalizedPublicStoreIdentity => {
   const source = payload?.data && typeof payload.data === "object" ? payload.data : {};
-  const id = Number(source.id);
 
   return {
-    id: Number.isFinite(id) ? id : null,
     name: toText(source.name),
     slug: toText(source.slug),
     description: toText(source.description),

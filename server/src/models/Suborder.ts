@@ -6,6 +6,9 @@ export interface SuborderAttributes {
   suborderNumber: string;
   storeId: number;
   storePaymentProfileId?: number | null;
+  appliedCouponId?: number | null;
+  appliedCouponCode?: string | null;
+  appliedCouponScopeType?: "PLATFORM" | "STORE" | null;
   subtotalAmount: number;
   shippingAmount: number;
   serviceFeeAmount: number;
@@ -34,6 +37,9 @@ type SuborderCreationAttributes = Optional<
   SuborderAttributes,
   | "id"
   | "storePaymentProfileId"
+  | "appliedCouponId"
+  | "appliedCouponCode"
+  | "appliedCouponScopeType"
   | "shippingAmount"
   | "serviceFeeAmount"
   | "paymentMethod"
@@ -52,6 +58,9 @@ export class Suborder
   declare suborderNumber: string;
   declare storeId: number;
   declare storePaymentProfileId?: number | null;
+  declare appliedCouponId?: number | null;
+  declare appliedCouponCode?: string | null;
+  declare appliedCouponScopeType?: "PLATFORM" | "STORE" | null;
   declare subtotalAmount: number;
   declare shippingAmount: number;
   declare serviceFeeAmount: number;
@@ -87,6 +96,10 @@ export class Suborder
     Suborder.belongsTo(models.StorePaymentProfile, {
       foreignKey: { name: "storePaymentProfileId", field: "store_payment_profile_id" },
       as: "paymentProfile",
+    });
+    Suborder.belongsTo(models.Coupon, {
+      foreignKey: { name: "appliedCouponId", field: "applied_coupon_id" },
+      as: "appliedCoupon",
     });
     Suborder.hasMany(models.SuborderItem, {
       foreignKey: { name: "suborderId", field: "suborder_id" },
@@ -138,6 +151,25 @@ export class Suborder
             model: "store_payment_profiles",
             key: "id",
           },
+        },
+        appliedCouponId: {
+          type: DataTypes.INTEGER.UNSIGNED,
+          allowNull: true,
+          field: "applied_coupon_id",
+          references: {
+            model: "coupons",
+            key: "id",
+          },
+        },
+        appliedCouponCode: {
+          type: DataTypes.STRING(120),
+          allowNull: true,
+          field: "applied_coupon_code",
+        },
+        appliedCouponScopeType: {
+          type: DataTypes.ENUM("PLATFORM", "STORE"),
+          allowNull: true,
+          field: "applied_coupon_scope_type",
         },
         subtotalAmount: {
           type: DataTypes.DECIMAL(12, 2),

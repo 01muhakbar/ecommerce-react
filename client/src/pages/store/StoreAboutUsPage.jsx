@@ -1,10 +1,10 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchStoreCustomization } from "../../api/store.service.ts";
+import { fetchStoreCustomization } from "../../api/public/storeCustomizationPublic.ts";
 import {
   UiEmptyState,
   UiErrorState,
-} from "../../components/ui-states/index.js";
+} from "../../components/primitives/state/index.js";
 
 const DEFAULT_LANG = "en";
 const DEFAULT_ABOUT_US = {

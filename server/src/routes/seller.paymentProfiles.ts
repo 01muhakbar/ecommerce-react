@@ -9,27 +9,29 @@ import {
 } from "../models/index.js";
 import {
   resolvePreferredStorePaymentProfileByStoreRow,
-} from "../services/storePaymentProfileCompat.js";
+} from "../services/sharedContracts/storePaymentProfileCompat.js";
+import {
+  buildEmptyStorePaymentProfileReadiness as buildEmptyReadiness,
+  buildSellerPaymentProfileGovernance,
+  buildStorePaymentProfileActivityMeta as buildActivityMeta,
+  buildStorePaymentProfileReadiness as buildPaymentProfileReadiness,
+  buildStorePaymentProfileVerificationMeta as buildVerificationMeta,
+  editableSellerPaymentProfileFields as editablePaymentProfileFields,
+  getEditableStorePaymentProfileDraftValue as getEditableDraftValue,
+  getStorePaymentProfileAttr as getAttr,
+  getStorePaymentProfileRequestStatusCode as getOpenRequestStatusCode,
+  hasStorePaymentProfileText as hasText,
+  isSellerPaymentProfileRequestLockedForEdit,
+  normalizeStorePaymentProfileNullableText as normalizeNullableText,
+  normalizeStorePaymentProfileRequiredText as normalizeRequiredDraftText,
+  openSellerPaymentRequestStatuses,
+  requiredStorePaymentProfileFields as requiredPaymentProfileFields,
+  serializeStorePaymentProfileActiveSnapshot as serializeActiveSnapshot,
+  serializeStorePaymentProfilePendingRequest as serializePendingRequest,
+  storePaymentProfileRequestAttributes,
+} from "../services/sharedContracts/storePaymentProfileState.js";
 
 const router = Router();
-
-const requiredPaymentProfileFields = [
-  { key: "accountName", label: "Account name" },
-  { key: "merchantName", label: "Merchant name" },
-  { key: "qrisImageUrl", label: "QRIS image" },
-] as const;
-
-const editablePaymentProfileFields = [
-  "accountName",
-  "merchantName",
-  "merchantId",
-  "qrisImageUrl",
-  "qrisPayload",
-  "instructionText",
-  "sellerNote",
-] as const;
-
-const openSellerPaymentRequestStatuses = ["DRAFT", "SUBMITTED", "NEEDS_REVISION"] as const;
 
 const sellerPaymentProfileDraftSchema = z
   .object({
@@ -42,147 +44,6 @@ const sellerPaymentProfileDraftSchema = z
     sellerNote: z.string().trim().max(4_000).optional().nullable(),
   })
   .strict();
-
-const getAttr = (row: any, key: string) =>
-  row?.getDataValue?.(key) ?? row?.get?.(key) ?? row?.dataValues?.[key];
-
-const hasText = (value: unknown) => String(value || "").trim().length > 0;
-
-const normalizeNullableText = (value: unknown) => {
-  const normalized = String(value || "").trim();
-  return normalized ? normalized : null;
-};
-
-const normalizeRequiredDraftText = (value: unknown) => String(value || "").trim();
-
-const getEditableDraftValue = (payload: Record<string, unknown>, key: string, fallback: unknown) =>
-  Object.prototype.hasOwnProperty.call(payload, key) ? payload[key] : fallback;
-
-const getOpenRequestStatusCode = (request: any) =>
-  String(getAttr(request, "requestStatus") || "").trim().toUpperCase();
-
-const buildEmptyReadiness = () => ({
-  code: "INCOMPLETE",
-  label: "Incomplete",
-  tone: "warning",
-  description:
-    "Some required payment destination fields are still missing. Complete them, save draft if needed, then submit for admin review.",
-  isReady: false,
-  isIncomplete: true,
-  completedFields: 0,
-  totalFields: requiredPaymentProfileFields.length,
-  missingFields: requiredPaymentProfileFields.map((field) => ({
-    key: field.key,
-    label: field.label,
-  })),
-});
-
-const buildVerificationMeta = (verificationStatusValue: unknown) => {
-  const code = String(verificationStatusValue || "PENDING").toUpperCase();
-
-  if (code === "ACTIVE") {
-    return {
-      code,
-      label: "Verified",
-      tone: "success",
-      description: "Admin review has marked this payment profile as approved.",
-    };
-  }
-
-  if (code === "REJECTED") {
-    return {
-      code,
-      label: "Rejected",
-      tone: "danger",
-      description:
-        "Admin review rejected this payment profile. The seller must revise the request and submit it again before the setup can go live.",
-    };
-  }
-
-  if (code === "INACTIVE") {
-    return {
-      code,
-      label: "Inactive",
-      tone: "neutral",
-      description: "The payment profile exists, but it is not active for seller operations.",
-    };
-  }
-
-  return {
-    code,
-    label: "Pending review",
-    tone: "warning",
-    description: "Payment profile data has been submitted and is still waiting for admin review.",
-  };
-};
-
-const buildActivityMeta = (isActiveValue: unknown) => {
-  const isActive = Boolean(isActiveValue);
-  return {
-    code: isActive ? "ACTIVE" : "INACTIVE",
-    label: isActive ? "Active" : "Inactive",
-    tone: isActive ? "success" : "neutral",
-    description: isActive
-      ? "This payment destination is active for the store."
-      : "This payment destination is not active yet.",
-  };
-};
-
-const buildPaymentProfileReadiness = (profile: any) => {
-  const missingFields = requiredPaymentProfileFields
-    .filter((field) => !hasText(getAttr(profile, field.key)))
-    .map((field) => ({
-      key: field.key,
-      label: field.label,
-    }));
-
-  const totalFields = requiredPaymentProfileFields.length;
-  const completedFields = totalFields - missingFields.length;
-  const verificationStatus = String(getAttr(profile, "verificationStatus") || "PENDING").toUpperCase();
-  const isActive = Boolean(getAttr(profile, "isActive"));
-  let code = "PENDING_REVIEW";
-  let label = "Pending review";
-  let tone = "warning";
-  let description =
-    "Required payment fields are present, but admin review still decides whether the profile can go live.";
-
-  if (missingFields.length > 0) {
-    code = "INCOMPLETE";
-    label = "Incomplete";
-    tone = "warning";
-    description =
-      "Some required payment destination fields are still missing. Complete them through the existing account or admin-managed flow.";
-  } else if (verificationStatus === "REJECTED") {
-    code = "REJECTED";
-    label = "Rejected";
-    tone = "danger";
-    description =
-      "The payment profile was reviewed and rejected. Seller can only monitor the snapshot here.";
-  } else if (verificationStatus === "ACTIVE" && isActive) {
-    code = "READY";
-    label = "Ready";
-    tone = "success";
-    description = "The payment profile is complete, approved, and active for seller operations.";
-  } else if (verificationStatus === "INACTIVE" || !isActive) {
-    code = "INACTIVE";
-    label = "Inactive";
-    tone = "neutral";
-    description =
-      "The payment profile exists, but activation is still blocked by the existing review or store configuration flow.";
-  }
-
-  return {
-    code,
-    label,
-    tone,
-    description,
-    isReady: code === "READY",
-    isIncomplete: code === "INCOMPLETE",
-    completedFields,
-    totalFields,
-    missingFields,
-  };
-};
 
 const buildRequestStatusMeta = (request: any, sellerAccess: any = null) => {
   const canEdit = Boolean(sellerAccess?.permissionKeys?.includes("PAYMENT_PROFILE_EDIT"));
@@ -412,7 +273,7 @@ const buildPaymentProfileReadModel = (
     nextStep = {
       code: "UPDATE_AND_RESUBMIT",
       label: actorCanEdit ? "Revise request and resubmit" : "Wait for owner or admin action",
-      lane: actorCanEdit ? "SELLER_PAYMENT_SETUP" : "ACCOUNT_ADMIN",
+      lane: "SELLER_PAYMENT_SETUP",
       actor: actorCanEdit ? "SELLER_EDITOR" : actorIsOwner ? "SELLER_OWNER_OR_ADMIN" : "STORE_OWNER_OR_ADMIN",
       description: actorCanEdit
         ? "Update the pending request, save the draft if needed, then submit again for admin review."
@@ -450,16 +311,12 @@ const buildPaymentProfileReadModel = (
       code: "COMPLETE_PROFILE",
       label: actorCanEdit
         ? "Start payment request"
-        : actorIsOwner
-          ? "Complete profile in account lane"
-          : "Ask owner or admin to complete profile",
-      lane: actorCanEdit ? "SELLER_PAYMENT_SETUP" : actorIsOwner ? "ACCOUNT_PAYMENT_PROFILE" : "ACCOUNT_ADMIN",
+        : "Ask owner or admin to complete setup",
+      lane: "SELLER_PAYMENT_SETUP",
       actor: actorCanEdit ? "SELLER_EDITOR" : actorIsOwner ? "SELLER_OWNER" : "STORE_OWNER_OR_ADMIN",
       description: actorCanEdit
         ? "Start a seller payment setup draft from the active snapshot, complete the required fields, then submit for admin review."
-        : actorIsOwner
-          ? "Complete the missing payment profile fields through the existing account payment profile form, then wait for admin review."
-          : "Seller workspace is read-only here. The store owner or admin must complete the payment profile through the existing account or admin lane.",
+        : "Seller workspace is read-only here. A seller owner or admin with payment setup authority must complete the request in the canonical seller lane.",
     };
   } else if (readiness.isReady) {
     primaryStatus = {
@@ -486,13 +343,11 @@ const buildPaymentProfileReadModel = (
         "The active setup exists but is not active for payment operations yet, even though the required fields are present.",
     };
     nextStep = {
-      code: requestState.code === "DRAFT" ? "SUBMIT_REQUEST" : "FOLLOW_EXISTING_REVIEW_LANE",
+      code: requestState.code === "DRAFT" ? "SUBMIT_REQUEST" : "REVIEW_PAYMENT_SETUP",
       label: requestState.code === "DRAFT"
         ? "Prepare request"
-        : actorIsOwner
-          ? "Follow up in account or admin lane"
-          : "Ask owner or admin to follow up",
-      lane: requestState.code === "DRAFT" ? "SELLER_PAYMENT_SETUP" : "ACCOUNT_ADMIN",
+        : "Review payment setup status",
+      lane: "SELLER_PAYMENT_SETUP",
       actor:
         requestState.code === "DRAFT"
           ? "SELLER_EDITOR"
@@ -502,7 +357,7 @@ const buildPaymentProfileReadModel = (
       description:
         requestState.code === "DRAFT"
           ? "The active setup is inactive. Seller can prepare a separate request and submit it for admin review."
-          : "Seller workspace does not expose activation controls. Follow the existing account or admin-managed flow to understand why activation is still blocked.",
+          : "Seller workspace does not expose activation controls. Review the current request and active snapshot here while admin keeps activation authority.",
     };
   }
 
@@ -531,98 +386,8 @@ const buildPaymentProfileReadModel = (
       sellerWorkspaceMode:
         actorCanEdit
           ? "Seller workspace edits only a separate store-scoped request here. Admin stays the final reviewer and activation authority, and checkout still reads only the current final active approved setup."
-          : "Seller workspace is read-only for this payment profile snapshot. Changes still belong to the existing account or admin lane.",
+          : "Seller workspace is read-only for this payment profile snapshot. Seller can monitor status here while admin keeps final approval and activation authority.",
     },
-  };
-};
-
-const serializeActiveSnapshot = (profile: any) => {
-  if (!profile) return null;
-
-  const verificationStatus = String(getAttr(profile, "verificationStatus") || "PENDING");
-  const isActive = Boolean(getAttr(profile, "isActive"));
-
-  return {
-    id: Number(getAttr(profile, "id") || 0),
-    storeId: Number(getAttr(profile, "storeId") || 0),
-    providerCode: String(getAttr(profile, "providerCode") || "MANUAL_QRIS"),
-    paymentType: String(getAttr(profile, "paymentType") || "QRIS_STATIC"),
-    version: Number(getAttr(profile, "version") || 1),
-    snapshotStatus: String(getAttr(profile, "snapshotStatus") || "INACTIVE"),
-    accountName: String(getAttr(profile, "accountName") || ""),
-    merchantName: String(getAttr(profile, "merchantName") || ""),
-    merchantId: getAttr(profile, "merchantId") ? String(getAttr(profile, "merchantId")) : null,
-    qrisImageUrl: getAttr(profile, "qrisImageUrl") ? String(getAttr(profile, "qrisImageUrl")) : null,
-    qrisPayload: getAttr(profile, "qrisPayload") ? String(getAttr(profile, "qrisPayload")) : null,
-    instructionText: getAttr(profile, "instructionText")
-      ? String(getAttr(profile, "instructionText"))
-      : null,
-    isActive,
-    verificationStatus,
-    verificationMeta: buildVerificationMeta(verificationStatus),
-    activityMeta: buildActivityMeta(isActive),
-    readiness: buildPaymentProfileReadiness(profile),
-    verifiedAt: getAttr(profile, "verifiedAt") || null,
-    updatedAt: getAttr(profile, "updatedAt") || null,
-    createdAt: getAttr(profile, "createdAt") || null,
-  };
-};
-
-const serializePendingRequest = (request: any, activeProfile: any = null) => {
-  if (!request) return null;
-
-  const fallback = (key: string) => {
-    const requestValue = getAttr(request, key);
-    if (requestValue !== undefined && requestValue !== null) return requestValue;
-    return getAttr(activeProfile, key);
-  };
-  const submittedByUser = request?.submittedByUser ?? request?.get?.("submittedByUser") ?? null;
-  const reviewedByAdmin = request?.reviewedByAdmin ?? request?.get?.("reviewedByAdmin") ?? null;
-
-  return {
-    id: Number(getAttr(request, "id") || 0),
-    storeId: Number(getAttr(request, "storeId") || getAttr(activeProfile, "storeId") || 0),
-    basedOnProfileId:
-      Number(getAttr(request, "basedOnProfileId") || getAttr(activeProfile, "id") || 0) || null,
-    requestStatus: getOpenRequestStatusCode(request) || "DRAFT",
-    accountName: String(fallback("accountName") || ""),
-    merchantName: String(fallback("merchantName") || ""),
-    merchantId: fallback("merchantId") ? String(fallback("merchantId")) : null,
-    qrisImageUrl: fallback("qrisImageUrl") ? String(fallback("qrisImageUrl")) : null,
-    qrisPayload: fallback("qrisPayload") ? String(fallback("qrisPayload")) : null,
-    instructionText: fallback("instructionText") ? String(fallback("instructionText")) : null,
-    sellerNote: getAttr(request, "sellerNote") ? String(getAttr(request, "sellerNote")) : null,
-    adminReviewNote: getAttr(request, "adminReviewNote")
-      ? String(getAttr(request, "adminReviewNote"))
-      : null,
-    readiness: buildPaymentProfileReadiness({
-      accountName: fallback("accountName"),
-      merchantName: fallback("merchantName"),
-      merchantId: fallback("merchantId"),
-      qrisImageUrl: fallback("qrisImageUrl"),
-      qrisPayload: fallback("qrisPayload"),
-      instructionText: fallback("instructionText"),
-      isActive: false,
-      verificationStatus: "PENDING",
-    }),
-    submittedAt: getAttr(request, "submittedAt") || null,
-    reviewedAt: getAttr(request, "reviewedAt") || null,
-    submittedBy: submittedByUser
-      ? {
-          id: Number(getAttr(submittedByUser, "id") || 0) || null,
-          name: String(getAttr(submittedByUser, "name") || ""),
-          email: getAttr(submittedByUser, "email") ? String(getAttr(submittedByUser, "email")) : null,
-        }
-      : null,
-    reviewedBy: reviewedByAdmin
-      ? {
-          id: Number(getAttr(reviewedByAdmin, "id") || 0) || null,
-          name: String(getAttr(reviewedByAdmin, "name") || ""),
-          email: getAttr(reviewedByAdmin, "email") ? String(getAttr(reviewedByAdmin, "email")) : null,
-        }
-      : null,
-    updatedAt: getAttr(request, "updatedAt") || null,
-    createdAt: getAttr(request, "createdAt") || null,
   };
 };
 
@@ -634,7 +399,9 @@ const serializeSellerPaymentProfile = (
   const activeSnapshot = serializeActiveSnapshot(activeProfile);
   const serializedPendingRequest = serializePendingRequest(pendingRequest, activeProfile);
   const readModel = buildPaymentProfileReadModel(activeProfile, pendingRequest, options.sellerAccess);
-  const canEdit = Boolean(options.sellerAccess?.permissionKeys?.includes("PAYMENT_PROFILE_EDIT"));
+  const canEditPermission = Boolean(
+    options.sellerAccess?.permissionKeys?.includes("PAYMENT_PROFILE_EDIT")
+  );
   const requestDraftSource = ((serializedPendingRequest || activeSnapshot || {}) as Record<
     string,
     unknown
@@ -675,24 +442,13 @@ const serializeSellerPaymentProfile = (
           : String(requestDraftSource?.[field] || ""),
       ])
     ),
-    governance: {
+    governance: buildSellerPaymentProfileGovernance({
       canView: true,
-      canEdit,
-      mode: canEdit ? "SELLER_EDITABLE_REQUEST" : "READ_ONLY_SNAPSHOT",
-      managedBy: "SELLER_REQUEST_ADMIN_FINAL_APPROVAL",
-      editableFields: canEdit ? [...editablePaymentProfileFields] : [],
-      readOnlyFields: [
-        "providerCode",
-        "paymentType",
-        "verificationStatus",
-        "isActive",
-        "verifiedByAdminId",
-        "verifiedAt",
-      ],
-      note: canEdit
-        ? "Seller can edit only the separate store-scoped payment request fields here. Admin still controls approval, rejection, activation, and deactivation."
-        : "Seller workspace only exposes a read-only payment setup snapshot. Changes still belong to the existing account or admin flow.",
-    },
+      sellerCanEdit: canEditPermission,
+      pendingRequest,
+      reviewStatus: readModel.reviewStatus,
+      nextStep: readModel.nextStep,
+    }),
     store: options.store
       ? {
           id: Number(options.store.id || activeSnapshot?.storeId || serializedPendingRequest?.storeId || 0),
@@ -706,28 +462,6 @@ const serializeSellerPaymentProfile = (
     createdAt: activeSnapshot?.createdAt || null,
   };
 };
-
-const storePaymentProfileRequestAttributes = [
-  "id",
-  "storeId",
-  "basedOnProfileId",
-  "requestStatus",
-  "accountName",
-  "merchantName",
-  "merchantId",
-  "qrisImageUrl",
-  "qrisPayload",
-  "instructionText",
-  "sellerNote",
-  "adminReviewNote",
-  "submittedByUserId",
-  "submittedAt",
-  "reviewedByAdminId",
-  "reviewedAt",
-  "promotedProfileId",
-  "createdAt",
-  "updatedAt",
-] as const;
 
 const findLatestOpenStorePaymentProfileRequest = async (storeId: number) =>
   StorePaymentProfileRequest.findOne({
@@ -910,6 +644,13 @@ router.put(
 
       const activeProfile = await loadActiveStorePaymentProfile(storeId);
       const existingRequest = await findLatestOpenStorePaymentProfileRequest(storeId);
+      if (isSellerPaymentProfileRequestLockedForEdit(existingRequest)) {
+        return res.status(409).json({
+          success: false,
+          code: "PAYMENT_PROFILE_REVIEW_LOCKED",
+          message: "The latest seller payment setup request is already under admin review.",
+        });
+      }
       const pendingRequest = await persistSellerPaymentProfileRequest({
         storeId,
         parsedData: parsed.data,
@@ -956,6 +697,13 @@ router.post(
 
       const activeProfile = await loadActiveStorePaymentProfile(storeId);
       const existingRequest = await findLatestOpenStorePaymentProfileRequest(storeId);
+      if (isSellerPaymentProfileRequestLockedForEdit(existingRequest)) {
+        return res.status(409).json({
+          success: false,
+          code: "PAYMENT_PROFILE_REVIEW_LOCKED",
+          message: "The latest seller payment setup request is already under admin review.",
+        });
+      }
       const mergedDraft = buildSellerRequestPayload(parsed.data, existingRequest, activeProfile);
       const requiredCheck = validateRequiredPaymentProfileFields(mergedDraft);
 

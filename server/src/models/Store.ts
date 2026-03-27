@@ -109,6 +109,10 @@ export class Store
       foreignKey: { name: "storeId", field: "store_id" },
       as: "products",
     });
+    Store.hasMany(models.Coupon, {
+      foreignKey: { name: "storeId", field: "store_id" },
+      as: "coupons",
+    });
   }
 
   static initModel(sequelize: Sequelize) {

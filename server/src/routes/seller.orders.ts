@@ -8,6 +8,7 @@ import {
   Order,
   Payment,
   PaymentProof,
+  sequelize,
   StoreAuditLog,
   StorePaymentProfile,
   Suborder,
@@ -535,6 +536,7 @@ const recordSellerFulfillmentAudit = async (payload: {
   action: string;
   beforeState?: Record<string, unknown> | null;
   afterState?: Record<string, unknown> | null;
+  transaction?: any;
 }) =>
   StoreAuditLog.create({
     storeId: payload.storeId,
@@ -544,7 +546,9 @@ const recordSellerFulfillmentAudit = async (payload: {
     action: payload.action,
     beforeState: serializeAuditState(payload.beforeState),
     afterState: serializeAuditState(payload.afterState),
-  } as any);
+  } as any, {
+    transaction: payload.transaction,
+  });
 
 const listInclude = [
   {
@@ -993,6 +997,7 @@ router.patch(
   "/stores/:storeId/suborders/:suborderId/fulfillment",
   requireSellerStoreAccess(["ORDER_VIEW", "ORDER_FULFILLMENT_MANAGE"]),
   async (req: any, res) => {
+    let tx: any = null;
     try {
       const storeId = Number(req.params.storeId);
       const suborderId = Number(req.params.suborderId);
@@ -1017,6 +1022,25 @@ router.patch(
         });
       }
 
+      tx = await sequelize.transaction();
+
+      const lockedSuborder = await Suborder.findOne({
+        where: { id: suborderId, storeId },
+        attributes: ["id", "orderId", "fulfillmentStatus"],
+        transaction: tx,
+        lock: tx.LOCK.UPDATE,
+      });
+
+      if (!lockedSuborder) {
+        await tx.rollback();
+        tx = null;
+        return res.status(404).json({
+          success: false,
+          code: "SUBORDER_NOT_FOUND",
+          message: "Suborder not found.",
+        });
+      }
+
       const suborder = await Suborder.findOne({
         where: { id: suborderId, storeId },
         attributes: [
@@ -1036,9 +1060,12 @@ router.patch(
           "updatedAt",
         ],
         include: detailInclude,
+        transaction: tx,
       });
 
       if (!suborder) {
+        await tx.rollback();
+        tx = null;
         return res.status(404).json({
           success: false,
           code: "SUBORDER_NOT_FOUND",
@@ -1051,6 +1078,8 @@ router.patch(
       );
 
       if (currentFulfillmentStatus === actionDefinition.nextStatus) {
+        await tx.rollback();
+        tx = null;
         return res.status(409).json({
           success: false,
           code: "FULFILLMENT_STATUS_ALREADY_SET",
@@ -1063,6 +1092,8 @@ router.patch(
           currentFulfillmentStatus
         )
       ) {
+        await tx.rollback();
+        tx = null;
         return res.status(409).json({
           success: false,
           code: "INVALID_FULFILLMENT_TRANSITION",
@@ -1097,6 +1128,8 @@ router.patch(
       });
 
       if (transitionBlocker) {
+        await tx.rollback();
+        tx = null;
         return res.status(409).json({
           success: false,
           code: transitionBlocker.code,
@@ -1106,10 +1139,11 @@ router.patch(
 
       await (suborder as any).update({
         fulfillmentStatus: actionDefinition.nextStatus,
-      });
+      }, { transaction: tx });
 
       const parentOrderSync = await recalculateParentOrderFulfillmentStatus(
-        toNumber(getAttr(suborder, "orderId"), 0)
+        toNumber(getAttr(suborder, "orderId"), 0),
+        tx
       );
 
       const refreshed = await Suborder.findOne({
@@ -1131,9 +1165,12 @@ router.patch(
           "updatedAt",
         ],
         include: detailInclude,
+        transaction: tx,
       });
 
       if (!refreshed) {
+        await tx.rollback();
+        tx = null;
         return res.status(500).json({
           success: false,
           message: "Seller fulfillment was updated, but the refreshed suborder could not be loaded.",
@@ -1170,7 +1207,11 @@ router.patch(
         action: actionDefinition.auditAction,
         beforeState,
         afterState,
+        transaction: tx,
       });
+
+      await tx.commit();
+      tx = null;
 
       if (parentOrderSync?.changed && parentOrderSync.userId) {
         try {
@@ -1218,6 +1259,13 @@ router.patch(
         },
       });
     } catch (error) {
+      if (tx) {
+        try {
+          await tx.rollback();
+        } catch {
+          // ignore rollback failure after primary error
+        }
+      }
       console.error("[seller/orders:fulfillment] error", error);
       return res.status(500).json({
         success: false,

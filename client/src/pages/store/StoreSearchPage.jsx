@@ -8,7 +8,7 @@ import {
   UiErrorState,
   UiSkeleton,
   UiUpdatingBadge,
-} from "../../components/ui-states/index.js";
+} from "../../components/primitives/state/index.js";
 import {
   GENERIC_ERROR,
   UPDATING,

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Eye, QrCode } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../../api/axios.ts";
-import { getStoreCustomization } from "../../api/store.service.ts";
+import { getStoreCustomization } from "../../api/public/storeCustomizationPublic.ts";
 import { formatCurrency } from "../../utils/format.js";
 import {
   normalizeOrderStatus,

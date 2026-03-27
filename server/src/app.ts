@@ -26,6 +26,7 @@ import sellerProductsRouter from "./routes/seller.products.js";
 import sellerStoreProfileRouter from "./routes/seller.storeProfile.js";
 import sellerTeamRouter from "./routes/seller.team.js";
 import sellerWorkspaceRouter from "./routes/seller.workspace.js";
+import sellerCouponsRouter from "./routes/seller.coupons.js";
 import catalogRouter from "./routes/admin.catalog.js";
 import statsRouter from "./routes/admin.stats.js";
 import analyticsRouter from "./routes/admin.analytics.js";
@@ -43,6 +44,7 @@ import adminSettingsRouter from "./routes/admin.settings.js";
 import adminLanguagesRouter from "./routes/admin.languages.js";
 import adminCurrenciesRouter from "./routes/admin.currencies.js";
 import adminStoreCustomizationRouter from "./routes/admin.storeCustomization.js";
+import adminStoreProfilesRouter from "./routes/admin.storeProfiles.js";
 import adminStoreSettingsRouter from "./routes/admin.storeSettings.js";
 import adminNotificationsRouter from "./routes/admin.notifications.js";
 import adminStorePaymentProfilesRouter from "./routes/admin.storePaymentProfiles.js";
@@ -91,6 +93,7 @@ app.use("/api/seller", sellerProductsRouter);
 app.use("/api/seller", sellerStoreProfileRouter);
 app.use("/api/seller", sellerTeamRouter);
 app.use("/api/seller", sellerWorkspaceRouter);
+app.use("/api/seller", sellerCouponsRouter);
 app.use("/api/store", storeRouter);
 app.use("/api/stores", storesRouter);
 app.use("/api/store/coupons", storeCouponsRouter);
@@ -133,6 +136,7 @@ app.use(
   requireAdmin,
   adminStoreCustomizationRouter
 );
+app.use("/api/admin", requireAdmin, adminStoreProfilesRouter);
 app.use("/api/admin/store/settings", requireAdmin, adminStoreSettingsRouter);
 app.use("/api/admin/stores", requireAdmin, adminStorePaymentProfilesRouter);
 app.use("/api/admin", requireAdmin, adminAttributeValuesRouter);

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "../auth/useAuth.js";
+import { useAdminAuth } from "../auth/authDomainHooks.js";
 
 const fetchMe = async () => {
   const res = await fetch("/api/auth/me");
@@ -13,7 +13,7 @@ const fetchMe = async () => {
 
 export default function AdminGuard() {
   const location = useLocation();
-  const { isLoading: authLoading, isAuthenticated } = useAuth();
+  const { isLoading: authLoading, isAuthenticated } = useAdminAuth();
   const meQuery = useQuery({
     queryKey: ["admin", "me"],
     queryFn: fetchMe,

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../../api/axios.ts";
-import { getStoreCustomization } from "../../api/store.service.ts";
+import { getStoreCustomization } from "../../api/public/storeCustomizationPublic.ts";
 
 const fetchMe = async () => {
   const { data } = await api.get("/auth/me");
