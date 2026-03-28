@@ -23,20 +23,38 @@
 .navbar__menu {
   width: 40px;
   height: 40px;
-  border-radius: 11px;
+  border-radius: 12px;
   border: 1px solid #e2e8f0;
   background: #ffffff;
-  display: grid;
-  gap: 4px;
-  padding: 9px;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease;
 }
 
-.navbar__menu span {
-  display: block;
-  height: 2px;
-  border-radius: 999px;
-  background: #0f766e;
+.navbar__menu-icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.9;
+}
+
+.navbar__menu:hover {
+  border-color: #dbe4ee;
+  background: #f8fafc;
+  color: #475569;
+}
+
+.navbar__menu.is-active {
+  border-color: #b7e4d1;
+  background: #ecfdf5;
+  color: #047857;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.08);
 }
 
 .navbar__actions {
@@ -467,8 +485,16 @@
   background: #0f172a;
 }
 
-.admin-theme-dark .navbar__menu span {
-  background: #34d399;
+.admin-theme-dark .navbar__menu:hover {
+  background: #1e293b;
+  color: #cbd5e1;
+}
+
+.admin-theme-dark .navbar__menu.is-active {
+  border-color: #059669;
+  background: #052e25;
+  color: #6ee7b7;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12);
 }
 
 .admin-theme-dark .navbar__lang {

@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+import multer from "multer";
 import { Router, Request, Response } from "express";
 import { QueryTypes } from "sequelize";
 import { sequelize } from "../models/index.js";
@@ -34,7 +37,23 @@ const DEFAULT_STORE_SETTINGS = {
     tawkPropertyId: "",
     tawkWidgetId: "",
   },
+  branding: {
+    clientLogoUrl: "",
+    adminLogoUrl: "",
+    sellerLogoUrl: "",
+    workspaceBrandName: "TP PRENEURS",
+  },
 };
+
+const BRANDING_UPLOAD_DIR = path.resolve(process.cwd(), "uploads", "branding");
+const BRANDING_UPLOAD_LIMIT_BYTES = 1024 * 1024;
+const BRANDING_TARGET_FIELD_BY_KEY = {
+  client: "clientLogoUrl",
+  admin: "adminLogoUrl",
+  seller: "sellerLogoUrl",
+} as const;
+
+type BrandingTarget = keyof typeof BRANDING_TARGET_FIELD_BY_KEY;
 
 type SettingsRow = {
   key: string;
@@ -85,6 +104,7 @@ const sanitizeStoreSettings = (rawData: unknown) => {
   const socialLoginSource = isPlainObject(source.socialLogin) ? source.socialLogin : {};
   const analyticsSource = isPlainObject(source.analytics) ? source.analytics : {};
   const chatSource = isPlainObject(source.chat) ? source.chat : {};
+  const brandingSource = isPlainObject(source.branding) ? source.branding : {};
 
   return {
     ...defaults,
@@ -142,7 +162,26 @@ const sanitizeStoreSettings = (rawData: unknown) => {
       tawkPropertyId: toText(chatSource.tawkPropertyId, ""),
       tawkWidgetId: toText(chatSource.tawkWidgetId, ""),
     },
+    branding: {
+      ...defaults.branding,
+      ...brandingSource,
+      clientLogoUrl: toText(brandingSource.clientLogoUrl, defaults.branding.clientLogoUrl),
+      adminLogoUrl: toText(brandingSource.adminLogoUrl, defaults.branding.adminLogoUrl),
+      sellerLogoUrl: toText(brandingSource.sellerLogoUrl, defaults.branding.sellerLogoUrl),
+      workspaceBrandName: toText(
+        brandingSource.workspaceBrandName,
+        defaults.branding.workspaceBrandName
+      ),
+    },
   };
+};
+
+const normalizeBrandingTarget = (value: unknown): BrandingTarget | null => {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "client" || normalized === "admin" || normalized === "seller") {
+    return normalized;
+  }
+  return null;
 };
 
 const ensureSettingsTable = async () => {
@@ -201,6 +240,34 @@ const getPersistedStoreSettings = async () => {
   }
 };
 
+fs.mkdirSync(BRANDING_UPLOAD_DIR, { recursive: true });
+
+const brandingLogoUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, BRANDING_UPLOAD_DIR),
+    filename: (req, file, cb) => {
+      const target = normalizeBrandingTarget(req.params?.target) || "client";
+      const ext = path.extname(file.originalname || "").toLowerCase() || ".png";
+      const safeExt = [".png", ".jpg", ".jpeg", ".webp"].includes(ext) ? ext : ".png";
+      const fileName = `branding-${target}-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 9)}${safeExt}`;
+      cb(null, fileName);
+    },
+  }),
+  fileFilter: (_req, file, cb) => {
+    const acceptedMimeTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
+    if (!acceptedMimeTypes.has(String(file.mimetype || "").toLowerCase())) {
+      cb(new Error("Only PNG, JPEG, and WEBP images are allowed."));
+      return;
+    }
+    cb(null, true);
+  },
+  limits: {
+    fileSize: BRANDING_UPLOAD_LIMIT_BYTES,
+  },
+});
+
 router.get("/", async (_req: Request, res: Response) => {
   try {
     await ensureSettingsTable();
@@ -238,6 +305,60 @@ router.put("/", async (req: Request, res: Response) => {
     console.error("[admin.storeSettings][PUT] failed:", error);
     return res.status(500).json({ success: false, message: "Failed to update store settings." });
   }
+});
+
+router.post("/branding/:target/logo", (req: Request, res: Response, next) => {
+  brandingLogoUpload.single("file")(req, res, async (error: any) => {
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: error?.message || "Failed to upload branding logo.",
+      });
+    }
+
+    const target = normalizeBrandingTarget(req.params?.target);
+    if (!target) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid branding target.",
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "No file uploaded.",
+      });
+    }
+
+    try {
+      await ensureSettingsTable();
+      const existing = await getPersistedStoreSettings();
+      const brandingField = BRANDING_TARGET_FIELD_BY_KEY[target];
+      const uploadedLogoUrl = `/uploads/branding/${req.file.filename}`;
+      const storeSettings = sanitizeStoreSettings({
+        ...existing,
+        branding: {
+          ...existing.branding,
+          [brandingField]: uploadedLogoUrl,
+        },
+      });
+
+      await upsertSettingsValue(STORE_SETTINGS_KEY, JSON.stringify(storeSettings));
+
+      return res.json({
+        success: true,
+        data: {
+          target,
+          logoUrl: uploadedLogoUrl,
+          branding: storeSettings.branding,
+          storeSettings,
+        },
+      });
+    } catch (uploadPersistError) {
+      return next(uploadPersistError);
+    }
+  });
 });
 
 export default router;

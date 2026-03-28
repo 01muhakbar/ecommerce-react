@@ -20,6 +20,7 @@ import {
   buildBuyerProofActionability,
   resolveBuyerFacingPaymentStatus,
 } from "../services/paymentCheckoutView.service.js";
+import { createSellerNotificationsForStoreRecipients } from "../services/notification.service.js";
 
 const router = Router();
 
@@ -389,6 +390,47 @@ router.post("/:paymentId/proof", async (req, res) => {
       throw error;
     }
 
+    try {
+      const notifySuborder =
+        (paymentForSubmit as any)?.suborder ?? paymentForSubmit?.get?.("suborder") ?? null;
+      const notifyStore =
+        (paymentForSubmit as any)?.store ??
+        paymentForSubmit?.get?.("store") ??
+        notifySuborder?.store ??
+        null;
+      const notifyStoreId = Number(getAttr(paymentForSubmit, "storeId") || getAttr(notifySuborder, "storeId") || 0);
+      const notifyPaymentId = Number(getAttr(paymentForSubmit, "id") || paymentId || 0);
+      const notifySuborderId = Number(getAttr(notifySuborder, "id") || 0);
+      const notifyOrderId = Number(getAttr(notifySuborder?.order, "id") || 0);
+      const notifyStoreSlug = String(getAttr(notifyStore, "slug") || "").trim();
+      const notifyStoreName = String(getAttr(notifyStore, "name") || `Store #${notifyStoreId}`);
+      const proofAmount = Number(parsed.data.transferAmount || 0);
+
+      if (notifyStoreId > 0) {
+        await createSellerNotificationsForStoreRecipients({
+          storeId: notifyStoreId,
+          type: "SELLER_PAYMENT_REVIEW_REQUIRED",
+          title: `Payment proof requires review for ${notifyStoreName}`,
+          actionCode: "SELLER_PAYMENT_REVIEW_REQUIRED",
+          orderId: notifyOrderId || null,
+          suborderId: notifySuborderId || null,
+          paymentId: notifyPaymentId || null,
+          route: notifyStoreSlug
+            ? `/seller/stores/${encodeURIComponent(notifyStoreSlug)}/payment-review`
+            : null,
+          message: `${parsed.data.senderName} submitted a payment proof that now needs seller review.`,
+          meta: {
+            transferAmount: proofAmount,
+            senderName: parsed.data.senderName,
+            suborderNumber: String(getAttr(notifySuborder, "suborderNumber") || ""),
+            invoiceNo: String(getAttr(notifySuborder?.order, "invoiceNo") || ""),
+          },
+        });
+      }
+    } catch (notifyError) {
+      console.warn("[payments/proof] failed to create seller notification", notifyError);
+    }
+
     const refreshed = await loadPaymentForActor(paymentId);
     return res.status(201).json({
       success: true,
@@ -466,7 +508,7 @@ router.post("/:paymentId/cancel", async (req, res) => {
       if (activeSuborder) {
         await activeSuborder.update(
           {
-            paymentStatus: "CANCELLED",
+            paymentStatus: "FAILED",
             paidAt: null,
           } as any,
           { transaction: tx }
@@ -477,7 +519,7 @@ router.post("/:paymentId/cancel", async (req, res) => {
         {
           paymentId,
           oldStatus: currentStatus,
-          newStatus: "CANCELLED",
+          newStatus: "FAILED",
           actorType: "BUYER",
           actorId: authUser.id,
           note: "Buyer cancelled this payment before final confirmation.",
@@ -493,6 +535,46 @@ router.post("/:paymentId/cancel", async (req, res) => {
     } catch (error) {
       await tx.rollback();
       throw error;
+    }
+
+    try {
+      const notifySuborder = activeSuborder;
+      const notifyStore =
+        (paymentForCancel as any)?.store ??
+        paymentForCancel?.get?.("store") ??
+        notifySuborder?.store ??
+        null;
+      const notifyStoreId = Number(getAttr(paymentForCancel, "storeId") || getAttr(notifySuborder, "storeId") || 0);
+      const notifyPaymentId = Number(getAttr(paymentForCancel, "id") || paymentId || 0);
+      const notifySuborderId = Number(getAttr(notifySuborder, "id") || 0);
+      const notifyOrderId = Number(getAttr(notifySuborder?.order, "id") || 0);
+      const notifyStoreSlug = String(getAttr(notifyStore, "slug") || "").trim();
+      const invoiceNo = String(getAttr(notifySuborder?.order, "invoiceNo") || "").trim();
+
+      if (notifyStoreId > 0) {
+        await createSellerNotificationsForStoreRecipients({
+          storeId: notifyStoreId,
+          type: "SELLER_PAYMENT_FAILED",
+          title: invoiceNo
+            ? `Payment closed as failed for order ${invoiceNo}`
+            : "Payment closed as failed for a seller suborder",
+          actionCode: "SELLER_PAYMENT_FAILED",
+          orderId: notifyOrderId || null,
+          suborderId: notifySuborderId || null,
+          paymentId: notifyPaymentId || null,
+          route:
+            notifyStoreSlug && notifySuborderId
+              ? `/seller/stores/${encodeURIComponent(notifyStoreSlug)}/orders/${notifySuborderId}`
+              : null,
+          message: "Buyer cancelled the payment before confirmation, so this seller payment lane is now closed.",
+          meta: {
+            invoiceNo: invoiceNo || null,
+            suborderNumber: String(getAttr(notifySuborder, "suborderNumber") || ""),
+          },
+        });
+      }
+    } catch (notifyError) {
+      console.warn("[payments/cancel] failed to create seller notification", notifyError);
     }
 
     const refreshed = await loadPaymentForActor(paymentId);

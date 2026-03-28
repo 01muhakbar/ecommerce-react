@@ -3,26 +3,8 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../../auth/useAuth.js";
 import { can } from "../../constants/permissions.js";
+import WorkspaceSidebarBrand from "../workspace/WorkspaceSidebarBrand.jsx";
 import "./Sidebar.css";
-
-const BrandBagIcon = () => (
-  <svg viewBox="0 0 24 24" aria-hidden="true" className="sidebar__brand-svg">
-    <path
-      d="M7 9h10l-1 10H8L7 9Z"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M9 9V7a3 3 0 1 1 6 0v2"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-    />
-  </svg>
-);
 
 const IconGrid = (props) => (
   <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
@@ -99,6 +81,14 @@ const ChevronDown = (props) => (
   </svg>
 );
 
+const IconLogout = (props) => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
+    <path d="M10 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4" />
+    <path d="M14 17l5-5-5-5" />
+    <path d="M9 12h10" />
+  </svg>
+);
+
 const MENU = [
   {
     section: "Overview",
@@ -113,10 +103,10 @@ const MENU = [
     icon: IconBoxes,
     hasCaret: true,
     children: [
-      { label: "Products", to: "/admin/products", perm: "PRODUCTS_VIEW" },
-      { label: "Categories", to: "/admin/categories", perm: "CATEGORIES_CRUD" },
-      { label: "Attributes", to: "/admin/attributes", perm: "ATTRIBUTES_CRUD" },
-      { label: "Coupons", to: "/admin/coupons", perm: "COUPONS_CRUD" },
+      { label: "Products", to: "/admin/catalog/products", perm: "PRODUCTS_VIEW" },
+      { label: "Categories", to: "/admin/catalog/categories", perm: "CATEGORIES_CRUD" },
+      { label: "Attributes", to: "/admin/catalog/attributes", perm: "ATTRIBUTES_CRUD" },
+      { label: "Coupons", to: "/admin/catalog/coupons", perm: "COUPONS_CRUD" },
     ],
   },
   {
@@ -153,8 +143,8 @@ const MENU = [
     icon: IconGlobe,
     hasCaret: true,
     children: [
-      { label: "Languages", to: "/admin/languages", perm: "SETTINGS_MANAGE" },
-      { label: "Currencies", to: "/admin/currencies", perm: "SETTINGS_MANAGE" },
+      { label: "Languages", to: "/admin/international/languages", perm: "SETTINGS_MANAGE" },
+      { label: "Currencies", to: "/admin/international/currencies", perm: "SETTINGS_MANAGE" },
     ],
   },
   {
@@ -215,7 +205,7 @@ const matchesRoute = (targetPath, currentPath) => {
   return currentPath.startsWith(`${targetPath}/`);
 };
 
-export default function Sidebar() {
+export default function Sidebar({ collapsed = false }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -223,6 +213,8 @@ export default function Sidebar() {
   const [openMenus, setOpenMenus] = useState({
     Catalog: true,
     International:
+      pathname.startsWith("/admin/international/languages") ||
+      pathname.startsWith("/admin/international/currencies") ||
       pathname.startsWith("/admin/languages") ||
       pathname.startsWith("/admin/currencies"),
     "Online Store":
@@ -235,6 +227,8 @@ export default function Sidebar() {
 
   useEffect(() => {
     if (
+      pathname.startsWith("/admin/international/languages") ||
+      pathname.startsWith("/admin/international/currencies") ||
       pathname.startsWith("/admin/languages") ||
       pathname.startsWith("/admin/currencies")
     ) {
@@ -283,15 +277,14 @@ export default function Sidebar() {
   }).filter(Boolean);
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${collapsed ? "is-collapsed" : ""}`}>
       <div className="sidebar__brand">
-        <span className="sidebar__brand-icon">
-          <BrandBagIcon />
-        </span>
-        <div className="sidebar__brand-copy">
-          <span className="sidebar__brand-title">TP Preneurs</span>
-          <span className="sidebar__brand-subtitle">Admin Workspace</span>
-        </div>
+        <WorkspaceSidebarBrand
+          brandName="TP PRENEURS"
+          workspaceLabel="Admin Workspace"
+          workspaceKey="admin"
+          collapsed={collapsed}
+        />
       </div>
 
       <nav className="sidebar__menu" aria-label="Sidebar">
@@ -314,6 +307,7 @@ export default function Sidebar() {
                 <NavLink
                   to={item.to}
                   end={item.to === "/admin"}
+                  title={collapsed ? item.label : undefined}
                   className={({ isActive }) =>
                     `sidebar__link ${isActive ? "is-active" : ""}`
                   }
@@ -330,6 +324,7 @@ export default function Sidebar() {
                     canToggle && isOpen ? "is-open" : ""
                   } ${hasActiveChild ? "is-current" : ""}`}
                   onClick={canToggle ? () => toggleMenu(item.label) : undefined}
+                  title={collapsed ? item.label : undefined}
                 >
                   <span className="sidebar__icon">
                     <item.icon className="sidebar__icon-svg" />
@@ -345,9 +340,18 @@ export default function Sidebar() {
               )}
 
               {hasChildren && isOpen ? (
-                <div className="sidebar__submenu" role="group">
+                <div
+                  className={`sidebar__submenu ${
+                    collapsed ? "sidebar__submenu--floating" : ""
+                  }`}
+                  role="group"
+                >
                   {item.children.length === 0 ? (
-                    <button type="button" className="sidebar__sublink">
+                    <button
+                      type="button"
+                      className="sidebar__sublink"
+                      title={collapsed ? item.label : undefined}
+                    >
                       <span className="sidebar__subdot" aria-hidden="true" />
                       <span className="sidebar__label">No items</span>
                     </button>
@@ -357,6 +361,7 @@ export default function Sidebar() {
                         <NavLink
                           key={`${item.label}-${child.label}`}
                           to={child.to}
+                          title={collapsed ? child.label : undefined}
                           className={({ isActive }) =>
                             `sidebar__sublink ${isActive ? "is-active" : ""}`
                           }
@@ -369,6 +374,7 @@ export default function Sidebar() {
                           key={`${item.label}-${child.label}`}
                           type="button"
                           className="sidebar__sublink"
+                          title={collapsed ? child.label : undefined}
                         >
                           <span className="sidebar__subdot" aria-hidden="true" />
                           <span className="sidebar__label">{child.label}</span>
@@ -384,8 +390,16 @@ export default function Sidebar() {
       </nav>
 
       <div className="sidebar__footer">
-        <button type="button" className="sidebar__logout" onClick={handleLogout}>
-          Log Out
+        <button
+          type="button"
+          className="sidebar__logout"
+          onClick={handleLogout}
+          title={collapsed ? "Log Out" : undefined}
+        >
+          <span className="sidebar__logout-icon" aria-hidden="true">
+            <IconLogout className="sidebar__icon-svg" />
+          </span>
+          <span className="sidebar__logout-label">Log Out</span>
         </button>
       </div>
     </aside>

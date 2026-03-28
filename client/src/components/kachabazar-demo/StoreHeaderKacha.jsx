@@ -37,7 +37,11 @@ const sanitizeHeaderBrandName = (value, fallback = "KACHA BAZAR") => {
   return normalized;
 };
 
-export default function StoreHeaderKacha({ onCartClick, publicIdentityOverride = null }) {
+export default function StoreHeaderKacha({
+  onCartClick,
+  publicIdentityOverride = null,
+  brandingLogoUrl = "",
+}) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const totalQty = useCartStore((state) => state.totalQty);
@@ -109,6 +113,10 @@ export default function StoreHeaderKacha({ onCartClick, publicIdentityOverride =
   const resolvedHeaderLogoUrl = publicIdentityOverride
     ? resolvePreferredText(publicIdentity.logoUrl, headerContent.headerLogoUrl)
     : resolvePreferredText(headerContent.headerLogoUrl, publicIdentity.logoUrl);
+  const effectiveHeaderLogoUrl = resolvePreferredText(
+    brandingLogoUrl,
+    resolvedHeaderLogoUrl
+  );
   const isIdentityLoading =
     !publicIdentityOverride &&
     !hasHeaderPayload &&
@@ -169,7 +177,7 @@ export default function StoreHeaderKacha({ onCartClick, publicIdentityOverride =
         isAuthenticated={Boolean(isAuthenticated)}
         onCartClick={onCartClick}
         brandName={resolvedBrandName}
-        headerLogoUrl={resolvedHeaderLogoUrl}
+        headerLogoUrl={effectiveHeaderLogoUrl}
         logoUpdatedAt={headerVersion}
         isHeaderLoading={isIdentityLoading}
       />

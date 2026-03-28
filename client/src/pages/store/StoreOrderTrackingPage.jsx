@@ -81,6 +81,27 @@ const normalizeTrackingPayload = (response) =>
 
 const normalizeStatusValue = (status) => String(status || "").trim().toLowerCase();
 
+const isTrackingOrderFinal = (status) => {
+  const normalized = normalizeStatusValue(status);
+  return ["complete", "delivered", "cancelled", "canceled"].includes(normalized);
+};
+
+const shouldPollTrackingOrder = (order) => {
+  if (!order || typeof order !== "object") return false;
+  if (!isTrackingOrderFinal(order?.status)) return true;
+
+  const storeSplits = Array.isArray(order?.storeSplits) ? order.storeSplits : [];
+  return storeSplits.some((split) => {
+    const paymentStatus = String(split?.paymentStatus || "").trim().toUpperCase();
+    const fulfillmentStatus = String(split?.fulfillmentStatus || "")
+      .trim()
+      .toUpperCase();
+    const paymentFinal = ["PAID", "FAILED", "EXPIRED", "CANCELLED"].includes(paymentStatus);
+    const fulfillmentFinal = ["DELIVERED", "CANCELLED"].includes(fulfillmentStatus);
+    return !paymentFinal || !fulfillmentFinal;
+  });
+};
+
 const TRACKING_STEPS = [
   { key: "pending", label: "Order received", matches: ["pending"] },
   { key: "processing", label: "Processing", matches: ["processing"] },
@@ -135,6 +156,12 @@ export default function StoreOrderTrackingPage() {
     queryFn: () => fetchStoreOrder(orderRefParam),
     enabled: hasValidRef,
     retry: false,
+    refetchOnWindowFocus: true,
+    refetchIntervalInBackground: false,
+    refetchInterval: (query) => {
+      const trackedOrder = normalizeTrackingPayload(query.state.data);
+      return shouldPollTrackingOrder(trackedOrder) ? 15000 : false;
+    },
   });
 
   const order = useMemo(() => normalizeTrackingPayload(data), [data]);

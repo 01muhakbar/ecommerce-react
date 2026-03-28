@@ -5,8 +5,13 @@ import { Order } from "../models/Order.js";
 import { User } from "../models/User.js";
 import { OrderItem } from "../models/OrderItem.js";
 import { Product } from "../models/Product.js";
+import { Suborder } from "../models/Suborder.js";
 import { createUserOrderStatusUpdatedNotification } from "../services/notification.service.js";
-import { inspectParentOrderFinalizationEligibility } from "../services/orderPaymentAggregation.service.js";
+import {
+  inspectParentOrderFinalizationEligibility,
+  resolveParentOrderFulfillmentStatus,
+  resolveParentPaymentStatus,
+} from "../services/orderPaymentAggregation.service.js";
 
 const router = Router();
 type UiOrderStatus = "pending" | "processing" | "shipping" | "complete" | "cancelled";
@@ -56,6 +61,173 @@ const toUiStatus = (raw: unknown) => {
     return "cancelled";
   }
   return "pending";
+};
+
+const normalizeSuborderPaymentStatus = (raw: unknown) => {
+  const value = String(raw || "UNPAID").toUpperCase().trim();
+  return value || "UNPAID";
+};
+
+const normalizeSuborderFulfillmentStatus = (raw: unknown) => {
+  const value = String(raw || "UNFULFILLED").toUpperCase().trim();
+  return value || "UNFULFILLED";
+};
+
+const STARTED_FULFILLMENT_STATUSES = new Set(["PROCESSING", "SHIPPED", "DELIVERED"]);
+const SHIPPED_COMPATIBLE_FULFILLMENT_STATUSES = new Set(["SHIPPED", "DELIVERED"]);
+
+const loadAdminOrderTransitionSnapshot = async (orderId: number) => {
+  const suborders = await Suborder.findAll({
+    where: { orderId },
+    attributes: ["id", "suborderNumber", "storeId", "paymentStatus", "fulfillmentStatus"],
+  });
+
+  const normalized = suborders.map((suborder: any) => ({
+    id: Number(getAttr(suborder, "id") || 0),
+    suborderNumber: String(getAttr(suborder, "suborderNumber") || "").trim() || null,
+    storeId: Number(getAttr(suborder, "storeId") || 0) || null,
+    paymentStatus: normalizeSuborderPaymentStatus(getAttr(suborder, "paymentStatus")),
+    fulfillmentStatus: normalizeSuborderFulfillmentStatus(getAttr(suborder, "fulfillmentStatus")),
+  }));
+
+  const activeSuborders = normalized.filter(
+    (suborder) => suborder.fulfillmentStatus !== "CANCELLED"
+  );
+
+  return {
+    totalSuborders: normalized.length,
+    activeSuborders,
+    aggregatePaymentStatus: resolveParentPaymentStatus(
+      activeSuborders.map((suborder) => suborder.paymentStatus)
+    ),
+    aggregateFulfillmentStatus: resolveParentOrderFulfillmentStatus(
+      activeSuborders.map((suborder) => suborder.fulfillmentStatus)
+    ),
+  };
+};
+
+const inspectAdminOrderTransitionEligibility = async (
+  orderId: number,
+  targetStatus: DbOrderStatus
+) => {
+  const snapshot = await loadAdminOrderTransitionSnapshot(orderId);
+  const baseData = {
+    targetStatus,
+    totalSuborders: snapshot.totalSuborders,
+    activeSuborders: snapshot.activeSuborders.length,
+    aggregatePaymentStatus: snapshot.aggregatePaymentStatus,
+    aggregateFulfillmentStatus: snapshot.aggregateFulfillmentStatus,
+  };
+
+  if (snapshot.totalSuborders === 0) {
+    return {
+      allowed: true,
+      code: null,
+      message: null,
+      data: {
+        ...baseData,
+        reason: "LEGACY_ORDER_WITHOUT_SUBORDERS",
+        blockingSuborders: [],
+      },
+    };
+  }
+
+  if (snapshot.activeSuborders.length === 0) {
+    return {
+      allowed: false,
+      code: "PARENT_ORDER_HAS_NO_ACTIVE_SUBORDERS",
+      message:
+        "Cannot move parent order forward because every linked suborder is already cancelled.",
+      data: {
+        ...baseData,
+        reason: "NO_ACTIVE_SUBORDERS",
+        blockingSuborders: [],
+      },
+    };
+  }
+
+  if (targetStatus === "processing") {
+    const hasStartedFulfillment = snapshot.activeSuborders.some((suborder) =>
+      STARTED_FULFILLMENT_STATUSES.has(suborder.fulfillmentStatus)
+    );
+    const hasFullySettledPayment = snapshot.aggregatePaymentStatus === "PAID";
+
+    if (hasStartedFulfillment || hasFullySettledPayment) {
+      return {
+        allowed: true,
+        code: null,
+        message: null,
+        data: {
+          ...baseData,
+          reason: hasStartedFulfillment
+            ? "SUBORDER_FULFILLMENT_ALREADY_STARTED"
+            : "ALL_ACTIVE_SUBORDERS_PAID",
+          blockingSuborders: [],
+        },
+      };
+    }
+
+    const blockingSuborders = snapshot.activeSuborders.filter(
+      (suborder) =>
+        suborder.paymentStatus !== "PAID" &&
+        !STARTED_FULFILLMENT_STATUSES.has(suborder.fulfillmentStatus)
+    );
+
+    return {
+      allowed: false,
+      code: "PARENT_PROCESSING_BLOCKED_BY_SUBORDER_STATE",
+      message:
+        "Cannot move parent order to processing while active suborders are still unpaid or not yet started by the seller.",
+      data: {
+        ...baseData,
+        reason: "ACTIVE_SUBORDERS_NOT_READY_FOR_PROCESSING",
+        blockingSuborders,
+      },
+    };
+  }
+
+  if (targetStatus === "shipped") {
+    const blockingSuborders = snapshot.activeSuborders.filter(
+      (suborder) =>
+        !SHIPPED_COMPATIBLE_FULFILLMENT_STATUSES.has(suborder.fulfillmentStatus)
+    );
+
+    if (blockingSuborders.length === 0) {
+      return {
+        allowed: true,
+        code: null,
+        message: null,
+        data: {
+          ...baseData,
+          reason: "ALL_ACTIVE_SUBORDERS_SHIPPED_OR_DELIVERED",
+          blockingSuborders: [],
+        },
+      };
+    }
+
+    return {
+      allowed: false,
+      code: "PARENT_SHIPPING_BLOCKED_BY_SUBORDER_FULFILLMENT",
+      message:
+        "Cannot move parent order to shipped while active suborders are still unfulfilled or processing.",
+      data: {
+        ...baseData,
+        reason: "ACTIVE_SUBORDERS_NOT_READY_FOR_SHIPPING",
+        blockingSuborders,
+      },
+    };
+  }
+
+  return {
+    allowed: true,
+    code: null,
+    message: null,
+    data: {
+      ...baseData,
+      reason: "NO_EXTRA_GUARD_REQUIRED",
+      blockingSuborders: [],
+    },
+  };
 };
 
 const methodPatternMap: Record<CanonicalMethod, string[]> = {
@@ -590,7 +762,51 @@ router.patch("/:id/status", requireStaffOrAdmin, async (req, res) => {
     return res.status(404).json({ message: "Pesanan tidak ditemukan." });
   }
 
+  const previousStatus = toUiStatus(getAttr(existingOrder, "status"));
+
+  if (normalizedStatus === "cancelled" && previousStatus === "complete") {
+    return res.status(409).json({
+      success: false,
+      code: "PARENT_ORDER_FINALIZED",
+      message:
+        "Parent order is already in a final delivered state, so it cannot be cancelled.",
+      data: {
+        currentStatus: previousStatus,
+        targetStatus: "cancelled",
+      },
+    });
+  }
+
+  if (normalizedStatus === "processing" || normalizedStatus === "shipped") {
+    const transitionCheck = await inspectAdminOrderTransitionEligibility(
+      Number(getAttr(existingOrder, "id")),
+      normalizedStatus
+    );
+
+    if (!transitionCheck.allowed) {
+      return res.status(409).json({
+        success: false,
+        code: transitionCheck.code,
+        message: transitionCheck.message,
+        data: transitionCheck.data,
+      });
+    }
+  }
+
   if (normalizedStatus === "delivered") {
+    const precheck = await inspectAdminOrderTransitionEligibility(
+      Number(getAttr(existingOrder, "id")),
+      normalizedStatus
+    );
+    if (!precheck.allowed) {
+      return res.status(409).json({
+        success: false,
+        code: precheck.code,
+        message: precheck.message,
+        data: precheck.data,
+      });
+    }
+
     const finalizationCheck = await inspectParentOrderFinalizationEligibility(
       Number(getAttr(existingOrder, "id"))
     );
@@ -615,7 +831,6 @@ router.patch("/:id/status", requireStaffOrAdmin, async (req, res) => {
     }
   }
 
-  const previousStatus = toUiStatus(getAttr(existingOrder, "status"));
   const [updatedRows] = await Order.update(
     { status: normalizedStatus, updatedAt: new Date() },
     { where: resolveOrderWhere(idStr) }

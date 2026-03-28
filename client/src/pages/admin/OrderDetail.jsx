@@ -12,6 +12,9 @@ import {
 } from "../../components/payments/PaymentReadModelBadges.jsx";
 import {
   ADMIN_ORDER_ACTION_OPTIONS,
+  getAdminOrderTransitionErrorMeta,
+  getAdminOrderTransitionDisabledState,
+  getAdminOrderTransitionPrecheck,
   getAdminOrderLifecycleNote,
   toAdminOrderActionValue,
 } from "./orderLifecyclePresentation.js";
@@ -57,8 +60,10 @@ export default function OrderDetail() {
         clearTimeout(noticeTimerRef.current);
         noticeTimerRef.current = null;
       }
-      const rawMsg = err?.response?.data?.message ?? err?.message;
-      const msg = typeof rawMsg === "string" ? rawMsg : "Failed to update status.";
+      const errorMeta = getAdminOrderTransitionErrorMeta(err);
+      const msg = [errorMeta.title, errorMeta.message, errorMeta.detail]
+        .filter(Boolean)
+        .join(". ");
       setSuccessMessage("");
       setErrorMessage(msg);
     },
@@ -75,6 +80,19 @@ export default function OrderDetail() {
   const norm = (value) => (value || "").toString().trim().toLowerCase();
   const currentActionStatus = toAdminOrderActionValue(currentStatus);
   const isSameStatus = norm(selectedStatus) === norm(currentActionStatus);
+  const transitionPrecheck = getAdminOrderTransitionPrecheck({
+    currentStatus: currentActionStatus,
+    targetStatus: selectedStatus,
+    paymentStatus: order?.paymentStatus,
+    checkoutMode: order?.checkoutMode,
+  });
+  const transitionDisabledState = getAdminOrderTransitionDisabledState({
+    currentStatus: currentActionStatus,
+    paymentStatus: order?.paymentStatus,
+  });
+  const selectedDisabledReason =
+    transitionDisabledState.disabledReasons[selectedStatus] || "";
+  const isSelectedDisabled = Boolean(selectedDisabledReason);
   const shouldAutoPrint = searchParams.get("print") === "1";
 
   useEffect(() => {
@@ -427,11 +445,42 @@ export default function OrderDetail() {
                   >
                     <option value="">Select status</option>
                     {ADMIN_ORDER_ACTION_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
+                      <option
+                        key={option.value}
+                        value={option.value}
+                        disabled={Boolean(transitionDisabledState.disabledReasons[option.value])}
+                      >
                         {labelize(option.label)}
                       </option>
                     ))}
                   </select>
+                  {transitionDisabledState.disabledActions.length > 0 ? (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                      <p className="font-semibold text-slate-900">Unavailable now</p>
+                      <div className="mt-2 space-y-1.5">
+                        {transitionDisabledState.disabledActions.map((action) => (
+                          <p key={action.value} className="leading-6">
+                            <span className="font-medium text-slate-900">
+                              {labelize(action.label)}
+                            </span>
+                            : {action.reason}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {selectedDisabledReason ? (
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                      <p className="font-semibold text-rose-900">Action unavailable</p>
+                      <p className="mt-1 leading-6">{selectedDisabledReason}</p>
+                    </div>
+                  ) : null}
+                  {transitionPrecheck && !selectedDisabledReason ? (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                      <p className="font-semibold text-amber-900">{transitionPrecheck.title}</p>
+                      <p className="mt-1 leading-6">{transitionPrecheck.message}</p>
+                    </div>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() =>
@@ -440,11 +489,21 @@ export default function OrderDetail() {
                         payload: { status: selectedStatus },
                       })
                     }
-                    disabled={updateMutation.isPending || !selectedStatus || isSameStatus}
+                    disabled={
+                      updateMutation.isPending ||
+                      !selectedStatus ||
+                      isSameStatus ||
+                      isSelectedDisabled
+                    }
                     className="h-11 w-full rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {updateMutation.isPending ? "Updating..." : "Update Status"}
                   </button>
+                  <p className="text-xs leading-5 text-slate-500">
+                    Backend remains the final gate for seller suborder readiness and payment
+                    validity. Use split payment audit for multi-store parent orders before
+                    forcing the parent lifecycle forward.
+                  </p>
                   <button
                     type="button"
                     onClick={() => handleCopy(invoiceRef, "Invoice")}

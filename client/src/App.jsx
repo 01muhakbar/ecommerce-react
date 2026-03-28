@@ -108,6 +108,100 @@ function LegacySellerStoreProfileRedirect() {
   return <Navigate to={target} replace />;
 }
 
+function LegacySellerCatalogRedirect() {
+  const { storeSlug } = useParams();
+  const target = storeSlug
+    ? `/seller/stores/${encodeURIComponent(storeSlug)}/catalog/products`
+    : "/seller/stores";
+  return <Navigate to={target} replace />;
+}
+
+function LegacySellerCouponsRedirect() {
+  const { storeSlug } = useParams();
+  const target = storeSlug
+    ? `/seller/stores/${encodeURIComponent(storeSlug)}/catalog/coupons`
+    : "/seller/stores";
+  return <Navigate to={target} replace />;
+}
+
+function LegacySellerProductCreateRedirect() {
+  const { storeSlug } = useParams();
+  const target = storeSlug
+    ? `/seller/stores/${encodeURIComponent(storeSlug)}/catalog/products/new`
+    : "/seller/stores";
+  return <Navigate to={target} replace />;
+}
+
+function LegacySellerProductDetailRedirect() {
+  const { storeSlug, productId } = useParams();
+  const target =
+    storeSlug && productId
+      ? `/seller/stores/${encodeURIComponent(storeSlug)}/catalog/products/${encodeURIComponent(productId)}`
+      : "/seller/stores";
+  return <Navigate to={target} replace />;
+}
+
+function LegacySellerProductEditRedirect() {
+  const { storeSlug, productId } = useParams();
+  const target =
+    storeSlug && productId
+      ? `/seller/stores/${encodeURIComponent(storeSlug)}/catalog/products/${encodeURIComponent(productId)}/edit`
+      : "/seller/stores";
+  return <Navigate to={target} replace />;
+}
+
+function LegacyAdminProductsRedirect() {
+  return <Navigate to="/admin/catalog/products" replace />;
+}
+
+function LegacyAdminProductCreateRedirect() {
+  return <Navigate to="/admin/catalog/products/new" replace />;
+}
+
+function LegacyAdminProductDetailRedirect() {
+  const { id } = useParams();
+  const target = id
+    ? `/admin/catalog/products/${encodeURIComponent(id)}`
+    : "/admin/catalog/products";
+  return <Navigate to={target} replace />;
+}
+
+function LegacyAdminCategoriesRedirect() {
+  return <Navigate to="/admin/catalog/categories" replace />;
+}
+
+function LegacyAdminCategoryByIdRedirect() {
+  const { id } = useParams();
+  const target = id
+    ? `/admin/catalog/categories/id/${encodeURIComponent(id)}`
+    : "/admin/catalog/categories";
+  return <Navigate to={target} replace />;
+}
+
+function LegacyAdminCategoryByCodeRedirect() {
+  const { code } = useParams();
+  const target = code
+    ? `/admin/catalog/categories/${encodeURIComponent(code)}`
+    : "/admin/catalog/categories";
+  return <Navigate to={target} replace />;
+}
+
+function LegacyAdminAttributesRedirect() {
+  return <Navigate to="/admin/catalog/attributes" replace />;
+}
+
+function LegacyAdminCouponsRedirect() {
+  return <Navigate to="/admin/catalog/coupons" replace />;
+}
+
+function LegacyAdminLanguagesRedirect() {
+  return <Navigate to="/admin/international/languages" replace />;
+}
+
+function LegacyAdminCurrenciesRedirect() {
+  return <Navigate to="/admin/international/currencies" replace />;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -207,18 +301,29 @@ export default function App() {
             <Route path="team" element={<SellerTeamPage />} />
             <Route path="team/:memberId" element={<SellerMemberLifecyclePage />} />
             <Route path="team/audit" element={<SellerTeamAuditPage />} />
-            <Route path="catalog" element={<SellerCatalogPage />} />
-            <Route path="catalog/new" element={<SellerProductAuthoringPage mode="create" />} />
+            <Route path="catalog" element={<LegacySellerCatalogRedirect />} />
+            <Route path="catalog/new" element={<LegacySellerProductCreateRedirect />} />
+            <Route path="catalog/products" element={<SellerCatalogPage />} />
+            <Route
+              path="catalog/products/new"
+              element={<SellerProductAuthoringPage mode="create" />}
+            />
             <Route
               path="catalog/:productId/edit"
+              element={<LegacySellerProductEditRedirect />}
+            />
+            <Route
+              path="catalog/products/:productId/edit"
               element={<SellerProductAuthoringPage mode="edit" />}
             />
-            <Route path="catalog/:productId" element={<SellerProductDetailPage />} />
+            <Route path="catalog/:productId" element={<LegacySellerProductDetailRedirect />} />
+            <Route path="catalog/products/:productId" element={<SellerProductDetailPage />} />
             <Route path="orders" element={<SellerOrdersPage />} />
             <Route path="orders/:suborderId" element={<SellerOrderDetailPage />} />
             <Route path="payment-review" element={<SellerPaymentReviewPage />} />
             <Route path="payment-profile" element={<SellerPaymentProfilePage />} />
-            <Route path="coupons" element={<SellerCouponsPage />} />
+            <Route path="coupons" element={<LegacySellerCouponsRedirect />} />
+            <Route path="catalog/coupons" element={<SellerCouponsPage />} />
           </Route>
           <Route path="/admin" element={<AdminGuard />}>
             <Route element={<AdminLayout />}>
@@ -240,6 +345,18 @@ export default function App() {
               />
               <Route
                 path="products"
+                element={<LegacyAdminProductsRedirect />}
+              />
+              <Route
+                path="products/new"
+                element={<LegacyAdminProductCreateRedirect />}
+              />
+              <Route
+                path="products/:id"
+                element={<LegacyAdminProductDetailRedirect />}
+              />
+              <Route
+                path="catalog/products"
                 element={
                   <RequirePerm perm="PRODUCTS_VIEW">
                     <AdminProductsPage />
@@ -247,7 +364,7 @@ export default function App() {
                 }
               />
               <Route
-                path="products/new"
+                path="catalog/products/new"
                 element={
                   <RequirePerm perm="PRODUCTS_CREATE">
                     <AdminProductForm />
@@ -255,7 +372,7 @@ export default function App() {
                 }
               />
               <Route
-                path="products/:id"
+                path="catalog/products/:id"
                 element={
                   <RequirePerm perm="PRODUCTS_UPDATE">
                     <AdminProductForm />
@@ -296,6 +413,18 @@ export default function App() {
               />
               <Route
                 path="categories/id/:id"
+                element={<LegacyAdminCategoryByIdRedirect />}
+              />
+              <Route
+                path="categories/:code"
+                element={<LegacyAdminCategoryByCodeRedirect />}
+              />
+              <Route
+                path="categories"
+                element={<LegacyAdminCategoriesRedirect />}
+              />
+              <Route
+                path="catalog/categories/id/:id"
                 element={
                   <RequirePerm perm="CATEGORIES_CRUD">
                     <AdminSubCategoriesPage resolveMode="id" />
@@ -303,7 +432,7 @@ export default function App() {
                 }
               />
               <Route
-                path="categories/:code"
+                path="catalog/categories/:code"
                 element={
                   <RequirePerm perm="CATEGORIES_CRUD">
                     <AdminSubCategoriesPage resolveMode="code" />
@@ -311,7 +440,7 @@ export default function App() {
                 }
               />
               <Route
-                path="categories"
+                path="catalog/categories"
                 element={
                   <RequirePerm perm="CATEGORIES_CRUD">
                     <AdminCategoriesPage />
@@ -320,6 +449,10 @@ export default function App() {
               />
               <Route
                 path="coupons"
+                element={<LegacyAdminCouponsRedirect />}
+              />
+              <Route
+                path="catalog/coupons"
                 element={
                   <RequirePerm perm="COUPONS_CRUD">
                     <AdminCouponsPage />
@@ -328,6 +461,10 @@ export default function App() {
               />
               <Route
                 path="attributes"
+                element={<LegacyAdminAttributesRedirect />}
+              />
+              <Route
+                path="catalog/attributes"
                 element={
                   <RequirePerm perm="ATTRIBUTES_CRUD">
                     <AdminAttributesPage />
@@ -352,6 +489,10 @@ export default function App() {
               />
               <Route
                 path="languages"
+                element={<LegacyAdminLanguagesRedirect />}
+              />
+              <Route
+                path="international/languages"
                 element={
                   <RequirePerm perm="SETTINGS_MANAGE">
                     <LanguagesPage />
@@ -360,6 +501,10 @@ export default function App() {
               />
               <Route
                 path="currencies"
+                element={<LegacyAdminCurrenciesRedirect />}
+              />
+              <Route
+                path="international/currencies"
                 element={
                   <RequirePerm perm="SETTINGS_MANAGE">
                     <CurrenciesPage />

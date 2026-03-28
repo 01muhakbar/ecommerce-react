@@ -324,6 +324,12 @@ export type PublicStoreSettings = {
     tawkPropertyId: string;
     tawkWidgetId: string;
   };
+  branding: {
+    clientLogoUrl: string;
+    adminLogoUrl: string;
+    sellerLogoUrl: string;
+    workspaceBrandName: string;
+  };
 };
 
 export type StoreSettingsResponse = {

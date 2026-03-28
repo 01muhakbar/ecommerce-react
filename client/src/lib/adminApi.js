@@ -545,3 +545,17 @@ export const updateAdminStoreSettings = async (payload) => {
   const { data } = await adminApi.put("/admin/store/settings", payload);
   return data?.data ?? data;
 };
+
+export const uploadAdminBrandingLogo = async (target, file) => {
+  const normalizedTarget = String(target || "").trim().toLowerCase();
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await adminApi.post(
+    `/admin/store/settings/branding/${encodeURIComponent(normalizedTarget)}/logo`,
+    formData,
+    {
+      headers: { "Content-Type": "multipart/form-data" },
+    }
+  );
+  return data?.data ?? data;
+};

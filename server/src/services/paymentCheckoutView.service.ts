@@ -16,6 +16,7 @@ export const resolveBuyerFacingPaymentStatus = (input: {
 }) => {
   const suborderPaymentStatus = normalizeStatus(input.suborderPaymentStatus, "UNPAID");
   if (suborderPaymentStatus === "CANCELLED") return "CANCELLED";
+  if (suborderPaymentStatus === "FAILED") return "FAILED";
   const paymentStatus = normalizeStatus(input.paymentStatus, "CREATED");
   if (paymentStatus === "EXPIRED") return "EXPIRED";
   if (paymentStatus === "CREATED" || paymentStatus === "REJECTED") {
@@ -51,6 +52,12 @@ export const buildBuyerProofActionability = (displayStatus: unknown) => {
     return {
       canStartProof: false,
       reason: "Payment has already been approved.",
+    };
+  }
+  if (status === "FAILED") {
+    return {
+      canStartProof: false,
+      reason: "This payment has already been closed.",
     };
   }
   if (status === "EXPIRED") {
@@ -91,6 +98,12 @@ export const buildBuyerCancelActionability = (displayStatus: unknown) => {
       reason: "This payment has already been approved.",
     };
   }
+  if (status === "FAILED") {
+    return {
+      canCancel: false,
+      reason: "This payment has already been closed.",
+    };
+  }
   if (status === "EXPIRED") {
     return {
       canCancel: false,
@@ -117,6 +130,7 @@ export const buildBuyerOrderPaymentEntry = (displayStatuses: unknown[]) => {
   const actionableCount = (counts.CREATED || 0) + (counts.REJECTED || 0);
   const reviewCount = counts.PENDING_CONFIRMATION || 0;
   const paidCount = counts.PAID || 0;
+  const failedCount = counts.FAILED || 0;
   const cancelledCount = counts.CANCELLED || 0;
   const expiredCount = counts.EXPIRED || 0;
   const totalGroups = normalizedStatuses.length;
@@ -130,6 +144,7 @@ export const buildBuyerOrderPaymentEntry = (displayStatuses: unknown[]) => {
       actionableCount,
       reviewCount,
       paidCount,
+      failedCount,
       cancelledCount,
       expiredCount,
       totalGroups,
@@ -145,6 +160,7 @@ export const buildBuyerOrderPaymentEntry = (displayStatuses: unknown[]) => {
       actionableCount,
       reviewCount,
       paidCount,
+      failedCount,
       cancelledCount,
       expiredCount,
       totalGroups,
@@ -154,10 +170,17 @@ export const buildBuyerOrderPaymentEntry = (displayStatuses: unknown[]) => {
   return {
     visible: false,
     label: null,
-    summaryStatus: paidCount > 0 && paidCount === totalGroups ? "PAID" : "FINAL",
+    summaryStatus:
+      paidCount > 0 && paidCount === totalGroups
+        ? "PAID"
+        : failedCount > 0
+          ? "FAILED"
+          : "FINAL",
     summaryLabel:
       paidCount > 0 && paidCount === totalGroups
         ? "Payment complete"
+        : failedCount > 0
+          ? "Payment failed"
         : cancelledCount > 0
           ? "Transaction closed"
           : expiredCount > 0
@@ -166,6 +189,7 @@ export const buildBuyerOrderPaymentEntry = (displayStatuses: unknown[]) => {
     actionableCount,
     reviewCount,
     paidCount,
+    failedCount,
     cancelledCount,
     expiredCount,
     totalGroups,

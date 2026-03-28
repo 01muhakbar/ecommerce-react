@@ -121,6 +121,14 @@ const resolveBuyerPaymentStep = (status) => {
       Icon: AlertTriangle,
     };
   }
+  if (code === "FAILED") {
+    return {
+      title: "Payment closed",
+      detail: "This payment can no longer continue. Check the latest activity and create a new payment later if needed.",
+      tone: "rose",
+      Icon: CircleX,
+    };
+  }
   if (code === "EXPIRED") {
     return {
       title: "Payment deadline expired",
@@ -198,6 +206,16 @@ const getBuyerPaymentProgress = (status) => {
       summary: "Transfer needs review update",
       tone: "rose",
       isFinal: false,
+    };
+  }
+
+  if (code === "FAILED") {
+    return {
+      steps,
+      currentStep: 1,
+      summary: "Closed",
+      tone: "rose",
+      isFinal: true,
     };
   }
 

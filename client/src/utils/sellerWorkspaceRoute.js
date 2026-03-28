@@ -45,18 +45,24 @@ export const createSellerWorkspaceRoutes = (storeSlug) => ({
   home: () => buildSellerWorkspacePath(storeSlug),
   storeProfile: () => buildSellerWorkspacePath(storeSlug, "/store-profile"),
   profile: () => buildSellerWorkspacePath(storeSlug, "/store-profile"),
-  catalog: () => buildSellerWorkspacePath(storeSlug, "/catalog"),
-  productCreate: () => buildSellerWorkspacePath(storeSlug, "/catalog/new"),
+  catalog: () => buildSellerWorkspacePath(storeSlug, "/catalog/products"),
+  productCreate: () => buildSellerWorkspacePath(storeSlug, "/catalog/products/new"),
   productDetail: (productId) =>
-    buildSellerWorkspacePath(storeSlug, `/catalog/${encodeURIComponent(String(productId))}`),
+    buildSellerWorkspacePath(
+      storeSlug,
+      `/catalog/products/${encodeURIComponent(String(productId))}`
+    ),
   productEdit: (productId) =>
-    buildSellerWorkspacePath(storeSlug, `/catalog/${encodeURIComponent(String(productId))}/edit`),
+    buildSellerWorkspacePath(
+      storeSlug,
+      `/catalog/products/${encodeURIComponent(String(productId))}/edit`
+    ),
   orders: () => buildSellerWorkspacePath(storeSlug, "/orders"),
   orderDetail: (suborderId) =>
     buildSellerWorkspacePath(storeSlug, `/orders/${encodeURIComponent(String(suborderId))}`),
   paymentReview: () => buildSellerWorkspacePath(storeSlug, "/payment-review"),
   paymentProfile: () => buildSellerWorkspacePath(storeSlug, "/payment-profile"),
-  coupons: () => buildSellerWorkspacePath(storeSlug, "/coupons"),
+  coupons: () => buildSellerWorkspacePath(storeSlug, "/catalog/coupons"),
   team: () => buildSellerWorkspacePath(storeSlug, "/team"),
   teamAudit: () => buildSellerWorkspacePath(storeSlug, "/team/audit"),
   memberLifecycle: (memberId) =>

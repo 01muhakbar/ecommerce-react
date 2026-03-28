@@ -349,7 +349,10 @@ export default function AdminSubCategoriesPage({ resolveMode = "code" }) {
               Sub Categories
             </h1>
             <div className="flex items-center gap-1.5 text-sm text-slate-500">
-              <Link to="/admin/categories" className="font-medium text-slate-600 hover:text-emerald-600">
+              <Link
+                to="/admin/catalog/categories"
+                className="font-medium text-slate-600 hover:text-emerald-600"
+              >
                 Categories
               </Link>
               <ChevronRight className="h-4 w-4 text-slate-400" />
@@ -385,7 +388,7 @@ export default function AdminSubCategoriesPage({ resolveMode = "code" }) {
         emptyHint="Please return to categories list and select a valid parent category."
         emptyActionLabel="Back to Categories"
         onEmptyAction={() => {
-          window.location.assign("/admin/categories");
+          window.location.assign("/admin/catalog/categories");
         }}
       >
         {emptyChildren ? (

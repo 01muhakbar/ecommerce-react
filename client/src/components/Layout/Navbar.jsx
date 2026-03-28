@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "react-router-dom";
-import { Search } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 import { fetchAdminLanguages } from "../../lib/adminApi.js";
 import ThemeToggle from "../admin/ThemeToggle.jsx";
 import AdminProfileMenu from "../admin/AdminProfileMenu.jsx";
@@ -45,20 +45,55 @@ const persistLanguage = (value) => {
 
 const pageTitleFromPath = (pathname) => {
   if (pathname === "/admin" || pathname === "/admin/dashboard") return "Dashboard";
-  if (pathname.startsWith("/admin/products")) return "Products";
+  if (
+    pathname.startsWith("/admin/catalog/products") ||
+    pathname.startsWith("/admin/products")
+  ) {
+    return "Products";
+  }
   if (pathname.startsWith("/admin/orders")) return "Orders";
   if (pathname.startsWith("/admin/customers")) return "Customers";
-  if (pathname.startsWith("/admin/categories")) return "Categories";
-  if (pathname.startsWith("/admin/attributes")) return "Attributes";
-  if (pathname.startsWith("/admin/coupons")) return "Coupons";
+  if (
+    pathname.startsWith("/admin/catalog/categories") ||
+    pathname.startsWith("/admin/categories")
+  ) {
+    return "Categories";
+  }
+  if (
+    pathname.startsWith("/admin/catalog/attributes") ||
+    pathname.startsWith("/admin/attributes")
+  ) {
+    return "Attributes";
+  }
+  if (
+    pathname.startsWith("/admin/catalog/coupons") ||
+    pathname.startsWith("/admin/coupons")
+  ) {
+    return "Coupons";
+  }
   if (pathname.startsWith("/admin/our-staff")) return "Our Staff";
   if (pathname.startsWith("/admin/settings")) return "Settings";
-  if (pathname.startsWith("/admin/languages")) return "Languages";
-  if (pathname.startsWith("/admin/currencies")) return "Currencies";
+  if (
+    pathname.startsWith("/admin/international/languages") ||
+    pathname.startsWith("/admin/languages")
+  ) {
+    return "Languages";
+  }
+  if (
+    pathname.startsWith("/admin/international/currencies") ||
+    pathname.startsWith("/admin/currencies")
+  ) {
+    return "Currencies";
+  }
   return "Admin";
 };
 
-export default function Navbar({ theme = "light", onToggleTheme }) {
+export default function Navbar({
+  theme = "light",
+  onToggleTheme,
+  isSidebarCollapsed = false,
+  onToggleSidebar,
+}) {
   const { pathname } = useLocation();
   const pageTitle = pageTitleFromPath(pathname);
   const langDropdownRef = useRef(null);
@@ -178,10 +213,14 @@ export default function Navbar({ theme = "light", onToggleTheme }) {
   return (
     <header className="navbar">
       <div className="navbar__left">
-        <button className="navbar__menu" aria-label="Toggle menu">
-          <span />
-          <span />
-          <span />
+        <button
+          className={`navbar__menu ${isSidebarCollapsed ? "is-active" : ""}`}
+          aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-pressed={isSidebarCollapsed}
+          type="button"
+          onClick={onToggleSidebar}
+        >
+          <Menu className="navbar__menu-icon" />
         </button>
         <div className="navbar__title-block">
           <p className="navbar__eyebrow">Admin Panel</p>

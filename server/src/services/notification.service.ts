@@ -1,5 +1,5 @@
-import { Op, QueryTypes } from "sequelize";
-import { Notification, sequelize } from "../models/index.js";
+import { Op, QueryTypes, literal } from "sequelize";
+import { Notification, sequelize, Store, StoreMember } from "../models/index.js";
 
 type NewOrderNotificationInput = {
   customerName?: string | null;
@@ -21,6 +21,20 @@ type UserOrderStatusNotificationInput = {
   status?: string;
   statusFrom?: string | null;
   statusTo?: string | null;
+};
+
+type SellerNotificationInput = {
+  userId: number;
+  storeId: number;
+  type: string;
+  title: string;
+  actionCode?: string | null;
+  message?: string | null;
+  route?: string | null;
+  orderId?: number | null;
+  suborderId?: number | null;
+  paymentId?: number | null;
+  meta?: Record<string, unknown> | null;
 };
 
 type AdminNotificationEventPayload = {
@@ -80,13 +94,61 @@ const normalizeMeta = (value: unknown): Record<string, unknown> | null => {
   return typeof value === "object" ? (value as Record<string, unknown>) : null;
 };
 
+const getAudienceFromMeta = (meta: unknown) =>
+  String(normalizeMeta(meta)?.audience || "")
+    .trim()
+    .toUpperCase();
+
 const toUserIdFromMeta = (meta: unknown) => {
   const parsed = normalizeMeta(meta);
   const userId = Number(parsed?.userId);
   return Number.isFinite(userId) && userId > 0 ? userId : 0;
 };
 
-const isUserTargeted = (meta: unknown) => toUserIdFromMeta(meta) > 0;
+const toStoreIdFromMeta = (meta: unknown) => {
+  const parsed = normalizeMeta(meta);
+  const storeId = Number(parsed?.storeId);
+  return Number.isFinite(storeId) && storeId > 0 ? storeId : 0;
+};
+
+const hasPrivateTarget = (meta: unknown) => toUserIdFromMeta(meta) > 0;
+
+const isSellerTargeted = (meta: unknown) =>
+  getAudienceFromMeta(meta) === "SELLER" &&
+  toUserIdFromMeta(meta) > 0 &&
+  toStoreIdFromMeta(meta) > 0;
+
+const isUserTargeted = (meta: unknown) =>
+  hasPrivateTarget(meta) && !isSellerTargeted(meta);
+
+const buildSellerMetaScopeWhere = (input: {
+  userId: number;
+  storeId: number;
+  id?: number;
+  unreadOnly?: boolean;
+}) => {
+  const safeUserId = toNumber(input.userId, 0);
+  const safeStoreId = toNumber(input.storeId, 0);
+  const safeId = toNumber(input.id, 0);
+  const conditions: any[] = [
+    literal(`JSON_UNQUOTE(JSON_EXTRACT(meta, '$.audience')) = 'SELLER'`),
+    literal(
+      `CAST(JSON_UNQUOTE(JSON_EXTRACT(meta, '$.userId')) AS UNSIGNED) = ${safeUserId}`
+    ),
+    literal(
+      `CAST(JSON_UNQUOTE(JSON_EXTRACT(meta, '$.storeId')) AS UNSIGNED) = ${safeStoreId}`
+    ),
+  ];
+
+  if (safeId > 0) {
+    conditions.push({ id: safeId });
+  }
+  if (input.unreadOnly) {
+    conditions.push({ isRead: false });
+  }
+
+  return { [Op.and]: conditions };
+};
 
 const normalizeNotificationType = (value: unknown) =>
   String(value || "").trim().toUpperCase();
@@ -315,7 +377,7 @@ export const createNotification = async (input: {
     // retention cleanup should never break notification creation
   }
 
-  if (!isUserTargeted(input.meta ?? null)) {
+  if (!hasPrivateTarget(input.meta ?? null)) {
     try {
       emitAdminNotificationEvent({
         type: String(created.type || input.type || "NOTIFICATION_CREATED"),
@@ -421,7 +483,7 @@ export const countAdminUnreadNotifications = async (adminId?: number) => {
 
   return unreadItems.filter(
     (item) =>
-      !isUserTargeted(item.meta) && isTypeEnabledForAdmin(item.type, enabledTypes)
+      !hasPrivateTarget(item.meta) && isTypeEnabledForAdmin(item.type, enabledTypes)
   ).length;
 };
 
@@ -444,7 +506,7 @@ export const listNotifications = async (limit = 20, offset = 0, adminId?: number
   const adminItems = items
     .filter(
       (item) =>
-        !isUserTargeted(item.meta) && isTypeEnabledForAdmin(item.type, enabledTypes)
+        !hasPrivateTarget(item.meta) && isTypeEnabledForAdmin(item.type, enabledTypes)
     )
     .slice(safeOffset, safeOffset + safeLimit);
 
@@ -466,7 +528,7 @@ export const countUserUnreadNotifications = async (userId: number) => {
     order: [["createdAt", "DESC"]],
   });
   return unreadItems.filter(
-    (item) => toUserIdFromMeta(item.meta) === safeUserId
+    (item) => isUserTargeted(item.meta) && toUserIdFromMeta(item.meta) === safeUserId
   ).length;
 };
 
@@ -490,10 +552,10 @@ export const listUserNotifications = async (userId: number, limit = 20, offset =
   ]);
 
   const filteredItems = items
-    .filter((item) => toUserIdFromMeta(item.meta) === safeUserId)
+    .filter((item) => isUserTargeted(item.meta) && toUserIdFromMeta(item.meta) === safeUserId)
     .slice(safeOffset, safeOffset + safeLimit);
   const unreadCount = unreadItems.filter(
-    (item) => toUserIdFromMeta(item.meta) === safeUserId
+    (item) => isUserTargeted(item.meta) && toUserIdFromMeta(item.meta) === safeUserId
   ).length;
 
   return {
@@ -534,7 +596,7 @@ export const markAllAdminNotificationsRead = async (adminId?: number) => {
   });
   const targetItems = unreadItems.filter(
     (item) =>
-      !isUserTargeted(item.meta) && isTypeEnabledForAdmin(item.type, enabledTypes)
+      !hasPrivateTarget(item.meta) && isTypeEnabledForAdmin(item.type, enabledTypes)
   );
   if (targetItems.length === 0) return 0;
 
@@ -549,7 +611,7 @@ export const clearAllAdminNotifications = async () => {
   const items = await Notification.findAll({
     order: [["createdAt", "DESC"]],
   });
-  const targetItems = items.filter((item) => !isUserTargeted(item.meta));
+  const targetItems = items.filter((item) => !hasPrivateTarget(item.meta));
   if (targetItems.length === 0) return 0;
 
   await Promise.all(targetItems.map((item) => item.destroy()));
@@ -575,7 +637,7 @@ export const markUserNotificationRead = async (id: number, userId: number) => {
 
   const item = await Notification.findByPk(safeId);
   if (!item) return false;
-  if (toUserIdFromMeta(item.meta) !== safeUserId) return false;
+  if (!isUserTargeted(item.meta) || toUserIdFromMeta(item.meta) !== safeUserId) return false;
   if (item.isRead) return true;
   await item.update({ isRead: true });
   return true;
@@ -591,7 +653,7 @@ export const markAllUserNotificationsRead = async (userId: number) => {
     order: [["createdAt", "DESC"]],
   });
   const targetItems = unreadItems.filter(
-    (item) => toUserIdFromMeta(item.meta) === safeUserId
+    (item) => isUserTargeted(item.meta) && toUserIdFromMeta(item.meta) === safeUserId
   );
   if (targetItems.length === 0) return 0;
 
@@ -607,7 +669,7 @@ export const deleteUserNotification = async (id: number, userId: number) => {
 
   const item = await Notification.findByPk(safeId);
   if (!item) return false;
-  if (toUserIdFromMeta(item.meta) !== safeUserId) return false;
+  if (!isUserTargeted(item.meta) || toUserIdFromMeta(item.meta) !== safeUserId) return false;
   await item.destroy();
   return true;
 };
@@ -621,10 +683,193 @@ export const clearAllUserNotifications = async (userId: number) => {
     order: [["createdAt", "DESC"]],
   });
   const targetItems = items.filter(
-    (item) => toUserIdFromMeta(item.meta) === safeUserId
+    (item) => isUserTargeted(item.meta) && toUserIdFromMeta(item.meta) === safeUserId
   );
   if (targetItems.length === 0) return 0;
 
   await Promise.all(targetItems.map((item) => item.destroy()));
   return targetItems.length;
+};
+
+export const resolveSellerNotificationRecipientUserIds = async (storeId: number) => {
+  await ensureNotificationStorage();
+  const safeStoreId = toNumber(storeId, 0);
+  if (!safeStoreId) return [] as number[];
+
+  const [store, members] = await Promise.all([
+    Store.findByPk(safeStoreId, {
+      attributes: ["id", "ownerUserId"],
+    }),
+    StoreMember.findAll({
+      where: { storeId: safeStoreId, status: "ACTIVE" } as any,
+      attributes: ["userId"],
+    }),
+  ]);
+
+  const recipientIds = new Set<number>();
+  const ownerUserId = toNumber((store as any)?.ownerUserId ?? (store as any)?.get?.("ownerUserId"), 0);
+  if (ownerUserId > 0) {
+    recipientIds.add(ownerUserId);
+  }
+
+  members.forEach((member: any) => {
+    const userId = toNumber(member?.userId ?? member?.get?.("userId"), 0);
+    if (userId > 0) {
+      recipientIds.add(userId);
+    }
+  });
+
+  return [...recipientIds];
+};
+
+export const createSellerNotification = async (input: SellerNotificationInput) => {
+  const safeUserId = toNumber(input.userId, 0);
+  const safeStoreId = toNumber(input.storeId, 0);
+  if (!safeUserId || !safeStoreId) return null;
+
+  return createNotification({
+    type: String(input.type || "SELLER_NOTIFICATION").trim().toUpperCase(),
+    title: String(input.title || "").trim() || "Seller notification",
+    meta: {
+      audience: "SELLER",
+      userId: safeUserId,
+      storeId: safeStoreId,
+      orderId: input.orderId ? toNumber(input.orderId, 0) || null : null,
+      suborderId: input.suborderId ? toNumber(input.suborderId, 0) || null : null,
+      paymentId: input.paymentId ? toNumber(input.paymentId, 0) || null : null,
+      actionCode: input.actionCode ? String(input.actionCode).trim() : null,
+      route: input.route ? String(input.route).trim() : null,
+      message: input.message ? String(input.message).trim() : null,
+      ...(input.meta ?? {}),
+    },
+  });
+};
+
+export const createSellerNotificationsForStoreRecipients = async (
+  input: Omit<SellerNotificationInput, "userId"> & { userIds?: number[] | null }
+) => {
+  const safeStoreId = toNumber(input.storeId, 0);
+  if (!safeStoreId) return [];
+  const providedUserIds = Array.isArray(input.userIds)
+    ? input.userIds.map((entry) => toNumber(entry, 0)).filter((entry) => entry > 0)
+    : [];
+  const recipientUserIds =
+    providedUserIds.length > 0
+      ? [...new Set(providedUserIds)]
+      : await resolveSellerNotificationRecipientUserIds(safeStoreId);
+
+  if (recipientUserIds.length === 0) return [];
+
+  const created = await Promise.all(
+    recipientUserIds.map((userId) =>
+      createSellerNotification({
+        ...input,
+        userId,
+      })
+    )
+  );
+
+  return created.filter(Boolean);
+};
+
+export const countSellerUnreadNotifications = async (userId: number, storeId: number) => {
+  await ensureNotificationStorage();
+  const safeUserId = toNumber(userId, 0);
+  const safeStoreId = toNumber(storeId, 0);
+  if (!safeUserId || !safeStoreId) return 0;
+
+  return Notification.count({
+    where: buildSellerMetaScopeWhere({
+      userId: safeUserId,
+      storeId: safeStoreId,
+      unreadOnly: true,
+    }),
+  });
+};
+
+export const listSellerNotifications = async (
+  userId: number,
+  storeId: number,
+  limit = 20,
+  offset = 0
+) => {
+  await ensureNotificationStorage();
+  const safeUserId = toNumber(userId, 0);
+  const safeStoreId = toNumber(storeId, 0);
+  const safeLimit = Math.max(1, Math.min(50, Number(limit) || 20));
+  const safeOffset = Math.max(0, Math.floor(Number(offset) || 0));
+  if (!safeUserId || !safeStoreId) {
+    return { unreadCount: 0, items: [] as ReturnType<typeof toNotificationPayload>[] };
+  }
+
+  const [items, unreadCount] = await Promise.all([
+    Notification.findAll({
+      where: buildSellerMetaScopeWhere({
+        userId: safeUserId,
+        storeId: safeStoreId,
+      }),
+      order: [["createdAt", "DESC"]],
+      limit: safeLimit,
+      offset: safeOffset,
+    }),
+    countSellerUnreadNotifications(safeUserId, safeStoreId),
+  ]);
+
+  return {
+    unreadCount,
+    items: items.map(toNotificationPayload),
+  };
+};
+
+export const markSellerNotificationRead = async (
+  id: number,
+  userId: number,
+  storeId: number
+) => {
+  await ensureNotificationStorage();
+  const safeId = toNumber(id, 0);
+  const safeUserId = toNumber(userId, 0);
+  const safeStoreId = toNumber(storeId, 0);
+  if (!safeId || !safeUserId || !safeStoreId) return false;
+
+  const [updatedCount] = await Notification.update(
+    { isRead: true },
+    {
+      where: buildSellerMetaScopeWhere({
+        id: safeId,
+        userId: safeUserId,
+        storeId: safeStoreId,
+        unreadOnly: true,
+      }),
+    }
+  );
+  if (updatedCount > 0) return true;
+
+  const existing = await Notification.count({
+    where: buildSellerMetaScopeWhere({
+      id: safeId,
+      userId: safeUserId,
+      storeId: safeStoreId,
+    }),
+  });
+  return existing > 0;
+};
+
+export const markAllSellerNotificationsRead = async (userId: number, storeId: number) => {
+  await ensureNotificationStorage();
+  const safeUserId = toNumber(userId, 0);
+  const safeStoreId = toNumber(storeId, 0);
+  if (!safeUserId || !safeStoreId) return 0;
+
+  const [updatedCount] = await Notification.update(
+    { isRead: true },
+    {
+      where: buildSellerMetaScopeWhere({
+        userId: safeUserId,
+        storeId: safeStoreId,
+        unreadOnly: true,
+      }),
+    }
+  );
+  return Number(updatedCount || 0);
 };

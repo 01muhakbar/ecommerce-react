@@ -243,7 +243,7 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
       onClose();
       return;
     }
-    navigate("/admin/products", { replace: true });
+    navigate("/admin/catalog/products", { replace: true });
   };
   const handleSubmitSuccess = () => {
     if (typeof onSuccess === "function") onSuccess();
@@ -535,7 +535,7 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div className="space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
-                Admin / Products / {isEdit ? "Edit" : "Add"}
+                Admin / Catalog / Products / {isEdit ? "Edit" : "Add"}
               </p>
               <h1 className="text-3xl font-semibold leading-tight text-slate-900 sm:text-4xl">
                 {isEdit ? "Edit Product" : "Add Product"}
@@ -1016,7 +1016,7 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
                 </button>
               ) : (
                 <Link
-                  to="/admin/products"
+                  to="/admin/catalog/products"
                   className="inline-flex h-12 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-800 transition hover:bg-slate-100"
                 >
                   Cancel

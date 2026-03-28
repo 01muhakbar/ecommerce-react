@@ -1,6 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchAdminSettings, updateAdminSettings } from "../lib/adminApi.js";
+import {
+  fetchAdminSettings,
+  fetchAdminStoreSettings,
+  updateAdminSettings,
+  updateAdminStoreSettings,
+  uploadAdminBrandingLogo,
+} from "../lib/adminApi.js";
+import { resolveAssetUrl } from "../lib/assetUrl.js";
+import {
+  getWorkspaceLogoUrl,
+  hasCustomBrandingLogo,
+} from "../lib/branding.js";
 
 const DEFAULT_SETTINGS = {
   imagesPerProduct: "12",
@@ -21,6 +32,39 @@ const DEFAULT_SETTINGS = {
   contactEmail: "kachabazar@gmail.com",
   website: "kachabazar-admin.vercel.app",
 };
+
+const DEFAULT_BRANDING_SETTINGS = {
+  clientLogoUrl: "",
+  adminLogoUrl: "",
+  sellerLogoUrl: "",
+  workspaceBrandName: "TP PRENEURS",
+};
+
+const BRANDING_MAX_FILE_BYTES = 1024 * 1024;
+const BRANDING_ACCEPT = "image/png,image/jpeg,image/webp";
+const BRANDING_ITEMS = [
+  {
+    key: "client",
+    field: "clientLogoUrl",
+    label: "Client Logo",
+    helper: "Digunakan di storefront.",
+    previewClass: "aspect-[3.4/1] rounded-2xl",
+  },
+  {
+    key: "admin",
+    field: "adminLogoUrl",
+    label: "Admin Logo",
+    helper: "Digunakan di Admin Workspace.",
+    previewClass: "aspect-square rounded-2xl",
+  },
+  {
+    key: "seller",
+    field: "sellerLogoUrl",
+    label: "Seller Logo",
+    helper: "Digunakan di Seller Workspace.",
+    previewClass: "aspect-square rounded-2xl",
+  },
+];
 
 const LANGUAGE_OPTIONS = ["English", "Indonesian", "Arabic", "French"];
 const CURRENCY_OPTIONS = ["IDR", "USD", "EUR", "GBP"];
@@ -108,6 +152,19 @@ const mapSettingsToForm = (settings) => {
   };
 };
 
+const normalizeBrandingSettings = (settings) => {
+  const branding = settings?.storeSettings?.branding || settings?.branding || {};
+  return {
+    clientLogoUrl: toStringValue(branding.clientLogoUrl),
+    adminLogoUrl: toStringValue(branding.adminLogoUrl),
+    sellerLogoUrl: toStringValue(branding.sellerLogoUrl),
+    workspaceBrandName: toStringValue(
+      branding.workspaceBrandName,
+      DEFAULT_BRANDING_SETTINGS.workspaceBrandName
+    ),
+  };
+};
+
 const inputClass =
   "mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100";
 
@@ -170,14 +227,78 @@ function Section({ id, title, children }) {
   );
 }
 
+function BrandingCard({
+  item,
+  logoUrl,
+  isUploading,
+  onFileChange,
+}) {
+  const hasCustomLogo = hasCustomBrandingLogo(logoUrl);
+  const previewSrc =
+    item.key === "client"
+      ? resolveAssetUrl(logoUrl)
+      : getWorkspaceLogoUrl(item.key, logoUrl);
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <div className="flex flex-col gap-4">
+        <div>
+          <p className="text-sm font-semibold text-slate-800">{item.label}</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">{item.helper}</p>
+        </div>
+
+        <div
+          className={`flex items-center justify-center overflow-hidden border border-slate-200 bg-white p-3 ${item.previewClass}`}
+        >
+          {previewSrc ? (
+            <img
+              src={previewSrc}
+              alt={`${item.label} preview`}
+              className="h-full w-full object-contain"
+            />
+          ) : (
+            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Fallback
+            </span>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-xs text-slate-500">
+            {hasCustomLogo ? "Current source: custom upload" : "Current source: fallback"}
+          </p>
+          <label className="inline-flex h-10 cursor-pointer items-center justify-center rounded-lg border border-emerald-200 bg-white px-4 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50">
+            <input
+              type="file"
+              accept={BRANDING_ACCEPT}
+              className="sr-only"
+              disabled={isUploading}
+              onChange={(event) => onFileChange(item, event)}
+            />
+            {isUploading ? "Uploading..." : hasCustomLogo ? "Replace Logo" : "Upload Logo"}
+          </label>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Settings() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState(() => mapSettingsToForm());
   const [feedback, setFeedback] = useState(null);
+  const [brandingFeedback, setBrandingFeedback] = useState(null);
+  const [activeBrandingTarget, setActiveBrandingTarget] = useState("");
+  const [brandingForm, setBrandingForm] = useState(() => DEFAULT_BRANDING_SETTINGS);
 
   const settingsQuery = useQuery({
     queryKey: ["admin-settings"],
     queryFn: fetchAdminSettings,
+  });
+
+  const brandingSettingsQuery = useQuery({
+    queryKey: ["admin-store-settings", "branding"],
+    queryFn: fetchAdminStoreSettings,
   });
 
   useEffect(() => {
@@ -185,6 +306,11 @@ export default function Settings() {
       setForm(mapSettingsToForm(settingsQuery.data));
     }
   }, [settingsQuery.data]);
+
+  useEffect(() => {
+    if (!brandingSettingsQuery.data) return;
+    setBrandingForm(normalizeBrandingSettings(brandingSettingsQuery.data));
+  }, [brandingSettingsQuery.data]);
 
   const mutation = useMutation({
     mutationFn: updateAdminSettings,
@@ -205,7 +331,39 @@ export default function Settings() {
     },
   });
 
+  const brandingUploadMutation = useMutation({
+    mutationFn: ({ target, file }) => uploadAdminBrandingLogo(target, file),
+  });
+
+  const brandingMutation = useMutation({
+    mutationFn: (payload) => updateAdminStoreSettings(payload),
+    onSuccess: (data) => {
+      const nextBranding = normalizeBrandingSettings(data);
+      setBrandingForm(nextBranding);
+      setBrandingFeedback({
+        type: "success",
+        message: "Workspace brand text updated successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["admin-store-settings"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["store-settings", "public"], exact: false });
+      queryClient.invalidateQueries({
+        queryKey: ["store-settings", "public", "branding"],
+        exact: false,
+      });
+    },
+    onError: (error) => {
+      setBrandingFeedback({
+        type: "error",
+        message:
+          error?.response?.data?.message ||
+          error?.message ||
+          "Failed to update workspace brand text.",
+      });
+    },
+  });
+
   const isSaving = mutation.isPending;
+  const isSavingBrandingText = brandingMutation.isPending;
 
   const statusBoxClass = useMemo(() => {
     if (!feedback) return "";
@@ -213,6 +371,18 @@ export default function Settings() {
       ? "rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
       : "rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700";
   }, [feedback]);
+
+  const brandingStatusBoxClass = useMemo(() => {
+    if (!brandingFeedback) return "";
+    return brandingFeedback.type === "success"
+      ? "rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
+      : "rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700";
+  }, [brandingFeedback]);
+
+  const branding = useMemo(
+    () => normalizeBrandingSettings(brandingSettingsQuery.data),
+    [brandingSettingsQuery.data]
+  );
 
   const onInputChange = (key, value) => {
     setForm((prev) => ({
@@ -234,6 +404,71 @@ export default function Settings() {
         form.invoiceEmailEnabled,
         "true"
       ),
+    });
+  };
+
+  const handleBrandingFileChange = async (item, event) => {
+    const input = event.target;
+    const file = input?.files?.[0];
+    input.value = "";
+
+    if (!file) return;
+
+    setBrandingFeedback(null);
+
+    if (!String(file.type || "").startsWith("image/")) {
+      setBrandingFeedback({
+        type: "error",
+        message: `${item.label} must be an image file.`,
+      });
+      return;
+    }
+
+    if (Number(file.size || 0) > BRANDING_MAX_FILE_BYTES) {
+      setBrandingFeedback({
+        type: "error",
+        message: `${item.label} must be 1MB or smaller.`,
+      });
+      return;
+    }
+
+    try {
+      setActiveBrandingTarget(item.key);
+      await brandingUploadMutation.mutateAsync({ target: item.key, file });
+      setBrandingFeedback({
+        type: "success",
+        message: `${item.label} updated successfully.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["admin-store-settings"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["store-settings", "public"], exact: false });
+      queryClient.invalidateQueries({
+        queryKey: ["store-settings", "public", "branding"],
+        exact: false,
+      });
+    } catch (error) {
+      setBrandingFeedback({
+        type: "error",
+        message:
+          error?.response?.data?.message ||
+          error?.message ||
+          `Failed to upload ${item.label.toLowerCase()}.`,
+      });
+    } finally {
+      setActiveBrandingTarget("");
+    }
+  };
+
+  const handleBrandingTextSubmit = (event) => {
+    event.preventDefault();
+    setBrandingFeedback(null);
+    brandingMutation.mutate({
+      storeSettings: {
+        branding: {
+          workspaceBrandName: String(
+            brandingForm.workspaceBrandName || DEFAULT_BRANDING_SETTINGS.workspaceBrandName
+          ).trim(),
+        },
+      },
     });
   };
 
@@ -268,6 +503,27 @@ export default function Settings() {
     );
   }
 
+  if (brandingSettingsQuery.isError) {
+    const message =
+      brandingSettingsQuery.error?.response?.data?.message ||
+      brandingSettingsQuery.error?.message ||
+      "Failed to load branding settings.";
+    return (
+      <div className="mx-auto w-full max-w-[1120px] px-1 sm:px-2">
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
+          <p className="text-sm text-rose-700">{message}</p>
+          <button
+            type="button"
+            onClick={() => brandingSettingsQuery.refetch()}
+            className="mt-4 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto w-full max-w-[1120px] px-1 sm:px-2">
       <form className="space-y-5 pb-2" onSubmit={onSubmit}>
@@ -285,6 +541,70 @@ export default function Settings() {
         </div>
 
         {feedback ? <div className={statusBoxClass}>{feedback.message}</div> : null}
+
+        <Section id="branding-settings" title="Branding Settings">
+          <div className="lg:col-span-2">
+            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
+                <div className="min-w-0 flex-1">
+                  <label className="block">
+                    <span className="text-sm font-semibold text-slate-700">
+                      Workspace Brand Text
+                    </span>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      Teks ini dipakai untuk judul brand di sidebar Admin dan Seller.
+                    </p>
+                    <input
+                      type="text"
+                      value={brandingForm.workspaceBrandName}
+                      onChange={(event) =>
+                        setBrandingForm((prev) => ({
+                          ...prev,
+                          workspaceBrandName: event.target.value,
+                        }))
+                      }
+                      className={inputClass}
+                      placeholder="TP PRENEURS"
+                      maxLength={60}
+                    />
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleBrandingTextSubmit}
+                  disabled={isSavingBrandingText}
+                  className="h-10 min-w-[170px] rounded-lg bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSavingBrandingText ? "Updating..." : "Update Brand Text"}
+                </button>
+              </div>
+            </div>
+            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              Uploads here replace the current branding source immediately for Client, Admin, and
+              Seller shells. Admin and Seller logos render inside a square frame automatically.
+            </div>
+            {brandingFeedback ? (
+              <div className={`${brandingStatusBoxClass} mb-4`}>{brandingFeedback.message}</div>
+            ) : null}
+            {brandingSettingsQuery.isLoading ? (
+              <div className="rounded-xl border border-slate-200 bg-white px-4 py-5 text-sm text-slate-500">
+                Loading branding settings...
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                {BRANDING_ITEMS.map((item) => (
+                  <BrandingCard
+                    key={item.key}
+                    item={item}
+                    logoUrl={branding[item.field]}
+                    isUploading={activeBrandingTarget === item.key}
+                    onFileChange={handleBrandingFileChange}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </Section>
 
         <Section id="general-settings" title="General Settings">
           <Field label="Number of images per product">

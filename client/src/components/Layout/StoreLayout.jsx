@@ -34,6 +34,12 @@ const DEFAULT_PUBLIC_STORE_SETTINGS = {
     tawkPropertyId: "",
     tawkWidgetId: "",
   },
+  branding: {
+    clientLogoUrl: "",
+    adminLogoUrl: "",
+    sellerLogoUrl: "",
+    workspaceBrandName: "TP PRENEURS",
+  },
 };
 
 const isPlainObject = (value) =>
@@ -61,6 +67,7 @@ const normalizePublicStoreSettings = (raw) => {
   const socialLogin = isPlainObject(source.socialLogin) ? source.socialLogin : {};
   const analytics = isPlainObject(source.analytics) ? source.analytics : {};
   const chat = isPlainObject(source.chat) ? source.chat : {};
+  const branding = isPlainObject(source.branding) ? source.branding : {};
 
   return {
     payments: {
@@ -106,6 +113,24 @@ const normalizePublicStoreSettings = (raw) => {
       tawkEnabled: toBool(chat.tawkEnabled, DEFAULT_PUBLIC_STORE_SETTINGS.chat.tawkEnabled),
       tawkPropertyId: toText(chat.tawkPropertyId, ""),
       tawkWidgetId: toText(chat.tawkWidgetId, ""),
+    },
+    branding: {
+      clientLogoUrl: toText(
+        branding.clientLogoUrl,
+        DEFAULT_PUBLIC_STORE_SETTINGS.branding.clientLogoUrl
+      ),
+      adminLogoUrl: toText(
+        branding.adminLogoUrl,
+        DEFAULT_PUBLIC_STORE_SETTINGS.branding.adminLogoUrl
+      ),
+      sellerLogoUrl: toText(
+        branding.sellerLogoUrl,
+        DEFAULT_PUBLIC_STORE_SETTINGS.branding.sellerLogoUrl
+      ),
+      workspaceBrandName: toText(
+        branding.workspaceBrandName,
+        DEFAULT_PUBLIC_STORE_SETTINGS.branding.workspaceBrandName
+      ),
     },
   };
 };
@@ -247,7 +272,10 @@ gtag('config', '${key}');`;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <StoreHeaderKacha onCartClick={openCartDrawer} />
+      <StoreHeaderKacha
+        onCartClick={openCartDrawer}
+        brandingLogoUrl={storeSettings.branding.clientLogoUrl}
+      />
       <main className="mx-auto w-full max-w-7xl px-4 py-8 pb-24 sm:pb-8">
         <Outlet context={{ storeSettings }} />
       </main>

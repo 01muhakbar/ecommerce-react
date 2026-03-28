@@ -18,6 +18,7 @@ import {
 import { GENERIC_ERROR, UPDATING } from "../../constants/uiMessages.js";
 import {
   ADMIN_ORDER_ACTION_OPTIONS,
+  getAdminOrderTransitionErrorMeta,
   getAdminOrderLifecycleNote,
   normalizeAdminOrderLifecycle,
   toAdminOrderActionValue,
@@ -149,8 +150,9 @@ export default function Orders() {
       setPendingUpdateId(null);
     },
     onError: (error) => {
+      const errorMeta = getAdminOrderTransitionErrorMeta(error);
       setRowError(
-        error?.response?.data?.message ?? error?.message ?? "Failed to update status."
+        [errorMeta.title, errorMeta.message, errorMeta.detail].filter(Boolean).join(". ")
       );
     },
   });

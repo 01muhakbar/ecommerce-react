@@ -34,6 +34,12 @@ const DEFAULT_STORE_SETTINGS = {
     tawkPropertyId: "",
     tawkWidgetId: "",
   },
+  branding: {
+    clientLogoUrl: "",
+    adminLogoUrl: "",
+    sellerLogoUrl: "",
+    workspaceBrandName: "TP PRENEURS",
+  },
 };
 
 type SettingsRow = {
@@ -69,6 +75,7 @@ const sanitizeStoreSettings = (rawData: unknown) => {
   const socialLoginSource = isPlainObject(source.socialLogin) ? source.socialLogin : {};
   const analyticsSource = isPlainObject(source.analytics) ? source.analytics : {};
   const chatSource = isPlainObject(source.chat) ? source.chat : {};
+  const brandingSource = isPlainObject(source.branding) ? source.branding : {};
 
   return {
     ...defaults,
@@ -126,6 +133,17 @@ const sanitizeStoreSettings = (rawData: unknown) => {
       tawkPropertyId: toText(chatSource.tawkPropertyId, ""),
       tawkWidgetId: toText(chatSource.tawkWidgetId, ""),
     },
+    branding: {
+      ...defaults.branding,
+      ...brandingSource,
+      clientLogoUrl: toText(brandingSource.clientLogoUrl, defaults.branding.clientLogoUrl),
+      adminLogoUrl: toText(brandingSource.adminLogoUrl, defaults.branding.adminLogoUrl),
+      sellerLogoUrl: toText(brandingSource.sellerLogoUrl, defaults.branding.sellerLogoUrl),
+      workspaceBrandName: toText(
+        brandingSource.workspaceBrandName,
+        defaults.branding.workspaceBrandName
+      ),
+    },
   };
 };
 
@@ -152,6 +170,12 @@ const toSafePublicStoreSettings = (settings: ReturnType<typeof sanitizeStoreSett
     tawkEnabled: Boolean(settings.chat.tawkEnabled),
     tawkPropertyId: toText(settings.chat.tawkPropertyId, ""),
     tawkWidgetId: toText(settings.chat.tawkWidgetId, ""),
+  },
+  branding: {
+    clientLogoUrl: toText(settings.branding.clientLogoUrl, ""),
+    adminLogoUrl: toText(settings.branding.adminLogoUrl, ""),
+    sellerLogoUrl: toText(settings.branding.sellerLogoUrl, ""),
+    workspaceBrandName: toText(settings.branding.workspaceBrandName, "TP PRENEURS"),
   },
 });
 

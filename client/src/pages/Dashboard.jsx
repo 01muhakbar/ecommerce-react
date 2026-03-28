@@ -322,57 +322,9 @@ export default function Dashboard() {
       };
     });
   }, [recentOrders, formatDateTime, formatMoney]);
-  const headerSnapshot = useMemo(
-    () => [
-      {
-        label: "Recent orders",
-        value: recentOrders.length,
-        tone: "slate",
-      },
-      {
-        label: "Pending amount",
-        value: pendingAmountValue != null ? formatMoney(pendingAmountValue) : "Clear",
-        tone: "emerald",
-      },
-      {
-        label: "Overview access",
-        value: limitedAccess ? "Limited" : "Full",
-        tone: limitedAccess ? "amber" : "blue",
-      },
-    ],
-    [recentOrders.length, pendingAmountValue, limitedAccess, formatMoney]
-  );
-
   return (
     <div className="dashboard">
       <Toaster position="top-right" />
-      <div className="dashboard__hero">
-        <div className="dashboard__hero-main">
-          <div className="dashboard__eyebrow">Admin overview</div>
-          <div className="dashboard__header">
-            <div>
-              <h1>Dashboard Overview</h1>
-              <p className="dashboard__subtext">
-                Monitor sales, order movement, and quick operational health from one place.
-              </p>
-            </div>
-            {limitedAccess && (
-              <span className="dashboard__flag">Limited access</span>
-            )}
-          </div>
-        </div>
-        <div className="dashboard__hero-metrics">
-          {headerSnapshot.map((item) => (
-            <div
-              key={item.label}
-              className={`dashboard__hero-card dashboard__hero-card--${item.tone}`}
-            >
-              <div className="dashboard__hero-label">{item.label}</div>
-              <div className="dashboard__hero-value">{item.value}</div>
-            </div>
-          ))}
-        </div>
-      </div>
       <KPIOverviewCards
         items={isLoadingSummary || summaryError ? statCards : kpiItems}
         labelMap={statLabelMap}

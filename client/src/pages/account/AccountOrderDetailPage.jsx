@@ -33,17 +33,56 @@ const formatDate = (value) => {
   return date.toLocaleString();
 };
 
+const normalizePaymentStatus = (value) => String(value || "").trim().toUpperCase();
+
+const isOrderFinal = (status = "") => {
+  const value = String(status || "").trim().toLowerCase();
+  return ["delivered", "complete", "completed", "cancelled", "canceled"].includes(value);
+};
+
+const isGroupOperationallyFinal = (group) => {
+  const fulfillmentStatus = String(group?.fulfillmentStatus || "")
+    .trim()
+    .toUpperCase();
+  const paymentStatus = normalizePaymentStatus(
+    group?.payment?.displayStatus || group?.payment?.status || group?.paymentStatus
+  );
+
+  const paymentFinal = ["PAID", "FAILED", "EXPIRED", "CANCELLED"].includes(paymentStatus);
+  const fulfillmentFinal = ["DELIVERED", "CANCELLED"].includes(fulfillmentStatus);
+  return paymentFinal && fulfillmentFinal;
+};
+
+const shouldPollGroupedOrder = (groupedOrder) => {
+  if (!groupedOrder || typeof groupedOrder !== "object") return false;
+  if (!isOrderFinal(groupedOrder.orderStatus)) return true;
+  const groups = Array.isArray(groupedOrder.groups) ? groupedOrder.groups : [];
+  return groups.some((group) => !isGroupOperationallyFinal(group));
+};
+
 export default function AccountOrderDetailPage() {
   const { id } = useParams();
   const { data, isLoading, isError } = useQuery({
     queryKey: ["account", "orders", id],
     queryFn: () => fetchOrder(id),
     enabled: Boolean(id),
+    refetchOnWindowFocus: true,
+    refetchIntervalInBackground: false,
+    refetchInterval: (query) => {
+      const order = query.state.data?.data ?? query.state.data?.data?.data ?? null;
+      return !isOrderFinal(order?.status) ? 15000 : false;
+    },
   });
   const groupedQuery = useQuery({
     queryKey: ["account", "orders", "grouped", id],
     queryFn: () => fetchOrderCheckoutPayment(id),
     enabled: Boolean(id),
+    refetchOnWindowFocus: true,
+    refetchIntervalInBackground: false,
+    refetchInterval: (query) => {
+      const groupedOrder = query.state.data?.data ?? null;
+      return shouldPollGroupedOrder(groupedOrder) ? 15000 : false;
+    },
   });
 
   if (!id) {

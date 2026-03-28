@@ -19,6 +19,7 @@ import {
 } from "../models/index.js";
 import {
   createNewOrderNotification,
+  createSellerNotificationsForStoreRecipients,
   createUserOrderPlacedNotification,
 } from "../services/notification.service.js";
 import {
@@ -1277,6 +1278,14 @@ router.post("/create-multi-store", async (req, res) => {
         }))
       );
       await OrderItem.bulkCreate(flatOrderItems as any, { transaction: tx });
+      const createdSellerSuborders: Array<{
+        storeId: number;
+        storeName: string;
+        storeSlug: string | null;
+        suborderId: number;
+        suborderNumber: string;
+        totalAmount: number;
+      }> = [];
 
       for (let index = 0; index < prepared.groups.length; index += 1) {
         const group = prepared.groups[index];
@@ -1295,7 +1304,7 @@ router.post("/create-multi-store", async (req, res) => {
         );
         const totalGroupDiscount = orderLevelGroupDiscount + scopedGroupDiscount;
         const discountedGroupTotal = Math.max(0, group.totalAmount - totalGroupDiscount);
-        await Suborder.create(
+        const suborder = await Suborder.create(
           {
             orderId: parentOrder.id,
             suborderNumber,
@@ -1315,49 +1324,58 @@ router.post("/create-multi-store", async (req, res) => {
             paidAt: null,
           } as any,
           { transaction: tx }
-        ).then(async (suborder) => {
-          await SuborderItem.bulkCreate(
-            group.items.map((item: any) => ({
-              suborderId: suborder.id,
-              productId: item.productId,
-              storeId: group.storeId,
-              productNameSnapshot: item.productName,
-              skuSnapshot: item.sku,
-              priceSnapshot: item.price,
-              qty: item.qty,
-              totalPrice: item.lineTotal,
-            })) as any,
-            { transaction: tx }
-          );
+        );
 
-          const payment = await Payment.create(
-            {
-              suborderId: suborder.id,
-              storeId: group.storeId,
-              storePaymentProfileId: paymentProfile?.id ? Number(paymentProfile.id) : null,
-              paymentChannel: "QRIS",
-              paymentType: "QRIS_STATIC",
-              internalReference: buildInternalPaymentReference(suborderNumber),
-              amount: discountedGroupTotal,
-              qrImageUrl: String(paymentProfile?.qrisImageUrl || ""),
-              qrPayload: paymentProfile?.qrisPayload ? String(paymentProfile.qrisPayload) : null,
-              status: "CREATED",
-              expiresAt: buildPaymentExpiry(),
-              paidAt: null,
-            } as any,
-            { transaction: tx }
-          );
-          await appendPaymentStatusLog(
-            {
-              paymentId: Number(payment.id),
-              oldStatus: null,
-              newStatus: "CREATED",
-              actorType: "SYSTEM",
-              actorId: null,
-              note: "Payment record created during multi-store checkout.",
-            },
-            tx
-          );
+        await SuborderItem.bulkCreate(
+          group.items.map((item: any) => ({
+            suborderId: suborder.id,
+            productId: item.productId,
+            storeId: group.storeId,
+            productNameSnapshot: item.productName,
+            skuSnapshot: item.sku,
+            priceSnapshot: item.price,
+            qty: item.qty,
+            totalPrice: item.lineTotal,
+          })) as any,
+          { transaction: tx }
+        );
+
+        const payment = await Payment.create(
+          {
+            suborderId: suborder.id,
+            storeId: group.storeId,
+            storePaymentProfileId: paymentProfile?.id ? Number(paymentProfile.id) : null,
+            paymentChannel: "QRIS",
+            paymentType: "QRIS_STATIC",
+            internalReference: buildInternalPaymentReference(suborderNumber),
+            amount: discountedGroupTotal,
+            qrImageUrl: String(paymentProfile?.qrisImageUrl || ""),
+            qrPayload: paymentProfile?.qrisPayload ? String(paymentProfile.qrisPayload) : null,
+            status: "CREATED",
+            expiresAt: buildPaymentExpiry(),
+            paidAt: null,
+          } as any,
+          { transaction: tx }
+        );
+        await appendPaymentStatusLog(
+          {
+            paymentId: Number(payment.id),
+            oldStatus: null,
+            newStatus: "CREATED",
+            actorType: "SYSTEM",
+            actorId: null,
+            note: "Payment record created during multi-store checkout.",
+          },
+          tx
+        );
+
+        createdSellerSuborders.push({
+          storeId: Number(group.storeId || 0),
+          storeName: String(group.storeName || `Store #${group.storeId}`),
+          storeSlug: group.storeSlug ? String(group.storeSlug) : null,
+          suborderId: Number((suborder as any).id || 0),
+          suborderNumber,
+          totalAmount: discountedGroupTotal,
         });
       }
 
@@ -1394,6 +1412,26 @@ router.post("/create-multi-store", async (req, res) => {
             orderId: Number(parentOrder.id || 0),
             invoiceNo,
           }),
+          ...createdSellerSuborders.map((suborder) =>
+            createSellerNotificationsForStoreRecipients({
+              storeId: suborder.storeId,
+              type: "SELLER_SUBORDER_CREATED",
+              title: `New suborder ${suborder.suborderNumber} is ready for seller review`,
+              actionCode: "SELLER_SUBORDER_CREATED",
+              orderId: Number(parentOrder.id || 0),
+              suborderId: suborder.suborderId,
+              route:
+                suborder.storeSlug && suborder.suborderId
+                  ? `/seller/stores/${encodeURIComponent(suborder.storeSlug)}/orders/${suborder.suborderId}`
+                  : null,
+              message: `${suborder.storeName} received a new suborder from checkout ${invoiceNo}.`,
+              meta: {
+                invoiceNo,
+                amount: suborder.totalAmount,
+                suborderNumber: suborder.suborderNumber,
+              },
+            })
+          ),
         ]);
       } catch (notifyError) {
         console.warn("[checkout/create-multi-store] failed to create notification", notifyError);

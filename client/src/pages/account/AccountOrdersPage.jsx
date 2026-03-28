@@ -33,6 +33,18 @@ const getOrderDateValue = (order) =>
 
 const getOrderRef = (order) => order?.invoiceNo || order?.orderId || order?.id || null;
 
+const isOrderFinal = (status) => {
+  const normalized = normalizeOrderStatus(status);
+  return normalized === "complete" || normalized === "cancelled";
+};
+
+const shouldPollAccountOrders = (orders) =>
+  Array.isArray(orders) &&
+  orders.some((order) => {
+    if (!isOrderFinal(order?.status)) return true;
+    return Boolean(order?.paymentEntry?.visible);
+  });
+
 const toText = (value, fallback) => {
   const normalized = String(value ?? "").trim();
   return normalized || fallback;
@@ -60,6 +72,17 @@ export default function AccountOrdersPage() {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["account", "orders", "my", page],
     queryFn: () => fetchOrders(page),
+    refetchOnWindowFocus: true,
+    refetchIntervalInBackground: false,
+    refetchInterval: (query) => {
+      const response = query.state.data;
+      const rows = Array.isArray(response?.data)
+        ? response.data
+        : Array.isArray(response)
+          ? response
+          : [];
+      return shouldPollAccountOrders(rows) ? 15000 : false;
+    },
   });
 
   const response = data ?? {};
