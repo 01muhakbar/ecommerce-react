@@ -8,6 +8,7 @@ import { StoreMember } from "./StoreMember.js";
 import { StoreAuditLog } from "./StoreAuditLog.js";
 import { StorePaymentProfile } from "./StorePaymentProfile.js";
 import { StorePaymentProfileRequest } from "./StorePaymentProfileRequest.js";
+import { StoreApplication } from "./StoreApplication.js";
 import { Product } from "./Product.js";
 import { Category } from "./Category.js";
 import { ProductCategory } from "./ProductCategory.js";
@@ -103,6 +104,7 @@ function initModels() {
   StoreAuditLog.initModel(sequelize);
   StorePaymentProfile.initModel(sequelize);
   StorePaymentProfileRequest.initModel(sequelize);
+  StoreApplication.initModel(sequelize);
   Product.initModel(sequelize);
   Category.initModel(sequelize);
   ProductCategory.initModel(sequelize);
@@ -131,6 +133,7 @@ function initModels() {
     StoreAuditLog,
     StorePaymentProfile,
     StorePaymentProfileRequest,
+    StoreApplication,
     Product,
     Category,
     ProductCategory,
@@ -431,6 +434,7 @@ export {
   StoreAuditLog,
   StorePaymentProfile,
   StorePaymentProfileRequest,
+  StoreApplication,
   Product,
   Category,
   ProductCategory,

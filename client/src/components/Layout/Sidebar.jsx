@@ -199,6 +199,11 @@ const MENU = [
         to: "/admin/store/payment-profiles",
         perm: "SETTINGS_MANAGE",
       },
+      {
+        label: "Store Applications",
+        to: "/admin/store/applications",
+        perm: "STORE_APPLICATIONS_REVIEW",
+      },
     ],
   },
 ];

@@ -106,6 +106,22 @@ const normalizeStoreProfile = (payload: any) => {
       managedBy: textOrFallback(payload?.governance?.managedBy, "SELLER_WORKSPACE"),
       note: textOrNull(payload?.governance?.note),
     },
+    operationalReadiness: payload?.operationalReadiness
+      ? {
+          code: textOrFallback(payload.operationalReadiness.code, "UNKNOWN"),
+          label: textOrFallback(payload.operationalReadiness.label, "Unavailable"),
+          tone: textOrFallback(payload.operationalReadiness.tone, "stone"),
+          description: textOrNull(payload.operationalReadiness.description),
+          isReady: Boolean(payload.operationalReadiness.isReady),
+          blockedBy: textOrNull(payload.operationalReadiness.blockedBy),
+          storeStatusCode: textOrNull(payload.operationalReadiness.storeStatusCode),
+          paymentProfileCode: textOrNull(payload.operationalReadiness.paymentProfileCode),
+        }
+      : null,
+    boundaries: {
+      readinessSourceOfTruth: textOrNull(payload?.boundaries?.readinessSourceOfTruth),
+      storefrontBoundary: textOrNull(payload?.boundaries?.storefrontBoundary),
+    },
     contract: {
       notes: toStringList(payload?.contract?.notes),
       categories: {

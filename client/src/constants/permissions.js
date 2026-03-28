@@ -36,6 +36,7 @@ export const can = (user, perm) => {
     case "PRODUCTS_CREATE":
     case "PRODUCTS_UPDATE":
     case "PRODUCTS_DELETE":
+    case "STORE_APPLICATIONS_REVIEW":
     case "CATEGORIES_CRUD":
     case "COUPONS_CRUD":
     case "ATTRIBUTES_CRUD":

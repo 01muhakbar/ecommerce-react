@@ -64,9 +64,12 @@ import AccountChangePasswordPage from "./pages/account/AccountChangePasswordPage
 import AccountShippingAddressPage from "./pages/account/AccountShippingAddressPage.jsx";
 import AccountStoreInvitationsPage from "./pages/account/AccountStoreInvitationsPage.jsx";
 import AccountLegacySellerRoutePage from "./pages/account/AccountLegacySellerRoutePage.jsx";
+import AccountStoreApplicationPage from "./pages/account/AccountStoreApplicationPage.jsx";
 import AdminStorePaymentPage from "./pages/admin/AdminStorePaymentPage.jsx";
 import AdminStorePaymentReviewPage from "./pages/admin/AdminStorePaymentReviewPage.jsx";
 import AdminStoreProfilePage from "./pages/admin/AdminStoreProfilePage.jsx";
+import AdminStoreApplicationsPage from "./pages/admin/AdminStoreApplicationsPage.jsx";
+import AdminStoreApplicationDetailPage from "./pages/admin/AdminStoreApplicationDetailPage.jsx";
 import SellerLayout from "./layouts/SellerLayout.jsx";
 import SellerOrderDetailPage from "./pages/seller/SellerOrderDetailPage.jsx";
 import SellerOrdersPage from "./pages/seller/SellerOrdersPage.jsx";
@@ -167,6 +170,7 @@ export default function App() {
                   element={<AccountLegacySellerRoutePage lane="paymentReview" />}
                 />
                 <Route path="store-invitations" element={<AccountStoreInvitationsPage />} />
+                <Route path="store-application" element={<AccountStoreApplicationPage />} />
                 <Route path="update-profile" element={<AccountProfilePage />} />
                 <Route path="change-password" element={<AccountChangePasswordPage />} />
               </Route>
@@ -439,6 +443,22 @@ export default function App() {
                 element={
                   <RequirePerm perm="SETTINGS_MANAGE">
                     <AdminStorePaymentProfilesPage />
+                  </RequirePerm>
+                }
+              />
+              <Route
+                path="store/applications"
+                element={
+                  <RequirePerm perm="STORE_APPLICATIONS_REVIEW">
+                    <AdminStoreApplicationsPage />
+                  </RequirePerm>
+                }
+              />
+              <Route
+                path="store/applications/:applicationId"
+                element={
+                  <RequirePerm perm="STORE_APPLICATIONS_REVIEW">
+                    <AdminStoreApplicationDetailPage />
                   </RequirePerm>
                 }
               />

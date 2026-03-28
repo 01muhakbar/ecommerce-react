@@ -1528,7 +1528,7 @@ router.post(
           transaction,
         });
       });
-      return res.status(201).json({ data: created });
+      return res.status(201).json({ data: toAdminProductDetail(created) });
     } catch (err) {
       if ((err as any)?.status === 400) {
         return res.status(400).json({ message: (err as any).message });
@@ -1625,7 +1625,7 @@ router.patch(
           transaction,
         });
       });
-      return res.json({ data: updated });
+      return res.json({ data: toAdminProductDetail(updated) });
     } catch (err) {
       if ((err as any)?.status === 400) {
         return res.status(400).json({ message: (err as any).message });
@@ -1679,7 +1679,7 @@ router.patch(
         });
       });
 
-      return res.json({ data: updated });
+      return res.json({ data: toAdminProductDetail(updated) });
     } catch (err) {
       if ((err as any)?.name === "ZodError") {
         return res.status(400).json({ message: (err as any).issues?.[0]?.message || "Invalid payload" });

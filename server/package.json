@@ -28,7 +28,10 @@
     "smoke:orders": "node scripts/smoke-orders-admin.mjs",
     "smoke:product-visibility": "tsx src/scripts/smokeProductVisibility.ts",
     "smoke:order-payment": "tsx src/scripts/smokeOrderPayment.ts",
-    "smoke:store-readiness": "tsx src/scripts/smokeStoreReadiness.ts"
+    "smoke:store-readiness": "tsx src/scripts/smokeStoreReadiness.ts",
+    "smoke:store-application": "tsx src/scripts/smokeStoreApplication.ts",
+    "smoke:store-application-activation": "tsx src/scripts/smokeStoreOnboardingActivation.ts",
+    "smoke:admin-store-application": "tsx src/scripts/smokeAdminStoreApplications.ts"
   },
   "dependencies": {
     "@ecommerce/schemas": "workspace:*",

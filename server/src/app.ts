@@ -27,6 +27,7 @@ import sellerStoreProfileRouter from "./routes/seller.storeProfile.js";
 import sellerTeamRouter from "./routes/seller.team.js";
 import sellerWorkspaceRouter from "./routes/seller.workspace.js";
 import sellerCouponsRouter from "./routes/seller.coupons.js";
+import userStoreApplicationsRouter from "./routes/user.storeApplications.js";
 import catalogRouter from "./routes/admin.catalog.js";
 import statsRouter from "./routes/admin.stats.js";
 import analyticsRouter from "./routes/admin.analytics.js";
@@ -48,6 +49,7 @@ import adminStoreProfilesRouter from "./routes/admin.storeProfiles.js";
 import adminStoreSettingsRouter from "./routes/admin.storeSettings.js";
 import adminNotificationsRouter from "./routes/admin.notifications.js";
 import adminStorePaymentProfilesRouter from "./routes/admin.storePaymentProfiles.js";
+import adminStoreApplicationsRouter from "./routes/admin.storeApplications.js";
 import adminPaymentsAuditRouter from "./routes/admin.payments.audit.js";
 import storeRouter from "./routes/store.js";
 import storesRouter from "./routes/stores.js";
@@ -99,6 +101,7 @@ app.use("/api/stores", storesRouter);
 app.use("/api/store/coupons", storeCouponsRouter);
 app.use("/api/store/customization", storeCustomizationRouter);
 app.use("/api/store/settings", storeSettingsRouter);
+app.use("/api/user", userStoreApplicationsRouter);
 
 // serve uploaded files from all known locations (priority: runtime uploads first)
 const uploadsCandidates = [
@@ -139,6 +142,7 @@ app.use(
 app.use("/api/admin", requireAdmin, adminStoreProfilesRouter);
 app.use("/api/admin/store/settings", requireAdmin, adminStoreSettingsRouter);
 app.use("/api/admin/stores", requireAdmin, adminStorePaymentProfilesRouter);
+app.use("/api/admin", requireAdmin, adminStoreApplicationsRouter);
 app.use("/api/admin", requireAdmin, adminAttributeValuesRouter);
 app.use("/api/admin", requireAdmin, adminProductAttributesRouter);
 

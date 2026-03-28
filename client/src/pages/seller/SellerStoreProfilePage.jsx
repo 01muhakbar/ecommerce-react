@@ -6,7 +6,6 @@ import {
   getSellerStoreProfile,
   updateSellerStoreProfile,
 } from "../../api/sellerStoreProfile.ts";
-import { getSellerFinanceSummary } from "../../api/sellerWorkspace.ts";
 import {
   sellerDisabledFieldClass,
   sellerFieldClass,
@@ -89,89 +88,6 @@ const buildLocationLabel = (profile) =>
     .filter(Boolean)
     .join(", ");
 
-const deriveOperationalReadiness = (storeStatus, paymentProfileReadiness) => {
-  const storeCode = String(storeStatus || "ACTIVE").trim().toUpperCase();
-  const paymentCode = String(paymentProfileReadiness?.code || "NOT_CONFIGURED")
-    .trim()
-    .toUpperCase();
-
-  if (storeCode !== "ACTIVE") {
-    return {
-      code: "STORE_INACTIVE",
-      label: "Store inactive",
-      tone: "stone",
-      isReady: false,
-      description:
-        "Store status is inactive, so this lane should not be treated as publicly live.",
-    };
-  }
-
-  if (!paymentProfileReadiness?.visible) {
-    return {
-      code: "READINESS_HIDDEN",
-      label: "Operational gate hidden",
-      tone: "stone",
-      isReady: false,
-      description:
-        "This seller role cannot verify payment readiness from the store profile lane, so avoid treating the store as live from this view.",
-    };
-  }
-
-  if (paymentProfileReadiness?.isReady || paymentCode === "READY") {
-    return {
-      code: "READY",
-      label: "Operational",
-      tone: "emerald",
-      isReady: true,
-      description:
-        "Store status is active and payment setup is ready, so the store can be treated as operational.",
-    };
-  }
-
-  if (paymentCode === "REJECTED") {
-    return {
-      code: "PAYMENT_REJECTED",
-      label: "Payment setup rejected",
-      tone: "rose",
-      isReady: false,
-      description:
-        "This store is not operational yet because payment setup was rejected and still needs seller follow-up.",
-    };
-  }
-
-  if (paymentCode === "INACTIVE") {
-    return {
-      code: "PAYMENT_INACTIVE",
-      label: "Payment setup inactive",
-      tone: "stone",
-      isReady: false,
-      description:
-        "This store is not operational yet because payment setup exists but is not active for buyer operations.",
-    };
-  }
-
-  if (paymentCode === "INCOMPLETE" || paymentCode === "NOT_CONFIGURED") {
-    return {
-      code: paymentCode === "NOT_CONFIGURED" ? "PAYMENT_NOT_CONFIGURED" : "PAYMENT_INCOMPLETE",
-      label:
-        paymentCode === "NOT_CONFIGURED" ? "Payment setup missing" : "Payment setup incomplete",
-      tone: "amber",
-      isReady: false,
-      description:
-        "This store is not operational yet because payment setup still blocks readiness.",
-    };
-  }
-
-  return {
-    code: "PAYMENT_PENDING_REVIEW",
-    label: "Payment review pending",
-    tone: "amber",
-    isReady: false,
-    description:
-      "This store is not operational yet because payment setup still waits for admin approval.",
-  };
-};
-
 function InputField({ label, hint, multiline = false, disabled = false, ...props }) {
   const inputClasses = multiline ? sellerTextareaClass : sellerFieldClass;
   return (
@@ -214,12 +130,6 @@ export default function SellerStoreProfilePage() {
   const profileQuery = useQuery({
     queryKey: ["seller", "store-profile", storeId],
     queryFn: () => getSellerStoreProfile(storeId),
-    enabled: Boolean(storeId) && canView,
-    retry: false,
-  });
-  const financeSummaryQuery = useQuery({
-    queryKey: ["seller", "workspace", "finance-summary", storeId, "store-profile"],
-    queryFn: () => getSellerFinanceSummary(storeId),
     enabled: Boolean(storeId) && canView,
     retry: false,
   });
@@ -345,10 +255,17 @@ export default function SellerStoreProfilePage() {
   };
 
   const profile = profileQuery.data;
-  const paymentProfileReadiness = financeSummaryQuery.data?.paymentProfileReadiness || null;
   const operationalReadiness = useMemo(
-    () => deriveOperationalReadiness(profile?.status, paymentProfileReadiness),
-    [paymentProfileReadiness, profile?.status]
+    () =>
+      profile?.operationalReadiness || {
+        code: "UNKNOWN",
+        label: "Unavailable",
+        tone: "stone",
+        isReady: false,
+        description:
+          "Operational readiness is unavailable right now. Use the backend workspace readiness lane as the source of truth.",
+      },
+    [profile?.operationalReadiness]
   );
   const completeness = profile?.completeness || {
     label: "Profile needs attention",

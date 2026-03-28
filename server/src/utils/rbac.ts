@@ -25,9 +25,13 @@ export function hasRole(userRole: unknown, requiredRole: Role) {
 export function requireMinRole(minRole: Role) {
   return (req: Request, res: Response, next: NextFunction) => {
     requireAuth(req, res, () => {
+      const rawRole = String((req as any).user?.role || "").toLowerCase().trim();
       const role = getRole(req);
-      if (!role) {
+      if (!rawRole) {
         return res.status(401).json({ message: "Unauthorized" });
+      }
+      if (!role) {
+        return res.status(403).json({ message: "Forbidden" });
       }
       if (!hasRole(role, minRole)) {
         return res.status(403).json({ message: "Forbidden" });

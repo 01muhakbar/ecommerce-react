@@ -8,8 +8,26 @@ import {
   sellerStoreProfilePatchSchema,
   serializeStoreProfileSnapshot,
 } from "../services/sharedContracts/storeProfileGovernance.js";
+import { buildPublicStoreOperationalReadiness } from "../services/sharedContracts/publicStoreIdentity.js";
+import { STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES } from "../services/sharedContracts/storePaymentProfileCompat.js";
 
 const router = Router();
+
+const serializeSellerStoreProfilePayload = (store: any, sellerAccess: any) => ({
+  ...serializeStoreProfileSnapshot(store, {
+    actor: "seller",
+    canEdit: Array.isArray(sellerAccess?.permissionKeys)
+      ? sellerAccess.permissionKeys.includes("STORE_EDIT")
+      : false,
+  }),
+  operationalReadiness: buildPublicStoreOperationalReadiness(store),
+  boundaries: {
+    readinessSourceOfTruth:
+      "Operational readiness is derived by the backend from store status and active payment profile readiness.",
+    storefrontBoundary:
+      "Public store and visit-store CTAs stay gated until operational readiness is READY.",
+  },
+});
 
 const getSellerStoreProfileResponse = async (req: any, res: any) => {
   try {
@@ -17,6 +35,18 @@ const getSellerStoreProfileResponse = async (req: any, res: any) => {
     const sellerAccess = req.sellerAccess;
     const store = await Store.findByPk(storeId, {
       attributes: [...STORE_PROFILE_ATTRIBUTES],
+      include: [
+        {
+          association: "paymentProfile",
+          attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+          required: false,
+        },
+        {
+          association: "activePaymentProfile",
+          attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+          required: false,
+        },
+      ],
     });
 
     if (!store) {
@@ -28,12 +58,7 @@ const getSellerStoreProfileResponse = async (req: any, res: any) => {
 
     return res.json({
       success: true,
-      data: serializeStoreProfileSnapshot(store, {
-        actor: "seller",
-        canEdit: Array.isArray(sellerAccess?.permissionKeys)
-          ? sellerAccess.permissionKeys.includes("STORE_EDIT")
-          : false,
-      }),
+      data: serializeSellerStoreProfilePayload(store, sellerAccess),
     });
   } catch (error) {
     console.error("[seller/store-profile:get] error", error);
@@ -91,6 +116,18 @@ const patchSellerStoreProfileResponse = async (req: any, res: any) => {
 
     const store = await Store.findByPk(storeId, {
       attributes: [...STORE_PROFILE_ATTRIBUTES],
+      include: [
+        {
+          association: "paymentProfile",
+          attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+          required: false,
+        },
+        {
+          association: "activePaymentProfile",
+          attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+          required: false,
+        },
+      ],
     });
 
     if (!store) {
@@ -104,12 +141,7 @@ const patchSellerStoreProfileResponse = async (req: any, res: any) => {
 
     return res.json({
       success: true,
-      data: serializeStoreProfileSnapshot(store, {
-        actor: "seller",
-        canEdit: Array.isArray(sellerAccess?.permissionKeys)
-          ? sellerAccess.permissionKeys.includes("STORE_EDIT")
-          : true,
-      }),
+      data: serializeSellerStoreProfilePayload(store, sellerAccess),
     });
   } catch (error) {
     console.error("[seller/store-profile:patch] error", error);
