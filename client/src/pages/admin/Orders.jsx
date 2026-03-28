@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchAdminOrders, updateAdminOrderStatus } from "../../lib/adminApi.js";
-import { toUIStatus } from "../../constants/orderStatus.js";
 import { prevData } from "../../lib/rq.ts";
 import useAdminLocale from "../../hooks/useAdminLocale.js";
 import OrderStatusBadge from "../../components/admin/OrderStatusBadge.jsx";
@@ -17,6 +16,12 @@ import {
   UiUpdatingBadge,
 } from "../../components/primitives/state/index.js";
 import { GENERIC_ERROR, UPDATING } from "../../constants/uiMessages.js";
+import {
+  ADMIN_ORDER_ACTION_OPTIONS,
+  getAdminOrderLifecycleNote,
+  normalizeAdminOrderLifecycle,
+  toAdminOrderActionValue,
+} from "./orderLifecyclePresentation.js";
 
 const headerBtnBase =
   "inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 text-[11px] font-medium transition";
@@ -49,16 +54,6 @@ const getCustomerName = (order) =>
 
 const getCustomerHint = (order) => toText(order?.customer?.email || order?.ref) || "";
 
-const getStatusNote = (status) => {
-  const value = toUIStatus(status || "pending");
-  if (value === "pending") return "Needs review";
-  if (value === "processing") return "Being prepared";
-  if (value === "shipping") return "In delivery";
-  if (value === "delivered" || value === "complete") return "Completed";
-  if (value === "cancel" || value === "cancelled") return "Stopped";
-  return "Awaiting action";
-};
-
 const methodLabelMap = {
   cash: "Cash",
   card: "Card",
@@ -87,25 +82,10 @@ const STATUS_FILTER_OPTIONS = [
   { value: "", label: "All Status" },
   { value: "pending", label: "Pending" },
   { value: "processing", label: "Processing" },
-  { value: "shipping", label: "Shipping" },
+  { value: "shipping", label: "In Delivery" },
   { value: "delivered", label: "Delivered" },
-  { value: "cancel", label: "Cancel" },
+  { value: "cancel", label: "Cancelled" },
 ];
-
-const STATUS_ACTION_OPTIONS = [
-  { value: "pending", label: "Pending" },
-  { value: "processing", label: "Processing" },
-  { value: "shipping", label: "Shipping" },
-  { value: "delivered", label: "Delivered" },
-  { value: "cancel", label: "Cancel" },
-];
-
-const toActionStatusValue = (raw) => {
-  const uiStatus = toUIStatus(raw || "pending");
-  if (uiStatus === "complete") return "delivered";
-  if (uiStatus === "cancelled") return "cancel";
-  return uiStatus;
-};
 
 export default function Orders() {
   const [page, setPage] = useState(1);
@@ -461,14 +441,14 @@ export default function Orders() {
                   <th className={`${tableHeadCell} w-[23%]`}>Customer</th>
                   <th className={`${tableHeadCell} w-[9%]`}>Method</th>
                   <th className={`${tableHeadCell} w-[11%] text-right`}>Amount</th>
-                  <th className={`${tableHeadCell} w-[13%]`}>Status</th>
+                  <th className={`${tableHeadCell} w-[13%]`}>Order / Payment</th>
                   <th className={`${tableHeadCell} w-[15%]`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {hasItems ? items.map((order, rowIndex) => {
-                  const uiStatus = toUIStatus(order.status || "pending");
-                  const actionStatus = toActionStatusValue(order.status || "pending");
+                  const lifecycleStatus = normalizeAdminOrderLifecycle(order.status || "pending");
+                  const actionStatus = toAdminOrderActionValue(order.status || "pending");
                   const isUpdating = pendingUpdateId === order.id;
                   const orderId = order?.id;
                   const invoiceParam = getInvoiceParam(order);
@@ -507,11 +487,13 @@ export default function Orders() {
                       </td>
                       <td className={`${tableCell} w-[13%]`}>
                         <div className="space-y-0.5">
-                          <OrderStatusBadge status={uiStatus || "-"} />
+                          <OrderStatusBadge status={lifecycleStatus || "-"} />
                           <div className="origin-left scale-90 opacity-85">
-                            <PaymentStatusBadge status={order.paymentStatus} prefix="Payment" />
+                            <PaymentStatusBadge status={order.paymentStatus} prefix="Parent Payment" />
                           </div>
-                          <div className="text-[10px] text-slate-400">{getStatusNote(order.status)}</div>
+                          <div className="text-[10px] text-slate-400">
+                            {getAdminOrderLifecycleNote(order.status)}
+                          </div>
                         </div>
                       </td>
                       <td className={`${tableCell} w-[15%]`}>
@@ -522,7 +504,7 @@ export default function Orders() {
                             disabled={isUpdating}
                             className="h-7 w-[102px] rounded-lg border border-slate-200 bg-white px-2 text-[10px] font-medium text-slate-700 focus:border-emerald-500 focus:outline-none disabled:opacity-60"
                           >
-                            {STATUS_ACTION_OPTIONS.map((option) => (
+                            {ADMIN_ORDER_ACTION_OPTIONS.map((option) => (
                               <option key={option.value} value={option.value}>
                                 {option.label}
                               </option>

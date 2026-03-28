@@ -211,7 +211,7 @@ export default function AccountOrdersPage() {
                             <span className={`h-2 w-2 rounded-full ${statusUI.dot}`} />
                             <span className={`ml-2 ${statusUI.text}`}>{statusUI.label}</span>
                           </span>
-                          <PaymentStatusBadge status={order.paymentStatus} prefix="Payment" />
+                          <PaymentStatusBadge status={order.paymentStatus} prefix="Parent" />
                           {paymentEntry?.summaryLabel ? (
                             <p className="text-xs text-slate-500">{paymentEntry.summaryLabel}</p>
                           ) : null}

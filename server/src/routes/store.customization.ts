@@ -6,6 +6,7 @@ import {
   PUBLIC_STORE_IDENTITY_ATTRIBUTES,
   serializePublicStoreIdentityPayload,
 } from "../services/sharedContracts/publicStoreIdentity.js";
+import { STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES } from "../services/sharedContracts/storePaymentProfileCompat.js";
 import {
   buildEffectiveStoreMicrositeRichAboutPayload,
   buildPublicStoreCustomizationHeaderSettings,
@@ -88,6 +89,18 @@ const resolvePrimaryPublicStore = async () => {
   return Store.findOne({
     where: { status: "ACTIVE" } as any,
     attributes: [...PUBLIC_STORE_IDENTITY_ATTRIBUTES],
+    include: [
+      {
+        association: "paymentProfile",
+        attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+        required: false,
+      },
+      {
+        association: "activePaymentProfile",
+        attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+        required: false,
+      },
+    ],
     order: [["id", "ASC"]],
   });
 };
@@ -102,6 +115,18 @@ const resolvePublicStoreBySlug = async (slug: string) => {
       status: "ACTIVE",
     } as any,
     attributes: [...PUBLIC_STORE_IDENTITY_ATTRIBUTES],
+    include: [
+      {
+        association: "paymentProfile",
+        attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+        required: false,
+      },
+      {
+        association: "activePaymentProfile",
+        attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+        required: false,
+      },
+    ],
   });
 };
 

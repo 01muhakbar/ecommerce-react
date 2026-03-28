@@ -313,11 +313,21 @@ async function previewCart(
     method: "POST",
     body: JSON.stringify({ productId, quantity: 1 }),
   });
-  assertStatus(addResponse, 200, `${label} add to cart`);
-  return customerClient.request("/api/checkout/preview", {
+  if (addResponse.status !== 200) {
+    return {
+      addResponse,
+      previewResponse: null,
+    };
+  }
+
+  const previewResponse = await customerClient.request("/api/checkout/preview", {
     method: "POST",
     body: JSON.stringify({}),
   });
+  return {
+    addResponse,
+    previewResponse,
+  };
 }
 
 async function cleanupFixtures() {
@@ -452,6 +462,28 @@ async function run() {
   await assertVisibleEverywhere(visibleProduct, "visible product");
   logPass("visible product list/detail");
 
+  logStep("checking admin review queue summary");
+  const adminQueue = await adminClient.request(
+    `/api/admin/products?q=${encodeURIComponent(RUN_ID)}&page=1&limit=50`
+  );
+  assertStatus(adminQueue, 200, "admin review queue summary");
+  assert.equal(
+    Number(adminQueue.body?.meta?.reviewQueue?.submitted || 0),
+    1,
+    "admin review queue: submitted count mismatch"
+  );
+  assert.equal(
+    Number(adminQueue.body?.meta?.reviewQueue?.needsRevision || 0),
+    1,
+    "admin review queue: needs revision count mismatch"
+  );
+  assert.equal(
+    Number(adminQueue.body?.meta?.reviewQueue?.total || 0),
+    2,
+    "admin review queue: total count mismatch"
+  );
+  logPass("admin review queue summary");
+
   logStep("checking checkout preview eligibility");
   const hiddenPreview = await previewCart(
     customerClient,
@@ -459,19 +491,28 @@ async function run() {
     draftProduct.id,
     "draft preview"
   );
-  assertStatus(hiddenPreview, 200, "draft preview");
-  assert.equal(
-    Array.isArray(hiddenPreview.body?.data?.invalidItems),
-    true,
-    "draft preview: invalidItems missing"
-  );
-  assert.equal(
-    hiddenPreview.body?.data?.invalidItems?.some(
-      (item: any) => Number(item?.productId) === draftProduct.id
-    ),
-    true,
-    "draft preview: hidden product was not marked invalid"
-  );
+  if (hiddenPreview.addResponse.status === 409) {
+    assert.equal(
+      String(hiddenPreview.addResponse.body?.code || ""),
+      "PRODUCT_NOT_AVAILABLE",
+      "draft preview: hidden product returned unexpected add-to-cart rejection"
+    );
+  } else {
+    assertStatus(hiddenPreview.addResponse, 200, "draft preview add to cart");
+    assertStatus(hiddenPreview.previewResponse as JsonResponse, 200, "draft preview");
+    assert.equal(
+      Array.isArray(hiddenPreview.previewResponse?.body?.data?.invalidItems),
+      true,
+      "draft preview: invalidItems missing"
+    );
+    assert.equal(
+      hiddenPreview.previewResponse?.body?.data?.invalidItems?.some(
+        (item: any) => Number(item?.productId) === draftProduct.id
+      ),
+      true,
+      "draft preview: hidden product was not marked invalid"
+    );
+  }
   logPass("draft checkout preview blocked");
 
   const visiblePreview = await previewCart(
@@ -480,14 +521,15 @@ async function run() {
     visibleProduct.id,
     "visible preview"
   );
-  assertStatus(visiblePreview, 200, "visible preview");
+  assertStatus(visiblePreview.addResponse, 200, "visible preview add to cart");
+  assertStatus(visiblePreview.previewResponse as JsonResponse, 200, "visible preview");
   assert.equal(
-    visiblePreview.body?.data?.invalidItems?.length || 0,
+    visiblePreview.previewResponse?.body?.data?.invalidItems?.length || 0,
     0,
     "visible preview: visible product unexpectedly invalid"
   );
   assert.equal(
-    visiblePreview.body?.data?.groups?.some((group: any) =>
+    visiblePreview.previewResponse?.body?.data?.groups?.some((group: any) =>
       Array.isArray(group?.items)
         ? group.items.some((item: any) => Number(item?.productId) === visibleProduct.id)
         : false
@@ -546,6 +588,48 @@ async function run() {
   );
   logPass("seller visibility metadata");
 
+  logStep("checking seller review locks");
+  const submittedEditLock = await sellerClient.request(
+    `/api/seller/stores/${activeStore.id}/products/${submittedProduct.id}/draft`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ name: `${submittedProduct.name} locked` }),
+    }
+  );
+  assertStatus(submittedEditLock, 409, "seller submitted edit lock");
+  assert.equal(
+    String(submittedEditLock.body?.code || ""),
+    "SELLER_PRODUCT_SUBMISSION_LOCKED",
+    "seller submitted edit lock: wrong error code"
+  );
+  const submittedPublishLock = await sellerClient.request(
+    `/api/seller/stores/${activeStore.id}/products/${submittedProduct.id}/published`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ published: false }),
+    }
+  );
+  assertStatus(submittedPublishLock, 409, "seller submitted publish lock");
+  assert.equal(
+    String(submittedPublishLock.body?.code || ""),
+    "SELLER_PRODUCT_REVIEW_LOCKED",
+    "seller submitted publish lock: wrong error code"
+  );
+  const needsRevisionPublishLock = await sellerClient.request(
+    `/api/seller/stores/${activeStore.id}/products/${needsRevisionProduct.id}/published`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ published: false }),
+    }
+  );
+  assertStatus(needsRevisionPublishLock, 409, "seller needs revision publish lock");
+  assert.equal(
+    String(needsRevisionPublishLock.body?.code || ""),
+    "SELLER_PRODUCT_REVIEW_LOCKED",
+    "seller needs revision publish lock: wrong error code"
+  );
+  logPass("seller review locks");
+
   logStep("checking admin unpublish removes visibility immediately");
   const unpublishResponse = await adminClient.request(
     `/api/admin/products/${visibleProduct.id}/published`,
@@ -562,14 +646,31 @@ async function run() {
     visibleProduct.id,
     "admin unpublish preview"
   );
-  assertStatus(unpublishedPreview, 200, "admin unpublish preview");
-  assert.equal(
-    unpublishedPreview.body?.data?.invalidItems?.some(
-      (item: any) => Number(item?.productId) === visibleProduct.id
-    ),
-    true,
-    "admin unpublish preview: unpublished product still treated as purchasable"
-  );
+  if (unpublishedPreview.addResponse.status === 409) {
+    assert.equal(
+      String(unpublishedPreview.addResponse.body?.code || ""),
+      "PRODUCT_NOT_AVAILABLE",
+      "admin unpublish preview: hidden product returned unexpected add-to-cart rejection"
+    );
+  } else {
+    assertStatus(
+      unpublishedPreview.addResponse,
+      200,
+      "admin unpublish preview add to cart"
+    );
+    assertStatus(
+      unpublishedPreview.previewResponse as JsonResponse,
+      200,
+      "admin unpublish preview"
+    );
+    assert.equal(
+      unpublishedPreview.previewResponse?.body?.data?.invalidItems?.some(
+        (item: any) => Number(item?.productId) === visibleProduct.id
+      ),
+      true,
+      "admin unpublish preview: unpublished product still treated as purchasable"
+    );
+  }
   logPass("admin unpublish immediate removal");
 
   console.log("[mvf-visibility] OK");

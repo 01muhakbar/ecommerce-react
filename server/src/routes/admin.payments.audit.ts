@@ -14,6 +14,7 @@ import {
   User,
 } from "../models/index.js";
 import { deriveLegacyPaymentStatus, serializeSplitOrder } from "./checkout.js";
+import { expireOverduePaymentsForOrder } from "../services/paymentExpiry.service.js";
 
 const router = Router();
 
@@ -45,6 +46,24 @@ const parsePositiveInt = (
 const allowedParentPaymentStatuses = new Set(["UNPAID", "PARTIALLY_PAID", "PAID"]);
 const allowedReviewStatuses = new Set(["PENDING", "APPROVED", "REJECTED"]);
 const allowedCheckoutModes = new Set(["LEGACY", "SINGLE_STORE", "MULTI_STORE"]);
+
+const expireOverduePaymentsForAuditOrders = async (orders: any[]) => {
+  const orderIds = Array.from(
+    new Set(
+      (Array.isArray(orders) ? orders : [])
+        .map((order: any) => toNumber(getAttr(order, "id"), 0))
+        .filter((orderId: number) => orderId > 0)
+    )
+  );
+
+  let changed = false;
+  for (const orderId of orderIds) {
+    const expired = await expireOverduePaymentsForOrder(orderId);
+    changed = changed || expired;
+  }
+
+  return changed;
+};
 
 const normalizeProofSummary = (proofs: any[]) => {
   if (!Array.isArray(proofs) || proofs.length === 0) return null;
@@ -586,25 +605,34 @@ router.get("/", async (req, res) => {
     const offset = (page - 1) * pageSize;
     const parsed = await buildAuditWhere(req.query || {});
 
-    const { rows, count } = await Order.findAndCountAll({
-      where: parsed.where,
-      include: auditListInclude,
-      attributes: [
-        "id",
-        "invoiceNo",
-        "checkoutMode",
-        "customerName",
-        "paymentStatus",
-        "totalAmount",
-        "createdAt",
-      ],
-      order: [["createdAt", "DESC"]],
-      limit: pageSize,
-      offset,
-      distinct: true,
-      col: "id",
-      subQuery: false,
-    });
+    const loadList = () =>
+      Order.findAndCountAll({
+        where: parsed.where,
+        include: auditListInclude,
+        attributes: [
+          "id",
+          "invoiceNo",
+          "checkoutMode",
+          "customerName",
+          "paymentStatus",
+          "totalAmount",
+          "createdAt",
+        ],
+        order: [["createdAt", "DESC"]],
+        limit: pageSize,
+        offset,
+        distinct: true,
+        col: "id",
+        subQuery: false,
+      });
+
+    let { rows, count } = await loadList();
+    const expired = await expireOverduePaymentsForAuditOrders(rows);
+    if (expired) {
+      const refreshed = await loadList();
+      rows = refreshed.rows;
+      count = refreshed.count;
+    }
 
     return res.json({
       success: true,
@@ -630,16 +658,27 @@ router.get("/:orderId", async (req, res) => {
   try {
     const lookup = String(req.params.orderId || "").trim();
     const where = /^\d+$/.test(lookup) ? { id: Number(lookup) } : { invoiceNo: lookup };
-    const order = await Order.findOne({
-      where,
-      include: detailInclude,
-    });
+    const loadOrder = () =>
+      Order.findOne({
+        where,
+        include: detailInclude,
+      });
+
+    let order = await loadOrder();
 
     if (!order) {
       return res.status(404).json({
         success: false,
         message: "Audit order not found.",
       });
+    }
+
+    const orderId = toNumber(getAttr(order, "id"), 0);
+    if (orderId > 0) {
+      const expired = await expireOverduePaymentsForOrder(orderId);
+      if (expired) {
+        order = await loadOrder();
+      }
     }
 
     return res.json({

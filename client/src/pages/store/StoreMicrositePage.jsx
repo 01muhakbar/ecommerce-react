@@ -479,6 +479,34 @@ export default function StoreMicrositePage() {
     () => normalizePublicStoreIdentity(micrositeQuery.data),
     [micrositeQuery.data]
   );
+  const publicOperationalReadiness =
+    micrositeQuery.data?.data?.summary?.operationalReadiness || null;
+  const isOperationallyReady = publicOperationalReadiness
+    ? Boolean(publicOperationalReadiness.isReady)
+    : true;
+  const shellIdentity = useMemo(() => {
+    if (!publicOperationalReadiness) return identity;
+    return {
+      ...identity,
+      summary: {
+        ...identity.summary,
+        status: {
+          code: toText(publicOperationalReadiness.code, identity.summary?.status?.code || "UNKNOWN"),
+          label: toText(
+            publicOperationalReadiness.label,
+            identity.summary?.status?.label || "Unavailable"
+          ),
+          tone: toText(
+            publicOperationalReadiness.tone,
+            identity.summary?.status?.tone || "neutral"
+          ),
+        },
+        productCount: publicOperationalReadiness.isReady ? identity.summary?.productCount : null,
+        ratingAverage: publicOperationalReadiness.isReady ? identity.summary?.ratingAverage : null,
+        ratingCount: publicOperationalReadiness.isReady ? identity.summary?.ratingCount : 0,
+      },
+    };
+  }, [identity, publicOperationalReadiness]);
   const effectiveRichAbout = richAboutQuery.data?.data?.effective;
   const aboutTitle = useMemo(
     () => toText(effectiveRichAbout?.title, "About Store"),
@@ -750,11 +778,36 @@ export default function StoreMicrositePage() {
 
   return (
     <StoreMicrositeShell
-      identity={identity}
+      identity={shellIdentity}
       safeSlug={safeSlug}
-      description={toText(identity.description, "Shop public products from this store.")}
-      navigationItems={navItems}
+      description={
+        isOperationallyReady
+          ? toText(identity.description, "Shop public products from this store.")
+          : toText(
+              publicOperationalReadiness?.description,
+              "This store is not operational for public buyer flow yet."
+            )
+      }
+      navigationItems={isOperationallyReady ? navItems : []}
     >
+      {!isOperationallyReady ? (
+        <section className="rounded-[32px] border border-amber-200 bg-amber-50 px-6 py-6 shadow-[0_20px_45px_rgba(15,23,42,0.08)] sm:px-8 sm:py-8">
+          <SectionHeader
+            eyebrow="Store readiness"
+            title={toText(publicOperationalReadiness?.label, "Store not ready")}
+            description={toText(
+              publicOperationalReadiness?.description,
+              "This store is not operational for public buyer flow yet."
+            )}
+          />
+          <div className="mt-6 rounded-[28px] border border-amber-200 bg-white px-5 py-5 text-sm leading-7 text-slate-700">
+            Public store identity can already exist, but this route should not be treated as a live operational store until the readiness gate is valid.
+          </div>
+        </section>
+      ) : null}
+
+      {!isOperationallyReady ? null : (
+        <>
       {!catalogMode && categoryOptions.length > 0 ? (
         <CategoryRail
           title="Categories"
@@ -994,6 +1047,8 @@ export default function StoreMicrositePage() {
             </div>
           }
         />
+      )}
+        </>
       )}
     </StoreMicrositeShell>
   );

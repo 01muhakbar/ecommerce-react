@@ -29,6 +29,7 @@ import {
 } from "../services/paymentCheckoutView.service.js";
 import { getDefaultAddressByUser } from "../services/userAddress.service.js";
 import { protect } from "../middleware/authMiddleware.js";
+import { STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES } from "../services/sharedContracts/storePaymentProfileCompat.js";
 
 const router = Router();
 
@@ -702,6 +703,18 @@ router.get(
             ],
             required: true,
             where: { status: "ACTIVE" } as any,
+            include: [
+              {
+                association: "paymentProfile",
+                attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+                required: false,
+              },
+              {
+                association: "activePaymentProfile",
+                attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+                required: false,
+              },
+            ],
           },
         ],
       });

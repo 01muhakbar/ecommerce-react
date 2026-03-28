@@ -53,6 +53,13 @@ export type StorefrontProductSellerInfo = {
     label: string;
     tone: string;
   } | null;
+  operationalReadiness?: {
+    code: string;
+    label: string;
+    tone: string;
+    description: string | null;
+    isReady: boolean;
+  } | null;
   productCount: number | null;
   ratingAverage: number | null;
   ratingCount: number | null;

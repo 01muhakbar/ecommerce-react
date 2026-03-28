@@ -110,7 +110,7 @@ const getSubmissionFilterLabel = (status) => {
 
 const getVisibilityFilterLabel = (value) => {
   if (value === "storefront_visible") return "Storefront visible";
-  if (value === "published_blocked") return "Published blocked";
+  if (value === "published_blocked") return "Visibility blocked";
   if (value === "internal_only") return "Internal only";
   return "All visibility";
 };
@@ -316,8 +316,8 @@ const getCompactStockMeta = (item) => {
 };
 
 const getCompactSubmissionHint = (item) => {
-  if (item?.submission?.status === "submitted") return "In review";
-  if (item?.submission?.status === "needs_revision") return "Fix then resend";
+  if (item?.submission?.status === "submitted") return "Waiting admin review";
+  if (item?.submission?.status === "needs_revision") return "Revise and resubmit";
   if (isReadyToSubmitItem(item)) return "Ready now";
   if (item?.authoring?.canEditDraft) return "Edit draft";
   if (item?.status === "draft") return "Draft";
@@ -325,19 +325,21 @@ const getCompactSubmissionHint = (item) => {
 };
 
 const getCompactSubmissionLabel = (item) => {
-  if (item?.submission?.status === "submitted") return "Submitted";
-  if (item?.submission?.status === "needs_revision") return "Needs revision";
+  if (item?.submission?.status === "submitted") return "Waiting review";
+  if (item?.submission?.status === "needs_revision") return "Revision required";
   if (isReadyToSubmitItem(item)) return "Ready to submit";
   if (item?.status === "draft") return "Draft";
   return item?.submission?.label || "Not submitted";
 };
 
-const getCompactVisibilityLabel = (item) =>
-  item?.visibility?.storefrontVisible
-    ? "Visible"
-    : item?.visibility?.stateCode === "PUBLISHED_BLOCKED"
-      ? "Blocked"
-      : "Internal";
+const getCompactVisibilityLabel = (item) => {
+  if (item?.visibility?.storefrontVisible) return "Visible";
+  if (item?.submission?.status === "submitted") return "Review blocked";
+  if (item?.submission?.status === "needs_revision") return "Revision blocked";
+  if (item?.status === "draft") return "Draft only";
+  if (item?.visibility?.stateCode === "PUBLISHED_BLOCKED") return "State blocked";
+  return "Internal";
+};
 
 const getCompactLifecycleLabel = (item) => {
   const status = String(item?.statusMeta?.code || item?.status || "").toLowerCase();
@@ -354,11 +356,18 @@ const getLifecycleTone = (item) => {
 };
 
 const getCompactVisibilityHint = (item) => {
-  if (item?.visibility?.storefrontVisible) return "Storefront on";
-  if (item?.visibility?.stateCode === "PUBLISHED_BLOCKED") {
-    return "Publish on, state blocked";
+  if (item?.visibility?.storefrontVisible) return "Visible to customers";
+  if (item?.submission?.status === "submitted") {
+    return "Hidden until admin review finishes";
   }
-  return "Seller/Admin only";
+  if (item?.submission?.status === "needs_revision") {
+    return "Hidden until revision is resubmitted";
+  }
+  if (item?.status === "draft") return "Draft stays internal";
+  if (item?.visibility?.stateCode === "PUBLISHED_BLOCKED") {
+    return "Lifecycle still blocks storefront";
+  }
+  return "Hidden from storefront";
 };
 
 const isItemEligibleForBulkAction = (item, action) => {
@@ -1026,7 +1035,7 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                   <option value="">All visibility</option>
                   <option value="internal_only">Internal only</option>
                   <option value="storefront_visible">Storefront visible</option>
-                  <option value="published_blocked">Published blocked</option>
+                  <option value="published_blocked">Visibility blocked</option>
                 </select>
               </div>
               <select
@@ -1451,6 +1460,17 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                       : needsRevision && item.submission?.revisionRequestedAt
                         ? `Requested ${formatDateTime(item.submission.revisionRequestedAt)}`
                         : null;
+                    const rowStateLabel = waitingForAdmin
+                      ? "Waiting review"
+                      : needsRevision
+                        ? "Revise and resubmit"
+                        : item.visibility?.storefrontVisible
+                          ? "Live"
+                          : item.status === "inactive"
+                            ? "Hidden"
+                            : item.status === "draft"
+                              ? "Draft"
+                              : null;
 
                     return (
                       <tr
@@ -1709,12 +1729,20 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                               )}
                             </div>
                             <div className="flex flex-wrap items-center gap-2 text-[10px] font-medium">
-                              {!canEditDraft && !canSubmit && waitingForAdmin ? (
-                                <span className="text-sky-700">In review</span>
-                              ) : item.visibility?.storefrontVisible ? (
-                                <span className="text-emerald-700">Live</span>
-                              ) : item.status === "inactive" ? (
-                                <span className="text-slate-500">Read-only</span>
+                              {rowStateLabel ? (
+                                <span
+                                  className={
+                                    waitingForAdmin
+                                      ? "text-sky-700"
+                                      : needsRevision
+                                        ? "text-amber-700"
+                                        : item.visibility?.storefrontVisible
+                                          ? "text-emerald-700"
+                                          : "text-slate-500"
+                                  }
+                                >
+                                  {rowStateLabel}
+                                </span>
                               ) : null}
                               <span className="text-slate-400">
                                 {item.publishing?.nextActionLabel ||

@@ -238,6 +238,7 @@ const normalizeProductPublishing = (value: any) => {
 
   return {
     stateCode: normalizeText(value.stateCode) || null,
+    isPublished: Boolean(value.isPublished ?? value.published),
     label: normalizeText(value.label) || null,
     isReady: Boolean(value.isReady),
     canPublish: Boolean(value.canPublish),

@@ -373,7 +373,7 @@ export default function App() {
               <Route
                 path="online-store/store-payment"
                 element={
-                  <RequirePerm perm="DASHBOARD_VIEW">
+                  <RequirePerm perm="SETTINGS_MANAGE">
                     <AdminStorePaymentPage />
                   </RequirePerm>
                 }
@@ -381,7 +381,7 @@ export default function App() {
               <Route
                 path="online-store/payment-review"
                 element={
-                  <RequirePerm perm="DASHBOARD_VIEW">
+                  <RequirePerm perm="SETTINGS_MANAGE">
                     <AdminStorePaymentReviewPage />
                   </RequirePerm>
                 }
@@ -420,7 +420,11 @@ export default function App() {
               />
               <Route
                 path="store-customization"
-                element={<Navigate to="/admin/store/customization" replace />}
+                element={
+                  <RequirePerm perm="SETTINGS_MANAGE">
+                    <Navigate to="/admin/store/customization" replace />
+                  </RequirePerm>
+                }
               />
               <Route
                 path="store/store-settings"
@@ -440,7 +444,11 @@ export default function App() {
               />
               <Route
                 path="store-settings"
-                element={<Navigate to="/admin/store/store-settings" replace />}
+                element={
+                  <RequirePerm perm="SETTINGS_MANAGE">
+                    <Navigate to="/admin/store/store-settings" replace />
+                  </RequirePerm>
+                }
               />
               <Route
                 path="settings"

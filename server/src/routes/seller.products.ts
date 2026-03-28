@@ -366,6 +366,8 @@ const buildSellerSubmissionGovernance = (
   const submissionStatus = normalizeSellerSubmissionStatus(options?.submissionStatus);
   const hasConcreteProduct = Boolean(options?.hasConcreteProduct);
   const isResubmission = submissionStatus === "needs_revision";
+  const sellerCanPublish =
+    permissions.canPublishProducts && submissionStatus === "none";
   const canSubmit =
     hasConcreteProduct &&
     permissions.canSubmitDrafts &&
@@ -384,15 +386,15 @@ const buildSellerSubmissionGovernance = (
     canResubmitWhenEnabled: canSubmit && isResubmission,
     canEditAfterSubmit: false,
     editLockAppliesWhenSubmitted: true,
-    sellerCanPublish: permissions.canPublishProducts,
+    sellerCanPublish,
     requiresSellerChanges: submissionStatus === "needs_revision",
     note:
       submissionStatus === "submitted"
-        ? "Legacy review is still recorded for this product, but seller workspace may continue with direct edits or publish control."
+        ? "This product is locked while admin review is in progress. Seller edits and publish changes stay blocked until admin finishes the review or requests revisions."
         : submissionStatus === "needs_revision"
-          ? "Legacy revision feedback is still recorded here. Seller may apply the changes and publish directly when the product is ready."
+          ? "Admin requested revisions on this draft. Update the requested changes first, then resubmit for review before publish can continue."
         : hasConcreteProduct
-          ? "Seller may publish directly from seller workspace. Review submission remains optional for stores that still use it operationally."
+          ? "Seller may keep this product as an internal draft or publish it directly while no admin review is in progress."
           : "You can create a draft first, then publish it directly when the required fields are ready.",
   };
 };
@@ -528,9 +530,11 @@ const serializeSellerSubmissionState = (
 const buildProductAuthoringState = (
   status: string,
   sellerAccess: any = null,
-  _submissionStatus: string = "none"
+  submissionStatus: string = "none"
 ) => {
   const permissions = buildAuthoringPermissions(sellerAccess);
+  const normalizedSubmissionStatus =
+    normalizeSellerSubmissionStatus(submissionStatus);
 
   if (!permissions.canEditDrafts) {
     return {
@@ -544,6 +548,14 @@ const buildProductAuthoringState = (
     return {
       canEditDraft: false,
       editBlockedReason: "PRODUCT_STATUS_NOT_EDITABLE",
+      allowedStatuses: ["draft", "active", "inactive"],
+    };
+  }
+
+  if (normalizedSubmissionStatus === "submitted") {
+    return {
+      canEditDraft: false,
+      editBlockedReason: "SELLER_PRODUCT_SUBMISSION_LOCKED",
       allowedStatuses: ["draft", "active", "inactive"],
     };
   }
@@ -899,7 +911,7 @@ const buildCatalogReadContract = () => ({
   notes: [
     "Seller catalog stays store-scoped through Product.storeId.",
     "Current public storefront queries gate product visibility by store mapping, publish flag, active status, and a cleared seller submission state.",
-    "Seller publish and unpublish actions clear legacy submission blockers before the product returns to public visibility.",
+    "Submitted and revision-required products stay blocked from storefront visibility until admin review is resolved and Product.sellerSubmissionStatus returns to none.",
     "Stock, pre-order, and category publish state are still not used as hard storefront visibility gates in product queries.",
   ],
 });
@@ -1002,12 +1014,42 @@ const serializeProductPublishing = (
   const permissions = buildAuthoringPermissions(sellerAccess);
   const isPublished = Boolean(getAttr(product, "isPublished"));
   const status = normalizeProductStatus(getAttr(product, "status"));
-  const canPublish = permissions.canPublishProducts && !isPublished && readiness.isReady;
-  const canUnpublish = permissions.canPublishProducts && isPublished;
+  const submissionStatus = normalizeSellerSubmissionStatus(
+    getAttr(product, "sellerSubmissionStatus")
+  );
+  const reviewBlocker =
+    submissionStatus === "submitted"
+      ? {
+          field: "submission",
+          code: "SELLER_REVIEW_PENDING",
+          message:
+            "Admin review is still in progress. Publish changes stay locked until the review is completed.",
+        }
+      : submissionStatus === "needs_revision"
+        ? {
+            field: "submission",
+            code: "SELLER_REVISION_REQUIRED",
+            message:
+              "Admin requested revisions. Update the draft and resubmit before changing publish visibility.",
+          }
+        : null;
+  const blockedReasons = reviewBlocker
+    ? [reviewBlocker, ...readiness.blockers]
+    : readiness.blockers;
+  const canPublish =
+    permissions.canPublishProducts &&
+    !isPublished &&
+    readiness.isReady &&
+    !reviewBlocker;
+  const canUnpublish =
+    permissions.canPublishProducts &&
+    isPublished &&
+    !reviewBlocker;
   const stateCode = isPublished ? "PUBLISHED" : status === "draft" ? "DRAFT" : "UNPUBLISHED";
 
   return {
     stateCode,
+    isPublished,
     label:
       stateCode === "PUBLISHED"
         ? "Published"
@@ -1017,11 +1059,15 @@ const serializeProductPublishing = (
     isReady: readiness.isReady,
     canPublish,
     canUnpublish,
-    blockedReasons: readiness.blockers,
+    blockedReasons,
     nextActionLabel: canPublish
       ? "Publish"
       : canUnpublish
         ? "Unpublish"
+        : reviewBlocker
+          ? submissionStatus === "submitted"
+            ? "Waiting Review"
+            : "Complete Revision"
         : stateCode === "DRAFT"
           ? "Complete draft"
           : "Update product",
@@ -1029,7 +1075,8 @@ const serializeProductPublishing = (
       ? "This product is ready for storefront visibility."
       : canUnpublish
         ? "This product is live and can be hidden from storefront at any time."
-        : readiness.blockers[0]?.message ||
+        : reviewBlocker?.message ||
+          blockedReasons[0]?.message ||
           (permissions.canPublishProducts
             ? "Update the remaining required fields before publishing."
             : "Your current seller access does not include publish control."),
@@ -1088,7 +1135,11 @@ const buildCatalogGovernance = (sellerAccess: any = null, options: any = {}) => 
     canManageMedia: true,
     sourceOfTruth: "SELLER_PRODUCT_WORKSPACE",
     note:
-      "Seller workspace owns store-scoped product authoring and publish visibility for the active store. Legacy review metadata may still appear, but publish and unpublish now stay seller-owned.",
+      submissionStatus === "submitted"
+        ? "Seller workspace remains the source of truth for the draft, but the submitted review lane is temporarily locked until admin finishes the review."
+        : submissionStatus === "needs_revision"
+          ? "Seller workspace remains the source of truth for the draft. Apply the requested changes here, then resubmit for admin review."
+          : "Seller workspace owns store-scoped product authoring and publish visibility for products that are not currently in the admin review lane.",
     authoring: {
       phase: "FULL_AUTHORITY_PHASE_1",
       phaseLabel: "Seller Full Authority",
@@ -1101,7 +1152,11 @@ const buildCatalogGovernance = (sellerAccess: any = null, options: any = {}) => 
       editBlockedReason: authoringState.editBlockedReason,
       allowedWriteStatuses: authoringState.allowedStatuses,
       note:
-        "Seller workspace may create and edit store-scoped products across draft, active, and inactive states with seller-safe core fields, then publish or unpublish them directly.",
+        submissionStatus === "submitted"
+          ? "This draft is locked while admin review is pending."
+          : submissionStatus === "needs_revision"
+            ? "This draft is open for revision updates so it can be resubmitted for review."
+            : "Seller workspace may create and edit store-scoped products across draft, active, and inactive states with seller-safe core fields, then publish or unpublish them directly.",
     },
     submissionGovernance: buildSellerSubmissionGovernance(sellerAccess, options),
     statusGovernance: {
@@ -1109,7 +1164,9 @@ const buildCatalogGovernance = (sellerAccess: any = null, options: any = {}) => 
       publishFlag: "seller-owned",
       sellerStateTransitionsActive: true,
       note:
-        "Seller publish actions set store-scoped products live by turning publish on and moving the lifecycle to active. Unpublish hides the product without removing store ownership.",
+        submissionStatus === "none"
+          ? "Seller publish actions set store-scoped products live by turning publish on and moving the lifecycle to active. Unpublish hides the product without removing store ownership."
+          : "Submitted and revision-required products stay outside seller publish toggles until the admin review lane is resolved.",
     },
     fieldGovernance: buildFieldGovernance(),
   };
@@ -1803,11 +1860,22 @@ router.patch(
       }
 
       const currentStatus = normalizeProductStatus(getAttr(product, "status"));
+      const currentSubmissionStatus = normalizeSellerSubmissionStatus(
+        getAttr(product, "sellerSubmissionStatus")
+      );
       if (!["draft", "active", "inactive"].includes(currentStatus)) {
         return res.status(409).json({
           success: false,
           code: "SELLER_PRODUCT_EDIT_STATE_INVALID",
           message: "This product is not editable from the seller product lane.",
+        });
+      }
+
+      if (currentSubmissionStatus === "submitted") {
+        return res.status(409).json({
+          success: false,
+          code: "SELLER_PRODUCT_SUBMISSION_LOCKED",
+          message: "This draft is already with admin review, so editing is locked for now.",
         });
       }
 
@@ -1913,6 +1981,28 @@ router.patch(
           success: false,
           code: "SELLER_PRODUCT_NOT_FOUND",
           message: "Product not found for this seller store.",
+        });
+      }
+
+      const currentSubmissionStatus = normalizeSellerSubmissionStatus(
+        getAttr(product, "sellerSubmissionStatus")
+      );
+
+      if (currentSubmissionStatus === "submitted") {
+        return res.status(409).json({
+          success: false,
+          code: "SELLER_PRODUCT_REVIEW_LOCKED",
+          message:
+            "This product is currently in admin review, so publish visibility cannot change yet.",
+        });
+      }
+
+      if (currentSubmissionStatus === "needs_revision") {
+        return res.status(409).json({
+          success: false,
+          code: "SELLER_PRODUCT_REVIEW_LOCKED",
+          message:
+            "This product needs seller revisions first. Update the draft and resubmit before changing publish visibility.",
         });
       }
 

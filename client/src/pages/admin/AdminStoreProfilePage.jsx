@@ -179,6 +179,11 @@ export default function AdminStoreProfilePage() {
             const storefrontHref = store?.slug
               ? `/store/${encodeURIComponent(store.slug)}`
               : null;
+            const publicOperationalReadiness =
+              entry?.publicIdentity?.summary?.operationalReadiness || null;
+            const canOpenStorefront = Boolean(
+              storefrontHref && publicOperationalReadiness?.isReady
+            );
 
             return (
               <section
@@ -197,6 +202,12 @@ export default function AdminStoreProfilePage() {
                       label={store?.statusMeta?.label || store?.status || "Active"}
                       tone={store?.statusMeta?.tone}
                     />
+                    {publicOperationalReadiness ? (
+                      <StatusPill
+                        label={publicOperationalReadiness.label}
+                        tone={publicOperationalReadiness.tone}
+                      />
+                    ) : null}
                     <StatusPill
                       label={store?.completeness?.label || "Profile status"}
                       tone={store?.completeness?.isComplete ? "SUCCESS" : "WARNING"}
@@ -216,13 +227,18 @@ export default function AdminStoreProfilePage() {
                             Core identity fields remain admin-governed.
                           </p>
                         </div>
-                        {storefrontHref ? (
+                        {canOpenStorefront ? (
                           <Link
                             to={storefrontHref}
                             className="inline-flex h-9 items-center justify-center rounded-full border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                           >
                             Open Storefront
                           </Link>
+                        ) : publicOperationalReadiness ? (
+                          <StatusPill
+                            label="Storefront gated"
+                            tone={publicOperationalReadiness.tone}
+                          />
                         ) : null}
                       </div>
 
@@ -311,6 +327,30 @@ export default function AdminStoreProfilePage() {
                       fields={publicSafeFields}
                       snapshot={publicIdentity}
                     />
+
+                    {publicOperationalReadiness ? (
+                      <div
+                        className={`rounded-xl border px-4 py-4 ${
+                          publicOperationalReadiness.isReady
+                            ? "border-emerald-200 bg-emerald-50"
+                            : "border-amber-200 bg-amber-50"
+                        }`}
+                      >
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                          Public Operational Gate
+                        </p>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <StatusPill
+                            label={publicOperationalReadiness.label}
+                            tone={publicOperationalReadiness.tone}
+                          />
+                        </div>
+                        <p className="mt-3 text-sm text-slate-700">
+                          {publicOperationalReadiness.description ||
+                            "Public store-facing lanes follow the current readiness gate."}
+                        </p>
+                      </div>
+                    ) : null}
 
                     <GovernanceBlock
                       title="Admin-Owned Governance Matrix"

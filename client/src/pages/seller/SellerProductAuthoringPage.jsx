@@ -499,6 +499,9 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
   const publishBlockers = Array.isArray(publishing?.blockedReasons)
     ? publishing.blockedReasons.filter((entry) => entry?.message)
     : [];
+  const showPublishBlockers =
+    publishBlockers.length > 0 &&
+    Boolean(isEditMode ? !publishing?.canPublish || !publishing?.isReady : true);
 
   const mutation = useMutation({
     mutationFn: (payload) =>
@@ -973,14 +976,26 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
 
   const storeSlug = sellerContext?.store?.slug || "store";
   const selectedCategoryCount = selectedCategories.length;
-  const isPublished = Boolean(publishing?.isPublished);
+  const isPublished = Boolean(
+    productQuery.data?.published ??
+      productQuery.data?.visibility?.isPublished ??
+      publishing?.isPublished
+  );
+  const isStorefrontVisible = Boolean(
+    productQuery.data?.visibility?.storefrontVisible
+  );
   const visibilityLabel =
-    productQuery.data?.visibility?.sellerLabel || "Hidden";
-  const currentPublishLabel =
-    publishing?.label || (isEditMode ? "Draft" : "Unpublished");
-  const publishTone = isPublished
+    productQuery.data?.visibility?.sellerLabel ||
+    (isStorefrontVisible
+      ? "Visible in storefront"
+      : isPublished
+        ? "Published but blocked"
+        : "Hidden from storefront");
+  const publishTone = isStorefrontVisible
     ? "emerald"
-    : publishing?.isReady
+    : isPublished
+      ? "amber"
+      : publishing?.canPublish
       ? "sky"
       : "amber";
   const saveActionLabel = mutation.isPending
@@ -1024,8 +1039,8 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
                     tone="emerald"
                   />
                   <DrawerChip
-                    icon={isPublished ? Eye : EyeOff}
-                    label={isEditMode ? currentPublishLabel : "Hidden"}
+                    icon={isStorefrontVisible ? Eye : EyeOff}
+                    label={isEditMode ? visibilityLabel : "Hidden from storefront"}
                     tone={publishTone}
                   />
                 </div>
@@ -1249,14 +1264,12 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
                   <div className="space-y-1.5 pb-1">
                     <div className="space-y-1.5 text-sm text-slate-500">
                       <p className="inline-flex items-center gap-2 font-medium text-slate-600">
-                        {isPublished ? (
+                        {isStorefrontVisible ? (
                           <Eye className="h-4 w-4 text-emerald-600" />
                         ) : (
                           <EyeOff className="h-4 w-4 text-slate-400" />
                         )}
-                        {isPublished
-                          ? "Visible in storefront"
-                          : "Hidden from storefront"}
+                        {visibilityLabel}
                       </p>
                       {!governance?.canPublish ? (
                         <p className="inline-flex items-center gap-2 text-amber-700">
@@ -1406,7 +1419,7 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
                   ) : null}
                 </div>
 
-                {!publishing?.isReady && publishBlockers.length > 0 ? (
+                {showPublishBlockers ? (
                   <div className="rounded-[20px] border border-amber-200 bg-amber-50/90 px-3.5 py-3 text-sm text-amber-900">
                     <div className="flex items-start gap-2">
                       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -1434,9 +1447,7 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
                       Final Action
                     </p>
                     <p className="text-xs text-slate-500">
-                      {isPublished
-                        ? "Visible in storefront"
-                        : "Hidden until published"}
+                      {visibilityLabel}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -1463,10 +1474,13 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
                       <button
                         type="button"
                         disabled={
-                          mutation.isPending || publishMutation.isPending
+                          mutation.isPending ||
+                          publishMutation.isPending ||
+                          (isEditMode && !publishing?.canPublish)
                         }
                         onClick={(event) => handleSubmit(event, "publish")}
                         className={authoringActionPrimaryClass}
+                        title={isEditMode ? publishing?.hint || "Publish" : "Publish"}
                       >
                         <Globe2 className="h-4 w-4" />
                         {publishActionLabel}

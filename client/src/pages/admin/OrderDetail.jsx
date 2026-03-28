@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchAdminOrderByInvoice, updateAdminOrderStatus } from "../../lib/adminApi.js";
-import { ORDER_STATUS_OPTIONS } from "../../constants/orderStatus.js";
 import QueryState from "../../components/primitives/ui/QueryState.jsx";
 import OrderStatusBadge from "../../components/admin/OrderStatusBadge.jsx";
 import OrderStatusTimeline from "../../components/admin/OrderStatusTimeline.jsx";
@@ -11,19 +10,14 @@ import {
   CheckoutModeBadge,
   PaymentStatusBadge,
 } from "../../components/payments/PaymentReadModelBadges.jsx";
+import {
+  ADMIN_ORDER_ACTION_OPTIONS,
+  getAdminOrderLifecycleNote,
+  toAdminOrderActionValue,
+} from "./orderLifecyclePresentation.js";
 
 const labelize = (value) =>
   value ? value.charAt(0).toUpperCase() + value.slice(1) : "";
-
-const getStatusHelper = (status) => {
-  const value = String(status || "").trim().toLowerCase();
-  if (value === "pending") return "Review payment and prepare the order for processing.";
-  if (value === "processing") return "Team is preparing the order before handoff.";
-  if (value === "shipping" || value === "shipped") return "Delivery is in progress for this order.";
-  if (value === "delivered" || value === "complete") return "Order is complete and can be archived.";
-  if (value === "cancel" || value === "cancelled") return "Order has been stopped and needs no further fulfillment.";
-  return "Use the status controls to keep fulfillment up to date.";
-};
 
 export default function OrderDetail() {
   const { invoiceNo } = useParams();
@@ -79,7 +73,8 @@ export default function OrderDetail() {
   const currentStatus = (order?.status ?? "").toString();
   const selectedStatus = status;
   const norm = (value) => (value || "").toString().trim().toLowerCase();
-  const isSameStatus = norm(selectedStatus) === norm(currentStatus);
+  const currentActionStatus = toAdminOrderActionValue(currentStatus);
+  const isSameStatus = norm(selectedStatus) === norm(currentActionStatus);
   const shouldAutoPrint = searchParams.get("print") === "1";
 
   useEffect(() => {
@@ -95,8 +90,8 @@ export default function OrderDetail() {
   }, [invoiceNo, shouldAutoPrint]);
 
   useEffect(() => {
-    setStatus(currentStatus || "");
-  }, [currentStatus]);
+    setStatus(currentActionStatus || "");
+  }, [currentActionStatus]);
   useEffect(() => () => {
     if (noticeTimerRef.current) {
       clearTimeout(noticeTimerRef.current);
@@ -137,7 +132,7 @@ export default function OrderDetail() {
   const orderNote = String(
     order?.customerNote || order?.note || order?.notes || ""
   ).trim();
-  const statusHelper = getStatusHelper(order?.status);
+  const statusHelper = getAdminOrderLifecycleNote(order?.status);
 
   const handleCopy = async (value, label) => {
     if (!value || value === "—") return;
@@ -215,7 +210,7 @@ export default function OrderDetail() {
                       </span>
                       <OrderStatusBadge status={order?.status || "-"} />
                       <CheckoutModeBadge mode={order?.checkoutMode} />
-                      <PaymentStatusBadge status={order?.paymentStatus} prefix="Parent" />
+                      <PaymentStatusBadge status={order?.paymentStatus} prefix="Parent Payment" />
                       <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium">
                         Total {formatMoney(totalAmount)}
                       </span>
@@ -270,9 +265,12 @@ export default function OrderDetail() {
                   <p className="mt-2 text-sm font-semibold text-slate-800">{paymentMethod}</p>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <CheckoutModeBadge mode={order?.checkoutMode} />
-                    <PaymentStatusBadge status={order?.paymentStatus} prefix="Parent" />
+                    <PaymentStatusBadge status={order?.paymentStatus} prefix="Parent Payment" />
                   </div>
                   <p className="mt-2 text-sm text-slate-500">Invoice: {invoiceRef}</p>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    Payment state is tracked separately from operational order progression.
+                  </p>
                   {order?.id && String(order?.checkoutMode || "LEGACY").toUpperCase() !== "LEGACY" ? (
                     <Link
                       to={`/admin/online-store/payment-audit/${order.id}`}
@@ -400,7 +398,7 @@ export default function OrderDetail() {
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <OrderStatusBadge status={order?.status || "-"} />
-                <PaymentStatusBadge status={order?.paymentStatus} prefix="Parent" />
+                <PaymentStatusBadge status={order?.paymentStatus} prefix="Parent Payment" />
               </div>
               <p className="mt-3 text-sm leading-6 text-slate-500">
                 {statusHelper}
@@ -418,7 +416,7 @@ export default function OrderDetail() {
                   </div>
                   <div className="text-sm font-semibold text-slate-900">Update Status</div>
                   <p className="text-sm text-slate-500">
-                    Apply the next order state without leaving this detail page.
+                    Update the operational order lifecycle. Payment review stays on the parent payment lane.
                   </p>
                 </div>
                 <div className="mt-3 space-y-3">
@@ -428,9 +426,9 @@ export default function OrderDetail() {
                     className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm"
                   >
                     <option value="">Select status</option>
-                    {ORDER_STATUS_OPTIONS.map((value) => (
-                      <option key={value} value={value}>
-                        {labelize(value)}
+                    {ADMIN_ORDER_ACTION_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {labelize(option.label)}
                       </option>
                     ))}
                   </select>

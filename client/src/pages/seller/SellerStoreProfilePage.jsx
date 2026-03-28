@@ -6,6 +6,7 @@ import {
   getSellerStoreProfile,
   updateSellerStoreProfile,
 } from "../../api/sellerStoreProfile.ts";
+import { getSellerFinanceSummary } from "../../api/sellerWorkspace.ts";
 import {
   sellerDisabledFieldClass,
   sellerFieldClass,
@@ -88,6 +89,89 @@ const buildLocationLabel = (profile) =>
     .filter(Boolean)
     .join(", ");
 
+const deriveOperationalReadiness = (storeStatus, paymentProfileReadiness) => {
+  const storeCode = String(storeStatus || "ACTIVE").trim().toUpperCase();
+  const paymentCode = String(paymentProfileReadiness?.code || "NOT_CONFIGURED")
+    .trim()
+    .toUpperCase();
+
+  if (storeCode !== "ACTIVE") {
+    return {
+      code: "STORE_INACTIVE",
+      label: "Store inactive",
+      tone: "stone",
+      isReady: false,
+      description:
+        "Store status is inactive, so this lane should not be treated as publicly live.",
+    };
+  }
+
+  if (!paymentProfileReadiness?.visible) {
+    return {
+      code: "READINESS_HIDDEN",
+      label: "Operational gate hidden",
+      tone: "stone",
+      isReady: false,
+      description:
+        "This seller role cannot verify payment readiness from the store profile lane, so avoid treating the store as live from this view.",
+    };
+  }
+
+  if (paymentProfileReadiness?.isReady || paymentCode === "READY") {
+    return {
+      code: "READY",
+      label: "Operational",
+      tone: "emerald",
+      isReady: true,
+      description:
+        "Store status is active and payment setup is ready, so the store can be treated as operational.",
+    };
+  }
+
+  if (paymentCode === "REJECTED") {
+    return {
+      code: "PAYMENT_REJECTED",
+      label: "Payment setup rejected",
+      tone: "rose",
+      isReady: false,
+      description:
+        "This store is not operational yet because payment setup was rejected and still needs seller follow-up.",
+    };
+  }
+
+  if (paymentCode === "INACTIVE") {
+    return {
+      code: "PAYMENT_INACTIVE",
+      label: "Payment setup inactive",
+      tone: "stone",
+      isReady: false,
+      description:
+        "This store is not operational yet because payment setup exists but is not active for buyer operations.",
+    };
+  }
+
+  if (paymentCode === "INCOMPLETE" || paymentCode === "NOT_CONFIGURED") {
+    return {
+      code: paymentCode === "NOT_CONFIGURED" ? "PAYMENT_NOT_CONFIGURED" : "PAYMENT_INCOMPLETE",
+      label:
+        paymentCode === "NOT_CONFIGURED" ? "Payment setup missing" : "Payment setup incomplete",
+      tone: "amber",
+      isReady: false,
+      description:
+        "This store is not operational yet because payment setup still blocks readiness.",
+    };
+  }
+
+  return {
+    code: "PAYMENT_PENDING_REVIEW",
+    label: "Payment review pending",
+    tone: "amber",
+    isReady: false,
+    description:
+      "This store is not operational yet because payment setup still waits for admin approval.",
+  };
+};
+
 function InputField({ label, hint, multiline = false, disabled = false, ...props }) {
   const inputClasses = multiline ? sellerTextareaClass : sellerFieldClass;
   return (
@@ -130,6 +214,12 @@ export default function SellerStoreProfilePage() {
   const profileQuery = useQuery({
     queryKey: ["seller", "store-profile", storeId],
     queryFn: () => getSellerStoreProfile(storeId),
+    enabled: Boolean(storeId) && canView,
+    retry: false,
+  });
+  const financeSummaryQuery = useQuery({
+    queryKey: ["seller", "workspace", "finance-summary", storeId, "store-profile"],
+    queryFn: () => getSellerFinanceSummary(storeId),
     enabled: Boolean(storeId) && canView,
     retry: false,
   });
@@ -255,6 +345,11 @@ export default function SellerStoreProfilePage() {
   };
 
   const profile = profileQuery.data;
+  const paymentProfileReadiness = financeSummaryQuery.data?.paymentProfileReadiness || null;
+  const operationalReadiness = useMemo(
+    () => deriveOperationalReadiness(profile?.status, paymentProfileReadiness),
+    [paymentProfileReadiness, profile?.status]
+  );
   const completeness = profile?.completeness || {
     label: "Profile needs attention",
     tone: "warning",
@@ -350,6 +445,11 @@ export default function SellerStoreProfilePage() {
             tone={completeness.isComplete ? "emerald" : "amber"}
           />,
           <SellerWorkspaceBadge
+            key="operational-readiness"
+            label={operationalReadiness.label}
+            tone={operationalReadiness.tone}
+          />,
+          <SellerWorkspaceBadge
             key="mode"
             label={effectiveCanEdit ? (isEditing ? "Editing" : "Editable") : "Read-only"}
             tone={effectiveCanEdit ? "sky" : "stone"}
@@ -404,6 +504,12 @@ export default function SellerStoreProfilePage() {
             {completeness.description ||
               "Use this summary to reduce ambiguity between seller operations and storefront-facing metadata."}
           </p>
+          <SellerWorkspaceNotice
+            type={operationalReadiness.isReady ? "success" : "warning"}
+            className="mt-4"
+          >
+            {operationalReadiness.description}
+          </SellerWorkspaceNotice>
           {missingFields.length ? (
             <SellerWorkspaceNotice type="warning" className="mt-4">
               <div className="space-y-3">
@@ -450,15 +556,17 @@ export default function SellerStoreProfilePage() {
             hint="This preview follows the same seller store profile payload that public store identity uses."
             Icon={Globe}
             actions={
-              storefrontPreviewHref ? (
+              storefrontPreviewHref && operationalReadiness.isReady ? (
                 <Link to={storefrontPreviewHref} className={sellerSecondaryButtonClass}>
                   Open /store/{profile.slug}
                 </Link>
               ) : null
             }
           >
-            <SellerWorkspaceNotice type="info">
-              Seller-managed public-safe fields sync to the store slug page and product seller card after save. Admin still owns the core store name, slug, and final store status.
+            <SellerWorkspaceNotice type={operationalReadiness.isReady ? "info" : "warning"}>
+              {operationalReadiness.isReady
+                ? "Seller-managed public-safe fields sync to the store slug page and product seller card after save. Admin still owns the core store name, slug, and final store status."
+                : `Store slug and public identity may already exist, but this store should not be treated as live yet. ${operationalReadiness.description}`}
             </SellerWorkspaceNotice>
 
             <div className="mt-4 grid gap-3">

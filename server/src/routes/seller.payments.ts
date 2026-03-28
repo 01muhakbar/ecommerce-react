@@ -14,6 +14,7 @@ import {
   sequelize,
 } from "../models/index.js";
 import { recalculateParentOrderPaymentStatus } from "../services/orderPaymentAggregation.service.js";
+import { expireOverduePaymentsForOrder } from "../services/paymentExpiry.service.js";
 import { appendPaymentStatusLog } from "../services/paymentStatusLog.service.js";
 import { SELLER_ROLE_CODES } from "../services/seller/permissionMap.js";
 import {
@@ -232,6 +233,24 @@ const normalizeStatuses = (rawStatus: any) => {
     .map((value) => value.trim().toUpperCase())
     .filter((value) => ALLOWED_PAYMENT_FILTERS.has(value));
   return normalized.length > 0 ? normalized : ["PENDING_CONFIRMATION"];
+};
+
+const expireOverduePaymentsForSellerSuborders = async (items: any[]) => {
+  const orderIds = Array.from(
+    new Set(
+      (Array.isArray(items) ? items : [])
+        .map((suborder: any) => toNumber(getAttr(suborder, "orderId"), 0))
+        .filter((orderId: number) => orderId > 0)
+    )
+  );
+
+  let changed = false;
+  for (const orderId of orderIds) {
+    const expired = await expireOverduePaymentsForOrder(orderId);
+    changed = changed || expired;
+  }
+
+  return changed;
 };
 
 const sellerListInclude = [
@@ -489,7 +508,11 @@ const loadSellerPaymentReviewList = async (input: {
 }) => {
   const statuses = normalizeStatuses(input.paymentStatus);
   const scopedStoreId = Number(input.access?.store?.id || input.access?.storeId || 0);
-  const items = await listSellerPaymentReviewSuborders(scopedStoreId, statuses);
+  let items = await listSellerPaymentReviewSuborders(scopedStoreId, statuses);
+  const expired = await expireOverduePaymentsForSellerSuborders(items);
+  if (expired) {
+    items = await listSellerPaymentReviewSuborders(scopedStoreId, statuses);
+  }
   return buildSellerPaymentReviewListPayload({
     access: input.access,
     filters: statuses,

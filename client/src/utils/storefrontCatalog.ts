@@ -56,6 +56,25 @@ const normalizeSellerInfo = (rawSellerInfo: any) => {
     logoUrl: toText(rawSellerInfo.logoUrl) || null,
     shortDescription: toText(rawSellerInfo.shortDescription) || null,
     status,
+    operationalReadiness:
+      rawSellerInfo.operationalReadiness &&
+      typeof rawSellerInfo.operationalReadiness === "object"
+        ? {
+            code: toText(
+              rawSellerInfo.operationalReadiness.code ||
+                rawSellerInfo.operationalReadiness.label ||
+                "UNKNOWN"
+            ),
+            label: toText(
+              rawSellerInfo.operationalReadiness.label ||
+                rawSellerInfo.operationalReadiness.code ||
+                "Store gated"
+            ),
+            tone: toText(rawSellerInfo.operationalReadiness.tone || "neutral"),
+            description: toText(rawSellerInfo.operationalReadiness.description) || null,
+            isReady: Boolean(rawSellerInfo.operationalReadiness.isReady),
+          }
+        : null,
     productCount: toNumberOrNull(rawSellerInfo.productCount),
     ratingAverage: toNumberOrNull(rawSellerInfo.ratingAverage),
     ratingCount: toNumberOrNull(rawSellerInfo.ratingCount) ?? 0,

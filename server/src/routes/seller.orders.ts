@@ -4,6 +4,7 @@ import requireSellerStoreAccess from "../middleware/requireSellerStoreAccess.js"
 import { sellerHasPermission } from "../services/seller/resolveSellerAccess.js";
 import { createUserOrderStatusUpdatedNotification } from "../services/notification.service.js";
 import { recalculateParentOrderFulfillmentStatus } from "../services/orderPaymentAggregation.service.js";
+import { expireOverduePaymentsForOrder } from "../services/paymentExpiry.service.js";
 import {
   Order,
   Payment,
@@ -429,6 +430,27 @@ const buildSellerReadModel = (input: {
 
 const serializeAuditState = (value?: Record<string, unknown> | null) =>
   value ? JSON.stringify(value) : null;
+
+const expireOverduePaymentsForSerializedOrders = async (rows: any[]) => {
+  const orderIds = Array.from(
+    new Set(
+      (Array.isArray(rows) ? rows : [])
+        .map((row: any) => {
+          const order = row?.order ?? row?.get?.("order") ?? null;
+          return toNumber(getAttr(order, "id"), 0);
+        })
+        .filter((orderId: number) => orderId > 0)
+    )
+  );
+
+  let changed = false;
+  for (const orderId of orderIds) {
+    const expired = await expireOverduePaymentsForOrder(orderId);
+    changed = changed || expired;
+  }
+
+  return changed;
+};
 
 const resolveFulfillmentTransitionBlocker = (input: {
   orderStatus?: string | null;
@@ -881,29 +903,36 @@ router.get(
         ];
       }
 
-      const result = await Suborder.findAndCountAll({
-        where,
-        attributes: [
-          "id",
-          "orderId",
-          "suborderNumber",
-          "storeId",
-          "subtotalAmount",
-          "shippingAmount",
-          "serviceFeeAmount",
-          "totalAmount",
-          "paymentStatus",
-          "fulfillmentStatus",
-          "paidAt",
-          "createdAt",
-        ],
-        include: listInclude,
-        order: [["createdAt", "DESC"]],
-        limit,
-        offset,
-        distinct: true,
-        subQuery: false,
-      });
+      const loadResult = () =>
+        Suborder.findAndCountAll({
+          where,
+          attributes: [
+            "id",
+            "orderId",
+            "suborderNumber",
+            "storeId",
+            "subtotalAmount",
+            "shippingAmount",
+            "serviceFeeAmount",
+            "totalAmount",
+            "paymentStatus",
+            "fulfillmentStatus",
+            "paidAt",
+            "createdAt",
+          ],
+          include: listInclude,
+          order: [["createdAt", "DESC"]],
+          limit,
+          offset,
+          distinct: true,
+          subQuery: false,
+        });
+
+      let result = await loadResult();
+      const expired = await expireOverduePaymentsForSerializedOrders(result.rows);
+      if (expired) {
+        result = await loadResult();
+      }
 
       return res.json({
         success: true,
@@ -950,31 +979,42 @@ router.get(
         });
       }
 
-      const suborder = await Suborder.findOne({
-        where: { id: suborderId, storeId },
-        attributes: [
-          "id",
-          "orderId",
-          "suborderNumber",
-          "storeId",
-          "storePaymentProfileId",
-          "subtotalAmount",
-          "shippingAmount",
-          "serviceFeeAmount",
-          "totalAmount",
-          "paymentStatus",
-          "fulfillmentStatus",
-          "paidAt",
-          "createdAt",
-        ],
-        include: detailInclude,
-      });
+      const loadSuborder = () =>
+        Suborder.findOne({
+          where: { id: suborderId, storeId },
+          attributes: [
+            "id",
+            "orderId",
+            "suborderNumber",
+            "storeId",
+            "storePaymentProfileId",
+            "subtotalAmount",
+            "shippingAmount",
+            "serviceFeeAmount",
+            "totalAmount",
+            "paymentStatus",
+            "fulfillmentStatus",
+            "paidAt",
+            "createdAt",
+          ],
+          include: detailInclude,
+        });
+
+      let suborder = await loadSuborder();
 
       if (!suborder) {
         return res.status(404).json({
           success: false,
           message: "Suborder not found.",
         });
+      }
+
+      const orderId = toNumber(getAttr(suborder, "orderId"), 0);
+      if (orderId > 0) {
+        const expired = await expireOverduePaymentsForOrder(orderId);
+        if (expired) {
+          suborder = await loadSuborder();
+        }
       }
 
       const serializedDetail = serializeDetail(suborder, req.sellerAccess);

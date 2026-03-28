@@ -138,6 +138,18 @@ const normalizePublicIdentity = (payload: any) => ({
       label: textOrFallback(payload?.summary?.status?.label, "Unavailable"),
       tone: textOrFallback(payload?.summary?.status?.tone, "neutral"),
     },
+    operationalReadiness: payload?.summary?.operationalReadiness
+      ? {
+          code: textOrFallback(payload.summary.operationalReadiness.code, "UNKNOWN"),
+          label: textOrFallback(
+            payload.summary.operationalReadiness.label,
+            "Unavailable"
+          ),
+          tone: textOrFallback(payload.summary.operationalReadiness.tone, "neutral"),
+          description: textOrNull(payload.summary.operationalReadiness.description),
+          isReady: Boolean(payload.summary.operationalReadiness.isReady),
+        }
+      : null,
     productCount:
       Number.isFinite(Number(payload?.summary?.productCount))
         ? Number(payload.summary.productCount)

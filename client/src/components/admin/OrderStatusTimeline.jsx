@@ -1,17 +1,17 @@
-import { normalizeOrderStatus } from "../../utils/orderStatus.js";
+import { normalizeAdminOrderLifecycle } from "../../pages/admin/orderLifecyclePresentation.js";
 
 const STATUS_FLOW = [
   { key: "pending", label: "Pending" },
   { key: "processing", label: "Processing" },
-  { key: "shipping", label: "Shipping" },
-  { key: "complete", label: "Complete" },
+  { key: "in_delivery", label: "In Delivery" },
+  { key: "delivered", label: "Delivered" },
 ];
 
 const STATUS_COLORS = {
   pending: "bg-amber-500",
   processing: "bg-indigo-500",
-  shipping: "bg-sky-500",
-  complete: "bg-emerald-500",
+  in_delivery: "bg-sky-500",
+  delivered: "bg-emerald-500",
   cancelled: "bg-red-500",
 };
 
@@ -23,7 +23,7 @@ const formatDate = (value) => {
 };
 
 export default function OrderStatusTimeline({ status, createdAt, updatedAt }) {
-  const normalized = normalizeOrderStatus(status);
+  const normalized = normalizeAdminOrderLifecycle(status);
   const isCancelled = normalized === "cancelled";
   const createdLabel = formatDate(createdAt);
   const updatedLabel = formatDate(updatedAt);

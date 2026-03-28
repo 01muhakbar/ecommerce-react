@@ -61,6 +61,10 @@ function SellerLogo({ logoUrl, name }) {
 export default function ProductSellerInfoCard({ sellerInfo }) {
   if (!sellerInfo?.name) return null;
 
+  const operationalReadiness = sellerInfo?.operationalReadiness || null;
+  const isOperationallyReady = operationalReadiness
+    ? Boolean(operationalReadiness.isReady)
+    : true;
   const description = toText(sellerInfo.shortDescription);
   const joinedLabel = formatMonthYear(sellerInfo.joinedAt);
   const productCount =
@@ -69,24 +73,49 @@ export default function ProductSellerInfoCard({ sellerInfo }) {
       : null;
   const ratingAverage = formatRating(sellerInfo.ratingAverage);
   const ratingCount = Math.max(0, Number(sellerInfo.ratingCount || 0));
-  const statusLabel = toText(sellerInfo?.status?.label);
+  const statusLabel = toText(
+    operationalReadiness?.label,
+    sellerInfo?.status?.label
+  );
+  const statusToneValue = toText(
+    operationalReadiness?.tone,
+    sellerInfo?.status?.tone
+  ).toLowerCase();
   const statusTone =
-    sellerInfo?.status?.tone === "success"
+    statusToneValue === "success"
       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-      : "border-slate-200 bg-slate-100 text-slate-600";
+      : statusToneValue === "warning"
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+        : statusToneValue === "danger"
+          ? "border-rose-200 bg-rose-50 text-rose-700"
+          : "border-slate-200 bg-slate-100 text-slate-600";
   const reviewLabel = `${formatMetricValue(ratingCount, "0")} review${ratingCount === 1 ? "" : "s"}`;
   const isChatEnabled = sellerInfo.chatMode === "enabled" && sellerInfo.chatHref;
-  const isChatFallback = sellerInfo.chatMode === "contact_fallback" && sellerInfo.chatHref;
-  const chatButtonLabel = sellerInfo.chatMode === "disabled" ? "Chat Soon" : "Chat";
+  const isChatFallback =
+    isOperationallyReady &&
+    sellerInfo.chatMode === "contact_fallback" &&
+    sellerInfo.chatHref;
+  const chatButtonLabel =
+    sellerInfo.chatMode === "disabled"
+      ? isOperationallyReady
+        ? "Chat Soon"
+        : "Store Gated"
+      : "Chat";
   const chatHelper =
-    sellerInfo.chatMode === "contact_fallback"
+    !isOperationallyReady
+      ? toText(
+          operationalReadiness?.description,
+          "This store is not operational yet."
+        )
+      : sellerInfo.chatMode === "contact_fallback"
       ? "Use the store page to get in touch."
       : sellerInfo.chatMode === "disabled"
         ? "Chat not available yet."
         : "";
+  const showOperationalMetrics = !operationalReadiness || isOperationallyReady;
 
   const metrics = [
-    productCount !== null
+    showOperationalMetrics && productCount !== null
       ? {
           key: "products",
           label: "Products",
@@ -94,7 +123,7 @@ export default function ProductSellerInfoCard({ sellerInfo }) {
           helper: "public",
         }
       : null,
-    ratingAverage
+    showOperationalMetrics && ratingAverage
       ? {
           key: "rating",
           label: "Rating",
@@ -172,7 +201,7 @@ export default function ProductSellerInfoCard({ sellerInfo }) {
               </button>
             )}
 
-            {sellerInfo.canVisitStore && sellerInfo.visitStoreHref ? (
+            {isOperationallyReady && sellerInfo.canVisitStore && sellerInfo.visitStoreHref ? (
               <Link
                 to={sellerInfo.visitStoreHref}
                 className="inline-flex h-9 items-center justify-center rounded-full border border-slate-300 bg-white px-3.5 text-[13px] font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50"

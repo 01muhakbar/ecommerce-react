@@ -182,12 +182,12 @@ const MENU = [
       {
         label: "Store Payment",
         to: "/admin/online-store/store-payment",
-        perm: "DASHBOARD_VIEW",
+        perm: "SETTINGS_MANAGE",
       },
       {
         label: "Payment Review",
         to: "/admin/online-store/payment-review",
-        perm: "DASHBOARD_VIEW",
+        perm: "SETTINGS_MANAGE",
       },
       {
         label: "Payment Audit",

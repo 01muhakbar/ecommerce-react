@@ -69,14 +69,15 @@ export default function StoreCheckoutSuccessPage() {
               <CheckCircle2 className="h-8 w-8 sm:h-10 sm:w-10" />
             </div>
             <p className="mt-5 text-sm font-semibold uppercase tracking-[0.14em] text-emerald-600">
-              Payment Confirmed
+              Order Created
             </p>
             <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-              Order Success
+              Continue Payment From Your Account
             </h1>
             <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500 sm:text-base">
-              Thank you, your order has been received and is now being processed.
-              You can track progress in real-time from your account.
+              Your order reference is ready. If this checkout uses per-store QRIS payment,
+              payment can still be pending until you complete transfer and proof review from your
+              account.
             </p>
 
             <div className="mt-7 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 sm:p-5">
@@ -103,7 +104,7 @@ export default function StoreCheckoutSuccessPage() {
                   to="/account/orders"
                   className="inline-flex h-11 w-full items-center justify-center rounded-full border border-emerald-200 px-5 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
                 >
-                  My Orders
+                  Open My Orders
                 </Link>
                 <Link
                   to="/"

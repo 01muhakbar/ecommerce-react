@@ -72,21 +72,60 @@ const tableHeadCell =
   "whitespace-nowrap px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500";
 const tableCell = "px-3 py-2 align-middle text-sm text-slate-700";
 
-function ProductPublishedBadge({ isPublished }) {
+const getStorefrontBadgeMeta = ({ published, status, submissionStatus }) => {
+  const normalizedStatus = String(status || "").trim().toLowerCase();
+  const normalizedSubmission = String(submissionStatus || "none")
+    .trim()
+    .toLowerCase();
+
+  if (!published) {
+    return {
+      label: normalizedStatus === "draft" ? "Draft" : "Hidden",
+      className: "border-slate-200 bg-slate-100 text-slate-600",
+      dotClassName: "bg-slate-400",
+    };
+  }
+
+  if (normalizedSubmission === "submitted") {
+    return {
+      label: "Review blocked",
+      className: "border-sky-200 bg-sky-50 text-sky-700",
+      dotClassName: "bg-sky-500",
+    };
+  }
+
+  if (normalizedSubmission === "needs_revision") {
+    return {
+      label: "Revision blocked",
+      className: "border-amber-200 bg-amber-50 text-amber-800",
+      dotClassName: "bg-amber-500",
+    };
+  }
+
+  if (normalizedStatus === "active") {
+    return {
+      label: "Visible",
+      className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+      dotClassName: "bg-emerald-500",
+    };
+  }
+
+  return {
+    label: "Blocked",
+    className: "border-amber-200 bg-amber-50 text-amber-800",
+    dotClassName: "bg-amber-500",
+  };
+};
+
+function ProductPublishedBadge({ published, status, submissionStatus }) {
+  const meta = getStorefrontBadgeMeta({ published, status, submissionStatus });
+
   return (
     <span
-      className={`inline-flex min-h-6 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
-        isPublished
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-          : "border-slate-200 bg-slate-100 text-slate-600"
-      }`}
+      className={`inline-flex min-h-6 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${meta.className}`}
     >
-      <span
-        className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-          isPublished ? "bg-emerald-500" : "bg-slate-400"
-        }`}
-      />
-      {isPublished ? "Published" : "Draft"}
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${meta.dotClassName}`} />
+      {meta.label}
     </span>
   );
 }
@@ -1153,7 +1192,11 @@ export default function AdminProductsPage() {
                       </td>
 
                       <td className={`${tableCell} w-[8%]`}>
-                        <ProductPublishedBadge isPublished={isPublished} />
+                          <ProductPublishedBadge
+                            published={isPublished}
+                            status={product?.status}
+                            submissionStatus={sellerSubmission?.status}
+                          />
                       </td>
 
                       <td className={`${tableCell} w-[12%]`}>

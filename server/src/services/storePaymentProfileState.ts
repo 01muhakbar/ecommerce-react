@@ -40,7 +40,10 @@ const storePaymentProfileRequestAttributes = [
 ] as const;
 
 const getStorePaymentProfileAttr = (row: any, key: string) =>
-  row?.getDataValue?.(key) ?? row?.get?.(key) ?? row?.dataValues?.[key];
+  row?.getDataValue?.(key) ??
+  row?.get?.(key) ??
+  row?.dataValues?.[key] ??
+  row?.[key];
 
 const hasStorePaymentProfileText = (value: unknown) => String(value || "").trim().length > 0;
 

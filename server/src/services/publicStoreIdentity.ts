@@ -1,5 +1,7 @@
 import { Op, QueryTypes } from "sequelize";
 import { Product, sequelize } from "../models/index.js";
+import { resolvePreferredStorePaymentProfile } from "./sharedContracts/storePaymentProfileCompat.js";
+import { buildStorePaymentProfileReadiness } from "./sharedContracts/storePaymentProfileState.js";
 
 export const PUBLIC_STORE_IDENTITY_ATTRIBUTES = [
   "id",
@@ -159,16 +161,125 @@ export const serializePublicStoreIdentityContract = () => ({
     "Store microsite hero artwork and public outbound links read seller-owned Store fields when present.",
     "Global marketplace header copy and contact-page layout remain admin customization-managed.",
     "Store description is the fallback for store microsite about content when rich-about customization is empty.",
+    "Public store-facing lanes should not present a store as operational until store status is ACTIVE and payment profile readiness is READY.",
   ],
 });
+
+export const buildPublicStoreOperationalReadiness = (
+  store: any,
+  options: { paymentProfile?: any } = {}
+) => {
+  const storeStatusCode = toText(readStoreIdentityAttr(store, "status"), "ACTIVE").toUpperCase();
+  const paymentProfile = options.paymentProfile ?? resolvePreferredStorePaymentProfile(store);
+  const paymentReadiness = paymentProfile ? buildStorePaymentProfileReadiness(paymentProfile) : null;
+  const paymentCode = String(paymentReadiness?.code || "NOT_CONFIGURED").toUpperCase();
+
+  if (storeStatusCode !== "ACTIVE") {
+    return {
+      code: "STORE_INACTIVE",
+      label: "Store inactive",
+      tone: "neutral",
+      description:
+        "This store identity exists, but public store operations stay gated while the store status is inactive.",
+      isReady: false,
+      blockedBy: "STORE_STATUS",
+      storeStatusCode,
+      paymentProfileCode: paymentCode,
+    };
+  }
+
+  if (!paymentProfile) {
+    return {
+      code: "PAYMENT_NOT_CONFIGURED",
+      label: "Payment setup missing",
+      tone: "warning",
+      description:
+        "This store is not operational yet because no active payment profile snapshot is available.",
+      isReady: false,
+      blockedBy: "PAYMENT_PROFILE",
+      storeStatusCode,
+      paymentProfileCode: paymentCode,
+    };
+  }
+
+  if (paymentReadiness?.isReady) {
+    return {
+      code: "READY",
+      label: "Operational",
+      tone: "success",
+      description:
+        "This store has an active approved payment setup and can be treated as operational on public store-facing lanes.",
+      isReady: true,
+      blockedBy: null,
+      storeStatusCode,
+      paymentProfileCode: paymentCode,
+    };
+  }
+
+  if (paymentCode === "REJECTED") {
+    return {
+      code: "PAYMENT_REJECTED",
+      label: "Payment setup rejected",
+      tone: "danger",
+      description:
+        "This store is not operational yet because the latest payment setup was rejected and still needs seller follow-up.",
+      isReady: false,
+      blockedBy: "PAYMENT_PROFILE",
+      storeStatusCode,
+      paymentProfileCode: paymentCode,
+    };
+  }
+
+  if (paymentCode === "INACTIVE") {
+    return {
+      code: "PAYMENT_INACTIVE",
+      label: "Payment setup inactive",
+      tone: "neutral",
+      description:
+        "This store is not operational yet because the payment setup exists but is not active for buyer operations.",
+      isReady: false,
+      blockedBy: "PAYMENT_PROFILE",
+      storeStatusCode,
+      paymentProfileCode: paymentCode,
+    };
+  }
+
+  if (paymentCode === "INCOMPLETE") {
+    return {
+      code: "PAYMENT_INCOMPLETE",
+      label: "Payment setup incomplete",
+      tone: "warning",
+      description:
+        "This store is not operational yet because the payment setup is still incomplete and cannot be treated as live.",
+      isReady: false,
+      blockedBy: "PAYMENT_PROFILE",
+      storeStatusCode,
+      paymentProfileCode: paymentCode,
+    };
+  }
+
+  return {
+    code: "PAYMENT_PENDING_REVIEW",
+    label: "Payment review pending",
+    tone: "warning",
+    description:
+      "This store is not operational yet because payment setup still waits for admin approval.",
+    isReady: false,
+    blockedBy: "PAYMENT_PROFILE",
+    storeStatusCode,
+    paymentProfileCode: paymentCode,
+  };
+};
 
 export const buildPublicStoreSummary = async (store: any) => {
   const storeId = Number(readStoreIdentityAttr(store, "id") || 0);
   const status = buildPublicStoreStatusMeta(readStoreIdentityAttr(store, "status"));
+  const operationalReadiness = buildPublicStoreOperationalReadiness(store);
 
   if (!(storeId > 0)) {
     return {
       status,
+      operationalReadiness,
       productCount: null,
       ratingAverage: null,
       ratingCount: 0,
@@ -226,6 +337,7 @@ export const buildPublicStoreSummary = async (store: any) => {
 
   return {
     status,
+    operationalReadiness,
     productCount: Number(productCount) || 0,
     ratingAverage,
     ratingCount,
@@ -314,18 +426,29 @@ export const serializePublicSellerInfo = async (store: any) => {
 
   const identity = await serializePublicStoreIdentity(store);
   const summary = identity.summary || {};
+  const operationalReadiness =
+    summary.operationalReadiness || buildPublicStoreOperationalReadiness(store);
+  const isOperationallyReady = operationalReadiness
+    ? Boolean(operationalReadiness.isReady)
+    : true;
   const storeSlug = toText(identity.slug);
   const storeWhatsApp = toPreferredWhatsAppLink(identity.whatsapp, "");
-  const hasContactFallback = Boolean(storeSlug && (identity.phone || identity.email));
-  const chatMode =
-    summary.chatMode === "enabled" || summary.chatMode === "contact_fallback"
-      ? summary.chatMode
-      : storeWhatsApp
-        ? "enabled"
-        : hasContactFallback
-          ? "contact_fallback"
-          : "disabled";
-  const canVisitStore = Boolean(storeSlug);
+  const hasContactFallback = Boolean(
+    isOperationallyReady && storeSlug && (identity.phone || identity.email)
+  );
+  const chatMode = storeWhatsApp
+    ? "enabled"
+    : hasContactFallback
+      ? "contact_fallback"
+      : "disabled";
+  const canVisitStore = Boolean(storeSlug && isOperationallyReady);
+  const sellerStatus = isOperationallyReady
+    ? summary.status || buildPublicStoreStatusMeta("ACTIVE")
+    : {
+        code: toText(operationalReadiness?.code, "UNKNOWN"),
+        label: toText(operationalReadiness?.label, "Store gated"),
+        tone: toText(operationalReadiness?.tone, "neutral"),
+      };
 
   return {
     storeId: identity.id,
@@ -333,7 +456,8 @@ export const serializePublicSellerInfo = async (store: any) => {
     slug: storeSlug,
     logoUrl: identity.logoUrl || null,
     shortDescription: identity.description || null,
-    status: summary.status || buildPublicStoreStatusMeta("ACTIVE"),
+    status: sellerStatus,
+    operationalReadiness,
     productCount:
       Number.isFinite(Number(summary.productCount)) ? Number(summary.productCount) : null,
     ratingAverage:
@@ -360,13 +484,20 @@ export const serializePublicSellerInfo = async (store: any) => {
         ? "Chat Toko"
         : hasContactFallback
           ? "Hubungi Toko"
-          : "Chat segera hadir",
+          : isOperationallyReady
+            ? "Chat segera hadir"
+            : "Store gated",
     chatHelper:
       chatMode === "enabled"
         ? "Opens the store WhatsApp contact in a new tab."
         : hasContactFallback
           ? "Store contact details are currently shown on the public store page."
-          : "Direct seller chat is not available in this storefront yet.",
+          : isOperationallyReady
+            ? "Direct seller chat is not available in this storefront yet."
+            : toText(
+                operationalReadiness?.description,
+                "This store page stays gated until the store becomes operational."
+              ),
     publicContact: {
       phone: identity.phone || null,
       email: identity.email || null,
@@ -380,6 +511,7 @@ export const serializePublicSellerInfo = async (store: any) => {
         "Only public-safe store identity is exposed in the PDP seller card.",
         "Follower, response rate, and response speed remain null until a validated source of truth exists.",
         "Chat CTA uses WhatsApp when the store has a public WhatsApp contact. Otherwise it falls back to the public store page when contact details are available there.",
+        "Visit-store CTA stays gated until public operational readiness is READY.",
       ],
     },
   };

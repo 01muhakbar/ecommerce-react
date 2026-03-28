@@ -137,13 +137,32 @@ const getLifecycleMeta = (status) => {
   };
 };
 
-const getStorefrontMeta = (published, status) => {
+const getStorefrontMeta = (published, status, submissionStatus) => {
   const normalized = String(status || "").trim().toLowerCase();
+  const normalizedSubmission = String(submissionStatus || "none")
+    .trim()
+    .toLowerCase();
   if (!published) {
     return {
       label: "Hidden from storefront",
       toneClass: "bg-rose-100 text-rose-700",
       description: "Publish is off, so customers cannot see this product yet.",
+    };
+  }
+  if (normalizedSubmission === "submitted") {
+    return {
+      label: "Published but review-blocked",
+      toneClass: "bg-sky-100 text-sky-700",
+      description:
+        "Publish is on, but storefront visibility stays hidden until admin review is completed.",
+    };
+  }
+  if (normalizedSubmission === "needs_revision") {
+    return {
+      label: "Published but revision-blocked",
+      toneClass: "bg-amber-100 text-amber-800",
+      description:
+        "Publish is on, but storefront visibility stays hidden until seller revisions are resubmitted and approved.",
     };
   }
   if (normalized === "active") {
@@ -208,7 +227,12 @@ export default function ProductPreviewDrawer({ productId, onClose, onEdit }) {
   const hasSalePrice = salePrice > 0 && salePrice < price;
   const published = Boolean(product?.published ?? product?.isPublished);
   const lifecycleMeta = getLifecycleMeta(product?.status);
-  const storefrontMeta = getStorefrontMeta(published, product?.status);
+  const sellerSubmission = product?.sellerSubmission || null;
+  const storefrontMeta = getStorefrontMeta(
+    published,
+    product?.status,
+    sellerSubmission?.status
+  );
   const skuValue = String(product?.sku ?? "").trim();
   const skuDisplay = skuValue && skuValue !== "-" ? skuValue : "N/A";
   const imageUrl = resolveAssetUrl(getPrimaryProductImageUrl(product, FALLBACK_THUMBNAIL));
@@ -217,7 +241,6 @@ export default function ProductPreviewDrawer({ productId, onClose, onEdit }) {
     () => buildVariants(product, displayTags, imageUrl),
     [product, displayTags, imageUrl]
   );
-  const sellerSubmission = product?.sellerSubmission || null;
   const publishGate = sellerSubmission?.publishGate || null;
   const canRequestRevision = sellerSubmission?.status === "submitted";
   const canPublishReviewOutcome =

@@ -94,6 +94,45 @@ const getSubmissionErrorMessage = (error) => {
 const getSubmissionReason = (submission) =>
   submission?.reviewNote || submission?.revisionReason || submission?.revisionNote || null;
 
+const getSellerLaneVisibilityLabel = (product) => {
+  if (product?.visibility?.storefrontVisible) return "Visible in storefront";
+  if (product?.submission?.status === "submitted") return "Hidden by admin review";
+  if (product?.submission?.status === "needs_revision") {
+    return "Hidden until revision is resubmitted";
+  }
+  if (product?.status === "draft") return "Draft only";
+  return product?.visibility?.storefrontLabel || "Hidden from storefront";
+};
+
+const getSellerLanePublishState = (publishing, submission) => {
+  if (submission?.status === "submitted") return "Locked by admin review";
+  if (submission?.status === "needs_revision") return "Locked until resubmission";
+  return publishing?.label || "Draft";
+};
+
+const getSellerLanePublishAuthority = (submission, submissionGovernance) => {
+  if (submission?.status === "submitted") return "Locked during review";
+  if (submission?.status === "needs_revision") return "Locked until resubmission";
+  return submissionGovernance?.sellerCanPublish ? "Seller-owned" : "Unavailable";
+};
+
+const getSellerLaneStorefrontImpact = (product) => {
+  if (product?.visibility?.storefrontVisible) return "Visible in storefront";
+  if (product?.submission?.status === "submitted") return "Hidden until admin review outcome";
+  if (product?.submission?.status === "needs_revision") {
+    return "Hidden until seller revisions are resubmitted";
+  }
+  return product?.visibility?.storefrontLabel || "Hidden from storefront";
+};
+
+const getSellerLanePublishFlagLabel = (product) => {
+  if (product?.submission?.status === "submitted") return "On, but review-blocked";
+  if (product?.submission?.status === "needs_revision") {
+    return "On, but revision-blocked";
+  }
+  return product?.visibility?.publishLabel || "-";
+};
+
 const getPublishErrorMessage = (error) => {
   const code = String(error?.response?.data?.code || "").trim().toUpperCase();
   const message = String(error?.response?.data?.message || "").trim();
@@ -287,6 +326,14 @@ export default function SellerProductDetailPage() {
   const isSubmitted = submission?.status === "submitted";
   const isNeedsRevision = submission?.status === "needs_revision";
   const isStorefrontVisible = Boolean(product?.visibility?.storefrontVisible);
+  const sellerLaneVisibilityLabel = getSellerLaneVisibilityLabel(product);
+  const publishStateLabel = getSellerLanePublishState(publishing, submission);
+  const publishAuthorityLabel = getSellerLanePublishAuthority(
+    submission,
+    submissionGovernance
+  );
+  const storefrontImpactLabel = getSellerLaneStorefrontImpact(product);
+  const publishFlagLabel = getSellerLanePublishFlagLabel(product);
   const editActionLabel = isNeedsRevision ? "Continue Revision" : "Edit Product";
   const submitButtonLabel =
     submission?.canResubmit || submission?.status === "needs_revision"
@@ -298,7 +345,7 @@ export default function SellerProductDetailPage() {
       <SellerWorkspaceSectionHeader
         eyebrow="Seller Product Detail"
         title={product?.name || "Product"}
-        description="Use this page to manage the seller-owned product state, storefront visibility, and any legacy review notes still attached to the item."
+        description="Use this page to review seller lifecycle state, admin review progress, and the final storefront visibility outcome for this product."
         actions={[
           backButton,
           canEditDraft ? (
@@ -361,6 +408,8 @@ export default function SellerProductDetailPage() {
               label="Waiting for admin review"
               tone="sky"
             />
+          ) : isNeedsRevision ? (
+            <SellerWorkspaceBadge key="revision" label="Revision required" tone="amber" />
           ) : isStorefrontVisible ? (
             <SellerWorkspaceBadge key="live" label="Live in storefront" tone="emerald" />
           ) : null,
@@ -390,10 +439,7 @@ export default function SellerProductDetailPage() {
           />
           <SellerWorkspaceBadge
             label={
-              product?.visibility?.sellerLabel ||
-              product?.visibility?.publishLabel ||
-              product?.visibility?.label ||
-              (product?.published ? "Published" : "Private")
+              sellerLaneVisibilityLabel
             }
             tone={getVisibilityTone(product?.visibility)}
           />
@@ -423,7 +469,7 @@ export default function SellerProductDetailPage() {
 
       {isSubmitted ? (
         <SellerWorkspaceNotice type="info">
-          Legacy admin review is still recorded for this product. Seller publish control remains active for the store, so use the visibility state below as the operational source of truth.
+          Admin review is still in progress for this product. Storefront visibility stays blocked, and seller edit or publish controls remain locked until admin completes the review or requests revisions.
         </SellerWorkspaceNotice>
       ) : null}
 
@@ -434,7 +480,7 @@ export default function SellerProductDetailPage() {
               Revision requested
             </p>
             <p>
-              Admin asked for changes on this product. You can update the product, resubmit for review, or publish directly once the required fields are ready.
+              Admin asked for changes on this product. Revise the draft here and resubmit it for review. Storefront visibility stays blocked during this revision state.
             </p>
             {revisionReason ? <p>{revisionReason}</p> : null}
           </div>
@@ -443,7 +489,7 @@ export default function SellerProductDetailPage() {
 
       <SellerWorkspaceSectionCard
         title="Visibility and next action"
-        hint="Use this panel to confirm storefront state, publish readiness, and any optional review workflow that still applies."
+        hint="Use this panel to confirm the final storefront outcome, any review lock, and the next seller action that is actually available."
         Icon={Send}
         actions={
           canEditDraft || canSubmitForReview || canPublish || canUnpublish
@@ -510,12 +556,12 @@ export default function SellerProductDetailPage() {
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <SellerWorkspaceDetailItem
             label="Visibility"
-            value={product?.visibility?.storefrontLabel || "Hidden from storefront"}
+            value={sellerLaneVisibilityLabel}
             hint={product?.visibility?.storefrontReason || "-"}
           />
           <SellerWorkspaceDetailItem
             label="Publish State"
-            value={publishing?.label || "Draft"}
+            value={publishStateLabel}
             hint={
               publishing?.hint ||
               publishBlockers[0]?.message ||
@@ -529,10 +575,10 @@ export default function SellerProductDetailPage() {
           />
           <SellerWorkspaceDetailItem
             label="Next Recommended Action"
-            value={publishing?.nextActionLabel || submission?.nextActionLabel || "Review product status"}
+            value={submission?.nextActionLabel || publishing?.nextActionLabel || "Review product status"}
             hint={
-              publishing?.hint ||
               submission?.nextActionDescription ||
+              publishing?.hint ||
               "No seller action is open for this product right now."
             }
           />
@@ -563,7 +609,7 @@ export default function SellerProductDetailPage() {
 
       <SellerWorkspaceSectionCard
         title="Submission timeline"
-        hint="Review metadata is still visible here for continuity, but seller publish control is now the active storefront authority."
+        hint="Review metadata here explains whether the product is waiting on admin, open for revision, or cleared to return to the normal seller visibility flow."
         Icon={Send}
       >
         {submissionGovernance?.note ? (
@@ -609,11 +655,11 @@ export default function SellerProductDetailPage() {
           />
           <SellerWorkspaceDetailItem
             label="Publish Authority"
-            value={submissionGovernance?.sellerCanPublish ? "Seller-owned" : "Admin-owned"}
+            value={publishAuthorityLabel}
           />
           <SellerWorkspaceDetailItem
             label="Storefront Impact"
-            value={submission?.storefrontImpact || "NO_VISIBILITY_CHANGE"}
+            value={storefrontImpactLabel}
           />
           <SellerWorkspaceDetailItem
             label="Edit After Submit"
@@ -637,7 +683,7 @@ export default function SellerProductDetailPage() {
           />
           <SellerWorkspaceDetailItem
             label="Current Public State"
-            value={product?.visibility?.storefrontLabel || "Hidden from storefront"}
+            value={sellerLaneVisibilityLabel}
           />
         </div>
       </SellerWorkspaceSectionCard>
@@ -660,7 +706,7 @@ export default function SellerProductDetailPage() {
               />
               <SellerWorkspaceDetailItem
                 label="Seller Visibility"
-                value={product?.visibility?.sellerLabel || "-"}
+                value={sellerLaneVisibilityLabel}
               />
               <SellerWorkspaceDetailItem
                 label="Storefront State"
@@ -732,7 +778,7 @@ export default function SellerProductDetailPage() {
               />
               <SellerWorkspaceDetailItem
                 label="Publish Flag"
-                value={product?.visibility?.publishLabel || "-"}
+                value={publishFlagLabel}
               />
             </div>
           </SellerWorkspaceSectionCard>

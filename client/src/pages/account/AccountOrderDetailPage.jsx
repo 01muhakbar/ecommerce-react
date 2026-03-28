@@ -85,6 +85,7 @@ export default function AccountOrderDetailPage() {
   const discountValue = order.discount ?? order.discountAmount ?? 0;
   const subtotalValue = order.subtotal ?? 0;
   const groupedOrder = groupedQuery.data?.data ?? null;
+  const parentPaymentStatus = groupedOrder?.paymentStatus || order.paymentStatus;
 
   return (
     <div className="space-y-6">
@@ -110,14 +111,14 @@ export default function AccountOrderDetailPage() {
 
       <div className="rounded-xl border border-slate-200 p-4">
         <h3 className="text-sm font-semibold text-slate-900">Summary</h3>
-        <div className="mt-3 grid gap-2 text-sm text-slate-600 md:grid-cols-2">
-          <div>Payment: {order.paymentMethod || "-"}</div>
-          <div>
-            <PaymentStatusBadge status={order.paymentStatus} prefix="Parent" />
-          </div>
-          <div>Total: {money(order.totalAmount || 0)}</div>
-          <div>Discount: {money(discountValue)}</div>
-          <div>Subtotal: {money(subtotalValue)}</div>
+          <div className="mt-3 grid gap-2 text-sm text-slate-600 md:grid-cols-2">
+            <div>Payment: {order.paymentMethod || "-"}</div>
+            <div>
+              <PaymentStatusBadge status={parentPaymentStatus} prefix="Parent" />
+            </div>
+            <div>Total: {money(order.totalAmount || 0)}</div>
+            <div>Discount: {money(discountValue)}</div>
+            <div>Subtotal: {money(subtotalValue)}</div>
         </div>
         {order.id ? (
           <div className="mt-4">
@@ -125,7 +126,7 @@ export default function AccountOrderDetailPage() {
               to={`/user/my-orders/${order.id}/payment`}
               className="inline-flex h-10 items-center justify-center rounded-full border border-emerald-200 px-4 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
             >
-              {String(order.paymentStatus || groupedOrder?.paymentStatus).toUpperCase() === "PAID"
+              {String(parentPaymentStatus).toUpperCase() === "PAID"
                 ? "View Payment by Store"
                 : "Continue to QRIS Payment"}
             </Link>
@@ -161,7 +162,10 @@ export default function AccountOrderDetailPage() {
                         <h4 className="font-semibold text-slate-900">{group.storeName}</h4>
                         <PaymentStatusBadge status={group.paymentStatus} prefix="Suborder" />
                         {group.payment?.status ? (
-                          <PaymentStatusBadge status={group.payment.status} prefix="Payment" />
+                          <PaymentStatusBadge
+                            status={group.payment.displayStatus || group.payment.status}
+                            prefix="Payment"
+                          />
                         ) : null}
                         {group.payment?.proof?.reviewStatus ? (
                           <ProofReviewBadge
