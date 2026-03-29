@@ -1,12 +1,17 @@
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { ArrowRight, CheckCircle2, QrCode, ReceiptText } from "lucide-react";
 import { formatCurrency } from "../../utils/format.js";
+import { resolvePublicOrderReference } from "../../utils/publicOrderReference.js";
 
 export default function CheckoutSuccess() {
   const [params] = useSearchParams();
   const location = useLocation();
-  const invoiceNo =
-    params.get("invoiceNo") || params.get("ref") || location.state?.ref || "";
+  const invoiceNo = resolvePublicOrderReference(
+    params.get("invoiceNo"),
+    params.get("ref"),
+    location.state?.invoiceNo,
+    location.state?.ref
+  );
   const orderId = params.get("orderId") || location.state?.orderId || "";
   const total = params.get("total");
   const method = (params.get("method") || location.state?.method || "QRIS").toUpperCase();

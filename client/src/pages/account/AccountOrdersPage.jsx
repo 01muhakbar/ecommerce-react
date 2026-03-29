@@ -11,6 +11,10 @@ import {
   CheckoutModeBadge,
   PaymentStatusBadge,
 } from "../../components/payments/PaymentReadModelBadges.jsx";
+import {
+  buildPublicOrderTrackingPath,
+  resolvePublicOrderReference,
+} from "../../utils/publicOrderReference.js";
 
 const fetchOrders = async (page) => {
   const { data } = await api.get("/store/my/orders", {
@@ -31,7 +35,7 @@ const formatDate = (value) => {
 const getOrderDateValue = (order) =>
   order?.createdAt || order?.created_at || order?.orderTime || null;
 
-const getOrderRef = (order) => order?.invoiceNo || order?.orderId || order?.id || null;
+const getPublicOrderRef = (order) => resolvePublicOrderReference(order?.invoiceNo);
 
 const isOrderFinal = (status) => {
   const normalized = normalizeOrderStatus(status);
@@ -207,7 +211,8 @@ export default function AccountOrdersPage() {
               </thead>
               <tbody>
                 {orders.map((order) => {
-                  const orderRef = getOrderRef(order);
+                  const publicOrderRef = getPublicOrderRef(order);
+                  const trackingPath = buildPublicOrderTrackingPath(publicOrderRef);
                   const statusUI = getStatusUI(order.status);
                   const shippingProvider =
                     order.shippingProvider || order.shipping?.provider || "-";
@@ -219,7 +224,9 @@ export default function AccountOrdersPage() {
                   return (
                     <tr key={order.id} className="border-t border-slate-100 hover:bg-slate-50">
                       <td className="px-5 py-4">
-                        <div className="font-semibold text-slate-900">{orderRef || `#${order.id}`}</div>
+                        <div className="font-semibold text-slate-900">
+                          {publicOrderRef || `#${order.id}`}
+                        </div>
                         <div className="mt-2">
                           <CheckoutModeBadge mode={order.checkoutMode} />
                         </div>
@@ -260,9 +267,9 @@ export default function AccountOrdersPage() {
                               {paymentEntry.label || "Order Payment"}
                             </Link>
                           ) : null}
-                          {orderRef ? (
+                          {trackingPath ? (
                             <Link
-                              to={`/order/${encodeURIComponent(orderRef)}`}
+                              to={trackingPath}
                               className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-emerald-200 text-emerald-600 transition hover:bg-emerald-50 hover:text-emerald-800"
                             >
                               <Eye className="h-4 w-4" />

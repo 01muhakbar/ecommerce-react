@@ -17,6 +17,10 @@ import {
   ORDER_NOT_FOUND,
   UPDATING,
 } from "../../constants/uiMessages.js";
+import {
+  isPublicOrderReference,
+  resolvePublicOrderReference,
+} from "../../utils/publicOrderReference.js";
 
 const formatDate = (value) => {
   if (!value) return "-";
@@ -149,7 +153,8 @@ const getTrackingSummary = (status) => {
 export default function StoreOrderTrackingPage() {
   const { ref } = useParams();
   const orderRefParam = String(ref || "").trim();
-  const hasValidRef = orderRefParam.length > 0;
+  const hasRefParam = orderRefParam.length > 0;
+  const hasValidRef = isPublicOrderReference(orderRefParam);
 
   const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey: ["store", "tracking", orderRefParam],
@@ -166,16 +171,20 @@ export default function StoreOrderTrackingPage() {
 
   const order = useMemo(() => normalizeTrackingPayload(data), [data]);
   const statusCode = error?.response?.status;
+  const isInvalidRefInput = hasRefParam && !hasValidRef;
+  const isInvalidRefResponse = hasValidRef && statusCode === 400;
   const isInitialLoading = hasValidRef && isLoading && !data;
   const isRefetching = hasValidRef && isFetching && !isInitialLoading;
   const isNotFound =
-    !hasValidRef ||
+    !hasRefParam ||
     statusCode === 404 ||
     (hasValidRef && !isInitialLoading && !isError && !order);
-  const isNetworkOrServerError = hasValidRef && isError && statusCode !== 404;
+  const isNetworkOrServerError =
+    hasValidRef && isError && statusCode !== 400 && statusCode !== 404;
   const isSuccess =
     hasValidRef &&
     !isInitialLoading &&
+    !isInvalidRefResponse &&
     !isNotFound &&
     !isNetworkOrServerError &&
     Boolean(order);
@@ -184,7 +193,11 @@ export default function StoreOrderTrackingPage() {
     window.print();
   };
 
-  const invoiceRef = order?.invoiceNo || order?.orderId || order?.ref || ref;
+  const invoiceRef = resolvePublicOrderReference(
+    order?.invoiceNo,
+    order?.ref,
+    orderRefParam
+  );
   const createdAt = order?.createdAt || order?.created_at || order?.orderTime || null;
   const customer = order?.customer || order?.user || {};
   const customerName =
@@ -206,8 +219,35 @@ export default function StoreOrderTrackingPage() {
   const trackingSummary = getTrackingSummary(order?.status);
   const isCancelled =
     normalizedStatus === "cancelled" || normalizedStatus === "canceled";
-  const errorMessage =
-    error?.response?.data?.message || error?.message || GENERIC_ERROR;
+  const errorMessage = isInvalidRefResponse
+    ? "Use the public invoice reference shown after checkout or in My Orders."
+    : error?.response?.data?.message || error?.message || GENERIC_ERROR;
+
+  if (isInvalidRefInput || isInvalidRefResponse) {
+    return (
+      <section className="mx-auto max-w-6xl px-3 py-6 sm:px-4 sm:py-8 lg:px-6">
+        <div className="mx-auto max-w-2xl rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_20px_45px_rgba(15,23,42,0.08)] sm:p-7">
+          <UiEmptyState
+            className="rounded-2xl"
+            title="Use Your Invoice Reference"
+            description={
+              hasRefParam
+                ? "Tracking works only with the public invoice reference from checkout or My Orders."
+                : "Enter the public invoice reference from checkout or My Orders to open tracking."
+            }
+            actions={
+              <Link
+                to="/"
+                className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Back to Home
+              </Link>
+            }
+          />
+        </div>
+      </section>
+    );
+  }
 
   if (isInitialLoading) {
     return (

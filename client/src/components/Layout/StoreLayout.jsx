@@ -4,11 +4,15 @@ import { Home, Menu, ShoppingCart, UserRound } from "lucide-react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import StoreHeaderKacha from "../kachabazar-demo/StoreHeaderKacha.jsx";
 import FloatingCartWidget from "../kachabazar-demo/FloatingCartWidget.jsx";
+import StoreFooterKacha from "../kachabazar-demo/StoreFooterKacha.jsx";
 import { StoreCartDrawer } from "../../pages/store/StoreCartPage.jsx";
 import { useCartStore } from "../../store/cart.store.ts";
 import MobileMenuDrawer from "./MobileMenuDrawer.jsx";
 import { formatCurrency } from "../../utils/format.js";
-import { getStoreSettings } from "../../api/public/storeCustomizationPublic.ts";
+import {
+  getStoreCustomization,
+  getStoreSettings,
+} from "../../api/public/storeCustomizationPublic.ts";
 
 const DEFAULT_PUBLIC_STORE_SETTINGS = {
   payments: {
@@ -159,9 +163,18 @@ export default function StoreLayout() {
     staleTime: 60_000,
     retry: 1,
   });
+  const homeCustomizationQuery = useQuery({
+    queryKey: ["store-customization", "store-layout", "en"],
+    queryFn: () => getStoreCustomization({ lang: "en", include: "home" }),
+    staleTime: 60_000,
+    retry: 1,
+    placeholderData: (previousData) => previousData,
+    refetchOnWindowFocus: false,
+  });
   const storeSettings = normalizePublicStoreSettings(
     storeSettingsQuery.data?.data?.storeSettings
   );
+  const footerConfig = homeCustomizationQuery.data?.customization?.home?.footer;
 
   useEffect(() => {
     setIsMenuOpen(false);
@@ -280,11 +293,10 @@ gtag('config', '${key}');`;
         <Outlet context={{ storeSettings }} />
       </main>
       {!isCheckoutRoute ? (
-        <footer className="border-t border-slate-200 bg-white">
-          <div className="mx-auto w-full max-w-7xl px-4 py-6 text-xs text-slate-500">
-            Crafted for local storefront demos.
-          </div>
-        </footer>
+        <StoreFooterKacha
+          footerConfig={footerConfig}
+          brandingName={storeSettings.branding.workspaceBrandName}
+        />
       ) : null}
       {showFloatingCartWidget ? (
         <FloatingCartWidget

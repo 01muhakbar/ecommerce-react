@@ -154,6 +154,7 @@ export function useCart() {
   const [rawCart, setRawCart] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<any>(null);
+  const [hasInitialized, setHasInitialized] = useState(false);
 
   const fallbackCart = useMemo(() => buildFallbackCart(storeItems), [storeItems]);
 
@@ -403,7 +404,13 @@ export function useCart() {
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
-    void refreshCart(true);
+    void (async () => {
+      try {
+        await refreshCart(true);
+      } finally {
+        setHasInitialized(true);
+      }
+    })();
   }, [refreshCart]);
 
   return {
@@ -416,6 +423,7 @@ export function useCart() {
     isGuest,
     isLoading,
     error,
+    hasInitialized,
     refreshCart,
     add,
     update,

@@ -1148,10 +1148,15 @@ router.get(
         return res.status(400).json({ message: "Invalid order reference." });
       }
 
-      const isNumeric = /^\d+$/.test(refParam);
-      const where = isNumeric
-        ? { id: Number(refParam) }
-        : sequelize.where(sequelize.col("invoice_no"), refParam);
+      // Public tracking must use the external invoice reference only.
+      // Internal numeric order ids stay out of the public lookup lane.
+      if (/^\d+$/.test(refParam)) {
+        return res.status(400).json({
+          message: "Order tracking requires a public invoice reference.",
+        });
+      }
+
+      const where = sequelize.where(sequelize.col("invoice_no"), refParam);
 
       const order = await Order.findOne({
         where,

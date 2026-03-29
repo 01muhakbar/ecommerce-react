@@ -5,6 +5,7 @@ import { useCartStore } from "../../store/cart.store.ts";
 import { validateStoreCoupon } from "../../api/public/storeCoupons.ts";
 import { createStoreOrder } from "../../api/public/storeOrders.ts";
 import { formatCurrency } from "../../utils/format.js";
+import { resolvePublicOrderReference } from "../../utils/publicOrderReference.js";
 
 export default function StoreCheckoutPage() {
   const navigate = useNavigate();
@@ -126,15 +127,22 @@ export default function StoreCheckoutPage() {
         clearCart();
         queryClient.invalidateQueries({ queryKey: ["account", "orders"] });
       }
-      const invoiceNo = response?.data?.invoiceNo;
-      const ref = invoiceNo || String(response.data.orderId);
-      const invoiceRef = invoiceNo || ref;
+      const publicOrderRef = resolvePublicOrderReference(
+        response?.data?.invoiceNo,
+        response?.data?.ref
+      );
+      const successParams = new URLSearchParams();
+      if (publicOrderRef) {
+        successParams.set("ref", publicOrderRef);
+        successParams.set("invoiceNo", publicOrderRef);
+      }
+      successParams.set(
+        "total",
+        String(response?.data?.total ?? total ?? "")
+      );
+      successParams.set("method", paymentMethod);
       navigate(
-        `/checkout/success?ref=${encodeURIComponent(ref)}&invoiceNo=${encodeURIComponent(
-          invoiceRef
-        )}&total=${encodeURIComponent(
-          String(response?.data?.total ?? total ?? "")
-        )}&method=${encodeURIComponent(paymentMethod)}`
+        `/checkout/success?${successParams.toString()}`
       );
     } catch (err) {
       const data = err?.response?.data;

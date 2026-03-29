@@ -192,6 +192,7 @@ export type StoreCustomizationResponse = {
   success: boolean;
   lang: string;
   customization: {
+    home?: Record<string, any>;
     aboutUs?: Record<string, any>;
     privacyPolicy?: Record<string, any>;
     termsAndConditions?: Record<string, any>;

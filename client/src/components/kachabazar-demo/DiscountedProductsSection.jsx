@@ -23,6 +23,9 @@ function ProductSkeletonCard() {
 }
 
 export default function DiscountedProductsSection({
+  title = "Latest Discounted Products",
+  description = "Don't miss out the latest discounted products from this week.",
+  maxProducts = 12,
   products = [],
   isLoading = false,
   isError = false,
@@ -30,17 +33,17 @@ export default function DiscountedProductsSection({
 }) {
   const discountedProducts = (Array.isArray(products) ? products : [])
     .filter(isDiscounted)
-    .slice(0, 12)
+    .slice(0, Math.max(1, Number(maxProducts) || 12))
     .map((product) => ({ ...product, variant: "discounted" }));
 
   return (
     <section className="space-y-6">
       <header className="text-center">
         <h2 className="text-2xl font-semibold text-slate-900 sm:text-3xl">
-          Latest Discounted Products
+          {title}
         </h2>
         <p className="mt-2 text-sm text-slate-500">
-          Don&apos;t miss out the latest discounted products from this week.
+          {description}
         </p>
       </header>
 

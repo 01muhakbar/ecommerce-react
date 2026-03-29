@@ -114,15 +114,23 @@ function CategoryCell({ category, subLinks }) {
   );
 }
 
-export default function FeaturedCategoriesSection({ categories = [], products = [] }) {
-  const safeCategories = Array.isArray(categories) ? categories : [];
+export default function FeaturedCategoriesSection({
+  title = "Featured Categories",
+  description = "Choose your necessary products from this feature categories.",
+  maxCategories = 12,
+  categories = [],
+  products = [],
+}) {
+  const safeCategories = Array.isArray(categories)
+    ? categories.slice(0, Math.max(1, Number(maxCategories) || 12))
+    : [];
 
   return (
     <section className="space-y-6 rounded-3xl bg-slate-100 px-3 py-8 sm:px-5">
       <header className="text-center">
-        <h2 className="text-2xl font-semibold text-slate-900 sm:text-3xl">Featured Categories</h2>
+        <h2 className="text-2xl font-semibold text-slate-900 sm:text-3xl">{title}</h2>
         <p className="mt-2 text-sm text-slate-500">
-          Choose your necessary products from this feature categories.
+          {description}
         </p>
       </header>
 

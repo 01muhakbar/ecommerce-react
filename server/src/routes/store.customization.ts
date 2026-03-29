@@ -294,6 +294,11 @@ router.get("/", async (req, res, next) => {
       includeSet.has("aboutus") ||
       includeSet.has("about-us") ||
       includeSet.has("about_us");
+    const includeHome =
+      includeSet.has("home") ||
+      includeSet.has("homesettings") ||
+      includeSet.has("home-settings") ||
+      includeSet.has("home_settings");
     const includePolicy = includeSet.has("policy");
     const includeFaq = includeSet.has("faq") || includeSet.has("faqs");
     const includeOffers = includeSet.has("offer") || includeSet.has("offers");
@@ -317,6 +322,9 @@ router.get("/", async (req, res, next) => {
     const sanitized = sanitizeStoreCustomization(sourcePayload);
     const customization: Record<string, unknown> = {};
 
+    if (includeHome) {
+      customization.home = sanitized.home;
+    }
     if (includeAboutUs) {
       customization.aboutUs = sanitized.aboutUs;
     }

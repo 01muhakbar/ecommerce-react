@@ -7,14 +7,12 @@ import {
   fetchAdminCoupons,
   createAdminLanguage,
   fetchAdminStoreCustomization,
-  uploadAdminStoreHeaderLogo,
   updateAdminStoreCustomization,
 } from "../../lib/adminApi.js";
 import {
   fileToDataUrl,
   validateCustomizationLogoFile,
 } from "../../utils/fileToDataUrl.js";
-import { resolveAssetUrl } from "../../lib/assetUrl.js";
 
 const ADMIN_LANGUAGE_KEY = "adminLanguage";
 
@@ -307,11 +305,14 @@ const getDefaultCustomization = () => ({
         description: "",
         buttonName: "",
         buttonLink: "",
+        imageFocus: "right",
       })),
       options: {
         showArrows: false,
         showDots: true,
         showBoth: false,
+        autoplayEnabled: false,
+        autoplayDelaySeconds: 5,
       },
     },
     discountCouponBox: {
@@ -733,122 +734,6 @@ const toText = (value, fallback = "") => {
   return normalized || fallback;
 };
 
-const withVersion = (url, version) => {
-  const normalizedUrl = toText(url);
-  const normalizedVersion = toText(version);
-  if (!normalizedUrl || !normalizedVersion) return normalizedUrl;
-  const separator = normalizedUrl.includes("?") ? "&" : "?";
-  return `${normalizedUrl}${separator}v=${encodeURIComponent(normalizedVersion)}`;
-};
-
-const isHttpUrl = (value) => /^https?:\/\//i.test(toText(value));
-
-const buildPublicUrl = (pathOrUrl) => {
-  const normalized = toText(pathOrUrl);
-  if (!normalized) return "";
-  if (isHttpUrl(normalized)) return normalized;
-  if (/^[a-z]+:/i.test(normalized)) return "";
-  const relativePath = normalized.startsWith("/") ? normalized : `/${normalized}`;
-  if (typeof window === "undefined") return relativePath;
-  return `${window.location.origin}${relativePath}`;
-};
-
-const getUrlPathname = (value) => {
-  const normalized = toText(value);
-  if (!normalized) return "";
-  try {
-    return new URL(normalized).pathname || "";
-  } catch {
-    return normalized.split("#")[0].split("?")[0];
-  }
-};
-
-const getSafeImageExt = (value) => {
-  const pathname = getUrlPathname(value).toLowerCase();
-  const rawExt = pathname.split(".").pop() || "";
-  const normalizedExt = rawExt === "jpg" ? "jpg" : rawExt;
-  const allowed = new Set(["png", "webp", "jpg", "jpeg"]);
-  return allowed.has(normalizedExt) ? normalizedExt : "png";
-};
-
-const readImageDimensions = (file) =>
-  new Promise((resolve, reject) => {
-    const objectUrl = URL.createObjectURL(file);
-    const image = new Image();
-    const cleanup = () => URL.revokeObjectURL(objectUrl);
-
-    image.onload = () => {
-      const width = Number(image.naturalWidth || image.width || 0);
-      const height = Number(image.naturalHeight || image.height || 0);
-      cleanup();
-      if (!width || !height) {
-        reject(new Error("Cannot read image dimensions."));
-        return;
-      }
-      resolve({
-        width,
-        height,
-        ratio: width / height,
-      });
-    };
-
-    image.onerror = () => {
-      cleanup();
-      reject(new Error("Cannot read image dimensions."));
-    };
-
-    image.src = objectUrl;
-  });
-
-const getLogoDimensionFeedback = (meta) => {
-  if (!meta) return { message: "", level: "info" };
-  const { width, height, ratio } = meta;
-  const nearRecommendedHeight =
-    Math.abs(height - 64) <= 8 || Math.abs(height - 80) <= 10;
-
-  if (width < 200 || height < 40) {
-    return {
-      message:
-        "Warning: Resolusi terlalu kecil, logo bisa blur. Recommended ~240x64 atau 300x80.",
-      level: "warn",
-    };
-  }
-
-  if (ratio < 2.5) {
-    return {
-      message:
-        "Warning: Logo terlalu kotak/tinggi. Gunakan logo horizontal (~3.5-4:1).",
-      level: "warn",
-    };
-  }
-
-  if (ratio > 6) {
-    return {
-      message:
-        "Warning: Logo terlalu panjang, pastikan teks/logo tetap terbaca di header.",
-      level: "warn",
-    };
-  }
-
-  if (ratio < 3 || ratio > 5) {
-    return {
-      message:
-        "Info: Rasio di luar range aman (3-5:1). Periksa lagi agar tidak terlalu tinggi/panjang.",
-      level: "warn",
-    };
-  }
-
-  if (ratio < 3.5 || ratio > 4.5 || !nearRecommendedHeight) {
-    return {
-      message:
-        "Info: Masih aman, tetapi belum ideal. Rekomendasi ratio ~3.5-4.5:1 (240x64 atau 300x80).",
-      level: "info",
-    };
-  }
-
-  return { message: "", level: "info" };
-};
-
 const isSafeWhatsAppLink = (value) => {
   const normalized = toText(value);
   if (!normalized) return true;
@@ -901,6 +786,29 @@ const toBool = (value, fallback = false) => {
     if (["false", "0", "no", "off"].includes(normalized)) return false;
   }
   return fallback;
+};
+
+const normalizeMainSliderImageFocus = (value, fallback = "right") => {
+  const normalized = toText(value, fallback).toLowerCase();
+  if (normalized === "left" || normalized === "center" || normalized === "right") {
+    return normalized;
+  }
+  return fallback;
+};
+
+const normalizeMainSliderAutoplayDelaySeconds = (value, fallback = 5) => {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  if (parsed === 5 || parsed === 10 || parsed === 15) {
+    return parsed;
+  }
+  return fallback === 10 || fallback === 15 ? fallback : 5;
+};
+
+const getMainSliderImageFocusClass = (value) => {
+  const normalized = normalizeMainSliderImageFocus(value);
+  if (normalized === "left") return "object-left";
+  if (normalized === "center") return "object-center";
+  return "object-right";
 };
 
 const toPositiveInt = (value, fallback) => {
@@ -1687,6 +1595,12 @@ const normalizeCustomizationPayload = (raw) => {
           "",
         fallback.buttonLink
       ),
+      imageFocus: normalizeMainSliderImageFocus(
+        nested.imageFocus ??
+          legacyNested.imageFocus ??
+          mainSliderSource[`slider${order}ImageFocus`],
+        fallback.imageFocus
+      ),
     };
   });
 
@@ -1709,9 +1623,36 @@ const normalizeCustomizationPayload = (raw) => {
     optionsSource.showBoth ?? mainSliderSource.showBoth ?? mainSliderSource.both,
     showArrows && showDots
   );
+  const autoplayEnabled = toBool(
+    optionsSource.autoplayEnabled ??
+      optionsSource.autoPlay ??
+      mainSliderSource.autoplayEnabled ??
+      mainSliderSource.autoPlay,
+    mainSliderDefaults.options.autoplayEnabled
+  );
+  const autoplayDelaySeconds = normalizeMainSliderAutoplayDelaySeconds(
+    optionsSource.autoplayDelaySeconds ??
+      optionsSource.autoPlayDelaySeconds ??
+      mainSliderSource.autoplayDelaySeconds ??
+      mainSliderSource.autoPlayDelaySeconds ??
+      mainSliderSource.slideDurationSeconds,
+    mainSliderDefaults.options.autoplayDelaySeconds
+  );
   const normalizedMainSliderOptions = showBoth
-    ? { showArrows: true, showDots: true, showBoth: true }
-    : { showArrows, showDots, showBoth: false };
+    ? {
+        showArrows: true,
+        showDots: true,
+        showBoth: true,
+        autoplayEnabled,
+        autoplayDelaySeconds,
+      }
+    : {
+        showArrows,
+        showDots,
+        showBoth: false,
+        autoplayEnabled,
+        autoplayDelaySeconds,
+      };
 
   const defaultsHome = defaults.home;
   const defaultsProductSlugPage = defaults.productSlugPage;
@@ -2516,14 +2457,12 @@ export default function StoreCustomizationPage() {
   const queryClient = useQueryClient();
   const presetRef = useRef(null);
   const tabContentRef = useRef(null);
-  const fileInputRef = useRef(null);
   const quickDeliveryFileInputRef = useRef(null);
 
   const [activeTab, setActiveTab] = useState("home");
   const [activeMainSliderTab, setActiveMainSliderTab] = useState("slider-0");
   const [activeAboutUsMemberTab, setActiveAboutUsMemberTab] = useState("member-0");
   const [lang, setLang] = useState(getStoredAdminLanguageIso);
-  const activeLangRef = useRef(lang);
   const [homeState, setHomeState] = useState(() => getDefaultCustomization().home);
   const [productSlugPageState, setProductSlugPageState] = useState(
     () => getDefaultCustomization().productSlugPage
@@ -2552,15 +2491,6 @@ export default function StoreCustomizationPage() {
   const [notice, setNotice] = useState(null);
   const [whatsAppLinkServerError, setWhatsAppLinkServerError] = useState("");
   const [whatsAppLinkHelperError, setWhatsAppLinkHelperError] = useState("");
-  const [headerLogoPreviewVersion, setHeaderLogoPreviewVersion] = useState("");
-  const [logoMeta, setLogoMeta] = useState(null);
-  const [logoWarning, setLogoWarning] = useState("");
-  const [logoWarningLevel, setLogoWarningLevel] = useState("info");
-  const [logoActionFeedback, setLogoActionFeedback] = useState("");
-  const [logoActionFeedbackType, setLogoActionFeedbackType] = useState("info");
-  const [logoError, setLogoError] = useState("");
-  const [isDropActive, setIsDropActive] = useState(false);
-  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isMainSliderDropActive, setIsMainSliderDropActive] = useState(false);
   const [mainSliderImageErrors, setMainSliderImageErrors] = useState({});
   const [couponCodeInput, setCouponCodeInput] = useState("");
@@ -2677,10 +2607,6 @@ export default function StoreCustomizationPage() {
     setLang(fallback.isoCode);
   }, [publishedLanguages, lang]);
 
-  useEffect(() => {
-    activeLangRef.current = lang;
-  }, [lang]);
-
   const customizationQuery = useQuery({
     queryKey: ["admin-store-customization", lang],
     enabled: Boolean(lang),
@@ -2710,8 +2636,6 @@ export default function StoreCustomizationPage() {
     setCheckoutState(normalized.checkout);
     setDashboardSettingState(normalized.dashboardSetting);
     setSeoSettingsState(normalized.seoSettings);
-    setLogoError("");
-    setIsUploadingLogo(false);
     setMainSliderImageErrors({});
     setIsMainSliderDropActive(false);
     setCouponCodeInput("");
@@ -2755,7 +2679,6 @@ export default function StoreCustomizationPage() {
     setOffersDropActive({});
     setContactUsImageErrors({});
     setContactUsDropActive({});
-    setHeaderLogoPreviewVersion(toText(customizationQuery.data?.updatedAt));
     setWhatsAppLinkServerError("");
     setWhatsAppLinkHelperError("");
     setActiveAboutUsMemberTab("member-0");
@@ -2844,15 +2767,6 @@ export default function StoreCustomizationPage() {
   }, [notice]);
 
   useEffect(() => {
-    if (!logoActionFeedback) return undefined;
-    const timer = setTimeout(() => {
-      setLogoActionFeedback("");
-      setLogoActionFeedbackType("info");
-    }, 1800);
-    return () => clearTimeout(timer);
-  }, [logoActionFeedback]);
-
-  useEffect(() => {
     if (!isAddLanguageOpen) return undefined;
 
     const prevOverflow = document.body.style.overflow;
@@ -2885,22 +2799,6 @@ export default function StoreCustomizationPage() {
   const selectedPresetLabel = selectedPreset
     ? `${selectedPreset.flag} ${selectedPreset.displayName} (${selectedPreset.isoCode})`
     : "Select a language";
-  const headerLogoSourceUrl = toText(
-    homeState?.header?.headerLogoUrl ?? homeState?.header?.logoDataUrl
-  );
-  const headerLogoPreviewUrl = resolveAssetUrl(headerLogoSourceUrl);
-  const headerLogoFrameSrc = withVersion(
-    headerLogoPreviewUrl,
-    headerLogoPreviewVersion
-  );
-  const publicLogoUrlCandidate = withVersion(
-    buildPublicUrl(headerLogoSourceUrl),
-    headerLogoPreviewVersion
-  );
-  const publicLogoUrl = isHttpUrl(publicLogoUrlCandidate) ? publicLogoUrlCandidate : "";
-  const logoMetaText = logoMeta
-    ? `Detected: ${logoMeta.width}x${logoMeta.height} (ratio ${logoMeta.ratio.toFixed(2)}:1)`
-    : "";
   const isLoadingHeader = customizationQuery.isFetching;
   const isSaving = updateMutation.isPending;
   const showFullCustomizationLoader =
@@ -2913,7 +2811,7 @@ export default function StoreCustomizationPage() {
     : whatsAppLinkHelperError || whatsAppLinkServerError;
 
   const onSave = () => {
-    if (!lang || isLoadingHeader || isSaving || isUploadingLogo) return;
+    if (!lang || isLoadingHeader || isSaving) return;
     setNotice(null);
     const current = queryClient.getQueryData(["admin-store-customization", lang]);
     const currentCustomization = normalizeCustomizationPayload(
@@ -2948,6 +2846,7 @@ export default function StoreCustomizationPage() {
                 description: toText(item?.description),
                 buttonName: toText(item?.buttonName),
                 buttonLink: toText(item?.buttonLink),
+                imageFocus: normalizeMainSliderImageFocus(item?.imageFocus),
               }))
             : getDefaultCustomization().home.mainSlider.sliders,
           options: {
@@ -3542,156 +3441,6 @@ export default function StoreCustomizationPage() {
     }));
   };
 
-  const onHandleLogoFile = async (file) => {
-    if (!file) return;
-    if (isLoadingHeader || isSaving || isUploadingLogo) return;
-    const validation = validateCustomizationLogoFile(file);
-    if (!validation.valid) {
-      setLogoError(validation.error);
-      return;
-    }
-
-    try {
-      const nextLogoMeta = await readImageDimensions(file);
-      const feedback = getLogoDimensionFeedback(nextLogoMeta);
-      setLogoMeta(nextLogoMeta);
-      setLogoWarning(feedback.message);
-      setLogoWarningLevel(feedback.level);
-    } catch {
-      setLogoMeta(null);
-      setLogoWarning("Warning: Cannot read image dimensions.");
-      setLogoWarningLevel("warn");
-    }
-
-    try {
-      const activeLang = String(lang || "en").trim().toLowerCase() || "en";
-      setIsUploadingLogo(true);
-      const uploadResult = await uploadAdminStoreHeaderLogo(file, activeLang);
-      const uploadedLogoUrl = toText(
-        uploadResult?.headerLogoUrl ?? uploadResult?.url
-      );
-      if (!uploadedLogoUrl) {
-        throw new Error("Upload succeeded but no logo URL was returned.");
-      }
-      if (
-        (String(activeLangRef.current || "en").trim().toLowerCase() || "en") !==
-        activeLang
-      ) {
-        return;
-      }
-      setLogoError("");
-      onChangeHeaderField("headerLogoUrl", uploadedLogoUrl);
-      onChangeHeaderField("logoDataUrl", uploadedLogoUrl);
-      setHeaderLogoPreviewVersion(toText(uploadResult?.updatedAt));
-      setNotice({
-        type: "success",
-        message: `Logo uploaded for ${activeLang.toUpperCase()}. Click Update to save other changes.`,
-      });
-    } catch (error) {
-      const errorMessage =
-        error?.response?.data?.message ||
-        error?.message ||
-        "Failed to process image.";
-      setLogoError(errorMessage);
-      setNotice({
-        type: "error",
-        message: errorMessage,
-      });
-    } finally {
-      setIsUploadingLogo(false);
-    }
-  };
-
-  const onLogoInputChange = async (event) => {
-    if (isUploadingLogo || isLoadingHeader || isSaving) {
-      event.target.value = "";
-      return;
-    }
-    const file = event.target.files?.[0];
-    await onHandleLogoFile(file);
-    event.target.value = "";
-  };
-
-  const onRemoveLogo = () => {
-    setLogoError("");
-    setHeaderLogoPreviewVersion("");
-    setLogoMeta(null);
-    setLogoWarning("");
-    setLogoWarningLevel("info");
-    setLogoActionFeedback("");
-    setLogoActionFeedbackType("info");
-    onChangeHeaderField("headerLogoUrl", "");
-    onChangeHeaderField("logoDataUrl", "");
-  };
-
-  const onCopyPublicLogoUrl = async () => {
-    if (!publicLogoUrl) return;
-    let copied = false;
-
-    if (
-      typeof navigator !== "undefined" &&
-      navigator.clipboard &&
-      typeof navigator.clipboard.writeText === "function"
-    ) {
-      try {
-        await navigator.clipboard.writeText(publicLogoUrl);
-        copied = true;
-      } catch {
-        copied = false;
-      }
-    }
-
-    if (!copied && typeof document !== "undefined") {
-      try {
-        const textArea = document.createElement("textarea");
-        textArea.value = publicLogoUrl;
-        textArea.setAttribute("readonly", "");
-        textArea.style.position = "absolute";
-        textArea.style.left = "-9999px";
-        document.body.appendChild(textArea);
-        textArea.select();
-        copied = document.execCommand("copy");
-        textArea.remove();
-      } catch {
-        copied = false;
-      }
-    }
-
-    setLogoActionFeedback(copied ? "Copied!" : "Copy failed.");
-    setLogoActionFeedbackType(copied ? "info" : "warn");
-  };
-
-  const onOpenPublicLogoUrl = () => {
-    if (!publicLogoUrl || typeof window === "undefined") return;
-    window.open(publicLogoUrl, "_blank", "noreferrer");
-  };
-
-  const onDownloadPublicLogoUrl = () => {
-    if (!publicLogoUrl || typeof document === "undefined") return;
-    const extension = getSafeImageExt(publicLogoUrl);
-    const normalizedLang = toText(lang, "en")
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, "") || "en";
-    const fileName = `store-header-logo_${normalizedLang}.${extension}`;
-    const anchor = document.createElement("a");
-    anchor.href = publicLogoUrl;
-    anchor.download = fileName;
-    anchor.rel = "noreferrer";
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    setLogoActionFeedback("Download started.");
-    setLogoActionFeedbackType("info");
-  };
-
-  const onDropLogo = async (event) => {
-    event.preventDefault();
-    setIsDropActive(false);
-    if (isUploadingLogo || isLoadingHeader || isSaving) return;
-    const file = event.dataTransfer?.files?.[0];
-    await onHandleLogoFile(file);
-  };
-
   const onOpenAddLanguage = () => {
     setAddLanguageError("");
     setPresetOpen(false);
@@ -3745,6 +3494,7 @@ export default function StoreCustomizationPage() {
         description: toText(currentItem.description),
         buttonName: toText(currentItem.buttonName),
         buttonLink: toText(currentItem.buttonLink),
+        imageFocus: normalizeMainSliderImageFocus(currentItem.imageFocus),
         [field]: value,
       };
       while (sliders.length < MAIN_SLIDER_LENGTH) {
@@ -3754,6 +3504,7 @@ export default function StoreCustomizationPage() {
           description: "",
           buttonName: "",
           buttonLink: "",
+          imageFocus: "right",
         });
       }
       return {
@@ -3772,7 +3523,24 @@ export default function StoreCustomizationPage() {
         showArrows: Boolean(prev.mainSlider?.options?.showArrows),
         showDots: Boolean(prev.mainSlider?.options?.showDots),
         showBoth: Boolean(prev.mainSlider?.options?.showBoth),
+        autoplayEnabled: Boolean(prev.mainSlider?.options?.autoplayEnabled),
+        autoplayDelaySeconds: normalizeMainSliderAutoplayDelaySeconds(
+          prev.mainSlider?.options?.autoplayDelaySeconds,
+          5
+        ),
       };
+      if (key === "autoplayDelaySeconds") {
+        return {
+          ...prev,
+          mainSlider: {
+            ...prev.mainSlider,
+            options: {
+              ...current,
+              autoplayDelaySeconds: normalizeMainSliderAutoplayDelaySeconds(value, 5),
+            },
+          },
+        };
+      }
       if (key === "showBoth") {
         if (value) {
           return {
@@ -3783,6 +3551,8 @@ export default function StoreCustomizationPage() {
                 showArrows: true,
                 showDots: true,
                 showBoth: true,
+                autoplayEnabled: current.autoplayEnabled,
+                autoplayDelaySeconds: current.autoplayDelaySeconds,
               },
             },
           };
@@ -4777,11 +4547,14 @@ export default function StoreCustomizationPage() {
       description: "",
       buttonName: "",
       buttonLink: "",
+      imageFocus: "right",
     };
   const mainSliderOptions = homeState.mainSlider?.options || {
     showArrows: false,
     showDots: true,
     showBoth: false,
+    autoplayEnabled: false,
+    autoplayDelaySeconds: 5,
   };
   const discountCouponBox = homeState.discountCouponBox || {
     enabled: true,
@@ -5471,7 +5244,7 @@ export default function StoreCustomizationPage() {
             <select
               value={lang}
               onChange={(event) => setLang(String(event.target.value).toLowerCase())}
-              disabled={isSaving || isUploadingLogo}
+              disabled={isSaving}
               className={`${inputBase} min-w-[178px] appearance-none pr-9`}
             >
               {publishedLanguages.length === 0 ? (
@@ -5497,7 +5270,7 @@ export default function StoreCustomizationPage() {
           <button
             type="button"
             onClick={onSave}
-            disabled={isSaving || isLoadingHeader || isUploadingLogo || !lang}
+            disabled={isSaving || isLoadingHeader || !lang}
             className="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isSaving ? "Updating..." : "Update"}
@@ -7913,7 +7686,7 @@ export default function StoreCustomizationPage() {
               Header Contacts
             </p>
 
-            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Header Text
@@ -7983,146 +7756,6 @@ export default function StoreCustomizationPage() {
                 ) : null}
               </label>
 
-              <div className="space-y-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Header Logo
-                </span>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".png,.jpeg,.jpg,.webp"
-                  onChange={onLogoInputChange}
-                  className="hidden"
-                />
-                <button
-                  type="button"
-                  disabled={isUploadingLogo || isLoadingHeader || isSaving}
-                  onClick={() => fileInputRef.current?.click()}
-                  onDragOver={(event) => {
-                    event.preventDefault();
-                    if (isUploadingLogo || isLoadingHeader || isSaving) return;
-                    setIsDropActive(true);
-                  }}
-                  onDragLeave={() => setIsDropActive(false)}
-                  onDrop={onDropLogo}
-                  className={`flex w-full flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-5 text-center transition ${
-                    isDropActive
-                      ? "border-emerald-400 bg-emerald-50"
-                      : "border-slate-300 bg-slate-50 hover:border-slate-400"
-                  } ${isUploadingLogo || isLoadingHeader || isSaving ? "cursor-not-allowed opacity-70" : ""}`}
-                >
-                  <Upload className="h-5 w-5 text-slate-500" />
-                  <p className="mt-2 text-sm font-medium text-slate-700">
-                    {isUploadingLogo ? "Uploading image..." : "Drag your images here"}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    (Only *.jpeg, *.webp and *.png images will be accepted)
-                  </p>
-                </button>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                  <p>Recommended size: 240x64px (or 300x80px for sharper display)</p>
-                  <p>Aspect ratio: horizontal (~3.5-4:1)</p>
-                  <p>Format: transparent PNG / WEBP</p>
-                  <p>Safe padding: 8-12px left/right</p>
-                  <p>
-                    Logo is rendered inside a ~40-48px height container on the storefront
-                    header.
-                  </p>
-                </div>
-
-                {logoError ? (
-                  <p className="text-xs text-rose-600">{logoError}</p>
-                ) : null}
-
-                {logoMetaText ? (
-                  <p className="text-xs text-slate-600">{logoMetaText}</p>
-                ) : null}
-
-                {logoWarning ? (
-                  <div
-                    className={`rounded-lg border px-3 py-2 text-xs ${
-                      logoWarningLevel === "warn"
-                        ? "border-amber-200 bg-amber-50 text-amber-700"
-                        : "border-sky-200 bg-sky-50 text-sky-700"
-                    }`}
-                  >
-                    {logoWarning}
-                  </div>
-                ) : null}
-
-                <div className="w-full rounded-xl border border-slate-200 bg-white p-3">
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Logo Preview (Client Frame)
-                    </p>
-                    {headerLogoPreviewUrl ? (
-                      <button
-                        type="button"
-                        onClick={onRemoveLogo}
-                        disabled={isUploadingLogo || isLoadingHeader || isSaving}
-                        className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                        aria-label="Remove logo"
-                      >
-                        Remove
-                      </button>
-                    ) : null}
-                  </div>
-
-                  <div className="relative flex h-10 items-center overflow-hidden rounded-md border border-slate-200 bg-slate-50 px-2 sm:h-11 sm:px-3 md:h-12">
-                    {headerLogoFrameSrc ? (
-                      <img
-                        src={headerLogoFrameSrc}
-                        alt="Header logo preview"
-                        className="max-h-full w-auto max-w-full object-contain"
-                      />
-                    ) : (
-                      <p className="text-xs text-slate-500">No logo uploaded yet</p>
-                    )}
-                    <div className="pointer-events-none absolute inset-0 p-2 sm:p-3">
-                      <div className="h-full w-full rounded-sm border border-dashed border-slate-300" />
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={onCopyPublicLogoUrl}
-                      disabled={!publicLogoUrl}
-                      className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      Copy URL
-                    </button>
-                    <button
-                      type="button"
-                      onClick={onOpenPublicLogoUrl}
-                      disabled={!publicLogoUrl}
-                      className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      Open
-                    </button>
-                    <button
-                      type="button"
-                      onClick={onDownloadPublicLogoUrl}
-                      disabled={!publicLogoUrl}
-                      className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      Download
-                    </button>
-                  </div>
-
-                  {logoActionFeedback ? (
-                    <p
-                      className={`mt-2 text-xs ${
-                        logoActionFeedbackType === "warn"
-                          ? "text-amber-700"
-                          : "text-slate-600"
-                      }`}
-                    >
-                      {logoActionFeedback}
-                    </p>
-                  ) : null}
-                </div>
-              </div>
             </div>
           </section>
 
@@ -8154,7 +7787,7 @@ export default function StoreCustomizationPage() {
 
               <div className="bg-white p-4 sm:p-5">
                 {activeMainSliderTab === "options" ? (
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
                     <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3">
                       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
                         Left and Right Arrows
@@ -8185,6 +7818,43 @@ export default function StoreCustomizationPage() {
                         value={Boolean(mainSliderOptions.showBoth)}
                         onChange={(value) => onChangeMainSliderOption("showBoth", value)}
                       />
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        Auto Slide
+                      </p>
+                      <SegmentedToggle
+                        value={Boolean(mainSliderOptions.autoplayEnabled)}
+                        onChange={(value) =>
+                          onChangeMainSliderOption("autoplayEnabled", value)
+                        }
+                      />
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3 xl:col-span-1">
+                      <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        Slide Duration
+                      </label>
+                      <select
+                        value={normalizeMainSliderAutoplayDelaySeconds(
+                          mainSliderOptions.autoplayDelaySeconds,
+                          5
+                        )}
+                        onChange={(event) =>
+                          onChangeMainSliderOption(
+                            "autoplayDelaySeconds",
+                            event.target.value
+                          )
+                        }
+                        disabled={!Boolean(mainSliderOptions.autoplayEnabled)}
+                        className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                      >
+                        <option value="5">5 seconds</option>
+                        <option value="10">10 seconds</option>
+                        <option value="15">15 seconds</option>
+                      </select>
+                      <p className="mt-2 text-xs text-slate-500">
+                        Active only when auto slide is turned on.
+                      </p>
                     </div>
                   </div>
                 ) : (
@@ -8226,6 +7896,14 @@ export default function StoreCustomizationPage() {
                           (Only *.jpeg, *.webp and *.png images will be accepted)
                         </p>
                       </label>
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                        <p>Recommended size: 1600x650px (1920x780px for sharper display)</p>
+                        <p>Aspect ratio: horizontal ~2.4-2.5:1</p>
+                        <p>Format: WEBP preferred, PNG/JPG supported</p>
+                        <p>Keep important subject on the center or right-safe area.</p>
+                        <p>Use Image Focus below if the subject sits too close to the left text area.</p>
+                        <p>Recommended file size: under 300-500KB for faster homepage loading.</p>
+                      </div>
 
                       {mainSliderImageErrors[activeMainSliderIndex] ? (
                         <p className="text-xs text-rose-600">
@@ -8233,23 +7911,48 @@ export default function StoreCustomizationPage() {
                         </p>
                       ) : null}
 
-                      {activeMainSliderItem.imageDataUrl ? (
-                        <div className="relative inline-flex rounded-xl border border-slate-200 bg-white p-2">
-                          <img
-                            src={activeMainSliderItem.imageDataUrl}
-                            alt={`Slider ${activeMainSliderIndex + 1} preview`}
-                            className="h-20 w-24 rounded-md object-cover"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => onRemoveMainSliderImage(activeMainSliderIndex)}
-                            className="absolute -right-2 -top-2 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 hover:bg-slate-100"
-                            aria-label={`Remove slider ${activeMainSliderIndex + 1} image`}
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
+                      <div className="rounded-xl border border-slate-200 bg-white p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                              Storefront Crop Preview
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              This left area is reserved for slider title, description, and button on
+                              the storefront.
+                            </p>
+                          </div>
+                          {activeMainSliderItem.imageDataUrl ? (
+                            <button
+                              type="button"
+                              onClick={() => onRemoveMainSliderImage(activeMainSliderIndex)}
+                              className="inline-flex items-center rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
+                            >
+                              Remove
+                            </button>
+                          ) : null}
                         </div>
-                      ) : null}
+                        <div className="relative mt-3 h-28 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
+                          {activeMainSliderItem.imageDataUrl ? (
+                            <img
+                              src={activeMainSliderItem.imageDataUrl}
+                              alt={`Slider ${activeMainSliderIndex + 1} preview`}
+                              className={`h-full w-full object-cover ${getMainSliderImageFocusClass(
+                                activeMainSliderItem.imageFocus
+                              )}`}
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-xs font-medium text-slate-400">
+                              Upload a slider image to preview the storefront crop.
+                            </div>
+                          )}
+                          <div className="pointer-events-none absolute inset-y-0 left-0 w-[42%] bg-[linear-gradient(90deg,rgba(246,250,255,0.96)_0%,rgba(246,250,255,0.90)_56%,rgba(246,250,255,0.32)_100%)]" />
+                          <div className="pointer-events-none absolute inset-y-3 left-3 w-[34%] rounded-xl border border-dashed border-slate-300/80 bg-white/20" />
+                          <div className="pointer-events-none absolute left-5 top-5 rounded-full bg-white/85 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-sm">
+                            Safe Text Area
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -8287,6 +7990,31 @@ export default function StoreCustomizationPage() {
                           }
                           className={`${inputBase} mt-2`}
                         />
+                      </label>
+
+                      <label className="block">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Image Focus
+                        </span>
+                        <select
+                          value={normalizeMainSliderImageFocus(activeMainSliderItem.imageFocus)}
+                          onChange={(event) =>
+                            onChangeMainSliderField(
+                              activeMainSliderIndex,
+                              "imageFocus",
+                              normalizeMainSliderImageFocus(event.target.value)
+                            )
+                          }
+                          className={`${inputBase} mt-2`}
+                        >
+                          <option value="right">Right (Recommended)</option>
+                          <option value="center">Center</option>
+                          <option value="left">Left</option>
+                        </select>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Move the subject away from the left text area when the banner feels too
+                          crowded.
+                        </p>
                       </label>
 
                       <label className="block md:col-span-2">

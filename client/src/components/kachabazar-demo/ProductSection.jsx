@@ -76,6 +76,7 @@ const matchesCategoryTab = (product, tab) => {
 export default function ProductSection({
   title = "Popular Products for Daily Shopping",
   subtitle = "See all products we have prepared for your cart today.",
+  maxProducts = 18,
   products = [],
   categories = [],
   isLoading = false,
@@ -134,8 +135,8 @@ export default function ProductSection({
         String(a?.name || a?.title || "").localeCompare(String(b?.name || b?.title || ""))
       );
     }
-    return sorted;
-  }, [products, activeTabMeta, sortBy]);
+    return sorted.slice(0, Math.max(1, Number(maxProducts) || 18));
+  }, [products, activeTabMeta, sortBy, maxProducts]);
 
   const viewAllLink = useMemo(() => {
     if (activeTabMeta?.key === "all") return "/search";

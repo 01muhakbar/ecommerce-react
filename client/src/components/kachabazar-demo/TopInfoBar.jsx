@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../auth/useAuth.js";
 
@@ -20,6 +21,8 @@ export default function TopInfoBar({
   headerText = "",
   phoneNumber = "",
   whatsAppLink = "",
+  menuLabels = {},
+  menuEnabled = {},
   isHeaderLoading = false,
 }) {
   const { isAuthenticated, logout } = useAuth() || {};
@@ -27,6 +30,47 @@ export default function TopInfoBar({
   const safePhoneNumber = toText(phoneNumber);
   const safeWhatsAppLink = toText(whatsAppLink);
   const hasWhatsAppLink = isSafeWhatsAppLink(safeWhatsAppLink);
+  const utilityItems = [];
+
+  if (menuEnabled.showAboutUs !== false) {
+    utilityItems.push({
+      key: "about-us",
+      type: "link",
+      to: "/about-us",
+      label: toText(menuLabels.aboutUs, "About Us"),
+    });
+  }
+
+  if (menuEnabled.showContactUs !== false) {
+    utilityItems.push({
+      key: "contact-us",
+      type: "link",
+      to: "/contact-us",
+      label: toText(menuLabels.contactUs, "Contact Us"),
+    });
+  }
+
+  utilityItems.push({
+    key: "my-account",
+    type: "link",
+    to: "/user/my-account",
+    label: toText(menuLabels.myAccount, "My Account"),
+  });
+
+  if (isAuthenticated) {
+    utilityItems.push({
+      key: "logout",
+      type: "button",
+      label: toText(menuLabels.logout, "Logout"),
+    });
+  } else {
+    utilityItems.push({
+      key: "login",
+      type: "link",
+      to: "/auth/login",
+      label: toText(menuLabels.login, "Login"),
+    });
+  }
 
   return (
     <div className="border-b border-slate-200 bg-slate-100 text-[12px] text-slate-500">
@@ -53,31 +97,27 @@ export default function TopInfoBar({
           ) : null}
         </div>
         <div className="flex flex-wrap items-center text-[12px] text-slate-500">
-          <Link to="/about-us" className="transition hover:text-slate-700 hover:underline">
-            About Us
-          </Link>
-          <span className="mx-2 text-slate-300">|</span>
-          <Link to="/contact-us" className="transition hover:text-slate-700 hover:underline">
-            Contact Us
-          </Link>
-          <span className="mx-2 text-slate-300">|</span>
-          <Link to="/user/my-account" className="transition hover:text-slate-700 hover:underline">
-            My Account
-          </Link>
-          <span className="mx-2 text-slate-300">|</span>
-          {isAuthenticated ? (
-            <button
-              type="button"
-              onClick={() => void logout?.()}
-              className="transition hover:text-slate-700 hover:underline"
-            >
-              Logout
-            </button>
-          ) : (
-            <Link to="/auth/login" className="transition hover:text-slate-700 hover:underline">
-              Login
-            </Link>
-          )}
+          {utilityItems.map((item, index) => (
+            <Fragment key={item.key}>
+              {index > 0 ? <span className="mx-2 text-slate-300">|</span> : null}
+              {item.type === "button" ? (
+                <button
+                  type="button"
+                  onClick={() => void logout?.()}
+                  className="transition hover:text-slate-700 hover:underline"
+                >
+                  {item.label}
+                </button>
+              ) : (
+                <Link
+                  to={item.to}
+                  className="transition hover:text-slate-700 hover:underline"
+                >
+                  {item.label}
+                </Link>
+              )}
+            </Fragment>
+          ))}
         </div>
       </div>
     </div>

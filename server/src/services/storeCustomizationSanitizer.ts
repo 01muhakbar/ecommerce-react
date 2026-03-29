@@ -103,11 +103,14 @@ const DEFAULT_CUSTOMIZATION = {
         description: "",
         buttonName: "",
         buttonLink: "",
+        imageFocus: "right",
       })),
       options: {
         showArrows: false,
         showDots: true,
         showBoth: false,
+        autoplayEnabled: false,
+        autoplayDelaySeconds: 5,
       },
     },
     discountCouponBox: {
@@ -581,6 +584,25 @@ const toBool = (value: unknown, fallback = false) => {
   return fallback;
 };
 
+const normalizeMainSliderImageFocus = (value: unknown, fallback = "right") => {
+  const normalized = toText(value, fallback).toLowerCase();
+  if (normalized === "left" || normalized === "center" || normalized === "right") {
+    return normalized;
+  }
+  return fallback;
+};
+
+const normalizeMainSliderAutoplayDelaySeconds = (
+  value: unknown,
+  fallback = 5
+) => {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  if (parsed === 5 || parsed === 10 || parsed === 15) {
+    return parsed;
+  }
+  return fallback === 10 || fallback === 15 ? fallback : 5;
+};
+
 const toPositiveInt = (value: unknown, fallback: number) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
@@ -678,6 +700,7 @@ const normalizeHome = (root: Record<string, any>) => {
     description: string;
     buttonName: string;
     buttonLink: string;
+    imageFocus: string;
   }>;
 
   const mainSliderSource = isPlainObject(homeCandidate.mainSlider)
@@ -735,6 +758,12 @@ const normalizeHome = (root: Record<string, any>) => {
           "",
         fallback.buttonLink
       ),
+      imageFocus: normalizeMainSliderImageFocus(
+        nested.imageFocus ??
+          legacyNested.imageFocus ??
+          mainSliderSource[`slider${order}ImageFocus`],
+        fallback.imageFocus
+      ),
     };
   });
 
@@ -757,9 +786,36 @@ const normalizeHome = (root: Record<string, any>) => {
     optionsSource.showBoth ?? mainSliderSource.showBoth ?? mainSliderSource.both,
     showArrows && showDots
   );
+  const autoplayEnabled = toBool(
+    optionsSource.autoplayEnabled ??
+      optionsSource.autoPlay ??
+      mainSliderSource.autoplayEnabled ??
+      mainSliderSource.autoPlay,
+    mainSliderDefaults.options.autoplayEnabled
+  );
+  const autoplayDelaySeconds = normalizeMainSliderAutoplayDelaySeconds(
+    optionsSource.autoplayDelaySeconds ??
+      optionsSource.autoPlayDelaySeconds ??
+      mainSliderSource.autoplayDelaySeconds ??
+      mainSliderSource.autoPlayDelaySeconds ??
+      mainSliderSource.slideDurationSeconds,
+    mainSliderDefaults.options.autoplayDelaySeconds
+  );
   const normalizedMainSliderOptions = showBoth
-    ? { showArrows: true, showDots: true, showBoth: true }
-    : { showArrows, showDots, showBoth: false };
+    ? {
+        showArrows: true,
+        showDots: true,
+        showBoth: true,
+        autoplayEnabled,
+        autoplayDelaySeconds,
+      }
+    : {
+        showArrows,
+        showDots,
+        showBoth: false,
+        autoplayEnabled,
+        autoplayDelaySeconds,
+      };
 
   const discountCouponBoxSource = isPlainObject(homeCandidate.discountCouponBox)
     ? homeCandidate.discountCouponBox

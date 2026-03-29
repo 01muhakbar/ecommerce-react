@@ -1,25 +1,41 @@
-import { Link } from "react-router-dom";
+const DEFAULT_PROMOS = [
+  "Free Shipping From €500.00",
+  "Support 24/7 At Anytime",
+  "Secure Payment Totally Safe",
+  "Latest Offer Upto 20% Off",
+];
 
-export default function FeatureStrip() {
+const normalizePromoItems = (...items) => {
+  const normalized = items
+    .map((item) => String(item ?? "").trim())
+    .filter(Boolean);
+  return normalized.length > 0 ? normalized : DEFAULT_PROMOS;
+};
+
+export default function FeatureStrip({
+  freeShippingText,
+  supportText,
+  securePaymentText,
+  latestOfferText,
+}) {
+  const promoItems = normalizePromoItems(
+    freeShippingText,
+    supportText,
+    securePaymentText,
+    latestOfferText
+  );
+
   return (
-    <section className="relative overflow-hidden rounded-3xl border border-[#f1d2b3] bg-[#FDEEDC] px-5 py-6 shadow-sm sm:px-7 sm:py-7">
-      <div className="pointer-events-none absolute -right-8 top-0 h-24 w-24 rounded-full bg-orange-200/45 blur-2xl" />
-      <div className="pointer-events-none absolute bottom-0 right-16 h-16 w-16 rounded-full bg-amber-200/45 blur-2xl" />
-      <div className="relative flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-        <div className="max-w-2xl">
-          <h2 className="text-xl font-semibold leading-tight text-slate-900 sm:text-2xl">
-            100% Natural Quality Organic Product
-          </h2>
-          <p className="mt-1.5 text-sm text-slate-600">
-            Fresh daily essentials and healthy groceries selected for your family.
-          </p>
-        </div>
-        <Link
-          to="/search?q=organic&page=1"
-          className="inline-flex shrink-0 items-center rounded-full bg-emerald-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 sm:px-5 sm:text-sm"
-        >
-          Shop Now
-        </Link>
+    <section className="rounded-3xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:px-5">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {promoItems.map((item, index) => (
+          <div
+            key={`${index}-${item}`}
+            className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+          >
+            <p className="text-sm font-semibold leading-6 text-slate-900">{item}</p>
+          </div>
+        ))}
       </div>
     </section>
   );

@@ -1,35 +1,27 @@
-import { useEffect } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
 import QueryState from "../../components/primitives/ui/QueryState.jsx";
-
-const LAST_ORDER_REF_STORAGE_KEY = "store_last_order_ref";
-
-const readStoredOrderRef = () => {
-  try {
-    return String(localStorage.getItem(LAST_ORDER_REF_STORAGE_KEY) || "").trim();
-  } catch {
-    return "";
-  }
-};
+import {
+  resolvePublicOrderReference,
+  isPublicOrderReference,
+  buildPublicOrderTrackingPath,
+} from "../../utils/publicOrderReference.js";
 
 export default function StoreCheckoutSuccessPage() {
   const location = useLocation();
   const [params] = useSearchParams();
-  const refFromParams = params.get("ref") || params.get("invoiceNo");
-  const refFromState = location.state?.ref || location.state?.orderRef;
-  const refFromStorage = readStoredOrderRef();
-  const orderRef = String(refFromParams || refFromState || refFromStorage || "").trim();
-  const hasOrderRef = orderRef.length > 0;
-
-  useEffect(() => {
-    if (!hasOrderRef) return;
-    try {
-      localStorage.setItem(LAST_ORDER_REF_STORAGE_KEY, orderRef);
-    } catch {
-      // ignore storage errors
-    }
-  }, [hasOrderRef, orderRef]);
+  const refFromParams = resolvePublicOrderReference(
+    params.get("invoiceNo"),
+    params.get("ref")
+  );
+  const refFromState = resolvePublicOrderReference(
+    location.state?.invoiceNo,
+    location.state?.ref,
+    location.state?.orderRef
+  );
+  const orderRef = resolvePublicOrderReference(refFromParams, refFromState);
+  const hasOrderRef = isPublicOrderReference(orderRef);
+  const trackingPath = buildPublicOrderTrackingPath(orderRef);
 
   return (
     <section className="mx-auto max-w-[1100px] px-3 py-6 sm:px-4 sm:py-8 lg:px-6">
@@ -95,7 +87,7 @@ export default function StoreCheckoutSuccessPage() {
               </p>
               <div className="grid gap-3 sm:grid-cols-3">
                 <Link
-                  to={`/order/${encodeURIComponent(orderRef)}`}
+                  to={trackingPath}
                   className="inline-flex h-11 w-full items-center justify-center rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
                 >
                   Track Order

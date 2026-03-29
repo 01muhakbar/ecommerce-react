@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2, WalletCards } from "lucide-react";
 import { createOrderSchema } from "@ecommerce/schemas";
 import { useAuth } from "../../auth/useAuth.js";
+import { useCart } from "../../hooks/useCart.ts";
 import { useCartStore } from "../../store/cart.store.ts";
 import {
   createMultiStoreCheckoutOrder,
@@ -26,6 +27,7 @@ import {
   splitFullName,
   toUserAddressPayload,
 } from "../../utils/userAddress.ts";
+import { resolvePublicOrderReference } from "../../utils/publicOrderReference.js";
 
 const INPUT_CLASS =
   "mt-2 h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 shadow-[0_1px_1px_rgba(15,23,42,0.03)] focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100";
@@ -38,8 +40,6 @@ const PAYMENT_OPTIONS = [
     Icon: WalletCards,
   },
 ];
-
-const LAST_ORDER_REF_STORAGE_KEY = "store_last_order_ref";
 const checkoutCustomerSchema = createOrderSchema.shape.customer;
 const DEFAULT_CHECKOUT_COPY = {
   personalDetails: {
@@ -394,8 +394,9 @@ function resolveInvalidCheckoutItemMessage(item) {
 export default function CheckoutPage() {
   const navigate = useNavigate();
   useOutletContext();
-  const { user } = useAuth() || {};
+  const { user, isLoading: isAuthLoading } = useAuth() || {};
   const queryClient = useQueryClient();
+  const { isLoading: isCartLoading, hasInitialized: hasCartBootstrapInitialized } = useCart();
   const items = useCartStore((state) => state.items);
   const hasHydrated = useCartStore((state) => state.hasHydrated);
   const subtotal = useCartStore((state) => state.subtotal);
@@ -449,6 +450,7 @@ export default function CheckoutPage() {
       return false;
     }
   };
+  const hasCheckoutAuthHint = resolveHasAuthHint();
   const checkoutCustomizationQuery = useQuery({
     queryKey: ["store-customization", "checkout", "en"],
     queryFn: () => getStoreCustomization({ lang: "en", include: "checkout" }),
@@ -480,33 +482,22 @@ export default function CheckoutPage() {
   }, [user?.email]);
 
   useEffect(() => {
-    let mounted = true;
-    const hasAuthHint = resolveHasAuthHint();
-    if (!hasAuthHint) {
-      return () => {
-        mounted = false;
-      };
+    if (!hasCheckoutAuthHint) {
+      return;
     }
-    const checkAuth = async () => {
-      try {
-        const res = await fetch("/api/auth/me", { credentials: "include" });
-        if (!mounted) return;
-        if (res.status === 401) {
-          navigate("/auth/login");
-        }
-      } catch {
-        if (mounted) {
-          navigate("/auth/login");
-        }
-      }
-    };
-    checkAuth();
-    return () => {
-      mounted = false;
-    };
-  }, [navigate]);
+    if (isAuthLoading) return;
+    if (user) return;
+    navigate("/auth/login");
+  }, [hasCheckoutAuthHint, isAuthLoading, navigate, user]);
 
   const hasItems = items.length > 0;
+  const isInitialCartSyncing =
+    hasCheckoutAuthHint &&
+    hasHydrated &&
+    (Boolean(isAuthLoading) ||
+      !hasCartBootstrapInitialized ||
+      (Boolean(isCartLoading) && !hasItems));
+  const showCheckoutSkeleton = !hasHydrated || isInitialCartSyncing;
   const lockAddressFields = isSubmitting || isAddressLoading || useDefaultShipping;
   const fallbackShippingCost = 0;
   const provinceOptions = useMemo(
@@ -550,7 +541,7 @@ export default function CheckoutPage() {
   const checkoutPreviewQuery = useQuery({
     queryKey: ["checkout-preview-by-store", checkoutPreviewSignature],
     queryFn: () => previewCheckoutByStore(),
-    enabled: hasHydrated && hasItems && !isRemoteSyncing && resolveHasAuthHint(),
+    enabled: hasHydrated && hasItems && !isRemoteSyncing && hasCheckoutAuthHint,
     staleTime: 10_000,
     retry: false,
   });
@@ -608,6 +599,8 @@ export default function CheckoutPage() {
     ]
   );
   const checkoutPreviewData = checkoutPreviewQuery.data?.data;
+  const hasCheckoutPreviewSnapshot =
+    checkoutPreviewData && typeof checkoutPreviewData === "object";
   const checkoutPreviewGroups = checkoutPreviewData?.groups ?? [];
   const checkoutPreviewInvalidItems = checkoutPreviewData?.invalidItems ?? [];
   const checkoutPreviewInvalidMessages = checkoutPreviewInvalidItems.map((item) => ({
@@ -665,9 +658,22 @@ export default function CheckoutPage() {
     const storeKey = String(group.storeId);
     return groupCouponStates?.[storeKey]?.status === "loading";
   });
+  const previewBlocksPricingActions =
+    hasCheckoutAuthHint &&
+    hasItems &&
+    (isRemoteSyncing ||
+      checkoutPreviewQuery.isLoading ||
+      checkoutPreviewQuery.isError ||
+      !hasCheckoutPreviewSnapshot);
+  const isCheckoutSummaryReady =
+    !previewBlocksPricingActions && Boolean(checkoutPreviewSummary);
+  const checkoutSummaryGuardMessage = checkoutPreviewQuery.isError
+    ? "Latest checkout snapshot is unavailable. Totals stay hidden until preview recovers."
+    : "Waiting for the latest backend snapshot before showing checkout totals.";
   const isPreviewBlockingSubmission =
-    !checkoutPreviewQuery.isError &&
-    (previewHasPaymentBlocker || checkoutPreviewInvalidItems.length > 0);
+    previewBlocksPricingActions ||
+    (!checkoutPreviewQuery.isError &&
+      (previewHasPaymentBlocker || checkoutPreviewInvalidItems.length > 0));
   const applyAddressToCheckoutForm = (address) => {
     const normalized = toUserAddressPayload(address || {});
     const fullNameParts = splitFullName(normalized.fullName);
@@ -776,6 +782,14 @@ export default function CheckoutPage() {
       return;
     }
 
+    if (previewBlocksPricingActions) {
+      clearAppliedCoupon(
+        "Checkout preview is still syncing. Wait for the latest totals before applying a coupon.",
+        "error"
+      );
+      return;
+    }
+
     if (checkoutMode === "MULTI_STORE") {
       clearAppliedCoupon(
         "Use the coupon field inside each store group during multi-store checkout.",
@@ -859,6 +873,15 @@ export default function CheckoutPage() {
         return;
       }
       clearGroupCoupon(storeId, "Please enter coupon code.", "error");
+      return;
+    }
+
+    if (previewBlocksPricingActions) {
+      clearGroupCoupon(
+        storeId,
+        "Checkout preview is still syncing. Wait for the latest store totals before applying a coupon.",
+        "error"
+      );
       return;
     }
 
@@ -1190,23 +1213,12 @@ export default function CheckoutPage() {
       };
       const response = await createMultiStoreCheckoutOrder(submitPayload);
       const result = resolveOrderPayload(response);
-      const resolvedOrderRef = [
+      const resolvedOrderRef = resolvePublicOrderReference(
         result?.invoiceNo,
         result?.ref,
         result?.invoice,
-        result?.orderRef,
-        result?.id,
-        result?.orderId,
-      ]
-        .map((value) => (value == null ? "" : String(value).trim()))
-        .find((value) => value.length > 0);
-      if (resolvedOrderRef) {
-        try {
-          localStorage.setItem(LAST_ORDER_REF_STORAGE_KEY, resolvedOrderRef);
-        } catch {
-          // ignore storage errors
-        }
-      }
+        result?.orderRef
+      );
       clearCart();
       await queryClient.invalidateQueries({
         queryKey: ["account", "orders", "my"],
@@ -1259,7 +1271,7 @@ export default function CheckoutPage() {
     }
   };
 
-  if (!hasHydrated) {
+  if (showCheckoutSkeleton) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-10 lg:px-6">
         <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6">
@@ -1746,8 +1758,8 @@ export default function CheckoutPage() {
                 ) : null}
                 {checkoutPreviewQuery.isError ? (
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                    Grouped checkout preview is temporarily unavailable. Final submit will retry
-                    the same multi-store validation on the server.
+                    Grouped checkout preview is temporarily unavailable. Order placement is paused
+                    until the latest backend totals can be loaded again.
                   </div>
                 ) : null}
                 {!checkoutPreviewQuery.isLoading && !checkoutPreviewQuery.isError ? (
@@ -1934,6 +1946,7 @@ export default function CheckoutPage() {
                                   }
                                   disabled={
                                     isSubmitting ||
+                                    previewBlocksPricingActions ||
                                     groupCouponStates?.[String(group.storeId)]?.status ===
                                       "loading"
                                   }
@@ -1945,6 +1958,7 @@ export default function CheckoutPage() {
                                   onClick={() => handleApplyGroupCoupon(group)}
                                   disabled={
                                     isSubmitting ||
+                                    previewBlocksPricingActions ||
                                     groupCouponStates?.[String(group.storeId)]?.status ===
                                       "loading"
                                   }
@@ -2226,14 +2240,16 @@ export default function CheckoutPage() {
               <div className="mt-2 flex items-end justify-between gap-4">
                 <div>
                   <p className="text-3xl font-extrabold leading-none sm:text-[34px]">
-                    {formatCurrency(total)}
+                    {isCheckoutSummaryReady ? formatCurrency(total) : "\u2014"}
                   </p>
                   <p className="mt-2 text-xs text-slate-300">
-                    Discounts and store settings are reflected live in this summary.
+                    {isCheckoutSummaryReady
+                      ? "Discounts and store settings are reflected live in this summary."
+                      : checkoutSummaryGuardMessage}
                   </p>
                 </div>
                 <div className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-200">
-                  Submit Next
+                  {isCheckoutSummaryReady ? "Submit Next" : "Preview First"}
                 </div>
               </div>
             </div>
@@ -2354,14 +2370,18 @@ export default function CheckoutPage() {
                       type="text"
                       value={couponCode}
                       onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
-                      disabled={isSubmitting || couponStatus === "loading"}
+                      disabled={
+                        isSubmitting || couponStatus === "loading" || previewBlocksPricingActions
+                      }
                       placeholder="Coupon Code"
                       className="h-11 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm focus:border-emerald-400 focus:outline-none"
                     />
                     <button
                       type="button"
                       onClick={handleApplyCoupon}
-                      disabled={isSubmitting || couponStatus === "loading"}
+                      disabled={
+                        isSubmitting || couponStatus === "loading" || previewBlocksPricingActions
+                      }
                       className="h-11 w-24 shrink-0 rounded-2xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-28"
                     >
                       {couponStatus === "loading"
@@ -2402,32 +2422,67 @@ export default function CheckoutPage() {
                   ) : null}
                 </>
               )}
+              {previewBlocksPricingActions ? (
+                <p className="mt-2 text-xs text-amber-600">
+                  Wait for the checkout preview to finish syncing before applying coupons.
+                </p>
+              ) : null}
             </div>
 
             <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5">
               <div className="space-y-2.5 text-sm">
                 <div className="flex items-center justify-between text-slate-600">
                   <span>{checkoutCopy.cartItemSection.subTotalLabel}</span>
-                  <span className="font-semibold tabular-nums text-slate-900">
-                    {formatCurrency(subtotalValue)}
+                  <span
+                    className={`tabular-nums ${
+                      isCheckoutSummaryReady
+                        ? "font-semibold text-slate-900"
+                        : "font-medium text-slate-400"
+                    }`}
+                  >
+                    {isCheckoutSummaryReady ? formatCurrency(subtotalValue) : "\u2014"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Shipping</span>
+                  <span
+                    className={`tabular-nums ${
+                      isCheckoutSummaryReady
+                        ? "font-semibold text-slate-900"
+                        : "font-medium text-slate-400"
+                    }`}
+                  >
+                    {isCheckoutSummaryReady ? formatCurrency(shippingCost) : "\u2014"}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-slate-600">
                   <span>{checkoutCopy.cartItemSection.discountLabel}</span>
                   <span
-                    className={`font-semibold tabular-nums ${
-                      discountValue > 0 ? "text-emerald-600" : "text-slate-900"
+                    className={`tabular-nums ${
+                      isCheckoutSummaryReady
+                        ? discountValue > 0
+                          ? "font-semibold text-emerald-600"
+                          : "font-semibold text-slate-900"
+                        : "font-medium text-slate-400"
                     }`}
                   >
-                    {discountValue > 0
-                      ? `- ${formatCurrency(discountValue)}`
-                      : formatCurrency(0)}
+                    {isCheckoutSummaryReady
+                      ? discountValue > 0
+                        ? `- ${formatCurrency(discountValue)}`
+                        : formatCurrency(0)
+                      : "\u2014"}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-slate-600">
                   <span>Tax</span>
-                  <span className="font-semibold tabular-nums text-slate-900">
-                    {formatCurrency(taxValue)}
+                  <span
+                    className={`tabular-nums ${
+                      isCheckoutSummaryReady
+                        ? "font-semibold text-slate-900"
+                        : "font-medium text-slate-400"
+                    }`}
+                  >
+                    {isCheckoutSummaryReady ? formatCurrency(taxValue) : "\u2014"}
                   </span>
                 </div>
               </div>
@@ -2436,11 +2491,20 @@ export default function CheckoutPage() {
                   <span className="text-base font-semibold text-slate-900">
                     {checkoutCopy.cartItemSection.totalCostLabel}
                   </span>
-                  <span className="text-2xl font-extrabold tabular-nums text-slate-900">
-                    {formatCurrency(total)}
+                  <span
+                    className={`text-2xl font-extrabold tabular-nums ${
+                      isCheckoutSummaryReady ? "text-slate-900" : "text-slate-400"
+                    }`}
+                  >
+                    {isCheckoutSummaryReady ? formatCurrency(total) : "\u2014"}
                   </span>
                 </div>
               </div>
+              {!isCheckoutSummaryReady ? (
+                <p className="mt-3 text-xs leading-5 text-amber-600">
+                  {checkoutSummaryGuardMessage}
+                </p>
+              ) : null}
             </div>
 
             <div className="mt-6 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3.5 text-sm text-emerald-900">
@@ -2472,7 +2536,9 @@ export default function CheckoutPage() {
             </button>
             {isPreviewBlockingSubmission ? (
               <p className="mt-3 text-center text-xs leading-5 text-amber-600">
-                Resolve the blocked store groups or invalid items above before placing this order.
+                {previewBlocksPricingActions
+                  ? "Checkout preview must finish syncing with the latest backend totals before you can place this order."
+                  : "Resolve the blocked store groups or invalid items above before placing this order."}
               </p>
             ) : null}
             {couponBlocksSubmission ? (

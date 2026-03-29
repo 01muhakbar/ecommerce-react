@@ -22,6 +22,10 @@ import {
   normalizeOrderStatus,
 } from "../../utils/orderStatus.js";
 import { createSellerWorkspaceRoutes } from "../../utils/sellerWorkspaceRoute.js";
+import {
+  buildPublicOrderTrackingPath,
+  resolvePublicOrderReference,
+} from "../../utils/publicOrderReference.js";
 
 const fetchOrders = async () => {
   const { data } = await api.get("/store/my/orders");
@@ -47,7 +51,7 @@ const getOrderTimestamp = (order) => {
   return Number.isNaN(time) ? 0 : time;
 };
 
-const getOrderRef = (order) => order?.invoiceNo || order?.orderId || order?.id || null;
+const getPublicOrderRef = (order) => resolvePublicOrderReference(order?.invoiceNo);
 
 const toText = (value, fallback) => {
   const normalized = String(value ?? "").trim();
@@ -412,7 +416,8 @@ export default function AccountDashboardPage() {
                 </thead>
                 <tbody>
                   {recentOrders.map((order) => {
-                    const orderRef = getOrderRef(order);
+                    const publicOrderRef = getPublicOrderRef(order);
+                    const trackingPath = buildPublicOrderTrackingPath(publicOrderRef);
                     const statusLabel = getOrderStatusLabel(order.status);
                     return (
                       <tr
@@ -420,7 +425,7 @@ export default function AccountDashboardPage() {
                         className="border-t border-slate-100 hover:bg-slate-50"
                       >
                         <td className="px-4 py-3 font-medium text-slate-900">
-                          {orderRef || `#${order.id}`}
+                          {publicOrderRef || `#${order.id}`}
                         </td>
                         <td className="px-4 py-3 text-slate-600">
                           {formatDate(getOrderDateValue(order))}
@@ -443,9 +448,9 @@ export default function AccountDashboardPage() {
                           {money(order.totalAmount)}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          {orderRef ? (
+                          {trackingPath ? (
                             <Link
-                              to={`/order/${encodeURIComponent(orderRef)}`}
+                              to={trackingPath}
                               className="inline-flex items-center justify-center text-emerald-700 hover:text-emerald-900"
                             >
                               <Eye className="h-4 w-4" />
