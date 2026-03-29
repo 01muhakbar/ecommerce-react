@@ -113,7 +113,16 @@ const uploadsCandidates = [
 ];
 uploadsCandidates.forEach((uploadsDir) => {
   if (!fs.existsSync(uploadsDir)) return;
-  app.use("/uploads", express.static(uploadsDir));
+  app.use(
+    "/uploads",
+    express.static(uploadsDir, {
+      setHeaders: (res) => {
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        res.setHeader("Pragma", "no-cache");
+        res.setHeader("Expires", "0");
+      },
+    })
+  );
 });
 
 // protected baseline

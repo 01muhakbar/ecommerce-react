@@ -4,30 +4,12 @@ import {
   LayoutDashboard,
   UserRound,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-
-const MENU_ITEMS = [
-  {
-    label: "Dashboard",
-    to: "/user/dashboard",
-    Icon: LayoutDashboard,
-  },
-  {
-    label: "My Orders",
-    to: "/user/my-orders",
-    Icon: ClipboardList,
-  },
-  {
-    label: "Update Profile",
-    to: "/user/update-profile",
-    Icon: UserRound,
-  },
-  {
-    label: "Change Password",
-    to: "/user/change-password",
-    Icon: KeyRound,
-  },
-];
+import { getStoreCustomization } from "../../api/public/storeCustomizationPublic.ts";
+import { normalizeDashboardSettingCopy } from "../../utils/dashboardSettingCopy.js";
+import { useAccountAuth } from "../../auth/authDomainHooks.js";
+import { resolveAssetUrl } from "../../lib/assetUrl.js";
 
 export default function UserAccountMenuDropdown({
   open,
@@ -35,6 +17,39 @@ export default function UserAccountMenuDropdown({
   onClose,
   triggerLabel = "My account",
 }) {
+  const { user } = useAccountAuth();
+  const dashboardSettingQuery = useQuery({
+    queryKey: ["store-customization", "dashboard-setting", "en"],
+    queryFn: () => getStoreCustomization({ lang: "en", include: "dashboardSetting" }),
+    staleTime: 60_000,
+  });
+  const dashboardSettingCopy = normalizeDashboardSettingCopy(
+    dashboardSettingQuery.data?.customization?.dashboardSetting
+  );
+  const avatarSrc = resolveAssetUrl(user?.avatarUrl || user?.avatar || "");
+  const menuItems = [
+    {
+      label: dashboardSettingCopy.dashboard.dashboardLabel,
+      to: "/user/dashboard",
+      Icon: LayoutDashboard,
+    },
+    {
+      label: dashboardSettingCopy.dashboard.myOrderValue,
+      to: "/user/my-orders",
+      Icon: ClipboardList,
+    },
+    {
+      label: dashboardSettingCopy.updateProfile.sectionTitleValue,
+      to: "/user/update-profile",
+      Icon: UserRound,
+    },
+    {
+      label: dashboardSettingCopy.updateProfile.changePasswordLabel,
+      to: "/user/change-password",
+      Icon: KeyRound,
+    },
+  ];
+
   const handleToggle = () => {
     if (typeof onToggle === "function") onToggle();
   };
@@ -53,12 +68,20 @@ export default function UserAccountMenuDropdown({
         title={triggerLabel}
         aria-expanded={Boolean(open)}
       >
-        <UserRound className="h-[18px] w-[18px]" />
+        {avatarSrc ? (
+          <img
+            src={avatarSrc}
+            alt={user?.name || user?.email || triggerLabel}
+            className="h-full w-full rounded-full object-cover"
+          />
+        ) : (
+          <UserRound className="h-[18px] w-[18px]" />
+        )}
       </button>
 
       {open ? (
         <div className="absolute right-0 top-[calc(100%+10px)] z-[70] w-[244px] overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 text-slate-900 shadow-2xl">
-          {MENU_ITEMS.map((item) => (
+          {menuItems.map((item) => (
             <Link
               key={item.to}
               to={item.to}

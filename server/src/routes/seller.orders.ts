@@ -5,6 +5,7 @@ import { sellerHasPermission } from "../services/seller/resolveSellerAccess.js";
 import { createUserOrderStatusUpdatedNotification } from "../services/notification.service.js";
 import { recalculateParentOrderFulfillmentStatus } from "../services/orderPaymentAggregation.service.js";
 import { expireOverduePaymentsForOrder } from "../services/paymentExpiry.service.js";
+import { getLatestTimelineRecord } from "../services/paymentReadModel.js";
 import {
   Order,
   Payment,
@@ -291,13 +292,8 @@ const serializeProofReviewMeta = (status: string) => ({
 });
 
 const normalizeProofSummary = (proofs: any[]) => {
-  if (!Array.isArray(proofs) || proofs.length === 0) return null;
-  const latest = [...proofs]
-    .sort((left, right) => {
-      const leftTime = new Date(getAttr(left, "createdAt") || 0).getTime();
-      const rightTime = new Date(getAttr(right, "createdAt") || 0).getTime();
-      return rightTime - leftTime;
-    })[0];
+  const latest = getLatestTimelineRecord(proofs);
+  if (!latest) return null;
 
   return {
     id: toNumber(getAttr(latest, "id")),
@@ -668,12 +664,7 @@ const serializeListItem = (suborder: any, sellerAccess: any = null) => {
   const order = suborder?.order ?? suborder?.get?.("order") ?? null;
   const buyer = order?.customer ?? order?.get?.("customer") ?? null;
   const payments = Array.isArray(suborder?.payments) ? suborder.payments : [];
-  const latestPayment = [...payments]
-    .sort((left, right) => {
-      const leftTime = new Date(getAttr(left, "createdAt") || 0).getTime();
-      const rightTime = new Date(getAttr(right, "createdAt") || 0).getTime();
-      return rightTime - leftTime;
-    })[0];
+  const latestPayment = getLatestTimelineRecord(payments);
   const paymentStatus = normalizePaymentStatus(getAttr(suborder, "paymentStatus"));
   const fulfillmentStatus = normalizeFulfillmentStatus(getAttr(suborder, "fulfillmentStatus"));
   const checkoutMode = toUpper(getAttr(order, "checkoutMode"), "LEGACY") || "LEGACY";
@@ -757,12 +748,7 @@ const serializeDetail = (suborder: any, sellerAccess: any = null) => {
   const order = suborder?.order ?? suborder?.get?.("order") ?? null;
   const buyer = order?.customer ?? order?.get?.("customer") ?? null;
   const payments = Array.isArray(suborder?.payments) ? suborder.payments : [];
-  const latestPayment = [...payments]
-    .sort((left, right) => {
-      const leftTime = new Date(getAttr(left, "createdAt") || 0).getTime();
-      const rightTime = new Date(getAttr(right, "createdAt") || 0).getTime();
-      return rightTime - leftTime;
-    })[0];
+  const latestPayment = getLatestTimelineRecord(payments);
   const paymentProfile = suborder?.paymentProfile ?? suborder?.get?.("paymentProfile") ?? null;
   const paymentStatus = normalizePaymentStatus(getAttr(suborder, "paymentStatus"));
   const fulfillmentStatus = normalizeFulfillmentStatus(getAttr(suborder, "fulfillmentStatus"));
@@ -1143,13 +1129,7 @@ router.patch(
 
       const hydratedSuborder: any = suborder;
       const order = hydratedSuborder?.order ?? hydratedSuborder?.get?.("order") ?? null;
-      const latestPayment = Array.isArray(hydratedSuborder?.payments)
-        ? [...hydratedSuborder.payments].sort((left, right) => {
-            const leftTime = new Date(getAttr(left, "createdAt") || 0).getTime();
-            const rightTime = new Date(getAttr(right, "createdAt") || 0).getTime();
-            return rightTime - leftTime;
-          })[0]
-        : null;
+      const latestPayment = getLatestTimelineRecord(hydratedSuborder?.payments);
 
       const beforeState = {
         suborderId: toNumber(getAttr(suborder, "id")),
@@ -1220,13 +1200,7 @@ router.patch(
       const hydratedRefreshed: any = refreshed;
       const refreshedOrder =
         hydratedRefreshed?.order ?? hydratedRefreshed?.get?.("order") ?? null;
-      const refreshedLatestPayment = Array.isArray(hydratedRefreshed?.payments)
-        ? [...hydratedRefreshed.payments].sort((left, right) => {
-            const leftTime = new Date(getAttr(left, "createdAt") || 0).getTime();
-            const rightTime = new Date(getAttr(right, "createdAt") || 0).getTime();
-            return rightTime - leftTime;
-          })[0]
-        : null;
+      const refreshedLatestPayment = getLatestTimelineRecord(hydratedRefreshed?.payments);
 
       const afterState = {
         suborderId: toNumber(getAttr(refreshed, "id")),

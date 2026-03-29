@@ -137,11 +137,53 @@ const getLifecycleMeta = (status) => {
   };
 };
 
-const getStorefrontMeta = (published, status, submissionStatus) => {
+const getStorefrontMeta = (visibility, published, status, submissionStatus) => {
+  const stateCode = String(visibility?.stateCode || "")
+    .trim()
+    .toUpperCase();
+  const reasonCode = String(visibility?.reasonCode || "")
+    .trim()
+    .toUpperCase();
   const normalized = String(status || "").trim().toLowerCase();
   const normalizedSubmission = String(submissionStatus || "none")
     .trim()
     .toLowerCase();
+  if (stateCode === "STOREFRONT_VISIBLE") {
+    return {
+      label: "Visible in storefront",
+      toneClass: "bg-emerald-100 text-emerald-700",
+      description:
+        visibility?.storefrontReason ||
+        "Publish is on and lifecycle is active, so storefront visibility is live.",
+    };
+  }
+  if (stateCode === "PUBLISHED_BLOCKED" && reasonCode === "REVIEW_PENDING") {
+    return {
+      label: "Published but review-blocked",
+      toneClass: "bg-sky-100 text-sky-700",
+      description:
+        visibility?.storefrontReason ||
+        "Publish is on, but storefront visibility stays hidden until admin review is completed.",
+    };
+  }
+  if (stateCode === "PUBLISHED_BLOCKED" && reasonCode === "REVISION_REQUIRED") {
+    return {
+      label: "Published but revision-blocked",
+      toneClass: "bg-amber-100 text-amber-800",
+      description:
+        visibility?.storefrontReason ||
+        "Publish is on, but storefront visibility stays hidden until seller revisions are resubmitted and approved.",
+    };
+  }
+  if (stateCode === "PUBLISHED_BLOCKED" && reasonCode === "STORE_NOT_ACTIVE") {
+    return {
+      label: "Published but store-blocked",
+      toneClass: "bg-amber-100 text-amber-800",
+      description:
+        visibility?.storefrontReason ||
+        "Publish is on, but the store is not active so storefront visibility stays blocked.",
+    };
+  }
   if (!published) {
     return {
       label: "Hidden from storefront",
@@ -229,6 +271,7 @@ export default function ProductPreviewDrawer({ productId, onClose, onEdit }) {
   const lifecycleMeta = getLifecycleMeta(product?.status);
   const sellerSubmission = product?.sellerSubmission || null;
   const storefrontMeta = getStorefrontMeta(
+    product?.visibility,
     published,
     product?.status,
     sellerSubmission?.status

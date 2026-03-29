@@ -15,6 +15,7 @@ import {
 } from "../models/index.js";
 import { recalculateParentOrderPaymentStatus } from "../services/orderPaymentAggregation.service.js";
 import { expireOverduePaymentsForOrder } from "../services/paymentExpiry.service.js";
+import { getLatestTimelineRecord } from "../services/paymentReadModel.js";
 import { appendPaymentStatusLog } from "../services/paymentStatusLog.service.js";
 import { SELLER_ROLE_CODES } from "../services/seller/permissionMap.js";
 import {
@@ -201,14 +202,8 @@ const resolveLegacySellerPaymentReviewAccess = async (input: {
 };
 
 const normalizeProofSummary = (proofs: any[]) => {
-  if (!Array.isArray(proofs) || proofs.length === 0) return null;
-  const latest = [...proofs]
-    .sort((left, right) => {
-      const leftTime = new Date(getAttr(left, "createdAt") || 0).getTime();
-      const rightTime = new Date(getAttr(right, "createdAt") || 0).getTime();
-      if (rightTime !== leftTime) return rightTime - leftTime;
-      return toNumber(getAttr(right, "id")) - toNumber(getAttr(left, "id"));
-    })[0];
+  const latest = getLatestTimelineRecord(proofs);
+  if (!latest) return null;
   return {
     id: toNumber(getAttr(latest, "id")),
     proofImageUrl: String(getAttr(latest, "proofImageUrl") || ""),
@@ -338,7 +333,7 @@ const sellerListInclude = [
 
 const serializeSellerSuborder = (suborder: any) => {
   const payments = Array.isArray(suborder?.payments) ? suborder.payments : [];
-  const payment = payments[0] ?? null;
+  const payment = getLatestTimelineRecord(payments);
   const proof = normalizeProofSummary(payment?.proofs ?? []);
   const buyer = suborder?.order?.customer ?? suborder?.order?.get?.("customer") ?? null;
   return {
@@ -391,14 +386,7 @@ const serializeSellerSuborder = (suborder: any) => {
 
 const resolveSellerPaymentReviewFilterStatus = (suborder: any) => {
   const payments = Array.isArray(suborder?.payments) ? suborder.payments : [];
-  const latestPayment =
-    payments.length > 1
-      ? [...payments].sort((left, right) => {
-          const leftTime = new Date(getAttr(left, "createdAt") || 0).getTime();
-          const rightTime = new Date(getAttr(right, "createdAt") || 0).getTime();
-          return rightTime - leftTime;
-        })[0]
-      : payments[0] ?? null;
+  const latestPayment = getLatestTimelineRecord(payments);
   const paymentStatus = String(getAttr(latestPayment, "status") || "").trim().toUpperCase();
   const suborderStatus = String(getAttr(suborder, "paymentStatus") || "UNPAID")
     .trim()
@@ -731,13 +719,7 @@ const handleSellerPaymentReview = async (req: any, res: any, options: { requireR
       });
     }
 
-    const latestProofRow = [...paymentProofs]
-      .sort((left, right) => {
-        const leftTime = new Date(getAttr(left, "createdAt") || 0).getTime();
-        const rightTime = new Date(getAttr(right, "createdAt") || 0).getTime();
-        if (rightTime !== leftTime) return rightTime - leftTime;
-        return toNumber(getAttr(right, "id")) - toNumber(getAttr(left, "id"));
-      })[0];
+    const latestProofRow = getLatestTimelineRecord(paymentProofs);
 
     const orderId = toNumber(getAttr(suborder, "orderId"), 0);
     const now = new Date();

@@ -404,10 +404,11 @@ const DEFAULT_CUSTOMIZATION = {
   checkout: {
     personalDetails: {
       sectionTitle: "Personal Details",
+      sectionHint: "Enter your contact details.",
       firstNameLabel: "First Name",
       lastNameLabel: "Last Name",
       emailLabel: "Email Address",
-      phoneLabel: "Phone",
+      phoneLabel: "Phone Number",
       firstNamePlaceholder: "First Name",
       lastNamePlaceholder: "Last Name",
       emailPlaceholder: "Email Address",
@@ -415,41 +416,61 @@ const DEFAULT_CUSTOMIZATION = {
     },
     shippingDetails: {
       sectionTitle: "Shipping Details",
-      streetAddressLabel: "Street Address",
-      cityLabel: "City",
-      countryLabel: "Country",
-      zipLabel: "Zip / Postal",
-      streetAddressPlaceholder: "Street Address",
-      cityPlaceholder: "City",
-      countryPlaceholder: "Country",
-      zipPlaceholder: "Zip Code",
-      shippingCostLabel: "Shipping Cost",
-      shippingOneNameLabel: "Shipping One Name",
-      shippingOneNameDefault: "FedEx",
-      shippingOneDescriptionLabel: "Shipping One Description",
-      shippingOneDescriptionDefault: "Delivery: Today Cost :",
-      shippingOneCostLabel: "Shipping One Cost",
-      shippingOneCostDefault: "60",
-      shippingTwoNameLabel: "Shipping Two Name",
-      shippingTwoNameDefault: "UPS",
-      shippingTwoDescriptionLabel: "Shipping Two Description",
-      shippingTwoDescriptionDefault: "Delivery: 7 Days Cost :",
-      shippingTwoCostLabel: "Shipping Two Cost",
-      shippingTwoCostDefault: "20",
+      sectionHint: "Confirm the delivery destination.",
+      provinceLabel: "Province",
+      cityLabel: "City/Regency",
+      districtLabel: "Subdistrict",
+      postalCodeLabel: "Postal Code",
+      streetNameLabel: "Street Name",
+      houseNumberLabel: "House Number",
+      buildingLabel: "Building",
+      otherDetailsLabel: "Other Details",
+      provincePlaceholder: "Select Province",
+      cityPlaceholder: "Select City/Regency",
+      districtPlaceholder: "Select Subdistrict",
+      postalCodePlaceholder: "Postal Code",
+      streetNamePlaceholder: "Street Name",
+      houseNumberPlaceholder: "House Number",
+      buildingPlaceholder: "Building",
+      otherDetailsPlaceholder: "Block / Unit / Reference",
+      defaultShippingToggleLabel: "Use Default Shipping Address",
+      defaultShippingToggleEnabledLabel: "Yes",
+      defaultShippingToggleDisabledLabel: "No",
+      defaultShippingLoadingLabel: "Loading your default shipping address...",
       paymentMethodLabel: "Payment Method",
-      paymentMethodPlaceholder: "Payment Method",
+      paymentMethodPlaceholder: "Select a preferred payment option.",
     },
     buttons: {
-      continueButtonLabel: "Continue Shipping",
-      confirmButtonLabel: "Confirm Order",
+      continueButtonLabel: "Back to Cart",
+      confirmButtonLabel: "Place an Order",
+      processingButtonLabel: "Processing...",
     },
     cartItemSection: {
-      sectionTitle: "Cart Item Section",
+      sectionTitle: "Checkout Summary",
       orderSummaryLabel: "Order Summary",
+      sectionDescription:
+        "Review items, coupon impact, and the final amount before you submit.",
+      estimatedTotalLabel: "Estimated Total",
+      itemCountSuffix: "Items",
       applyButtonLabel: "Apply",
-      subTotalLabel: "Sub Total",
+      applyingButtonLabel: "Applying...",
+      couponCodeLabel: "Coupon Code",
+      couponCodePlaceholder: "Coupon Code",
+      couponHelperText:
+        "Use this single field for either a platform coupon or the linked store coupon.",
+      itemPriceLabel: "Item Price",
+      subTotalLabel: "Subtotal",
+      shippingLabel: "Shipping",
       discountLabel: "Discount",
-      totalCostLabel: "Total Cost",
+      taxLabel: "Tax",
+      totalCostLabel: "TOTAL COST",
+      postSubmitNotice:
+        "After placing the order, you will be redirected to the payment page with a trackable order reference.",
+      confirmationHelperText:
+        "By placing this order, you confirm the contact and shipping details above.",
+      summaryReadyHint: "Discounts and store settings are reflected live in this summary.",
+      submitNextLabel: "Submit Next",
+      previewFirstLabel: "Preview First",
     },
   },
   dashboardSetting: {
@@ -1549,6 +1570,31 @@ const normalizeCheckout = (root: Record<string, any>) => {
   const cartItemSectionSource = isPlainObject(source.cartItemSection)
     ? source.cartItemSection
     : {};
+  const normalizeCheckoutButtonLabel = (value: unknown, fallback: string) => {
+    const normalized = toText(value, fallback);
+    const lowered = normalized.toLowerCase();
+    if (lowered === "continue shipping") return defaults.buttons.continueButtonLabel;
+    if (lowered === "confirm order") return defaults.buttons.confirmButtonLabel;
+    return normalized;
+  };
+  const normalizeCheckoutSectionTitle = (value: unknown, fallback: string) => {
+    const normalized = toText(value, fallback);
+    return normalized.toLowerCase() === "cart item section"
+      ? defaults.cartItemSection.sectionTitle
+      : normalized;
+  };
+  const normalizeCheckoutSubtotalLabel = (value: unknown, fallback: string) => {
+    const normalized = toText(value, fallback);
+    return normalized.toLowerCase() === "sub total"
+      ? defaults.cartItemSection.subTotalLabel
+      : normalized;
+  };
+  const normalizeCheckoutTotalLabel = (value: unknown, fallback: string) => {
+    const normalized = toText(value, fallback);
+    return normalized.toLowerCase() === "total cost"
+      ? defaults.cartItemSection.totalCostLabel
+      : normalized;
+  };
 
   return {
     ...defaults,
@@ -1559,6 +1605,10 @@ const normalizeCheckout = (root: Record<string, any>) => {
       sectionTitle: toText(
         personalDetailsSource.sectionTitle,
         defaults.personalDetails.sectionTitle
+      ),
+      sectionHint: toText(
+        personalDetailsSource.sectionHint,
+        defaults.personalDetails.sectionHint
       ),
       firstNameLabel: toText(
         personalDetailsSource.firstNameLabel,
@@ -1600,83 +1650,92 @@ const normalizeCheckout = (root: Record<string, any>) => {
         shippingDetailsSource.sectionTitle,
         defaults.shippingDetails.sectionTitle
       ),
-      streetAddressLabel: toText(
-        shippingDetailsSource.streetAddressLabel,
-        defaults.shippingDetails.streetAddressLabel
+      sectionHint: toText(
+        shippingDetailsSource.sectionHint,
+        defaults.shippingDetails.sectionHint
       ),
-      cityLabel: toText(shippingDetailsSource.cityLabel, defaults.shippingDetails.cityLabel),
-      countryLabel: toText(
-        shippingDetailsSource.countryLabel,
-        defaults.shippingDetails.countryLabel
+      provinceLabel: toText(
+        shippingDetailsSource.provinceLabel ?? shippingDetailsSource.countryLabel,
+        defaults.shippingDetails.provinceLabel
       ),
-      zipLabel: toText(shippingDetailsSource.zipLabel, defaults.shippingDetails.zipLabel),
-      streetAddressPlaceholder: toText(
-        shippingDetailsSource.streetAddressPlaceholder,
-        defaults.shippingDetails.streetAddressPlaceholder
+      cityLabel: toText(
+        shippingDetailsSource.cityLabel,
+        defaults.shippingDetails.cityLabel
+      ),
+      districtLabel: toText(
+        shippingDetailsSource.districtLabel,
+        defaults.shippingDetails.districtLabel
+      ),
+      postalCodeLabel: toText(
+        shippingDetailsSource.postalCodeLabel ?? shippingDetailsSource.zipLabel,
+        defaults.shippingDetails.postalCodeLabel
+      ),
+      streetNameLabel: toText(
+        shippingDetailsSource.streetNameLabel ?? shippingDetailsSource.streetAddressLabel,
+        defaults.shippingDetails.streetNameLabel
+      ),
+      houseNumberLabel: toText(
+        shippingDetailsSource.houseNumberLabel,
+        defaults.shippingDetails.houseNumberLabel
+      ),
+      buildingLabel: toText(
+        shippingDetailsSource.buildingLabel,
+        defaults.shippingDetails.buildingLabel
+      ),
+      otherDetailsLabel: toText(
+        shippingDetailsSource.otherDetailsLabel,
+        defaults.shippingDetails.otherDetailsLabel
+      ),
+      provincePlaceholder: toText(
+        shippingDetailsSource.provincePlaceholder ??
+          shippingDetailsSource.countryPlaceholder,
+        defaults.shippingDetails.provincePlaceholder
       ),
       cityPlaceholder: toText(
         shippingDetailsSource.cityPlaceholder,
         defaults.shippingDetails.cityPlaceholder
       ),
-      countryPlaceholder: toText(
-        shippingDetailsSource.countryPlaceholder,
-        defaults.shippingDetails.countryPlaceholder
+      districtPlaceholder: toText(
+        shippingDetailsSource.districtPlaceholder,
+        defaults.shippingDetails.districtPlaceholder
       ),
-      zipPlaceholder: toText(
-        shippingDetailsSource.zipPlaceholder,
-        defaults.shippingDetails.zipPlaceholder
+      postalCodePlaceholder: toText(
+        shippingDetailsSource.postalCodePlaceholder ??
+          shippingDetailsSource.zipPlaceholder,
+        defaults.shippingDetails.postalCodePlaceholder
       ),
-      shippingCostLabel: toText(
-        shippingDetailsSource.shippingCostLabel,
-        defaults.shippingDetails.shippingCostLabel
+      streetNamePlaceholder: toText(
+        shippingDetailsSource.streetNamePlaceholder ??
+          shippingDetailsSource.streetAddressPlaceholder,
+        defaults.shippingDetails.streetNamePlaceholder
       ),
-      shippingOneNameLabel: toText(
-        shippingDetailsSource.shippingOneNameLabel,
-        defaults.shippingDetails.shippingOneNameLabel
+      houseNumberPlaceholder: toText(
+        shippingDetailsSource.houseNumberPlaceholder,
+        defaults.shippingDetails.houseNumberPlaceholder
       ),
-      shippingOneNameDefault: toText(
-        shippingDetailsSource.shippingOneNameDefault,
-        defaults.shippingDetails.shippingOneNameDefault
+      buildingPlaceholder: toText(
+        shippingDetailsSource.buildingPlaceholder,
+        defaults.shippingDetails.buildingPlaceholder
       ),
-      shippingOneDescriptionLabel: toText(
-        shippingDetailsSource.shippingOneDescriptionLabel,
-        defaults.shippingDetails.shippingOneDescriptionLabel
+      otherDetailsPlaceholder: toText(
+        shippingDetailsSource.otherDetailsPlaceholder,
+        defaults.shippingDetails.otherDetailsPlaceholder
       ),
-      shippingOneDescriptionDefault: toText(
-        shippingDetailsSource.shippingOneDescriptionDefault,
-        defaults.shippingDetails.shippingOneDescriptionDefault
+      defaultShippingToggleLabel: toText(
+        shippingDetailsSource.defaultShippingToggleLabel,
+        defaults.shippingDetails.defaultShippingToggleLabel
       ),
-      shippingOneCostLabel: toText(
-        shippingDetailsSource.shippingOneCostLabel,
-        defaults.shippingDetails.shippingOneCostLabel
+      defaultShippingToggleEnabledLabel: toText(
+        shippingDetailsSource.defaultShippingToggleEnabledLabel,
+        defaults.shippingDetails.defaultShippingToggleEnabledLabel
       ),
-      shippingOneCostDefault: toText(
-        shippingDetailsSource.shippingOneCostDefault,
-        defaults.shippingDetails.shippingOneCostDefault
+      defaultShippingToggleDisabledLabel: toText(
+        shippingDetailsSource.defaultShippingToggleDisabledLabel,
+        defaults.shippingDetails.defaultShippingToggleDisabledLabel
       ),
-      shippingTwoNameLabel: toText(
-        shippingDetailsSource.shippingTwoNameLabel,
-        defaults.shippingDetails.shippingTwoNameLabel
-      ),
-      shippingTwoNameDefault: toText(
-        shippingDetailsSource.shippingTwoNameDefault,
-        defaults.shippingDetails.shippingTwoNameDefault
-      ),
-      shippingTwoDescriptionLabel: toText(
-        shippingDetailsSource.shippingTwoDescriptionLabel,
-        defaults.shippingDetails.shippingTwoDescriptionLabel
-      ),
-      shippingTwoDescriptionDefault: toText(
-        shippingDetailsSource.shippingTwoDescriptionDefault,
-        defaults.shippingDetails.shippingTwoDescriptionDefault
-      ),
-      shippingTwoCostLabel: toText(
-        shippingDetailsSource.shippingTwoCostLabel,
-        defaults.shippingDetails.shippingTwoCostLabel
-      ),
-      shippingTwoCostDefault: toText(
-        shippingDetailsSource.shippingTwoCostDefault,
-        defaults.shippingDetails.shippingTwoCostDefault
+      defaultShippingLoadingLabel: toText(
+        shippingDetailsSource.defaultShippingLoadingLabel,
+        defaults.shippingDetails.defaultShippingLoadingLabel
       ),
       paymentMethodLabel: toText(
         shippingDetailsSource.paymentMethodLabel,
@@ -1690,19 +1749,23 @@ const normalizeCheckout = (root: Record<string, any>) => {
     buttons: {
       ...defaults.buttons,
       ...buttonsSource,
-      continueButtonLabel: toText(
+      continueButtonLabel: normalizeCheckoutButtonLabel(
         buttonsSource.continueButtonLabel,
         defaults.buttons.continueButtonLabel
       ),
-      confirmButtonLabel: toText(
+      confirmButtonLabel: normalizeCheckoutButtonLabel(
         buttonsSource.confirmButtonLabel,
         defaults.buttons.confirmButtonLabel
+      ),
+      processingButtonLabel: toText(
+        buttonsSource.processingButtonLabel,
+        defaults.buttons.processingButtonLabel
       ),
     },
     cartItemSection: {
       ...defaults.cartItemSection,
       ...cartItemSectionSource,
-      sectionTitle: toText(
+      sectionTitle: normalizeCheckoutSectionTitle(
         cartItemSectionSource.sectionTitle,
         defaults.cartItemSection.sectionTitle
       ),
@@ -1710,21 +1773,81 @@ const normalizeCheckout = (root: Record<string, any>) => {
         cartItemSectionSource.orderSummaryLabel,
         defaults.cartItemSection.orderSummaryLabel
       ),
+      sectionDescription: toText(
+        cartItemSectionSource.sectionDescription,
+        defaults.cartItemSection.sectionDescription
+      ),
+      estimatedTotalLabel: toText(
+        cartItemSectionSource.estimatedTotalLabel,
+        defaults.cartItemSection.estimatedTotalLabel
+      ),
+      itemCountSuffix: toText(
+        cartItemSectionSource.itemCountSuffix,
+        defaults.cartItemSection.itemCountSuffix
+      ),
       applyButtonLabel: toText(
         cartItemSectionSource.applyButtonLabel,
         defaults.cartItemSection.applyButtonLabel
       ),
-      subTotalLabel: toText(
+      applyingButtonLabel: toText(
+        cartItemSectionSource.applyingButtonLabel,
+        defaults.cartItemSection.applyingButtonLabel
+      ),
+      couponCodeLabel: toText(
+        cartItemSectionSource.couponCodeLabel,
+        defaults.cartItemSection.couponCodeLabel
+      ),
+      couponCodePlaceholder: toText(
+        cartItemSectionSource.couponCodePlaceholder,
+        defaults.cartItemSection.couponCodePlaceholder
+      ),
+      couponHelperText: toText(
+        cartItemSectionSource.couponHelperText,
+        defaults.cartItemSection.couponHelperText
+      ),
+      itemPriceLabel: toText(
+        cartItemSectionSource.itemPriceLabel,
+        defaults.cartItemSection.itemPriceLabel
+      ),
+      subTotalLabel: normalizeCheckoutSubtotalLabel(
         cartItemSectionSource.subTotalLabel,
         defaults.cartItemSection.subTotalLabel
+      ),
+      shippingLabel: toText(
+        cartItemSectionSource.shippingLabel,
+        defaults.cartItemSection.shippingLabel
       ),
       discountLabel: toText(
         cartItemSectionSource.discountLabel,
         defaults.cartItemSection.discountLabel
       ),
-      totalCostLabel: toText(
+      taxLabel: toText(
+        cartItemSectionSource.taxLabel,
+        defaults.cartItemSection.taxLabel
+      ),
+      totalCostLabel: normalizeCheckoutTotalLabel(
         cartItemSectionSource.totalCostLabel,
         defaults.cartItemSection.totalCostLabel
+      ),
+      postSubmitNotice: toText(
+        cartItemSectionSource.postSubmitNotice,
+        defaults.cartItemSection.postSubmitNotice
+      ),
+      confirmationHelperText: toText(
+        cartItemSectionSource.confirmationHelperText,
+        defaults.cartItemSection.confirmationHelperText
+      ),
+      summaryReadyHint: toText(
+        cartItemSectionSource.summaryReadyHint,
+        defaults.cartItemSection.summaryReadyHint
+      ),
+      submitNextLabel: toText(
+        cartItemSectionSource.submitNextLabel,
+        defaults.cartItemSection.submitNextLabel
+      ),
+      previewFirstLabel: toText(
+        cartItemSectionSource.previewFirstLabel,
+        defaults.cartItemSection.previewFirstLabel
       ),
     },
   };

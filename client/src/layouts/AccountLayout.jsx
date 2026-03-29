@@ -14,30 +14,8 @@ import {
 import { useAccountAuth } from "../auth/authDomainHooks.js";
 import { useCartStore } from "../store/cart.store.ts";
 import { getStoreCustomization } from "../api/public/storeCustomizationPublic.ts";
-
-const toText = (value, fallback) => {
-  const normalized = String(value ?? "").trim();
-  return normalized || fallback;
-};
-
-const normalizeDashboardSettingCopy = (raw) => {
-  const source = raw && typeof raw === "object" ? raw : {};
-  const dashboard = source.dashboard && typeof source.dashboard === "object" ? source.dashboard : {};
-  const updateProfile =
-    source.updateProfile && typeof source.updateProfile === "object"
-      ? source.updateProfile
-      : {};
-  return {
-    dashboard: {
-      dashboardLabel: toText(dashboard.dashboardLabel, "Dashboard"),
-      myOrderValue: toText(dashboard.myOrderValue, "My Orders"),
-    },
-    updateProfile: {
-      sectionTitleValue: toText(updateProfile.sectionTitleValue, "Update Profile"),
-      changePasswordLabel: toText(updateProfile.changePasswordLabel, "Change Password"),
-    },
-  };
-};
+import { normalizeDashboardSettingCopy } from "../utils/dashboardSettingCopy.js";
+import { resolveAssetUrl } from "../lib/assetUrl.js";
 
 const getInitials = (value) => {
   const text = String(value || "").trim();
@@ -54,15 +32,17 @@ function AccountSidebar({ user, onLogout, isLoggingOut, dashboardSettingCopy }) 
   const displayName = user?.name || user?.fullName || "Guest User";
   const email = user?.email || "No email provided";
   const initials = getInitials(user?.name || user?.email || "User");
+  const avatarSrc = resolveAssetUrl(user?.avatarUrl || user?.avatar || "");
+  const copy = dashboardSettingCopy || normalizeDashboardSettingCopy({});
   const navItems = [
     {
       to: "/user/dashboard",
-      label: "Dashboard",
+      label: copy.dashboard.dashboardLabel,
       Icon: LayoutDashboard,
     },
     {
       to: "/user/my-orders",
-      label: "My Orders",
+      label: copy.dashboard.myOrderValue,
       Icon: ClipboardList,
     },
     { to: "/user/notifications", label: "Notifications", Icon: Bell },
@@ -79,12 +59,12 @@ function AccountSidebar({ user, onLogout, isLoggingOut, dashboardSettingCopy }) 
     },
     {
       to: "/user/update-profile",
-      label: "Update Profile",
+      label: copy.updateProfile.sectionTitleValue,
       Icon: User,
     },
     {
       to: "/user/change-password",
-      label: "Change Password",
+      label: copy.updateProfile.changePasswordLabel,
       Icon: KeyRound,
     },
   ];
@@ -94,7 +74,15 @@ function AccountSidebar({ user, onLogout, isLoggingOut, dashboardSettingCopy }) 
         <div className="flex items-center gap-4">
           <div className="relative">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 text-xl font-bold text-slate-500">
-              {initials}
+              {avatarSrc ? (
+                <img
+                  src={avatarSrc}
+                  alt={displayName}
+                  className="h-full w-full rounded-full object-cover"
+                />
+              ) : (
+                initials
+              )}
             </div>
             <span className="absolute -bottom-1 left-1/2 h-3 w-3 -translate-x-1/2 rounded-full border-2 border-white bg-emerald-500" />
           </div>

@@ -2,6 +2,10 @@ import { Op } from "sequelize";
 import { Router } from "express";
 import requireSellerStoreAccess from "../middleware/requireSellerStoreAccess.js";
 import { Category, Product, ProductCategory } from "../models/index.js";
+import {
+  buildProductVisibilitySnapshot,
+  isStorefrontStoreActive,
+} from "../services/productVisibility.js";
 import { sellerHasPermission } from "../services/seller/resolveSellerAccess.js";
 
 const router = Router();
@@ -901,16 +905,17 @@ const findSellerScopedProductDetail = async (storeId: number, productId: number)
 const buildCatalogReadContract = () => ({
   sourceOfTruth: {
     tenantScope: "Product.storeId",
+    storeLifecycle: "Store.status",
     status: "Product.status",
     publishFlag: "Product.isPublished",
     submissionGate: "Product.sellerSubmissionStatus",
     storefrontVisibility:
-      "Product.storeId valid && Product.isPublished === true && Product.status === active && Product.sellerSubmissionStatus === none",
+      "Product.storeId valid && Store.status === ACTIVE && Product.isPublished === true && Product.status === active && Product.sellerSubmissionStatus === none",
   },
   supportedStatuses: ["active", "inactive", "draft"],
   notes: [
     "Seller catalog stays store-scoped through Product.storeId.",
-    "Current public storefront queries gate product visibility by store mapping, publish flag, active status, and a cleared seller submission state.",
+    "Current public storefront queries gate product visibility by store mapping, active store status, publish flag, active product status, and a cleared seller submission state.",
     "Submitted and revision-required products stay blocked from storefront visibility until admin review is resolved and Product.sellerSubmissionStatus returns to none.",
     "Stock, pre-order, and category publish state are still not used as hard storefront visibility gates in product queries.",
   ],
@@ -931,85 +936,22 @@ const serializeProductStatus = (status: string) => ({
 const serializeProductVisibility = (
   isPublished: boolean,
   status: string,
-  submissionStatus: string = "none"
-) => {
-  const normalizedSubmissionStatus = normalizeSellerSubmissionStatus(submissionStatus);
-  const reviewBlocked = normalizedSubmissionStatus !== "none";
-  const storefrontVisible = isPublished && status === "active" && !reviewBlocked;
-  const blockingSignals = [];
-
-  if (!isPublished) {
-    blockingSignals.push("PUBLISH_OFF");
-  }
-  if (status !== "active") {
-    blockingSignals.push("STATUS_NOT_ACTIVE");
-  }
-  if (normalizedSubmissionStatus === "submitted") {
-    blockingSignals.push("SELLER_REVIEW_PENDING");
-  }
-  if (normalizedSubmissionStatus === "needs_revision") {
-    blockingSignals.push("SELLER_REVISION_REQUIRED");
-  }
-
-  const stateCode = !isPublished
-    ? "INTERNAL_ONLY"
-    : storefrontVisible
-      ? "STOREFRONT_VISIBLE"
-      : "PUBLISHED_BLOCKED";
-
-  return {
+  submissionStatus: string = "none",
+  options: { storeStatus?: unknown; storeId?: unknown } = {}
+) =>
+  buildProductVisibilitySnapshot({
     isPublished,
-    storefrontVisible,
-    stateCode,
-    label: isPublished ? "Published" : "Private",
-    publishLabel: isPublished ? "Published" : "Private",
-    sellerLabel: !isPublished
-      ? status === "draft"
-        ? "Draft in seller workspace"
-        : "Hidden from storefront"
-      : storefrontVisible
-        ? "Visible in storefront"
-        : normalizedSubmissionStatus === "submitted"
-          ? "Published but waiting admin review"
-          : normalizedSubmissionStatus === "needs_revision"
-            ? "Published but revision is still required"
-        : "Published but blocked",
-    storefrontLabel: storefrontVisible ? "Visible in storefront" : "Hidden from storefront",
-    storefrontReason: !isPublished
-      ? "Public storefront queries exclude this product because the publish flag is off."
-      : storefrontVisible
-        ? "Public storefront queries include this product because publish is on and status is active."
-        : normalizedSubmissionStatus === "submitted"
-          ? "Publish is on, but this product is still waiting for the final admin review outcome and stays hidden from storefront queries."
-          : normalizedSubmissionStatus === "needs_revision"
-            ? "Publish is on, but this product is still in revision-required review state and stays hidden from storefront queries."
-        : "Publish is on, but public storefront queries still exclude this product until status becomes active.",
-    sellerHint: !isPublished
-      ? "Seller can still review this product here, but customers cannot see it yet."
-      : storefrontVisible
-        ? "Seller and customer views are aligned for visibility."
-        : normalizedSubmissionStatus === "submitted"
-          ? "Seller can see that publish is on, but admin review still blocks storefront visibility."
-          : normalizedSubmissionStatus === "needs_revision"
-            ? "Seller can see that publish is on, but revision follow-up still blocks storefront visibility."
-        : "Seller can review this product here, but customers will not see it until status becomes active.",
-    blockingSignals,
-    reasonCode: !isPublished
-      ? "UNPUBLISHED"
-      : normalizedSubmissionStatus === "submitted"
-        ? "REVIEW_PENDING"
-        : normalizedSubmissionStatus === "needs_revision"
-          ? "REVISION_REQUIRED"
-          : storefrontVisible
-            ? "STOREFRONT_VISIBLE"
-            : "STATUS_NOT_ACTIVE",
-  };
-};
+    status,
+    submissionStatus,
+    storeStatus: options.storeStatus,
+    storeId: options.storeId,
+  });
 
 const serializeProductPublishing = (
   product: any,
   sellerAccess: any = null,
-  readiness = resolveSellerPublishReadiness(product)
+  readiness = resolveSellerPublishReadiness(product),
+  options: { storeStatus?: unknown; storeId?: unknown } = {}
 ) => {
   const permissions = buildAuthoringPermissions(sellerAccess);
   const isPublished = Boolean(getAttr(product, "isPublished"));
@@ -1017,6 +959,13 @@ const serializeProductPublishing = (
   const submissionStatus = normalizeSellerSubmissionStatus(
     getAttr(product, "sellerSubmissionStatus")
   );
+  const visibility = buildProductVisibilitySnapshot({
+    isPublished,
+    status,
+    submissionStatus,
+    storeStatus: options.storeStatus,
+    storeId: options.storeId ?? getAttr(product, "storeId"),
+  });
   const reviewBlocker =
     submissionStatus === "submitted"
       ? {
@@ -1072,9 +1021,15 @@ const serializeProductPublishing = (
           ? "Complete draft"
           : "Update product",
     hint: canPublish
-      ? "This product is ready for storefront visibility."
+      ? visibility.storefrontVisible
+        ? "This product is ready for storefront visibility."
+        : visibility.reasonCode === "STORE_NOT_ACTIVE"
+          ? "This product can be published, but storefront visibility stays blocked until the store becomes active."
+          : "This product is ready for publish control."
       : canUnpublish
-        ? "This product is live and can be hidden from storefront at any time."
+        ? visibility.storefrontVisible
+          ? "This product is live and can be hidden from storefront at any time."
+          : visibility.storefrontReason
         : reviewBlocker?.message ||
           blockedReasons[0]?.message ||
           (permissions.canPublishProducts
@@ -1204,7 +1159,11 @@ const serializeCategorySummary = (category: any) => {
   };
 };
 
-const serializeProductListItem = (product: any, sellerAccess: any = null) => {
+const serializeProductListItem = (
+  product: any,
+  sellerAccess: any = null,
+  storeStatus: unknown = null
+) => {
   const category =
     product?.defaultCategory ??
     product?.category ??
@@ -1224,9 +1183,16 @@ const serializeProductListItem = (product: any, sellerAccess: any = null) => {
   const visibility = serializeProductVisibility(
     isPublished,
     status,
-    normalizeSellerSubmissionStatus(getAttr(product, "sellerSubmissionStatus"))
+    normalizeSellerSubmissionStatus(getAttr(product, "sellerSubmissionStatus")),
+    {
+      storeStatus,
+      storeId: getAttr(product, "storeId"),
+    }
   );
-  const publishing = serializeProductPublishing(product, sellerAccess);
+  const publishing = serializeProductPublishing(product, sellerAccess, undefined, {
+    storeStatus,
+    storeId: getAttr(product, "storeId"),
+  });
   const authoring = buildProductAuthoringState(status, sellerAccess, normalizeSellerSubmissionStatus(getAttr(product, "sellerSubmissionStatus")));
   const submissionGovernance = buildSellerSubmissionGovernance(sellerAccess, {
     hasConcreteProduct: true,
@@ -1272,7 +1238,11 @@ const serializeProductListItem = (product: any, sellerAccess: any = null) => {
   };
 };
 
-const serializeProductDetail = (product: any, sellerAccess: any = null) => {
+const serializeProductDetail = (
+  product: any,
+  sellerAccess: any = null,
+  storeStatus: unknown = null
+) => {
   const defaultCategory =
     product?.defaultCategory ?? product?.get?.("defaultCategory") ?? null;
   const primaryCategory = product?.category ?? product?.get?.("category") ?? null;
@@ -1298,9 +1268,16 @@ const serializeProductDetail = (product: any, sellerAccess: any = null) => {
   const visibility = serializeProductVisibility(
     isPublished,
     status,
-    normalizeSellerSubmissionStatus(getAttr(product, "sellerSubmissionStatus"))
+    normalizeSellerSubmissionStatus(getAttr(product, "sellerSubmissionStatus")),
+    {
+      storeStatus,
+      storeId: getAttr(product, "storeId"),
+    }
   );
-  const publishing = serializeProductPublishing(product, sellerAccess);
+  const publishing = serializeProductPublishing(product, sellerAccess, undefined, {
+    storeStatus,
+    storeId: getAttr(product, "storeId"),
+  });
   const authoring = buildProductAuthoringState(status, sellerAccess, normalizeSellerSubmissionStatus(getAttr(product, "sellerSubmissionStatus")));
   const submissionGovernance = buildSellerSubmissionGovernance(sellerAccess, {
     hasConcreteProduct: true,
@@ -1402,8 +1379,12 @@ const serializeProductDetail = (product: any, sellerAccess: any = null) => {
   };
 };
 
-const buildSellerProductSummary = async (storeId: number) => {
+const buildSellerProductSummary = async (
+  storeId: number,
+  storeStatus: unknown = null
+) => {
   const baseWhere = { storeId } as any;
+  const storeActive = isStorefrontStoreActive({ storeStatus, storeId });
 
   const [
     totalProducts,
@@ -1450,20 +1431,25 @@ const buildSellerProductSummary = async (storeId: number) => {
         status: "active",
         sellerSubmissionStatus: "none",
       } as any,
-    }),
+    }).then((count) => (storeActive ? count : 0)),
     Product.count({
-      where: {
-        ...baseWhere,
-        isPublished: true,
-        [Op.or]: [
-          { status: { [Op.ne]: "active" } },
-          {
-            sellerSubmissionStatus: {
-              [Op.in]: ["submitted", "needs_revision"],
-            },
-          },
-        ],
-      } as any,
+      where: storeActive
+        ? {
+            ...baseWhere,
+            isPublished: true,
+            [Op.or]: [
+              { status: { [Op.ne]: "active" } },
+              {
+                sellerSubmissionStatus: {
+                  [Op.in]: ["submitted", "needs_revision"],
+                },
+              },
+            ],
+          } as any
+        : {
+            ...baseWhere,
+            isPublished: true,
+          } as any,
     }),
     Product.count({ where: { ...baseWhere, isPublished: false } as any }),
   ]);
@@ -1494,6 +1480,10 @@ const parseSellerProductsFilterInput = (source: any = {}) => ({
 const buildSellerProductsWhere = (options: any = {}) => {
   const andConditions: any[] = [];
   const ids = Array.isArray(options?.ids) ? options.ids : [];
+  const storeActive = isStorefrontStoreActive({
+    storeStatus: options?.storeStatus,
+    storeId: options?.storeId,
+  });
 
   if (allowedStatuses.has(options?.status)) {
     andConditions.push({ status: options.status });
@@ -1519,15 +1509,19 @@ const buildSellerProductsWhere = (options: any = {}) => {
   if (options?.visibilityState === "internal_only") {
     andConditions.push({ isPublished: false });
   } else if (options?.visibilityState === "storefront_visible") {
-    andConditions.push(
-      { isPublished: true },
-      { status: "active" },
-      { sellerSubmissionStatus: "none" }
-    );
+    if (storeActive) {
+      andConditions.push(
+        { isPublished: true },
+        { status: "active" },
+        { sellerSubmissionStatus: "none" }
+      );
+    } else {
+      andConditions.push({ id: { [Op.eq]: 0 } });
+    }
   } else if (options?.visibilityState === "published_blocked") {
-    andConditions.push(
-      { isPublished: true },
-      {
+    andConditions.push({ isPublished: true });
+    if (storeActive) {
+      andConditions.push({
         [Op.or]: [
           { status: { [Op.ne]: "active" } },
           {
@@ -1536,8 +1530,8 @@ const buildSellerProductsWhere = (options: any = {}) => {
             },
           },
         ],
-      }
-    );
+      });
+    }
   }
 
   if (options?.keyword) {
@@ -1621,7 +1615,11 @@ const toCsvCell = (value: unknown) => {
   return text;
 };
 
-const buildSellerProductsCsv = (products: any[], sellerAccess: any = null) => {
+const buildSellerProductsCsv = (
+  products: any[],
+  sellerAccess: any = null,
+  storeStatus: unknown = null
+) => {
   const header = [
     "ID",
     "Name",
@@ -1638,7 +1636,7 @@ const buildSellerProductsCsv = (products: any[], sellerAccess: any = null) => {
   ];
 
   const rows = products.map((product) => {
-    const item = serializeProductListItem(product, sellerAccess);
+    const item = serializeProductListItem(product, sellerAccess, storeStatus);
     return [
       item.id,
       item.name,
@@ -1802,7 +1800,7 @@ router.post(
       return res.status(201).json({
         success: true,
         data: {
-          ...serializeProductDetail(detail || product, sellerAccess),
+          ...serializeProductDetail(detail || product, sellerAccess, sellerAccess?.store?.status),
           contract: buildCatalogReadContract(),
         },
       });
@@ -1924,7 +1922,7 @@ router.patch(
       return res.json({
         success: true,
         data: {
-          ...serializeProductDetail(detail || product, sellerAccess),
+          ...serializeProductDetail(detail || product, sellerAccess, sellerAccess?.store?.status),
           contract: buildCatalogReadContract(),
         },
       });
@@ -2038,7 +2036,7 @@ router.patch(
       return res.json({
         success: true,
         data: {
-          ...serializeProductDetail(detail || product, sellerAccess),
+          ...serializeProductDetail(detail || product, sellerAccess, sellerAccess?.store?.status),
           contract: buildCatalogReadContract(),
         },
       });
@@ -2120,7 +2118,7 @@ router.post(
       return res.json({
         success: true,
         data: {
-          ...serializeProductDetail(detail || product, sellerAccess),
+          ...serializeProductDetail(detail || product, sellerAccess, sellerAccess?.store?.status),
           contract: buildCatalogReadContract(),
         },
       });
@@ -2259,6 +2257,7 @@ router.post(
     try {
       const sellerAccess = (req as any).sellerAccess;
       const storeId = Number(req.params.storeId);
+      const storeStatus = sellerAccess?.store?.status;
       const idsInput = req.body?.ids;
       const hasSelectedIds = Array.isArray(idsInput);
       const ids = normalizePositiveIdList(idsInput, 500);
@@ -2274,6 +2273,7 @@ router.post(
       const filters = parseSellerProductsFilterInput(req.body?.filters);
       const where = buildSellerProductsWhere({
         storeId,
+        storeStatus,
         ...filters,
         ids,
       });
@@ -2295,7 +2295,7 @@ router.post(
         }
       }
 
-      const csv = `\uFEFF${buildSellerProductsCsv(rows, sellerAccess)}`;
+      const csv = `\uFEFF${buildSellerProductsCsv(rows, sellerAccess, storeStatus)}`;
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
       const scopeLabel = hasSelectedIds ? "selected" : "filtered";
 
@@ -2323,6 +2323,7 @@ router.get(
     try {
       const sellerAccess = (req as any).sellerAccess;
       const storeId = Number(req.params.storeId);
+      const storeStatus = sellerAccess?.store?.status;
       const page = parsePositiveInt(req.query.page, 1, 1, 10_000);
       const limit = parsePositiveInt(req.query.limit, 20, 1, 50);
       const offset = (page - 1) * limit;
@@ -2331,68 +2332,15 @@ router.get(
       const published = parseBooleanFilter(req.query.published);
       const submissionStatus = normalizeSellerSubmissionFilter(req.query.submissionStatus);
       const visibilityState = normalizeVisibilityStateFilter(req.query.visibilityState);
-      const andConditions: any[] = [];
-
-      if (allowedStatuses.has(status)) {
-        andConditions.push({ status });
-      }
-
-      if (published !== null) {
-        andConditions.push({ isPublished: published });
-      }
-
-      if (submissionStatus === "review_queue") {
-        andConditions.push({
-          sellerSubmissionStatus: {
-            [Op.in]: ["submitted", "needs_revision"],
-          },
-        });
-      } else if (submissionStatus === "ready_to_submit") {
-        andConditions.push({ status: "draft" });
-        andConditions.push({ sellerSubmissionStatus: "none" });
-      } else if (allowedSellerSubmissionStatuses.has(submissionStatus)) {
-        andConditions.push({ sellerSubmissionStatus: submissionStatus });
-      }
-
-      if (visibilityState === "internal_only") {
-        andConditions.push({ isPublished: false });
-      } else if (visibilityState === "storefront_visible") {
-        andConditions.push(
-          { isPublished: true },
-          { status: "active" },
-          { sellerSubmissionStatus: "none" }
-        );
-      } else if (visibilityState === "published_blocked") {
-        andConditions.push(
-          { isPublished: true },
-          {
-            [Op.or]: [
-              { status: { [Op.ne]: "active" } },
-              {
-                sellerSubmissionStatus: {
-                  [Op.in]: ["submitted", "needs_revision"],
-                },
-              },
-            ],
-          }
-        );
-      }
-
-      if (keyword) {
-        const likeKeyword = `%${keyword}%`;
-        andConditions.push({
-          [Op.or]: [
-            { name: { [Op.like]: likeKeyword } },
-            { slug: { [Op.like]: likeKeyword } },
-            { sku: { [Op.like]: likeKeyword } },
-          ],
-        });
-      }
-
-      const where: any = {
+      const where = buildSellerProductsWhere({
         storeId,
-        ...(andConditions.length > 0 ? { [Op.and]: andConditions } : {}),
-      };
+        storeStatus,
+        keyword,
+        status,
+        published,
+        submissionStatus,
+        visibilityState,
+      });
 
       const [result, summary] = await Promise.all([
         Product.findAndCountAll({
@@ -2438,13 +2386,15 @@ router.get(
           offset,
           distinct: true,
         }),
-        buildSellerProductSummary(storeId),
+        buildSellerProductSummary(storeId, storeStatus),
       ]);
 
       return res.json({
         success: true,
         data: {
-          items: result.rows.map((product) => serializeProductListItem(product, sellerAccess)),
+          items: result.rows.map((product) =>
+            serializeProductListItem(product, sellerAccess, storeStatus)
+          ),
           contract: buildCatalogReadContract(),
           governance: buildCatalogGovernance(sellerAccess),
           summary,
@@ -2500,7 +2450,7 @@ router.get(
       return res.json({
         success: true,
         data: {
-          ...serializeProductDetail(product, sellerAccess),
+          ...serializeProductDetail(product, sellerAccess, sellerAccess?.store?.status),
           contract: buildCatalogReadContract(),
         },
       });

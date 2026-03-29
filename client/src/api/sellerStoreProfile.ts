@@ -169,3 +169,16 @@ export const updateSellerStoreProfile = async (
   const { data } = await api.patch(`/seller/stores/${storeId}/store-profile`, payload);
   return normalizeStoreProfile(data?.data ?? null);
 };
+
+export const uploadSellerStoreProfileImage = async (file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await api.post<{ data?: { url?: string } }>("/upload", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  const url = textOrNull(data?.data?.url);
+  if (!url) {
+    throw new Error("Upload succeeded without URL.");
+  }
+  return url;
+};

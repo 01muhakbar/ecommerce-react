@@ -2,46 +2,40 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Mail, MapPin, PhoneCall } from "lucide-react";
 import { getStoreCustomization } from "../../api/public/storeCustomizationPublic.ts";
-import { getStorePublicIdentity } from "../../api/public/storePublicIdentity.ts";
 import { UiEmptyState, UiErrorState } from "../../components/primitives/state/index.js";
-import {
-  normalizePublicStoreIdentity,
-  resolvePreferredText,
-} from "../../utils/storePublicIdentity.ts";
 
 const DEFAULT_LANG = "en";
-const DEFAULT_CONTACT_US = {
+const DEFAULT_CONTACT_US_DISABLED = {
   pageHeader: {
-    enabled: true,
+    enabled: false,
     backgroundImageDataUrl: "",
-    pageTitle: "Contact Us",
+    pageTitle: "",
   },
   emailBox: {
-    enabled: true,
-    title: "Email Us",
-    email: "info@kachabazar.com",
-    text: "Interactively grow empowered for process-centric total linkage.",
+    enabled: false,
+    title: "",
+    email: "",
+    text: "",
   },
   callBox: {
-    enabled: true,
-    title: "Call Us",
-    phone: "029-00124667",
-    text: "Distinctively disseminate focused solutions clicks-and-mortar ministerate.",
+    enabled: false,
+    title: "",
+    phone: "",
+    text: "",
   },
   addressBox: {
-    enabled: true,
-    title: "Location",
-    address: "Boho One, Bridge Street West, Middlesbrough, North Yorkshire, TS2 1AE.",
+    enabled: false,
+    title: "",
+    address: "",
   },
   middleLeftColumn: {
-    enabled: true,
+    enabled: false,
     imageDataUrl: "",
   },
   contactForm: {
-    enabled: true,
-    title: "For any support just send your query",
-    description:
-      "Collaboratively promote client-focused convergence vis-a-vis customer-directed alignments via plagiarized strategic users and standardized infrastructures.",
+    enabled: false,
+    title: "",
+    description: "",
   },
 };
 
@@ -61,6 +55,25 @@ const toBool = (value, fallback = false) => {
   return fallback;
 };
 
+const toImageDataUrl = (...values) => {
+  for (const value of values) {
+    const normalized = String(value ?? "").trim();
+    if (normalized) return normalized;
+  }
+  return "";
+};
+
+const hasText = (value) => String(value ?? "").trim().length > 0;
+
+const isDisplayEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value ?? "").trim());
+
+const toTelHref = (value) => {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) return "";
+  const digits = normalized.replace(/[^\d+]/g, "");
+  return digits ? `tel:${digits}` : "";
+};
+
 const normalizeContactUs = (raw) => {
   const source = raw && typeof raw === "object" ? raw : {};
   const pageHeader =
@@ -78,43 +91,48 @@ const normalizeContactUs = (raw) => {
 
   return {
     pageHeader: {
-      enabled: toBool(pageHeader.enabled, DEFAULT_CONTACT_US.pageHeader.enabled),
-      backgroundImageDataUrl: toText(
-        pageHeader.backgroundImageDataUrl ?? pageHeader.backgroundImage ?? pageHeader.imageDataUrl,
-        DEFAULT_CONTACT_US.pageHeader.backgroundImageDataUrl
+      enabled: toBool(pageHeader.enabled, DEFAULT_CONTACT_US_DISABLED.pageHeader.enabled),
+      backgroundImageDataUrl: toImageDataUrl(
+        pageHeader.backgroundImageDataUrl,
+        pageHeader.backgroundImage,
+        pageHeader.imageDataUrl,
+        pageHeader.image
       ),
-      pageTitle: toText(pageHeader.pageTitle, DEFAULT_CONTACT_US.pageHeader.pageTitle),
+      pageTitle: toText(pageHeader.pageTitle, DEFAULT_CONTACT_US_DISABLED.pageHeader.pageTitle),
     },
     emailBox: {
-      enabled: toBool(emailBox.enabled, DEFAULT_CONTACT_US.emailBox.enabled),
-      title: toText(emailBox.title, DEFAULT_CONTACT_US.emailBox.title),
-      email: toText(emailBox.email, DEFAULT_CONTACT_US.emailBox.email),
-      text: toText(emailBox.text, DEFAULT_CONTACT_US.emailBox.text),
+      enabled: toBool(emailBox.enabled, DEFAULT_CONTACT_US_DISABLED.emailBox.enabled),
+      title: toText(emailBox.title, DEFAULT_CONTACT_US_DISABLED.emailBox.title),
+      email: toText(emailBox.email, DEFAULT_CONTACT_US_DISABLED.emailBox.email),
+      text: toText(emailBox.text, DEFAULT_CONTACT_US_DISABLED.emailBox.text),
     },
     callBox: {
-      enabled: toBool(callBox.enabled, DEFAULT_CONTACT_US.callBox.enabled),
-      title: toText(callBox.title, DEFAULT_CONTACT_US.callBox.title),
-      phone: toText(callBox.phone, DEFAULT_CONTACT_US.callBox.phone),
-      text: toText(callBox.text, DEFAULT_CONTACT_US.callBox.text),
+      enabled: toBool(callBox.enabled, DEFAULT_CONTACT_US_DISABLED.callBox.enabled),
+      title: toText(callBox.title, DEFAULT_CONTACT_US_DISABLED.callBox.title),
+      phone: toText(callBox.phone, DEFAULT_CONTACT_US_DISABLED.callBox.phone),
+      text: toText(callBox.text, DEFAULT_CONTACT_US_DISABLED.callBox.text),
     },
     addressBox: {
-      enabled: toBool(addressBox.enabled, DEFAULT_CONTACT_US.addressBox.enabled),
-      title: toText(addressBox.title, DEFAULT_CONTACT_US.addressBox.title),
-      address: toText(addressBox.address, DEFAULT_CONTACT_US.addressBox.address),
+      enabled: toBool(addressBox.enabled, DEFAULT_CONTACT_US_DISABLED.addressBox.enabled),
+      title: toText(addressBox.title, DEFAULT_CONTACT_US_DISABLED.addressBox.title),
+      address: toText(addressBox.address, DEFAULT_CONTACT_US_DISABLED.addressBox.address),
     },
     middleLeftColumn: {
       enabled: toBool(
         middleLeftColumn.enabled,
-        DEFAULT_CONTACT_US.middleLeftColumn.enabled
+        DEFAULT_CONTACT_US_DISABLED.middleLeftColumn.enabled
       ),
-      imageDataUrl: toText(middleLeftColumn.imageDataUrl, ""),
+      imageDataUrl: toImageDataUrl(
+        middleLeftColumn.imageDataUrl,
+        middleLeftColumn.image
+      ),
     },
     contactForm: {
-      enabled: toBool(contactForm.enabled, DEFAULT_CONTACT_US.contactForm.enabled),
-      title: toText(contactForm.title, DEFAULT_CONTACT_US.contactForm.title),
+      enabled: toBool(contactForm.enabled, DEFAULT_CONTACT_US_DISABLED.contactForm.enabled),
+      title: toText(contactForm.title, DEFAULT_CONTACT_US_DISABLED.contactForm.title),
       description: toText(
         contactForm.description,
-        DEFAULT_CONTACT_US.contactForm.description
+        DEFAULT_CONTACT_US_DISABLED.contactForm.description
       ),
     },
   };
@@ -152,62 +170,61 @@ export default function StoreContactUsPage() {
     queryFn: () => getStoreCustomization({ lang, include: "contactUs" }),
     staleTime: 60_000,
   });
-  const publicIdentityQuery = useQuery({
-    queryKey: ["store-public-identity"],
-    queryFn: getStorePublicIdentity,
-    staleTime: 60_000,
-    retry: 1,
-  });
 
   const contactUsRaw = contactQuery.data?.customization?.contactUs;
   const contactUs = useMemo(() => normalizeContactUs(contactUsRaw), [contactUsRaw]);
-  const publicIdentity = useMemo(
-    () => normalizePublicStoreIdentity(publicIdentityQuery.data),
-    [publicIdentityQuery.data]
-  );
-
   const cards = useMemo(
     () => [
-      contactUs.emailBox.enabled
+      contactUs.emailBox.enabled &&
+      (hasText(contactUs.emailBox.title) ||
+        isDisplayEmail(contactUs.emailBox.email) ||
+        hasText(contactUs.emailBox.text))
         ? {
             key: "email",
             title: contactUs.emailBox.title,
-            primary: resolvePreferredText(publicIdentity.email, contactUs.emailBox.email),
+            primary: isDisplayEmail(contactUs.emailBox.email) ? contactUs.emailBox.email : "",
             text: contactUs.emailBox.text,
+            href: isDisplayEmail(contactUs.emailBox.email)
+              ? `mailto:${contactUs.emailBox.email}`
+              : "",
             Icon: Mail,
             iconClassName: "bg-emerald-100 text-emerald-700",
           }
         : null,
-      contactUs.callBox.enabled
+      contactUs.callBox.enabled &&
+      (hasText(contactUs.callBox.title) ||
+        hasText(contactUs.callBox.phone) ||
+        hasText(contactUs.callBox.text))
         ? {
             key: "call",
             title: contactUs.callBox.title,
-            primary: resolvePreferredText(publicIdentity.phone, contactUs.callBox.phone),
+            primary: hasText(contactUs.callBox.phone) ? contactUs.callBox.phone : "",
             text: contactUs.callBox.text,
+            href: toTelHref(contactUs.callBox.phone),
             Icon: PhoneCall,
             iconClassName: "bg-sky-100 text-sky-700",
           }
         : null,
-      contactUs.addressBox.enabled
+      contactUs.addressBox.enabled &&
+      (hasText(contactUs.addressBox.title) || hasText(contactUs.addressBox.address))
         ? {
             key: "address",
             title: contactUs.addressBox.title,
             primary: contactUs.addressBox.address,
             text: "",
+            href: "",
             Icon: MapPin,
             iconClassName: "bg-amber-100 text-amber-700",
           }
         : null,
     ].filter(Boolean),
-    [contactUs]
+    [contactUs.addressBox.address, contactUs.addressBox.enabled, contactUs.addressBox.title, contactUs.callBox.enabled, contactUs.callBox.phone, contactUs.callBox.text, contactUs.callBox.title, contactUs.emailBox.email, contactUs.emailBox.enabled, contactUs.emailBox.text, contactUs.emailBox.title]
   );
 
   const hasAnyEnabledSection =
     contactUs.pageHeader.enabled ||
-    contactUs.emailBox.enabled ||
-    contactUs.callBox.enabled ||
-    contactUs.addressBox.enabled ||
-    contactUs.middleLeftColumn.enabled ||
+    cards.length > 0 ||
+    (contactUs.middleLeftColumn.enabled && hasText(contactUs.middleLeftColumn.imageDataUrl)) ||
     contactUs.contactForm.enabled;
 
   const onChange = (field, value) => {
@@ -285,6 +302,8 @@ export default function StoreContactUsPage() {
   const showMiddleLeftImage =
     contactUs.middleLeftColumn.enabled && Boolean(contactUs.middleLeftColumn.imageDataUrl);
   const showContactForm = contactUs.contactForm.enabled;
+  const hasContactFormHeading =
+    hasText(contactUs.contactForm.title) || hasText(contactUs.contactForm.description);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-3 py-6 sm:px-4 sm:py-8 lg:px-6">
@@ -317,9 +336,22 @@ export default function StoreContactUsPage() {
               >
                 <card.Icon className="h-5 w-5" />
               </span>
-              <h2 className="mt-4 text-base font-semibold text-slate-900">{card.title}</h2>
-              <p className="mt-1 text-sm font-medium text-slate-700">{card.primary}</p>
-              {card.text ? (
+              {hasText(card.title) ? (
+                <h2 className="mt-4 text-base font-semibold text-slate-900">{card.title}</h2>
+              ) : null}
+              {hasText(card.primary) ? (
+                card.href ? (
+                  <a
+                    href={card.href}
+                    className="mt-1 inline-flex text-sm font-medium text-slate-700 hover:text-emerald-700"
+                  >
+                    {card.primary}
+                  </a>
+                ) : (
+                  <p className="mt-1 text-sm font-medium text-slate-700">{card.primary}</p>
+                )
+              ) : null}
+              {hasText(card.text) ? (
                 <p className="mt-2 text-xs leading-6 text-slate-500">{card.text}</p>
               ) : null}
             </article>
@@ -342,14 +374,20 @@ export default function StoreContactUsPage() {
 
             {showContactForm ? (
               <div className="space-y-4">
-                <div>
-                  <h2 className="text-2xl font-bold text-slate-900">
-                    {contactUs.contactForm.title}
-                  </h2>
-                  <p className="mt-2 text-sm leading-7 text-slate-600">
-                    {contactUs.contactForm.description}
-                  </p>
-                </div>
+                {hasContactFormHeading ? (
+                  <div>
+                    {hasText(contactUs.contactForm.title) ? (
+                      <h2 className="text-2xl font-bold text-slate-900">
+                        {contactUs.contactForm.title}
+                      </h2>
+                    ) : null}
+                    {hasText(contactUs.contactForm.description) ? (
+                      <p className="mt-2 text-sm leading-7 text-slate-600">
+                        {contactUs.contactForm.description}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <form onSubmit={onSubmit} className="space-y-4">
                   <div>

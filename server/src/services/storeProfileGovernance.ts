@@ -242,6 +242,27 @@ const nullableUrlField = () =>
       .optional()
   );
 
+const normalizeNullableAssetUrl = (value: unknown) => {
+  const normalized = normalizeNullableText(value);
+  if (typeof normalized !== "string") return normalized;
+  if (normalized.startsWith("uploads/")) return `/${normalized}`;
+  return normalized;
+};
+
+const nullableAssetUrlField = () =>
+  z.preprocess(
+    normalizeNullableAssetUrl,
+    z
+      .string()
+      .max(2048)
+      .refine(
+        (value) => /^https?:\/\//i.test(value) || value.startsWith("/uploads/"),
+        { message: "Asset URL must use http, https, or an uploads path." }
+      )
+      .nullable()
+      .optional()
+  );
+
 const nullableEmailField = () =>
   z.preprocess(
     normalizeNullableText,
@@ -294,8 +315,8 @@ const nullableSocialUrlField = (hosts: string[], label: string) =>
 export const sellerStoreProfilePatchSchema = z
   .object({
     description: nullableStringField(4000),
-    logoUrl: nullableUrlField(),
-    bannerUrl: nullableUrlField(),
+    logoUrl: nullableAssetUrlField(),
+    bannerUrl: nullableAssetUrlField(),
     email: nullableEmailField(),
     phone: nullablePhoneField("Phone"),
     whatsapp: nullablePhoneField("WhatsApp"),

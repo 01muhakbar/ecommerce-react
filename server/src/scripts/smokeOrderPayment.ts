@@ -299,6 +299,7 @@ async function createCheckoutOrder(input: {
   productId: number;
   label: string;
   storeId: number;
+  couponCode?: string;
 }): Promise<CheckoutScenario> {
   await addProductToCart(input.customerClient, input.buyerUserId, input.productId);
   const shippingDetails = buildShippingDetails(input.label);
@@ -311,6 +312,7 @@ async function createCheckoutOrder(input: {
         address: `${shippingDetails.streetName} ${shippingDetails.houseNumber}`,
         notes: `Smoke ${input.label}`,
       },
+      couponCode: input.couponCode,
       shippingDetails,
     }),
   });
@@ -441,6 +443,36 @@ function findAdminSplitGroup(auditDetail: any, suborderId: number, label: string
     ) || null;
   assert.ok(group, `${label}: admin split group ${suborderId} missing`);
   return group;
+}
+
+async function expectCheckoutConflict(input: {
+  customerClient: CookieClient;
+  buyerUserId: number;
+  productId: number;
+  label: string;
+  couponCode?: string;
+  skipCartSetup?: boolean;
+}) {
+  if (!input.skipCartSetup) {
+    await addProductToCart(input.customerClient, input.buyerUserId, input.productId);
+  }
+  const shippingDetails = buildShippingDetails(input.label);
+  const response = await input.customerClient.request("/api/checkout/create-multi-store", {
+    method: "POST",
+    body: JSON.stringify({
+      customer: {
+        name: shippingDetails.fullName,
+        phone: shippingDetails.phoneNumber,
+        address: `${shippingDetails.streetName} ${shippingDetails.houseNumber}`,
+        notes: `Smoke ${input.label}`,
+      },
+      couponCode: input.couponCode,
+      shippingDetails,
+    }),
+  });
+  assertStatus(response, 409, `${input.label} checkout conflict`);
+  assert.equal(Boolean(response.body?.success), false, `${input.label}: conflict should return success=false`);
+  return response.body ?? null;
 }
 
 async function runApproveScenario(input: {
@@ -726,6 +758,97 @@ async function runExpiryScenario(input: {
   logPass("expiry scenario cross-lane sync");
 }
 
+async function runCheckoutGuardrailScenarios(input: {
+  customerClient: CookieClient;
+  buyerUserId: number;
+  productId: number;
+  storeId: number;
+}) {
+  logStep("guardrail scenario: unpublished product blocks checkout");
+  await addProductToCart(input.customerClient, input.buyerUserId, input.productId);
+  await Product.update(
+    { isPublished: false } as any,
+    { where: { id: input.productId } as any }
+  );
+  const unpublished = await expectCheckoutConflict({
+    customerClient: input.customerClient,
+    buyerUserId: input.buyerUserId,
+    productId: input.productId,
+    label: "guardrail-unpublished",
+    skipCartSetup: true,
+  });
+  assert.equal(
+    String(unpublished?.data?.invalidItems?.[0]?.reason || ""),
+    "PRODUCT_NOT_PUBLIC",
+    "guardrail unpublished: expected PRODUCT_NOT_PUBLIC"
+  );
+  await Product.update(
+    { isPublished: true } as any,
+    { where: { id: input.productId } as any }
+  );
+
+  logStep("guardrail scenario: inactive store blocks checkout");
+  await addProductToCart(input.customerClient, input.buyerUserId, input.productId);
+  await Store.update(
+    { status: "INACTIVE" } as any,
+    { where: { id: input.storeId } as any }
+  );
+  const inactiveStore = await expectCheckoutConflict({
+    customerClient: input.customerClient,
+    buyerUserId: input.buyerUserId,
+    productId: input.productId,
+    label: "guardrail-store-inactive",
+    skipCartSetup: true,
+  });
+  assert.equal(
+    String(inactiveStore?.data?.invalidItems?.[0]?.reason || ""),
+    "PRODUCT_NOT_PUBLIC",
+    "guardrail store inactive: expected PRODUCT_NOT_PUBLIC"
+  );
+  await Store.update(
+    { status: "ACTIVE" } as any,
+    { where: { id: input.storeId } as any }
+  );
+
+  logStep("guardrail scenario: stock exhaustion blocks checkout");
+  await addProductToCart(input.customerClient, input.buyerUserId, input.productId);
+  await Product.update(
+    { stock: 0 } as any,
+    { where: { id: input.productId } as any }
+  );
+  const outOfStock = await expectCheckoutConflict({
+    customerClient: input.customerClient,
+    buyerUserId: input.buyerUserId,
+    productId: input.productId,
+    label: "guardrail-out-of-stock",
+    skipCartSetup: true,
+  });
+  assert.equal(
+    String(outOfStock?.data?.invalidItems?.[0]?.reason || ""),
+    "PRODUCT_OUT_OF_STOCK",
+    "guardrail out of stock: expected PRODUCT_OUT_OF_STOCK"
+  );
+  await Product.update(
+    { stock: 30 } as any,
+    { where: { id: input.productId } as any }
+  );
+
+  logStep("guardrail scenario: invalid coupon blocks checkout");
+  const invalidCoupon = await expectCheckoutConflict({
+    customerClient: input.customerClient,
+    buyerUserId: input.buyerUserId,
+    productId: input.productId,
+    label: "guardrail-invalid-coupon",
+    couponCode: `${RUN_ID}-missing-coupon`,
+  });
+  assert.equal(
+    String(invalidCoupon?.data?.coupon?.reason || ""),
+    "not_found",
+    "guardrail invalid coupon: expected not_found"
+  );
+  logPass("checkout guardrail conflict coverage");
+}
+
 async function cleanupFixtures() {
   for (const userId of createdUserIds) {
     await resetCartForUser(userId).catch(() => null);
@@ -854,6 +977,13 @@ async function run() {
   await loginAdmin(adminClient);
   await login(sellerClient, sellerUser.email, sellerUser.password, "seller login");
   await login(buyerClient, buyerUser.email, buyerUser.password, "buyer login");
+
+  await runCheckoutGuardrailScenarios({
+    customerClient: buyerClient,
+    buyerUserId: buyerUser.id,
+    productId: product.id,
+    storeId: store.id,
+  });
 
   await runApproveScenario({
     customerClient: buyerClient,

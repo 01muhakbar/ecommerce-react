@@ -15,6 +15,7 @@ import {
   buildPublicOrderTrackingPath,
   resolvePublicOrderReference,
 } from "../../utils/publicOrderReference.js";
+import { normalizeDashboardSettingCopy } from "../../utils/dashboardSettingCopy.js";
 
 const fetchOrders = async (page) => {
   const { data } = await api.get("/store/my/orders", {
@@ -49,19 +50,6 @@ const shouldPollAccountOrders = (orders) =>
     return Boolean(order?.paymentEntry?.visible);
   });
 
-const toText = (value, fallback) => {
-  const normalized = String(value ?? "").trim();
-  return normalized || fallback;
-};
-
-const normalizeDashboardSettingCopy = (raw) => {
-  const source = raw && typeof raw === "object" ? raw : {};
-  const dashboard = source.dashboard && typeof source.dashboard === "object" ? source.dashboard : {};
-  return {
-    myOrderValue: toText(dashboard.myOrderValue, "My Orders"),
-  };
-};
-
 export default function AccountOrdersPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const dashboardSettingQuery = useQuery({
@@ -72,6 +60,7 @@ export default function AccountOrdersPage() {
   const dashboardSettingCopy = normalizeDashboardSettingCopy(
     dashboardSettingQuery.data?.customization?.dashboardSetting
   );
+  const dashboardCopy = dashboardSettingCopy.dashboard;
   const page = Math.max(1, Number(searchParams.get("page") || 1));
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["account", "orders", "my", page],
@@ -136,7 +125,7 @@ export default function AccountOrdersPage() {
     <div className="rounded-xl border border-slate-200 bg-white p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-slate-900">
-          {dashboardSettingCopy.myOrderValue}
+          {dashboardCopy.myOrderValue}
         </h1>
         <div className="text-sm text-slate-500">Page {page}</div>
       </div>

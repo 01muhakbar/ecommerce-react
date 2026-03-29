@@ -8,6 +8,7 @@ type ProfileRow = {
   email: string;
   phone: string | null;
   avatar: string | null;
+  avatarUrl: string | null;
 };
 
 type UsersTableMeta = {
@@ -76,8 +77,8 @@ const toProfile = async (userId: number): Promise<ProfileRow | null> => {
     ? `${quoteId(meta.phoneColumn)} AS phone`
     : "NULL AS phone";
   const avatarSelect = meta.avatarColumn
-    ? `${quoteId(meta.avatarColumn)} AS avatar`
-    : "NULL AS avatar";
+    ? `${quoteId(meta.avatarColumn)} AS avatar, ${quoteId(meta.avatarColumn)} AS avatarUrl`
+    : "NULL AS avatar, NULL AS avatarUrl";
 
   const rows = await sequelize.query<ProfileRow>(
     `
@@ -146,6 +147,20 @@ export const updateAdminMe = async (req: Request, res: Response) => {
         phoneRaw == null || String(phoneRaw).trim() === "" ? null : String(phoneRaw).trim();
       updates.push(`${quoteId(meta.phoneColumn)} = :phone`);
       replacements.phone = phone;
+    }
+
+    if (
+      meta.avatarColumn &&
+      (Object.prototype.hasOwnProperty.call(req.body || {}, "avatarUrl") ||
+        Object.prototype.hasOwnProperty.call(req.body || {}, "avatar"))
+    ) {
+      const avatarRaw = Object.prototype.hasOwnProperty.call(req.body || {}, "avatarUrl")
+        ? req.body?.avatarUrl
+        : req.body?.avatar;
+      const avatar =
+        avatarRaw == null || String(avatarRaw).trim() === "" ? null : String(avatarRaw).trim();
+      updates.push(`${quoteId(meta.avatarColumn)} = :avatarUrl`);
+      replacements.avatarUrl = avatar;
     }
 
     if (meta.updatedColumn) {

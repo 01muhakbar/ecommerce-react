@@ -168,7 +168,6 @@ export default function StoreLayout() {
     queryFn: () => getStoreCustomization({ lang: "en", include: "home" }),
     staleTime: 60_000,
     retry: 1,
-    placeholderData: (previousData) => previousData,
     refetchOnWindowFocus: false,
   });
   const storeSettings = normalizePublicStoreSettings(

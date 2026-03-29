@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { LayoutDashboard, LogOut, UserRound } from "lucide-react";
 import { useAuth } from "../../auth/useAuth.js";
+import { resolveAssetUrl } from "../../lib/assetUrl.js";
 
 const initialsFromUser = (user) => {
   const source = String(user?.name || user?.email || "A").trim();
@@ -22,6 +23,7 @@ export default function AdminProfileMenu({
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const initials = useMemo(() => initialsFromUser(user), [user]);
+  const avatarSrc = resolveAssetUrl(user?.avatarUrl || user?.avatar || "");
 
   const goto = (path) => {
     onClose?.();
@@ -44,7 +46,15 @@ export default function AdminProfileMenu({
         aria-expanded={open}
         aria-label="Profile menu"
       >
-        {initials}
+        {avatarSrc ? (
+          <img
+            src={avatarSrc}
+            alt={user?.name || user?.email || "Admin avatar"}
+            className="h-full w-full rounded-full object-cover"
+          />
+        ) : (
+          initials
+        )}
       </button>
 
       {open ? (

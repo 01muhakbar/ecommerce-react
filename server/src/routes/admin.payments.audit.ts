@@ -15,6 +15,10 @@ import {
 } from "../models/index.js";
 import { deriveLegacyPaymentStatus, serializeSplitOrder } from "./checkout.js";
 import { expireOverduePaymentsForOrder } from "../services/paymentExpiry.service.js";
+import {
+  getLatestTimelineRecord,
+  sortTimelineDesc,
+} from "../services/paymentReadModel.js";
 
 const router = Router();
 
@@ -66,14 +70,8 @@ const expireOverduePaymentsForAuditOrders = async (orders: any[]) => {
 };
 
 const normalizeProofSummary = (proofs: any[]) => {
-  if (!Array.isArray(proofs) || proofs.length === 0) return null;
-  const latest = [...proofs]
-    .sort((left, right) => {
-      const leftTime = new Date(getAttr(left, "createdAt") || 0).getTime();
-      const rightTime = new Date(getAttr(right, "createdAt") || 0).getTime();
-      if (rightTime !== leftTime) return rightTime - leftTime;
-      return toNumber(getAttr(right, "id")) - toNumber(getAttr(left, "id"));
-    })[0];
+  const latest = getLatestTimelineRecord(proofs);
+  if (!latest) return null;
   const uploadedBy = latest?.uploadedByUser ?? latest?.get?.("uploadedByUser") ?? null;
   const reviewedBy = latest?.reviewedByUser ?? latest?.get?.("reviewedByUser") ?? null;
   return {
@@ -508,7 +506,7 @@ const serializeAuditDetail = (order: any) => {
     counts: summarizeAuditRow(order).counts,
     split,
     suborders: suborders.map((suborder: any) => {
-      const payments = Array.isArray(suborder?.payments) ? suborder.payments : [];
+      const payments = sortTimelineDesc(Array.isArray(suborder?.payments) ? suborder.payments : []);
       return {
         suborderId: toNumber(getAttr(suborder, "id")),
         suborderNumber: String(getAttr(suborder, "suborderNumber") || ""),

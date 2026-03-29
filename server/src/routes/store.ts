@@ -1106,8 +1106,22 @@ router.put(
 
       const name = typeof req.body?.name === "string" ? req.body.name.trim() : null;
       const email = typeof req.body?.email === "string" ? req.body.email.trim() : null;
+      const avatarProvided =
+        Object.prototype.hasOwnProperty.call(req.body || {}, "avatarUrl") ||
+        Object.prototype.hasOwnProperty.call(req.body || {}, "avatar");
+      const avatarRaw = avatarProvided
+        ? Object.prototype.hasOwnProperty.call(req.body || {}, "avatarUrl")
+          ? req.body?.avatarUrl
+          : req.body?.avatar
+        : undefined;
+      const avatarUrl =
+        avatarRaw === undefined || avatarRaw == null || String(avatarRaw).trim() === ""
+          ? avatarProvided
+            ? null
+            : undefined
+          : String(avatarRaw).trim();
 
-      if (!name && !email) {
+      if (!name && !email && avatarUrl === undefined) {
         return res.status(400).json({ message: "No updates provided." });
       }
 
@@ -1118,6 +1132,9 @@ router.put(
 
       if (name) user.name = name;
       if (email) user.email = email;
+      if (avatarUrl !== undefined) {
+        (user as any).avatarUrl = avatarUrl;
+      }
 
       await user.save();
 
@@ -1127,6 +1144,7 @@ router.put(
           name: user.name,
           email: user.email,
           role: (user as any).role,
+          avatarUrl: (user as any).avatarUrl ?? null,
         },
       });
     } catch (error: any) {

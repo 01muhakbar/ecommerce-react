@@ -4,7 +4,8 @@ import { z } from "zod";
 import multer from "multer";
 import { requireAdmin, requireStaffOrAdmin } from "../middleware/requireRole.js";
 import { Product } from "../models/Product.js";
-import { Category, ProductCategory, sequelize } from "../models/index.js";
+import { Category, ProductCategory, Store, sequelize } from "../models/index.js";
+import { buildProductVisibilitySnapshot } from "../services/productVisibility.js";
 
 const router = Router();
 router.use(requireStaffOrAdmin);
@@ -504,6 +505,12 @@ const resolveProductDefaultCategory = (plain: any) =>
 
 const buildAdminProductIncludes = (categoryFilterId?: number | null) => [
   {
+    model: Store,
+    as: "store",
+    attributes: ["id", "slug", "status"],
+    required: false,
+  },
+  {
     model: Category,
     as: "category",
     attributes: ["id", "name", "code", "parentId"],
@@ -679,6 +686,17 @@ const toAdminProductListItem = (product: any) => {
   const imagePaths = normalizeImagePathList(plain?.imagePaths);
   const imageUrl = normalizeUploadsUrl(plain?.promoImagePath) || imagePaths[0] || null;
   const priceFields = resolveAdminPriceFields(plain);
+  const published =
+    typeof plain?.published !== "undefined"
+      ? Boolean(plain.published)
+      : Boolean(plain?.isPublished);
+  const visibility = buildProductVisibilitySnapshot({
+    isPublished: published,
+    status: plain?.status,
+    submissionStatus: plain?.sellerSubmissionStatus,
+    storeStatus: plain?.store?.status,
+    storeId: plain?.storeId,
+  });
 
   const ratingAvgRaw = toNumber(plain?.ratingAvg ?? plain?.rating_avg, 0);
   const ratingAvg = Number(ratingAvgRaw.toFixed(1));
@@ -707,10 +725,9 @@ const toAdminProductListItem = (product: any) => {
     stock: plain?.stock ?? 0,
     status: plain?.status ?? "draft",
     sellerSubmission: serializeAdminSellerSubmission(plain),
-    published:
-      typeof plain?.published !== "undefined"
-        ? Boolean(plain.published)
-        : Boolean(plain?.isPublished),
+    published,
+    visibility,
+    storefrontVisibilityState: visibility.stateCode,
     createdAt: plain?.createdAt ?? null,
     updatedAt: plain?.updatedAt ?? null,
   };
@@ -722,6 +739,17 @@ const toAdminProductDetail = (product: any) => {
   const imageUrl = normalizeUploadsUrl(plain?.promoImagePath) || imagePaths[0] || null;
   const priceFields = resolveAdminPriceFields(plain);
   const tags = normalizeAdminProductTags(plain?.tags);
+  const published =
+    typeof plain?.published !== "undefined"
+      ? Boolean(plain.published)
+      : Boolean(plain?.isPublished);
+  const visibility = buildProductVisibilitySnapshot({
+    isPublished: published,
+    status: plain?.status,
+    submissionStatus: plain?.sellerSubmissionStatus,
+    storeStatus: plain?.store?.status,
+    storeId: plain?.storeId,
+  });
 
   return {
     id: plain?.id,
@@ -735,10 +763,9 @@ const toAdminProductDetail = (product: any) => {
     stock: plain?.stock ?? 0,
     status: plain?.status ?? "draft",
     sellerSubmission: serializeAdminSellerSubmission(plain),
-    published:
-      typeof plain?.published !== "undefined"
-        ? Boolean(plain.published)
-        : Boolean(plain?.isPublished),
+    published,
+    visibility,
+    storefrontVisibilityState: visibility.stateCode,
     categoryId: plain?.defaultCategoryId ?? plain?.categoryId ?? null,
     defaultCategoryId: plain?.defaultCategoryId ?? plain?.categoryId ?? null,
     category: resolveProductDefaultCategory(plain),

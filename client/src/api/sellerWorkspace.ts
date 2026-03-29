@@ -6,6 +6,8 @@ export type SellerWorkspaceContext = {
     name: string;
     slug: string;
     status: string;
+    logoUrl?: string | null;
+    imageUrl?: string | null;
   };
   access: {
     accessMode: "OWNER_BRIDGE" | "MEMBER";

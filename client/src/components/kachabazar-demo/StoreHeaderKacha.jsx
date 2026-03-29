@@ -92,7 +92,6 @@ export default function StoreHeaderKacha({
     queryFn: () => getStoreHeaderCustomization({ lang }),
     staleTime: 60_000,
     retry: 1,
-    placeholderData: (previousData) => previousData,
     refetchOnWindowFocus: false,
   });
   const homeCustomizationQuery = useQuery({
@@ -100,7 +99,6 @@ export default function StoreHeaderKacha({
     queryFn: () => getStoreCustomization({ lang, include: "home" }),
     staleTime: 60_000,
     retry: 1,
-    placeholderData: (previousData) => previousData,
     refetchOnWindowFocus: false,
   });
   const publicIdentityQuery = useQuery({
@@ -109,7 +107,6 @@ export default function StoreHeaderKacha({
     enabled: !publicIdentityOverride,
     staleTime: 60_000,
     retry: 1,
-    placeholderData: (previousData) => previousData,
     refetchOnWindowFocus: false,
   });
 

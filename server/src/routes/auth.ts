@@ -89,6 +89,7 @@ router.post("/login", async (req, res) => {
           email: user.email,
           name: user.name,
           role: user.role,
+          avatarUrl: user.avatarUrl ?? null,
         },
       },
     });
@@ -161,6 +162,7 @@ router.post("/register", async (req, res) => {
           email: user.email,
           name: user.name,
           role: user.role,
+          avatarUrl: user.avatarUrl ?? null,
         },
       },
     });
@@ -180,7 +182,7 @@ router.get("/me", requireAuth, (req, res) => {
   }
 
   return User.findByPk(user.id, {
-    attributes: ["id", "email", "name", "role"],
+    attributes: ["id", "email", "name", "role", "avatarUrl"],
   })
     .then((dbUser: any) => {
       if (!dbUser) {
@@ -257,6 +259,7 @@ router.post("/admin/login", async (req, res) => {
         email: user.email,
         name: user.name,
         role: user.role,
+        avatarUrl: user.avatarUrl ?? null,
       },
     });
   } catch (error) {

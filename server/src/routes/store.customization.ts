@@ -14,6 +14,7 @@ import {
   parseStoredCustomization,
   sanitizeStoreCustomization,
 } from "../services/sharedContracts/storeCustomizationSanitizer.js";
+import { buildPublicOffersCustomization } from "../services/offersReadModel.js";
 
 const router = Router();
 
@@ -307,10 +308,19 @@ router.get("/", async (req, res, next) => {
       includeSet.has("contact-us") ||
       includeSet.has("contact_us");
     const includeCheckout = includeSet.has("checkout");
+    const includeSeoSettings =
+      includeSet.has("seo") ||
+      includeSet.has("seosettings") ||
+      includeSet.has("seo-settings") ||
+      includeSet.has("seo_settings");
     const includeDashboardSetting =
       includeSet.has("dashboardsetting") ||
       includeSet.has("dashboard-setting") ||
       includeSet.has("dashboard_setting");
+    const includeProductSlugPage =
+      includeSet.has("productslugpage") ||
+      includeSet.has("product-slug-page") ||
+      includeSet.has("product_slug_page");
 
     const row = await getCustomizationRow(lang);
     const fallbackRow = !row && lang !== "en" ? await getCustomizationRow("en") : null;
@@ -336,7 +346,7 @@ router.get("/", async (req, res, next) => {
       customization.faqs = sanitized.faqs;
     }
     if (includeOffers) {
-      customization.offers = sanitized.offers;
+      customization.offers = await buildPublicOffersCustomization(sanitized.offers);
     }
     if (includeContactUs) {
       customization.contactUs = sanitized.contactUs;
@@ -344,8 +354,14 @@ router.get("/", async (req, res, next) => {
     if (includeCheckout) {
       customization.checkout = sanitized.checkout;
     }
+    if (includeSeoSettings) {
+      customization.seoSettings = sanitized.seoSettings;
+    }
     if (includeDashboardSetting) {
       customization.dashboardSetting = sanitized.dashboardSetting;
+    }
+    if (includeProductSlugPage) {
+      customization.productSlugPage = sanitized.productSlugPage;
     }
 
     return res.json({

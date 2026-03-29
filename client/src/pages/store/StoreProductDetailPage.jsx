@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import {
   Banknote,
@@ -18,6 +19,7 @@ import {
 } from "lucide-react";
 import { useCart } from "../../hooks/useCart.ts";
 import { useProduct, useProducts } from "../../storefront.jsx";
+import { getStoreCustomization } from "../../api/public/storeCustomizationPublic.ts";
 import QueryState from "../../components/primitives/ui/QueryState.jsx";
 import { UiEmptyState, UiErrorState, UiSkeleton } from "../../components/primitives/state/index.js";
 import ProductSellerInfoCard from "../../components/store/ProductSellerInfoCard.jsx";
@@ -25,17 +27,16 @@ import { formatCurrency } from "../../utils/format.js";
 import { resolveProductImageUrl } from "../../utils/productImage.js";
 import { GENERIC_ERROR } from "../../constants/uiMessages.js";
 
-const HIGHLIGHT_ITEMS = [
-  { icon: Truck, text: "Shipping fee is calculated at checkout." },
-  { icon: House, text: "Delivery coverage depends on your address." },
-  { icon: Banknote, text: "Cash on delivery is available when the store supports it." },
-  { icon: RotateCcw, text: "Follow store policy for return and support requests." },
-  { icon: ShieldX, text: "Warranty terms depend on the product category." },
-  { icon: Sparkles, text: "Product details are shown from the current public listing." },
-  {
-    icon: MapPin,
-    text: "Pickup and dispatch details may vary by store location.",
-  },
+const DEFAULT_PRODUCT_SLUG_LANG = "en";
+const RIGHT_BOX_ICONS = [Truck, House, Banknote, RotateCcw, ShieldX, Sparkles, MapPin];
+const DEFAULT_RIGHT_BOX_DESCRIPTIONS = [
+  "Shipping fee is calculated at checkout.",
+  "Delivery coverage depends on your address.",
+  "Cash on delivery is available when the store supports it.",
+  "Follow store policy for return and support requests.",
+  "Warranty terms depend on the product category.",
+  "Product details are shown from the current public listing.",
+  "Pickup and dispatch details may vary by store location.",
 ];
 
 const PURCHASE_POINTS = [
@@ -52,6 +53,40 @@ const toPositiveNumber = (value, fallback = 0) => {
 const toSafeNumber = (value, fallback = 0) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const toBool = (value, fallback = false) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "on"].includes(normalized)) return true;
+    if (["false", "0", "no", "off"].includes(normalized)) return false;
+  }
+  return fallback;
+};
+
+const normalizeProductRightBox = (raw) => {
+  const source = raw && typeof raw === "object" ? raw : {};
+  const rawDescriptions = Array.isArray(source.descriptions)
+    ? source.descriptions
+    : Array.from({ length: 7 }, (_, index) => source[`description${index + 1}`] ?? "");
+  const descriptions = Array.from({ length: 7 }, (_, index) => {
+    const fallback = DEFAULT_RIGHT_BOX_DESCRIPTIONS[index] || "";
+    const value = rawDescriptions[index];
+    return typeof value === "string" ? value.trim() : fallback;
+  });
+  const items = descriptions
+    .map((text, index) => ({
+      icon: RIGHT_BOX_ICONS[index] || Sparkles,
+      text,
+    }))
+    .filter((item) => Boolean(item.text));
+
+  return {
+    enabled: toBool(source.enabled, true),
+    items,
+  };
 };
 
 const normalizeTags = (product, categoryName) => {
@@ -586,6 +621,16 @@ export default function StoreProductDetailPage() {
     refetch: refetchProduct,
   } = useProduct(slug);
   const product = productData?.data ?? null;
+  const productSlugCustomizationQuery = useQuery({
+    queryKey: ["store-customization", "product-slug-page", DEFAULT_PRODUCT_SLUG_LANG],
+    queryFn: () =>
+      getStoreCustomization({
+        lang: DEFAULT_PRODUCT_SLUG_LANG,
+        include: "product-slug-page",
+      }),
+    staleTime: 60_000,
+    retry: 1,
+  });
 
   const relatedCategoryId = product?.category?.id ?? product?.categoryId ?? null;
   const numericCategoryId = Number(relatedCategoryId);
@@ -661,6 +706,19 @@ export default function StoreProductDetailPage() {
     () => normalizeVariationGroups(product?.variations),
     [product?.variations]
   );
+  const productRightBox = useMemo(() => {
+    const customizationRaw =
+      productSlugCustomizationQuery.data?.customization?.productSlugPage?.rightBox;
+    if (customizationRaw && typeof customizationRaw === "object") {
+      return normalizeProductRightBox(customizationRaw);
+    }
+    return normalizeProductRightBox({
+      enabled: true,
+      descriptions: DEFAULT_RIGHT_BOX_DESCRIPTIONS,
+    });
+  }, [productSlugCustomizationQuery.data]);
+  const shouldRenderProductRightBox =
+    productRightBox.enabled && productRightBox.items.length > 0;
 
   useEffect(() => {
     setImageSrc(resolvedImageSrc);
@@ -965,22 +1023,24 @@ export default function StoreProductDetailPage() {
 
           <aside className="order-4 lg:col-span-5 lg:self-start">
             <div className="space-y-6">
-              <div
-                id="product-highlights"
-                className="rounded-[28px] border border-slate-200 bg-white p-5 sm:p-6"
-              >
-                <h3 className="text-2xl font-bold leading-tight tracking-tight text-slate-900 sm:text-[32px]">
-                  Highlights
-                </h3>
-                <ul className="mt-4 space-y-3 text-[15px] text-slate-600">
-                  {HIGHLIGHT_ITEMS.map((item) => (
-                    <li key={item.text} className="flex items-start gap-3">
-                      <item.icon className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
-                      <span>{item.text}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              {shouldRenderProductRightBox ? (
+                <div
+                  id="product-highlights"
+                  className="rounded-[28px] border border-slate-200 bg-white p-5 sm:p-6"
+                >
+                  <h3 className="text-2xl font-bold leading-tight tracking-tight text-slate-900 sm:text-[32px]">
+                    Highlights
+                  </h3>
+                  <ul className="mt-4 space-y-3 text-[15px] text-slate-600">
+                    {productRightBox.items.map((item) => (
+                      <li key={item.text} className="flex items-start gap-3">
+                        <item.icon className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+                        <span>{item.text}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
 
               <div
                 id="product-share"

@@ -171,23 +171,13 @@ const MENU = [
       },
       {
         label: "Store Payment",
-        to: "/admin/online-store/store-payment",
-        perm: "SETTINGS_MANAGE",
-      },
-      {
-        label: "Payment Review",
-        to: "/admin/online-store/payment-review",
+        to: "/admin/store/payment-profiles",
         perm: "SETTINGS_MANAGE",
       },
       {
         label: "Payment Audit",
         to: "/admin/online-store/payment-audit",
         perm: "DASHBOARD_VIEW",
-      },
-      {
-        label: "Payment Profiles",
-        to: "/admin/store/payment-profiles",
-        perm: "SETTINGS_MANAGE",
       },
       {
         label: "Store Applications",

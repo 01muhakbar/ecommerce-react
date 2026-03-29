@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Download, Printer } from "lucide-react";
 import { fetchStoreOrder } from "../../api/public/storeOrders.ts";
+import { getStoreCustomization } from "../../api/public/storeCustomizationPublic.ts";
 import { formatCurrency } from "../../utils/format.js";
 import { getOrderStatusLabel } from "../../utils/orderStatus.js";
 import { PaymentStatusBadge } from "../../components/payments/PaymentReadModelBadges.jsx";
@@ -21,6 +22,7 @@ import {
   isPublicOrderReference,
   resolvePublicOrderReference,
 } from "../../utils/publicOrderReference.js";
+import { normalizeDashboardSettingCopy } from "../../utils/dashboardSettingCopy.js";
 
 const formatDate = (value) => {
   if (!value) return "-";
@@ -155,6 +157,15 @@ export default function StoreOrderTrackingPage() {
   const orderRefParam = String(ref || "").trim();
   const hasRefParam = orderRefParam.length > 0;
   const hasValidRef = isPublicOrderReference(orderRefParam);
+  const dashboardSettingQuery = useQuery({
+    queryKey: ["store-customization", "dashboard-setting", "en"],
+    queryFn: () => getStoreCustomization({ lang: "en", include: "dashboardSetting" }),
+    staleTime: 60_000,
+  });
+  const dashboardSettingCopy = normalizeDashboardSettingCopy(
+    dashboardSettingQuery.data?.customization?.dashboardSetting
+  );
+  const dashboardCopy = dashboardSettingCopy.dashboard;
 
   const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey: ["store", "tracking", orderRefParam],
@@ -681,21 +692,29 @@ export default function StoreOrderTrackingPage() {
         </div>
 
         <div className="no-print flex flex-col gap-3 px-4 py-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4 sm:px-6 sm:py-6 lg:px-8">
+          <div className="max-w-2xl text-sm text-slate-600">
+            <p className="font-semibold text-slate-900">
+              {dashboardCopy.invoiceMessageFirstPartValue}
+            </p>
+            <p className="mt-1">{dashboardCopy.invoiceMessageLastPartValue}</p>
+          </div>
           <button
             type="button"
             onClick={handlePrint}
             className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 sm:w-auto"
+            aria-label={dashboardCopy.downloadButtonLabel}
           >
             <Download className="h-4 w-4" />
-            Download PDF
+            {dashboardCopy.downloadButtonValue}
           </button>
           <button
             type="button"
             onClick={handlePrint}
             className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 sm:w-auto"
+            aria-label={dashboardCopy.printButtonLabel}
           >
             <Printer className="h-4 w-4" />
-            Print Invoice
+            {dashboardCopy.printButtonValue}
           </button>
         </div>
       </div>

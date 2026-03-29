@@ -1,11 +1,23 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { changeUserPassword } from "../../api/userPassword.ts";
 import { useAccountAuth } from "../../auth/authDomainHooks.js";
+import { getStoreCustomization } from "../../api/public/storeCustomizationPublic.ts";
+import { normalizeDashboardSettingCopy } from "../../utils/dashboardSettingCopy.js";
 
 export default function AccountChangePasswordPage() {
   const navigate = useNavigate();
   const { logout } = useAccountAuth();
+  const dashboardSettingQuery = useQuery({
+    queryKey: ["store-customization", "dashboard-setting", "en"],
+    queryFn: () => getStoreCustomization({ lang: "en", include: "dashboardSetting" }),
+    staleTime: 60_000,
+  });
+  const dashboardSettingCopy = normalizeDashboardSettingCopy(
+    dashboardSettingQuery.data?.customization?.dashboardSetting
+  );
+  const profileCopy = dashboardSettingCopy.updateProfile;
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -76,7 +88,9 @@ export default function AccountChangePasswordPage() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Change Password</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">
+          {profileCopy.changePasswordLabel}
+        </h1>
         <p className="mt-1 text-sm text-slate-500">
           Update your password to keep your account secure.
         </p>
@@ -95,7 +109,7 @@ export default function AccountChangePasswordPage() {
 
       <div>
         <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-          Current Password
+          {profileCopy.currentPasswordLabel}
         </label>
         <input
           type="password"
@@ -108,7 +122,7 @@ export default function AccountChangePasswordPage() {
 
       <div>
         <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-          New Password
+          {profileCopy.newPasswordLabel}
         </label>
         <input
           type="password"
@@ -151,7 +165,7 @@ export default function AccountChangePasswordPage() {
         disabled={!canSubmit}
         className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {isSubmitting ? "Saving..." : "Save Password"}
+        {isSubmitting ? "Saving..." : profileCopy.changePasswordLabel}
       </button>
     </form>
   );

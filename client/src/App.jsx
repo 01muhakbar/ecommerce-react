@@ -71,6 +71,7 @@ import AdminStoreProfilePage from "./pages/admin/AdminStoreProfilePage.jsx";
 import AdminStoreApplicationsPage from "./pages/admin/AdminStoreApplicationsPage.jsx";
 import AdminStoreApplicationDetailPage from "./pages/admin/AdminStoreApplicationDetailPage.jsx";
 import SellerLayout from "./layouts/SellerLayout.jsx";
+import SeoCustomizationBridge from "./components/SeoCustomizationBridge.jsx";
 import SellerOrderDetailPage from "./pages/seller/SellerOrderDetailPage.jsx";
 import SellerOrdersPage from "./pages/seller/SellerOrdersPage.jsx";
 import SellerPaymentReviewPage from "./pages/seller/SellerPaymentReviewPage.jsx";
@@ -205,6 +206,7 @@ function LegacyAdminCurrenciesRedirect() {
 export default function App() {
   return (
     <AuthProvider>
+      <SeoCustomizationBridge />
       <Suspense
         fallback={
           <div className="p-6 text-sm text-slate-500">Loading...</div>

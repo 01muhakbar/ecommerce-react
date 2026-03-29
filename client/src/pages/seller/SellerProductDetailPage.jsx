@@ -207,7 +207,9 @@ export default function SellerProductDetailPage() {
       setSubmitStatus({
         type: "success",
         message: data?.published
-          ? "Product published and synced to storefront visibility."
+          ? data?.visibility?.storefrontVisible
+            ? "Product published and synced to storefront visibility."
+            : "Product published, but storefront visibility is still blocked."
           : "Product hidden from storefront.",
       });
       queryClient.setQueryData(["seller", "products", "detail", storeId, productId], data);

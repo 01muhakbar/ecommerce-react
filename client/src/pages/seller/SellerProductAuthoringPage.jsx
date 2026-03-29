@@ -839,8 +839,9 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
 
       setStatus({
         type: "success",
-        message:
-          "Product published and is now synced to storefront visibility.",
+        message: published?.visibility?.storefrontVisible
+          ? "Product published and is now synced to storefront visibility."
+          : "Product published, but storefront visibility is still blocked.",
       });
       navigate(workspaceRoutes.productDetail(published.id), { replace: true });
       return;

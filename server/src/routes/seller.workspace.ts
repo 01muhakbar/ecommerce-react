@@ -41,6 +41,8 @@ const serializeSellerWorkspaceContext = (sellerAccess: any) => ({
     name: String(sellerAccess.store.name || ""),
     slug: String(sellerAccess.store.slug || ""),
     status: String(sellerAccess.store.status || "ACTIVE"),
+    logoUrl: String(sellerAccess.store.logoUrl || "").trim() || null,
+    imageUrl: String(sellerAccess.store.imageUrl || sellerAccess.store.logoUrl || "").trim() || null,
   },
   access: {
     accessMode: sellerAccess.accessMode,
@@ -574,6 +576,10 @@ const buildSellerFinanceSummary = (input: {
       name: String(input.sellerAccess.store.name || ""),
       slug: String(input.sellerAccess.store.slug || ""),
       status: String(input.sellerAccess.store.status || "ACTIVE"),
+      logoUrl: String(input.sellerAccess.store.logoUrl || "").trim() || null,
+      imageUrl:
+        String(input.sellerAccess.store.imageUrl || input.sellerAccess.store.logoUrl || "").trim() ||
+        null,
       roleCode: String(input.sellerAccess.roleCode || ""),
       accessMode: String(input.sellerAccess.accessMode || ""),
       membershipStatus: String(input.sellerAccess.membershipStatus || ""),
@@ -734,6 +740,8 @@ router.get(
             name: String(store.name || ""),
             slug: String(store.slug || ""),
             status: String(store.status || "ACTIVE"),
+            logoUrl: String(store.logoUrl || "").trim() || null,
+            imageUrl: String(store.logoUrl || "").trim() || null,
             roleCode: String(sellerAccess?.roleCode || ""),
             accessMode: String(sellerAccess?.accessMode || ""),
             membershipStatus: String(sellerAccess?.membershipStatus || ""),

@@ -1,15 +1,25 @@
-import { useEffect, useState } from "react";
-import { getAdminMe, updateAdminMe } from "../../api/adminProfile.ts";
+import { useEffect, useRef, useState } from "react";
+import {
+  getAdminMe,
+  updateAdminMe,
+  uploadAdminProfileImage,
+} from "../../api/adminProfile.ts";
+import { useAuth } from "../../auth/useAuth.js";
+import { resolveAssetUrl } from "../../lib/assetUrl.js";
 
 const EMPTY_FORM = {
   name: "",
   email: "",
   phone: "",
+  avatarUrl: "",
 };
 
 export default function AdminProfilePage() {
+  const { refreshSession } = useAuth() || {};
+  const fileInputRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [form, setForm] = useState(EMPTY_FORM);
@@ -23,6 +33,7 @@ export default function AdminProfilePage() {
         name: String(data?.name || ""),
         email: String(data?.email || ""),
         phone: String(data?.phone || ""),
+        avatarUrl: String(data?.avatarUrl || data?.avatar || ""),
       });
     } catch (err) {
       const message = err?.response?.data?.message || "Failed to load profile.";
@@ -41,6 +52,30 @@ export default function AdminProfilePage() {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
+  const handleAvatarUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setError("");
+    setSuccess("");
+    try {
+      const url = await uploadAdminProfileImage(file);
+      setForm((prev) => ({ ...prev, avatarUrl: url }));
+      setSuccess("Profile image uploaded. Save to persist the change.");
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "Failed to upload image.";
+      setError(String(message));
+    } finally {
+      setUploading(false);
+      event.target.value = "";
+    }
+  };
+
+  const handleRemoveAvatar = () => {
+    setForm((prev) => ({ ...prev, avatarUrl: "" }));
+    setSuccess("Profile image removed from the draft. Save to persist the change.");
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     setSaving(true);
@@ -50,13 +85,16 @@ export default function AdminProfilePage() {
       const updated = await updateAdminMe({
         name: form.name,
         phone: form.phone || null,
+        avatarUrl: form.avatarUrl || null,
       });
       setForm((prev) => ({
         ...prev,
         name: String(updated?.name || prev.name),
         email: String(updated?.email || prev.email),
         phone: String(updated?.phone || ""),
+        avatarUrl: String(updated?.avatarUrl || updated?.avatar || ""),
       }));
+      await refreshSession?.();
       setSuccess("Profile updated successfully.");
     } catch (err) {
       const message = err?.response?.data?.message || "Failed to update profile.";
@@ -74,6 +112,8 @@ export default function AdminProfilePage() {
     );
   }
 
+  const avatarSrc = resolveAssetUrl(form.avatarUrl || "");
+
   return (
     <section className="mx-auto max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <header className="mb-5">
@@ -84,6 +124,44 @@ export default function AdminProfilePage() {
       </header>
 
       <form className="space-y-4" onSubmit={handleSubmit}>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className="hidden"
+          onChange={handleAvatarUpload}
+        />
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-sm font-medium text-slate-700">Profile image</p>
+          <div className="mt-3 flex flex-wrap items-center gap-4">
+            <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white text-lg font-semibold text-slate-400">
+              {avatarSrc ? (
+                <img src={avatarSrc} alt={form.name || form.email || "Admin avatar"} className="h-full w-full object-cover" />
+              ) : (
+                "AD"
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="inline-flex h-10 items-center justify-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:border-slate-300 disabled:opacity-60"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={saving || uploading}
+              >
+                {uploading ? "Uploading..." : avatarSrc ? "Replace image" : "Upload image"}
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-10 items-center justify-center rounded-full border border-rose-200 bg-white px-4 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+                onClick={handleRemoveAvatar}
+                disabled={saving || uploading || !form.avatarUrl}
+              >
+                Remove image
+              </button>
+            </div>
+          </div>
+        </div>
+
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-slate-700">Name</span>
           <input

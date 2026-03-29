@@ -89,7 +89,7 @@ export default function AdminStorePaymentProfilesPage() {
   if (profilesQuery.isLoading) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
-        Loading store payment profiles...
+        Loading store payment...
       </div>
     );
   }
@@ -99,7 +99,7 @@ export default function AdminStorePaymentProfilesPage() {
       <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
         {profilesQuery.error?.response?.data?.message ||
           profilesQuery.error?.message ||
-          "Failed to load store payment profiles."}
+          "Failed to load store payment."}
       </div>
     );
   }
@@ -108,7 +108,7 @@ export default function AdminStorePaymentProfilesPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
         <div>
-          <h1 className="text-[22px] font-semibold text-slate-800">Store Payment Profiles</h1>
+          <h1 className="text-[22px] font-semibold text-slate-800">Store Payment</h1>
           <p className="mt-1 text-sm text-slate-500">
             Review seller payment setup requests and promote approved QRIS revisions into a new active snapshot.
           </p>
@@ -120,7 +120,7 @@ export default function AdminStorePaymentProfilesPage() {
 
       {items.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
-          No store payment profiles found yet.
+          No store payment data found yet.
         </div>
       ) : (
         <div className="grid gap-4">

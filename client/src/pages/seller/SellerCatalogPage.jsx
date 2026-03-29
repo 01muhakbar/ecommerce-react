@@ -529,7 +529,9 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
       setActionNotice({
         type: "success",
         message: data?.published
-          ? "Product published and synced to storefront visibility."
+          ? data?.visibility?.storefrontVisible
+            ? "Product published and synced to storefront visibility."
+            : "Product published, but storefront visibility is still blocked."
           : "Product hidden from storefront.",
       });
       await Promise.all([

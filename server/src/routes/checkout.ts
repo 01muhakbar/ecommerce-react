@@ -34,6 +34,10 @@ import {
   resolveBuyerFacingPaymentStatus,
 } from "../services/paymentCheckoutView.service.js";
 import {
+  getLatestTimelineRecord,
+  sortTimelineDesc,
+} from "../services/paymentReadModel.js";
+import {
   resolvePreferredStorePaymentProfile,
   STORE_PAYMENT_PROFILE_CHECKOUT_ATTRIBUTES,
 } from "../services/sharedContracts/storePaymentProfileCompat.js";
@@ -522,6 +526,32 @@ const prepareCartGroups = (cartItems: any[]) => {
   };
 };
 
+const buildCheckoutProductRequestMap = (groups: any[]) => {
+  const requestedByProductId = new Map<
+    number,
+    {
+      product: any;
+      requested: number;
+      productName: string;
+    }
+  >();
+
+  for (const group of Array.isArray(groups) ? groups : []) {
+    for (const item of Array.isArray(group?.items) ? group.items : []) {
+      const productId = toNumber(item?.productId, 0);
+      if (!Number.isFinite(productId) || productId <= 0) continue;
+      const current = requestedByProductId.get(productId);
+      requestedByProductId.set(productId, {
+        product: item?.product ?? current?.product ?? null,
+        requested: toNumber(current?.requested, 0) + Math.max(0, toNumber(item?.qty, 0)),
+        productName: String(item?.productName || current?.productName || `Product #${productId}`),
+      });
+    }
+  }
+
+  return requestedByProductId;
+};
+
 const lockVisibleProductsForCheckout = async (
   productIds: number[],
   transaction: any
@@ -594,14 +624,8 @@ const serializeCheckoutPreview = (prepared: any) => ({
 });
 
 const normalizeProofSummary = (proofs: any[]) => {
-  if (!Array.isArray(proofs) || proofs.length === 0) return null;
-  const latest = [...proofs]
-    .sort((left, right) => {
-      const leftTime = new Date(getAttr(left, "createdAt") || 0).getTime();
-      const rightTime = new Date(getAttr(right, "createdAt") || 0).getTime();
-      if (rightTime !== leftTime) return rightTime - leftTime;
-      return toNumber(getAttr(right, "id")) - toNumber(getAttr(left, "id"));
-    })[0];
+  const latest = getLatestTimelineRecord(proofs);
+  if (!latest) return null;
   return {
     id: toNumber(getAttr(latest, "id")),
     proofImageUrl: String(getAttr(latest, "proofImageUrl") || ""),
@@ -841,7 +865,7 @@ const serializeSplitOrder = (order: any) => {
     createdAt: getAttr(order, "createdAt") || null,
     summary,
     groups: suborders.map((suborder: any) => {
-      const payments = Array.isArray(suborder?.payments) ? suborder.payments : [];
+      const payments = sortTimelineDesc(Array.isArray(suborder?.payments) ? suborder.payments : []);
       const payment = payments[0] ?? null;
       const items = Array.isArray(suborder?.items) ? suborder.items : [];
       const proof = normalizeProofSummary(payment?.proofs ?? []);
@@ -1121,21 +1145,21 @@ router.post("/create-multi-store", async (req, res) => {
         });
       }
 
-      for (const group of prepared.groups) {
-        for (const item of group.items) {
-          if (item.stock < item.qty) {
-            await tx.rollback();
-            return res.status(409).json({
-              success: false,
-              message: "Insufficient stock",
-              data: {
-                productId: item.productId,
-                name: item.productName,
-                available: item.stock,
-                requested: item.qty,
-              },
-            });
-          }
+      const requestedByProductId = buildCheckoutProductRequestMap(prepared.groups);
+      for (const [productId, entry] of requestedByProductId.entries()) {
+        const currentStock = toNumber(getAttr(entry.product, "stock"), 0);
+        if (currentStock < entry.requested) {
+          await tx.rollback();
+          return res.status(409).json({
+            success: false,
+            message: "Insufficient stock",
+            data: {
+              productId,
+              name: entry.productName,
+              available: currentStock,
+              requested: entry.requested,
+            },
+          });
         }
       }
 
@@ -1304,6 +1328,7 @@ router.post("/create-multi-store", async (req, res) => {
         );
         const totalGroupDiscount = orderLevelGroupDiscount + scopedGroupDiscount;
         const discountedGroupTotal = Math.max(0, group.totalAmount - totalGroupDiscount);
+        const expiresAt = buildPaymentExpiry();
         const suborder = await Suborder.create(
           {
             orderId: parentOrder.id,
@@ -1320,7 +1345,7 @@ router.post("/create-multi-store", async (req, res) => {
             paymentMethod: "QRIS",
             paymentStatus: "UNPAID",
             fulfillmentStatus: "UNFULFILLED",
-            expiresAt: buildPaymentExpiry(),
+            expiresAt,
             paidAt: null,
           } as any,
           { transaction: tx }
@@ -1352,7 +1377,7 @@ router.post("/create-multi-store", async (req, res) => {
             qrImageUrl: String(paymentProfile?.qrisImageUrl || ""),
             qrPayload: paymentProfile?.qrisPayload ? String(paymentProfile.qrisPayload) : null,
             status: "CREATED",
-            expiresAt: buildPaymentExpiry(),
+            expiresAt,
             paidAt: null,
           } as any,
           { transaction: tx }
@@ -1379,13 +1404,12 @@ router.post("/create-multi-store", async (req, res) => {
         });
       }
 
-      for (const group of prepared.groups) {
-        for (const item of group.items) {
-          const product = item.product;
-          const currentStock = toNumber(getAttr(product, "stock"), 0);
-          product.set("stock", currentStock - item.qty);
-          await product.save({ transaction: tx });
-        }
+      for (const [productId, entry] of requestedByProductId.entries()) {
+        const product = entry.product ?? lockedProductsById.get(productId) ?? null;
+        if (!product) continue;
+        const currentStock = toNumber(getAttr(product, "stock"), 0);
+        product.set("stock", Math.max(0, currentStock - entry.requested));
+        await product.save({ transaction: tx });
       }
 
       const cartId = toNumber(getAttr(cart, "id"), 0);

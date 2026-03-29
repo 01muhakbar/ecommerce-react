@@ -476,7 +476,6 @@ export default function KachaBazarDemoHomePage() {
     queryFn: () => getStoreCustomization({ lang, include: "home" }),
     staleTime: 60_000,
     retry: 1,
-    placeholderData: (previousData) => previousData,
     refetchOnWindowFocus: false,
   });
   const categoriesById = useMemo(() => {

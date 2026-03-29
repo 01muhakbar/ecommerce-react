@@ -5,12 +5,14 @@ type UserColumnSupport = {
   checked: boolean;
   hasPhone: boolean;
   hasAddress: boolean;
+  hasAvatarUrl: boolean;
 };
 
 const userColumns: UserColumnSupport = {
   checked: false,
   hasPhone: false,
   hasAddress: false,
+  hasAvatarUrl: false,
 };
 
 const getAuthUserId = (req: Request) => {
@@ -31,9 +33,11 @@ const ensureUserColumns = async () => {
     const table = await sequelize.getQueryInterface().describeTable("users");
     userColumns.hasPhone = Object.prototype.hasOwnProperty.call(table, "phone");
     userColumns.hasAddress = Object.prototype.hasOwnProperty.call(table, "address");
+    userColumns.hasAvatarUrl = Object.prototype.hasOwnProperty.call(table, "avatar_url");
   } catch {
     userColumns.hasPhone = false;
     userColumns.hasAddress = false;
+    userColumns.hasAvatarUrl = false;
   } finally {
     userColumns.checked = true;
   }
@@ -48,6 +52,9 @@ const getUserPayload = (user: any, support: UserColumnSupport) => {
     phone: support.hasPhone
       ? toNullableText(user?.get?.("phone") ?? user?.phone ?? null)
       : null,
+    avatarUrl: support.hasAvatarUrl
+      ? toNullableText(user?.get?.("avatarUrl") ?? user?.avatarUrl ?? null)
+      : null,
   };
   if (support.hasAddress) {
     payload.address = toNullableText(user?.get?.("address") ?? user?.address ?? null);
@@ -59,6 +66,7 @@ const findUserMe = async (userId: number, support: UserColumnSupport) => {
   const attrs = ["id", "name", "email"];
   if (support.hasPhone) attrs.push("phone");
   if (support.hasAddress) attrs.push("address");
+  if (support.hasAvatarUrl) attrs.push("avatarUrl");
   return User.findByPk(userId, { attributes: attrs as any[] });
 };
 
@@ -106,6 +114,17 @@ export const updateUserMe = async (req: Request, res: Response) => {
     const updates: Record<string, unknown> = { name };
     if (support.hasPhone && Object.prototype.hasOwnProperty.call(req.body || {}, "phone")) {
       updates.phone = toNullableText(req.body?.phone);
+    }
+    if (
+      support.hasAvatarUrl &&
+      (Object.prototype.hasOwnProperty.call(req.body || {}, "avatarUrl") ||
+        Object.prototype.hasOwnProperty.call(req.body || {}, "avatar"))
+    ) {
+      updates.avatarUrl = toNullableText(
+        Object.prototype.hasOwnProperty.call(req.body || {}, "avatarUrl")
+          ? req.body?.avatarUrl
+          : req.body?.avatar
+      );
     }
     await user.update(updates as any);
 

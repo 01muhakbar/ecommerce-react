@@ -72,11 +72,49 @@ const tableHeadCell =
   "whitespace-nowrap px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500";
 const tableCell = "px-3 py-2 align-middle text-sm text-slate-700";
 
-const getStorefrontBadgeMeta = ({ published, status, submissionStatus }) => {
+const getStorefrontBadgeMeta = ({ visibility, published, status, submissionStatus }) => {
+  const stateCode = String(visibility?.stateCode || "")
+    .trim()
+    .toUpperCase();
+  const reasonCode = String(visibility?.reasonCode || "")
+    .trim()
+    .toUpperCase();
   const normalizedStatus = String(status || "").trim().toLowerCase();
   const normalizedSubmission = String(submissionStatus || "none")
     .trim()
     .toLowerCase();
+
+  if (stateCode === "STOREFRONT_VISIBLE") {
+    return {
+      label: "Visible",
+      className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+      dotClassName: "bg-emerald-500",
+    };
+  }
+
+  if (stateCode === "PUBLISHED_BLOCKED" && reasonCode === "REVIEW_PENDING") {
+    return {
+      label: "Review blocked",
+      className: "border-sky-200 bg-sky-50 text-sky-700",
+      dotClassName: "bg-sky-500",
+    };
+  }
+
+  if (stateCode === "PUBLISHED_BLOCKED" && reasonCode === "REVISION_REQUIRED") {
+    return {
+      label: "Revision blocked",
+      className: "border-amber-200 bg-amber-50 text-amber-800",
+      dotClassName: "bg-amber-500",
+    };
+  }
+
+  if (stateCode === "PUBLISHED_BLOCKED" && reasonCode === "STORE_NOT_ACTIVE") {
+    return {
+      label: "Store blocked",
+      className: "border-amber-200 bg-amber-50 text-amber-800",
+      dotClassName: "bg-amber-500",
+    };
+  }
 
   if (!published) {
     return {
@@ -117,8 +155,13 @@ const getStorefrontBadgeMeta = ({ published, status, submissionStatus }) => {
   };
 };
 
-function ProductPublishedBadge({ published, status, submissionStatus }) {
-  const meta = getStorefrontBadgeMeta({ published, status, submissionStatus });
+function ProductPublishedBadge({ visibility, published, status, submissionStatus }) {
+  const meta = getStorefrontBadgeMeta({
+    visibility,
+    published,
+    status,
+    submissionStatus,
+  });
 
   return (
     <span
@@ -1193,6 +1236,7 @@ export default function AdminProductsPage() {
 
                       <td className={`${tableCell} w-[8%]`}>
                           <ProductPublishedBadge
+                            visibility={product?.visibility}
                             published={isPublished}
                             status={product?.status}
                             submissionStatus={sellerSubmission?.status}

@@ -331,53 +331,56 @@ export const updateCartItem = async (
       return;
     }
 
-    const cart = await Cart.findOne({ where: { userId } });
-    if (!cart) {
-      res.status(404).json({ message: "Cart not found." });
-      return;
-    }
-    const cartId = await resolveCartId(cart, userId);
-    if (!cartId) {
-      res.status(500).json({ message: "Failed to resolve cart id." });
-      return;
-    }
-
-    if (quantity === 0) {
-      await CartItem.destroy({
-        where: { cartId, productId: id },
+    await sequelize.transaction(async (t) => {
+      const cart = await Cart.findOne({
+        where: { userId },
+        transaction: t,
+        lock: t.LOCK.UPDATE,
       });
-      res.status(200).json({ message: "Item removed from cart." });
-      return;
-    }
+      if (!cart) {
+        const error: any = new Error("Cart not found.");
+        error.statusCode = 404;
+        throw error;
+      }
+      const cartId = await resolveCartId(cart, userId);
+      if (!cartId) {
+        throw new Error("Failed to resolve cart id.");
+      }
 
-    const product = await Product.findByPk(id);
-    if (!product) {
-      res.status(404).json({ message: "Product not found." });
-      return;
-    }
-    if (product.stock < quantity) {
-      res
-        .status(400)
-        .json({
-          message: `Not enough stock. Only ${product.stock} items available.`,
+      if (quantity === 0) {
+        await CartItem.destroy({
+          where: { cartId, productId: id },
+          transaction: t,
         });
-      return;
-    }
+        return;
+      }
 
-    await CartItem.update(
-      { quantity },
-      { where: { cartId, productId: id } }
-    );
+      const product = await loadCartProductForMutation(id, t);
+      validateCartMutationProduct(product, quantity);
+
+      await CartItem.update(
+        { quantity },
+        {
+          where: { cartId, productId: id },
+          transaction: t,
+        }
+      );
+    });
 
     res.status(200).json({ message: "Cart updated successfully." });
   } catch (error) {
     console.error("UPDATE CART ERROR:", error);
-    res
-      .status(500)
-      .json({
-        message: "Failed to update cart.",
-        error: (error as Error).message,
-      });
+    const statusCode = Number((error as any)?.statusCode || 500);
+    res.status(statusCode).json({
+      message:
+        statusCode >= 400 && statusCode < 500
+          ? (error as Error).message
+          : "Failed to update cart.",
+      error: (error as Error).message,
+      ...(String((error as any)?.code || "").trim()
+        ? { code: String((error as any).code) }
+        : {}),
+    });
   }
 };
 

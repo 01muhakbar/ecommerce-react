@@ -441,9 +441,16 @@ async function run() {
   logStep("authenticating admin, seller, and customer clients");
   const adminClient = new CookieClient();
   const sellerClient = new CookieClient();
+  const inactiveSellerClient = new CookieClient();
   const customerClient = new CookieClient();
   await loginAdmin(adminClient);
   await login(sellerClient, sellerUser.email, sellerUser.password, "seller login");
+  await login(
+    inactiveSellerClient,
+    inactiveSellerUser.email,
+    inactiveSellerUser.password,
+    "inactive seller login"
+  );
   await login(customerClient, customerUser.email, customerUser.password, "customer login");
 
   logStep("checking hidden scenarios on public/storefront routes");
@@ -481,6 +488,29 @@ async function run() {
     Number(adminQueue.body?.meta?.reviewQueue?.total || 0),
     2,
     "admin review queue: total count mismatch"
+  );
+  const adminItems: any[] = Array.isArray(adminQueue.body?.data) ? adminQueue.body.data : [];
+  const adminItemBySlug = new Map<string, any>(
+    adminItems.map((item: any) => [String(item?.slug || ""), item])
+  );
+  const adminInactiveStoreItem = adminItemBySlug.get(inactiveStoreProduct.slug);
+  const adminVisibleItem = adminItemBySlug.get(visibleProduct.slug);
+  assert.ok(adminInactiveStoreItem, "admin list: inactive store item missing");
+  assert.ok(adminVisibleItem, "admin list: visible item missing");
+  assert.equal(
+    String(adminInactiveStoreItem?.visibility?.stateCode || ""),
+    "PUBLISHED_BLOCKED",
+    "admin list: inactive store product state mismatch"
+  );
+  assert.equal(
+    String(adminInactiveStoreItem?.visibility?.reasonCode || ""),
+    "STORE_NOT_ACTIVE",
+    "admin list: inactive store product reason mismatch"
+  );
+  assert.equal(
+    String(adminVisibleItem?.visibility?.stateCode || ""),
+    "STOREFRONT_VISIBLE",
+    "admin list: visible product state mismatch"
   );
   logPass("admin review queue summary");
 
@@ -587,6 +617,73 @@ async function run() {
     "seller list: visible product state mismatch"
   );
   logPass("seller visibility metadata");
+
+  logStep("checking inactive-store seller visibility metadata");
+  const inactiveSellerList = await inactiveSellerClient.request(
+    `/api/seller/stores/${inactiveStore.id}/products?keyword=${encodeURIComponent(RUN_ID)}&limit=20`
+  );
+  assertStatus(inactiveSellerList, 200, "inactive seller list");
+  const inactiveSellerItems: any[] = Array.isArray(inactiveSellerList.body?.data?.items)
+    ? inactiveSellerList.body.data.items
+    : [];
+  const inactiveSellerItem = inactiveSellerItems.find(
+    (item: any) => String(item?.slug || "") === inactiveStoreProduct.slug
+  );
+  assert.ok(inactiveSellerItem, "inactive seller list: product missing");
+  assert.equal(
+    Boolean(inactiveSellerItem?.visibility?.storefrontVisible),
+    false,
+    "inactive seller list: product incorrectly marked visible"
+  );
+  assert.equal(
+    String(inactiveSellerItem?.visibility?.stateCode || ""),
+    "PUBLISHED_BLOCKED",
+    "inactive seller list: product state mismatch"
+  );
+  assert.equal(
+    String(inactiveSellerItem?.visibility?.reasonCode || ""),
+    "STORE_NOT_ACTIVE",
+    "inactive seller list: product reason mismatch"
+  );
+  assert.equal(
+    Number(inactiveSellerList.body?.data?.summary?.storefrontVisible || 0),
+    0,
+    "inactive seller list: storefrontVisible summary mismatch"
+  );
+  assert.equal(
+    Number(inactiveSellerList.body?.data?.summary?.publishedBlocked || 0),
+    1,
+    "inactive seller list: publishedBlocked summary mismatch"
+  );
+  const inactiveVisibleFilter = await inactiveSellerClient.request(
+    `/api/seller/stores/${inactiveStore.id}/products?keyword=${encodeURIComponent(
+      RUN_ID
+    )}&visibilityState=storefront_visible&limit=20`
+  );
+  assertStatus(inactiveVisibleFilter, 200, "inactive seller visible filter");
+  assert.equal(
+    Array.isArray(inactiveVisibleFilter.body?.data?.items)
+      ? inactiveVisibleFilter.body.data.items.length
+      : 0,
+    0,
+    "inactive seller visible filter: blocked product should not appear"
+  );
+  const inactiveBlockedFilter = await inactiveSellerClient.request(
+    `/api/seller/stores/${inactiveStore.id}/products?keyword=${encodeURIComponent(
+      RUN_ID
+    )}&visibilityState=published_blocked&limit=20`
+  );
+  assertStatus(inactiveBlockedFilter, 200, "inactive seller blocked filter");
+  assert.equal(
+    Array.isArray(inactiveBlockedFilter.body?.data?.items)
+      ? inactiveBlockedFilter.body.data.items.some(
+          (item: any) => String(item?.slug || "") === inactiveStoreProduct.slug
+        )
+      : false,
+    true,
+    "inactive seller blocked filter: inactive store product missing"
+  );
+  logPass("inactive-store seller visibility metadata");
 
   logStep("checking seller review locks");
   const submittedEditLock = await sellerClient.request(

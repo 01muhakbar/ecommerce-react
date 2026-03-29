@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Globe, ImageIcon, MapPin, Save, ShieldCheck, Store } from "lucide-react";
 import {
   getSellerStoreProfile,
+  uploadSellerStoreProfileImage,
   updateSellerStoreProfile,
 } from "../../api/sellerStoreProfile.ts";
 import {
@@ -21,6 +22,7 @@ import {
 } from "../../components/seller/SellerWorkspaceFoundation.jsx";
 import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
 import { useSellerWorkspaceRoute } from "../../utils/sellerWorkspaceRoute.js";
+import { resolveAssetUrl } from "../../lib/assetUrl.js";
 
 const emptyToNull = (value) => {
   const normalized = String(value || "").trim();
@@ -115,6 +117,7 @@ function InputField({ label, hint, multiline = false, disabled = false, ...props
 
 export default function SellerStoreProfilePage() {
   const queryClient = useQueryClient();
+  const logoInputRef = useRef(null);
   const {
     sellerContext,
     workspaceStoreId: storeId,
@@ -126,6 +129,7 @@ export default function SellerStoreProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [status, setStatus] = useState(null);
   const [form, setForm] = useState(createFormState(null));
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
   const profileQuery = useQuery({
     queryKey: ["seller", "store-profile", storeId],
@@ -293,6 +297,7 @@ export default function SellerStoreProfilePage() {
     ? `/store/${encodeURIComponent(profile.slug)}`
     : null;
   const storefrontLocationLabel = buildLocationLabel(profile);
+  const logoPreviewUrl = resolveAssetUrl(form.logoUrl || "");
 
   if (!canView) {
     return (
@@ -456,6 +461,15 @@ export default function SellerStoreProfilePage() {
             hint="These fields stay store-scoped and follow the current profile contract."
             Icon={ImageIcon}
           >
+            {profile.logoUrl ? (
+              <div className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <img
+                  src={resolveAssetUrl(profile.logoUrl)}
+                  alt={profile.name || "Store logo"}
+                  className="mx-auto h-24 w-24 rounded-full object-cover"
+                />
+              </div>
+            ) : null}
             <div className="grid gap-3">
               <SellerWorkspaceDetailItem label="Logo URL" value={profile.logoUrl} />
               <SellerWorkspaceDetailItem label="Banner URL" value={profile.bannerUrl} />
@@ -721,6 +735,84 @@ export default function SellerStoreProfilePage() {
           </SellerWorkspaceNotice>
 
           <form id="seller-store-profile-form" onSubmit={handleSubmit} className="space-y-4">
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/png,image/jpeg"
+              className="hidden"
+              onChange={async (event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                setStatus(null);
+                setIsUploadingLogo(true);
+                try {
+                  const url = await uploadSellerStoreProfileImage(file);
+                  setForm((current) => ({ ...current, logoUrl: url }));
+                  setStatus({
+                    type: "success",
+                    message: "Store logo uploaded. Save changes to persist it to the store profile.",
+                  });
+                } catch (error) {
+                  setStatus({
+                    type: "error",
+                    message:
+                      error?.response?.data?.message ||
+                      error?.message ||
+                      "Failed to upload seller store logo.",
+                  });
+                } finally {
+                  setIsUploadingLogo(false);
+                  event.target.value = "";
+                }
+              }}
+            />
+            <section className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-900">Profile Image</h4>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    This store logo feeds the seller header avatar and the public store identity lane.
+                  </p>
+                </div>
+                <SellerWorkspaceBadge
+                  label={logoPreviewUrl ? "Logo ready" : "Fallback initials"}
+                  tone={logoPreviewUrl ? "emerald" : "stone"}
+                />
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-4">
+                <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white text-lg font-semibold text-slate-400">
+                  {logoPreviewUrl ? (
+                    <img src={logoPreviewUrl} alt={form.name || profile.name || "Store logo"} className="h-full w-full object-cover" />
+                  ) : (
+                    "ST"
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => logoInputRef.current?.click()}
+                    disabled={!isEditing || mutation.isPending || isUploadingLogo || !editableFieldSet.has("logoUrl")}
+                    className={sellerSecondaryButtonClass}
+                  >
+                    {isUploadingLogo ? "Uploading..." : logoPreviewUrl ? "Replace logo" : "Upload logo"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForm((current) => ({ ...current, logoUrl: "" }));
+                      setStatus({
+                        type: "success",
+                        message: "Store logo removed from the draft. Save changes to persist the fallback.",
+                      });
+                    }}
+                    disabled={!isEditing || mutation.isPending || isUploadingLogo || !form.logoUrl || !editableFieldSet.has("logoUrl")}
+                    className={sellerSecondaryButtonClass}
+                  >
+                    Remove logo
+                  </button>
+                </div>
+              </div>
+            </section>
             {formSections.map((section) => (
               <section
                 key={section.title}

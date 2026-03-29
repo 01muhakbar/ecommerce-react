@@ -602,10 +602,11 @@ const getDefaultCustomization = () => ({
   checkout: {
     personalDetails: {
       sectionTitle: "Personal Details",
+      sectionHint: "Enter your contact details.",
       firstNameLabel: "First Name",
       lastNameLabel: "Last Name",
       emailLabel: "Email Address",
-      phoneLabel: "Phone",
+      phoneLabel: "Phone Number",
       firstNamePlaceholder: "First Name",
       lastNamePlaceholder: "Last Name",
       emailPlaceholder: "Email Address",
@@ -613,41 +614,61 @@ const getDefaultCustomization = () => ({
     },
     shippingDetails: {
       sectionTitle: "Shipping Details",
-      streetAddressLabel: "Street Address",
-      cityLabel: "City",
-      countryLabel: "Country",
-      zipLabel: "Zip / Postal",
-      streetAddressPlaceholder: "Street Address",
-      cityPlaceholder: "City",
-      countryPlaceholder: "Country",
-      zipPlaceholder: "Zip Code",
-      shippingCostLabel: "Shipping Cost",
-      shippingOneNameLabel: "Shipping One Name",
-      shippingOneNameDefault: "FedEx",
-      shippingOneDescriptionLabel: "Shipping One Description",
-      shippingOneDescriptionDefault: "Delivery: Today Cost :",
-      shippingOneCostLabel: "Shipping One Cost",
-      shippingOneCostDefault: "60",
-      shippingTwoNameLabel: "Shipping Two Name",
-      shippingTwoNameDefault: "UPS",
-      shippingTwoDescriptionLabel: "Shipping Two Description",
-      shippingTwoDescriptionDefault: "Delivery: 7 Days Cost :",
-      shippingTwoCostLabel: "Shipping Two Cost",
-      shippingTwoCostDefault: "20",
+      sectionHint: "Confirm the delivery destination.",
+      provinceLabel: "Province",
+      cityLabel: "City/Regency",
+      districtLabel: "Subdistrict",
+      postalCodeLabel: "Postal Code",
+      streetNameLabel: "Street Name",
+      houseNumberLabel: "House Number",
+      buildingLabel: "Building",
+      otherDetailsLabel: "Other Details",
+      provincePlaceholder: "Select Province",
+      cityPlaceholder: "Select City/Regency",
+      districtPlaceholder: "Select Subdistrict",
+      postalCodePlaceholder: "Postal Code",
+      streetNamePlaceholder: "Street Name",
+      houseNumberPlaceholder: "House Number",
+      buildingPlaceholder: "Building",
+      otherDetailsPlaceholder: "Block / Unit / Reference",
+      defaultShippingToggleLabel: "Use Default Shipping Address",
+      defaultShippingToggleEnabledLabel: "Yes",
+      defaultShippingToggleDisabledLabel: "No",
+      defaultShippingLoadingLabel: "Loading your default shipping address...",
       paymentMethodLabel: "Payment Method",
-      paymentMethodPlaceholder: "Payment Method",
+      paymentMethodPlaceholder: "Select a preferred payment option.",
     },
     buttons: {
-      continueButtonLabel: "Continue Shipping",
-      confirmButtonLabel: "Confirm Order",
+      continueButtonLabel: "Back to Cart",
+      confirmButtonLabel: "Place an Order",
+      processingButtonLabel: "Processing...",
     },
     cartItemSection: {
-      sectionTitle: "Cart Item Section",
+      sectionTitle: "Checkout Summary",
       orderSummaryLabel: "Order Summary",
+      sectionDescription:
+        "Review items, coupon impact, and the final amount before you submit.",
+      estimatedTotalLabel: "Estimated Total",
+      itemCountSuffix: "Items",
       applyButtonLabel: "Apply",
-      subTotalLabel: "Sub Total",
+      applyingButtonLabel: "Applying...",
+      couponCodeLabel: "Coupon Code",
+      couponCodePlaceholder: "Coupon Code",
+      couponHelperText:
+        "Use this single field for either a platform coupon or the linked store coupon.",
+      itemPriceLabel: "Item Price",
+      subTotalLabel: "Subtotal",
+      shippingLabel: "Shipping",
       discountLabel: "Discount",
-      totalCostLabel: "Total Cost",
+      taxLabel: "Tax",
+      totalCostLabel: "TOTAL COST",
+      postSubmitNotice:
+        "After placing the order, you will be redirected to the payment page with a trackable order reference.",
+      confirmationHelperText:
+        "By placing this order, you confirm the contact and shipping details above.",
+      summaryReadyHint: "Discounts and store settings are reflected live in this summary.",
+      submitNextLabel: "Submit Next",
+      previewFirstLabel: "Preview First",
     },
   },
   dashboardSetting: {
@@ -1098,6 +1119,31 @@ const normalizeCheckout = (source, defaults) => {
   const cartItemSectionSource = isPlainObject(checkoutSource.cartItemSection)
     ? checkoutSource.cartItemSection
     : {};
+  const normalizeCheckoutButtonLabel = (value, fallback) => {
+    const normalized = toText(value, fallback);
+    const lowered = normalized.toLowerCase();
+    if (lowered === "continue shipping") return defaults.buttons.continueButtonLabel;
+    if (lowered === "confirm order") return defaults.buttons.confirmButtonLabel;
+    return normalized;
+  };
+  const normalizeCheckoutSectionTitle = (value, fallback) => {
+    const normalized = toText(value, fallback);
+    return normalized.toLowerCase() === "cart item section"
+      ? defaults.cartItemSection.sectionTitle
+      : normalized;
+  };
+  const normalizeCheckoutSubtotalLabel = (value, fallback) => {
+    const normalized = toText(value, fallback);
+    return normalized.toLowerCase() === "sub total"
+      ? defaults.cartItemSection.subTotalLabel
+      : normalized;
+  };
+  const normalizeCheckoutTotalLabel = (value, fallback) => {
+    const normalized = toText(value, fallback);
+    return normalized.toLowerCase() === "total cost"
+      ? defaults.cartItemSection.totalCostLabel
+      : normalized;
+  };
 
   return {
     ...defaults,
@@ -1108,6 +1154,10 @@ const normalizeCheckout = (source, defaults) => {
       sectionTitle: toText(
         personalDetailsSource.sectionTitle,
         defaults.personalDetails.sectionTitle
+      ),
+      sectionHint: toText(
+        personalDetailsSource.sectionHint,
+        defaults.personalDetails.sectionHint
       ),
       firstNameLabel: toText(
         personalDetailsSource.firstNameLabel,
@@ -1149,83 +1199,93 @@ const normalizeCheckout = (source, defaults) => {
         shippingDetailsSource.sectionTitle,
         defaults.shippingDetails.sectionTitle
       ),
-      streetAddressLabel: toText(
-        shippingDetailsSource.streetAddressLabel,
-        defaults.shippingDetails.streetAddressLabel
+      sectionHint: toText(
+        shippingDetailsSource.sectionHint,
+        defaults.shippingDetails.sectionHint
       ),
-      cityLabel: toText(shippingDetailsSource.cityLabel, defaults.shippingDetails.cityLabel),
-      countryLabel: toText(
-        shippingDetailsSource.countryLabel,
-        defaults.shippingDetails.countryLabel
+      provinceLabel: toText(
+        shippingDetailsSource.provinceLabel ?? shippingDetailsSource.countryLabel,
+        defaults.shippingDetails.provinceLabel
       ),
-      zipLabel: toText(shippingDetailsSource.zipLabel, defaults.shippingDetails.zipLabel),
-      streetAddressPlaceholder: toText(
-        shippingDetailsSource.streetAddressPlaceholder,
-        defaults.shippingDetails.streetAddressPlaceholder
+      cityLabel: toText(
+        shippingDetailsSource.cityLabel,
+        defaults.shippingDetails.cityLabel
+      ),
+      districtLabel: toText(
+        shippingDetailsSource.districtLabel,
+        defaults.shippingDetails.districtLabel
+      ),
+      postalCodeLabel: toText(
+        shippingDetailsSource.postalCodeLabel ?? shippingDetailsSource.zipLabel,
+        defaults.shippingDetails.postalCodeLabel
+      ),
+      streetNameLabel: toText(
+        shippingDetailsSource.streetNameLabel ??
+          shippingDetailsSource.streetAddressLabel,
+        defaults.shippingDetails.streetNameLabel
+      ),
+      houseNumberLabel: toText(
+        shippingDetailsSource.houseNumberLabel,
+        defaults.shippingDetails.houseNumberLabel
+      ),
+      buildingLabel: toText(
+        shippingDetailsSource.buildingLabel,
+        defaults.shippingDetails.buildingLabel
+      ),
+      otherDetailsLabel: toText(
+        shippingDetailsSource.otherDetailsLabel,
+        defaults.shippingDetails.otherDetailsLabel
+      ),
+      provincePlaceholder: toText(
+        shippingDetailsSource.provincePlaceholder ??
+          shippingDetailsSource.countryPlaceholder,
+        defaults.shippingDetails.provincePlaceholder
       ),
       cityPlaceholder: toText(
         shippingDetailsSource.cityPlaceholder,
         defaults.shippingDetails.cityPlaceholder
       ),
-      countryPlaceholder: toText(
-        shippingDetailsSource.countryPlaceholder,
-        defaults.shippingDetails.countryPlaceholder
+      districtPlaceholder: toText(
+        shippingDetailsSource.districtPlaceholder,
+        defaults.shippingDetails.districtPlaceholder
       ),
-      zipPlaceholder: toText(
-        shippingDetailsSource.zipPlaceholder,
-        defaults.shippingDetails.zipPlaceholder
+      postalCodePlaceholder: toText(
+        shippingDetailsSource.postalCodePlaceholder ??
+          shippingDetailsSource.zipPlaceholder,
+        defaults.shippingDetails.postalCodePlaceholder
       ),
-      shippingCostLabel: toText(
-        shippingDetailsSource.shippingCostLabel,
-        defaults.shippingDetails.shippingCostLabel
+      streetNamePlaceholder: toText(
+        shippingDetailsSource.streetNamePlaceholder ??
+          shippingDetailsSource.streetAddressPlaceholder,
+        defaults.shippingDetails.streetNamePlaceholder
       ),
-      shippingOneNameLabel: toText(
-        shippingDetailsSource.shippingOneNameLabel,
-        defaults.shippingDetails.shippingOneNameLabel
+      houseNumberPlaceholder: toText(
+        shippingDetailsSource.houseNumberPlaceholder,
+        defaults.shippingDetails.houseNumberPlaceholder
       ),
-      shippingOneNameDefault: toText(
-        shippingDetailsSource.shippingOneNameDefault,
-        defaults.shippingDetails.shippingOneNameDefault
+      buildingPlaceholder: toText(
+        shippingDetailsSource.buildingPlaceholder,
+        defaults.shippingDetails.buildingPlaceholder
       ),
-      shippingOneDescriptionLabel: toText(
-        shippingDetailsSource.shippingOneDescriptionLabel,
-        defaults.shippingDetails.shippingOneDescriptionLabel
+      otherDetailsPlaceholder: toText(
+        shippingDetailsSource.otherDetailsPlaceholder,
+        defaults.shippingDetails.otherDetailsPlaceholder
       ),
-      shippingOneDescriptionDefault: toText(
-        shippingDetailsSource.shippingOneDescriptionDefault,
-        defaults.shippingDetails.shippingOneDescriptionDefault
+      defaultShippingToggleLabel: toText(
+        shippingDetailsSource.defaultShippingToggleLabel,
+        defaults.shippingDetails.defaultShippingToggleLabel
       ),
-      shippingOneCostLabel: toText(
-        shippingDetailsSource.shippingOneCostLabel,
-        defaults.shippingDetails.shippingOneCostLabel
+      defaultShippingToggleEnabledLabel: toText(
+        shippingDetailsSource.defaultShippingToggleEnabledLabel,
+        defaults.shippingDetails.defaultShippingToggleEnabledLabel
       ),
-      shippingOneCostDefault: toText(
-        shippingDetailsSource.shippingOneCostDefault,
-        defaults.shippingDetails.shippingOneCostDefault
+      defaultShippingToggleDisabledLabel: toText(
+        shippingDetailsSource.defaultShippingToggleDisabledLabel,
+        defaults.shippingDetails.defaultShippingToggleDisabledLabel
       ),
-      shippingTwoNameLabel: toText(
-        shippingDetailsSource.shippingTwoNameLabel,
-        defaults.shippingDetails.shippingTwoNameLabel
-      ),
-      shippingTwoNameDefault: toText(
-        shippingDetailsSource.shippingTwoNameDefault,
-        defaults.shippingDetails.shippingTwoNameDefault
-      ),
-      shippingTwoDescriptionLabel: toText(
-        shippingDetailsSource.shippingTwoDescriptionLabel,
-        defaults.shippingDetails.shippingTwoDescriptionLabel
-      ),
-      shippingTwoDescriptionDefault: toText(
-        shippingDetailsSource.shippingTwoDescriptionDefault,
-        defaults.shippingDetails.shippingTwoDescriptionDefault
-      ),
-      shippingTwoCostLabel: toText(
-        shippingDetailsSource.shippingTwoCostLabel,
-        defaults.shippingDetails.shippingTwoCostLabel
-      ),
-      shippingTwoCostDefault: toText(
-        shippingDetailsSource.shippingTwoCostDefault,
-        defaults.shippingDetails.shippingTwoCostDefault
+      defaultShippingLoadingLabel: toText(
+        shippingDetailsSource.defaultShippingLoadingLabel,
+        defaults.shippingDetails.defaultShippingLoadingLabel
       ),
       paymentMethodLabel: toText(
         shippingDetailsSource.paymentMethodLabel,
@@ -1239,19 +1299,23 @@ const normalizeCheckout = (source, defaults) => {
     buttons: {
       ...defaults.buttons,
       ...buttonsSource,
-      continueButtonLabel: toText(
+      continueButtonLabel: normalizeCheckoutButtonLabel(
         buttonsSource.continueButtonLabel,
         defaults.buttons.continueButtonLabel
       ),
-      confirmButtonLabel: toText(
+      confirmButtonLabel: normalizeCheckoutButtonLabel(
         buttonsSource.confirmButtonLabel,
         defaults.buttons.confirmButtonLabel
+      ),
+      processingButtonLabel: toText(
+        buttonsSource.processingButtonLabel,
+        defaults.buttons.processingButtonLabel
       ),
     },
     cartItemSection: {
       ...defaults.cartItemSection,
       ...cartItemSectionSource,
-      sectionTitle: toText(
+      sectionTitle: normalizeCheckoutSectionTitle(
         cartItemSectionSource.sectionTitle,
         defaults.cartItemSection.sectionTitle
       ),
@@ -1259,21 +1323,81 @@ const normalizeCheckout = (source, defaults) => {
         cartItemSectionSource.orderSummaryLabel,
         defaults.cartItemSection.orderSummaryLabel
       ),
+      sectionDescription: toText(
+        cartItemSectionSource.sectionDescription,
+        defaults.cartItemSection.sectionDescription
+      ),
+      estimatedTotalLabel: toText(
+        cartItemSectionSource.estimatedTotalLabel,
+        defaults.cartItemSection.estimatedTotalLabel
+      ),
+      itemCountSuffix: toText(
+        cartItemSectionSource.itemCountSuffix,
+        defaults.cartItemSection.itemCountSuffix
+      ),
       applyButtonLabel: toText(
         cartItemSectionSource.applyButtonLabel,
         defaults.cartItemSection.applyButtonLabel
       ),
-      subTotalLabel: toText(
+      applyingButtonLabel: toText(
+        cartItemSectionSource.applyingButtonLabel,
+        defaults.cartItemSection.applyingButtonLabel
+      ),
+      couponCodeLabel: toText(
+        cartItemSectionSource.couponCodeLabel,
+        defaults.cartItemSection.couponCodeLabel
+      ),
+      couponCodePlaceholder: toText(
+        cartItemSectionSource.couponCodePlaceholder,
+        defaults.cartItemSection.couponCodePlaceholder
+      ),
+      couponHelperText: toText(
+        cartItemSectionSource.couponHelperText,
+        defaults.cartItemSection.couponHelperText
+      ),
+      itemPriceLabel: toText(
+        cartItemSectionSource.itemPriceLabel,
+        defaults.cartItemSection.itemPriceLabel
+      ),
+      subTotalLabel: normalizeCheckoutSubtotalLabel(
         cartItemSectionSource.subTotalLabel,
         defaults.cartItemSection.subTotalLabel
+      ),
+      shippingLabel: toText(
+        cartItemSectionSource.shippingLabel,
+        defaults.cartItemSection.shippingLabel
       ),
       discountLabel: toText(
         cartItemSectionSource.discountLabel,
         defaults.cartItemSection.discountLabel
       ),
-      totalCostLabel: toText(
+      taxLabel: toText(
+        cartItemSectionSource.taxLabel,
+        defaults.cartItemSection.taxLabel
+      ),
+      totalCostLabel: normalizeCheckoutTotalLabel(
         cartItemSectionSource.totalCostLabel,
         defaults.cartItemSection.totalCostLabel
+      ),
+      postSubmitNotice: toText(
+        cartItemSectionSource.postSubmitNotice,
+        defaults.cartItemSection.postSubmitNotice
+      ),
+      confirmationHelperText: toText(
+        cartItemSectionSource.confirmationHelperText,
+        defaults.cartItemSection.confirmationHelperText
+      ),
+      summaryReadyHint: toText(
+        cartItemSectionSource.summaryReadyHint,
+        defaults.cartItemSection.summaryReadyHint
+      ),
+      submitNextLabel: toText(
+        cartItemSectionSource.submitNextLabel,
+        defaults.cartItemSection.submitNextLabel
+      ),
+      previewFirstLabel: toText(
+        cartItemSectionSource.previewFirstLabel,
+        defaults.cartItemSection.previewFirstLabel
       ),
     },
   };
@@ -3203,6 +3327,7 @@ export default function StoreCustomizationPage() {
           ...currentCustomization.checkout?.personalDetails,
           ...checkoutState?.personalDetails,
           sectionTitle: toText(checkoutState?.personalDetails?.sectionTitle),
+          sectionHint: toText(checkoutState?.personalDetails?.sectionHint),
           firstNameLabel: toText(checkoutState?.personalDetails?.firstNameLabel),
           lastNameLabel: toText(checkoutState?.personalDetails?.lastNameLabel),
           emailLabel: toText(checkoutState?.personalDetails?.emailLabel),
@@ -3218,52 +3343,34 @@ export default function StoreCustomizationPage() {
           ...currentCustomization.checkout?.shippingDetails,
           ...checkoutState?.shippingDetails,
           sectionTitle: toText(checkoutState?.shippingDetails?.sectionTitle),
-          streetAddressLabel: toText(checkoutState?.shippingDetails?.streetAddressLabel),
+          sectionHint: toText(checkoutState?.shippingDetails?.sectionHint),
+          provinceLabel: toText(checkoutState?.shippingDetails?.provinceLabel),
           cityLabel: toText(checkoutState?.shippingDetails?.cityLabel),
-          countryLabel: toText(checkoutState?.shippingDetails?.countryLabel),
-          zipLabel: toText(checkoutState?.shippingDetails?.zipLabel),
-          streetAddressPlaceholder: toText(
-            checkoutState?.shippingDetails?.streetAddressPlaceholder
-          ),
+          districtLabel: toText(checkoutState?.shippingDetails?.districtLabel),
+          postalCodeLabel: toText(checkoutState?.shippingDetails?.postalCodeLabel),
+          streetNameLabel: toText(checkoutState?.shippingDetails?.streetNameLabel),
+          houseNumberLabel: toText(checkoutState?.shippingDetails?.houseNumberLabel),
+          buildingLabel: toText(checkoutState?.shippingDetails?.buildingLabel),
+          otherDetailsLabel: toText(checkoutState?.shippingDetails?.otherDetailsLabel),
+          provincePlaceholder: toText(checkoutState?.shippingDetails?.provincePlaceholder),
           cityPlaceholder: toText(checkoutState?.shippingDetails?.cityPlaceholder),
-          countryPlaceholder: toText(checkoutState?.shippingDetails?.countryPlaceholder),
-          zipPlaceholder: toText(checkoutState?.shippingDetails?.zipPlaceholder),
-          shippingCostLabel: toText(checkoutState?.shippingDetails?.shippingCostLabel),
-          shippingOneNameLabel: toText(
-            checkoutState?.shippingDetails?.shippingOneNameLabel
+          districtPlaceholder: toText(checkoutState?.shippingDetails?.districtPlaceholder),
+          postalCodePlaceholder: toText(checkoutState?.shippingDetails?.postalCodePlaceholder),
+          streetNamePlaceholder: toText(checkoutState?.shippingDetails?.streetNamePlaceholder),
+          houseNumberPlaceholder: toText(checkoutState?.shippingDetails?.houseNumberPlaceholder),
+          buildingPlaceholder: toText(checkoutState?.shippingDetails?.buildingPlaceholder),
+          otherDetailsPlaceholder: toText(checkoutState?.shippingDetails?.otherDetailsPlaceholder),
+          defaultShippingToggleLabel: toText(
+            checkoutState?.shippingDetails?.defaultShippingToggleLabel
           ),
-          shippingOneNameDefault: toText(
-            checkoutState?.shippingDetails?.shippingOneNameDefault
+          defaultShippingToggleEnabledLabel: toText(
+            checkoutState?.shippingDetails?.defaultShippingToggleEnabledLabel
           ),
-          shippingOneDescriptionLabel: toText(
-            checkoutState?.shippingDetails?.shippingOneDescriptionLabel
+          defaultShippingToggleDisabledLabel: toText(
+            checkoutState?.shippingDetails?.defaultShippingToggleDisabledLabel
           ),
-          shippingOneDescriptionDefault: toText(
-            checkoutState?.shippingDetails?.shippingOneDescriptionDefault
-          ),
-          shippingOneCostLabel: toText(
-            checkoutState?.shippingDetails?.shippingOneCostLabel
-          ),
-          shippingOneCostDefault: toText(
-            checkoutState?.shippingDetails?.shippingOneCostDefault
-          ),
-          shippingTwoNameLabel: toText(
-            checkoutState?.shippingDetails?.shippingTwoNameLabel
-          ),
-          shippingTwoNameDefault: toText(
-            checkoutState?.shippingDetails?.shippingTwoNameDefault
-          ),
-          shippingTwoDescriptionLabel: toText(
-            checkoutState?.shippingDetails?.shippingTwoDescriptionLabel
-          ),
-          shippingTwoDescriptionDefault: toText(
-            checkoutState?.shippingDetails?.shippingTwoDescriptionDefault
-          ),
-          shippingTwoCostLabel: toText(
-            checkoutState?.shippingDetails?.shippingTwoCostLabel
-          ),
-          shippingTwoCostDefault: toText(
-            checkoutState?.shippingDetails?.shippingTwoCostDefault
+          defaultShippingLoadingLabel: toText(
+            checkoutState?.shippingDetails?.defaultShippingLoadingLabel
           ),
           paymentMethodLabel: toText(checkoutState?.shippingDetails?.paymentMethodLabel),
           paymentMethodPlaceholder: toText(
@@ -3275,16 +3382,34 @@ export default function StoreCustomizationPage() {
           ...checkoutState?.buttons,
           continueButtonLabel: toText(checkoutState?.buttons?.continueButtonLabel),
           confirmButtonLabel: toText(checkoutState?.buttons?.confirmButtonLabel),
+          processingButtonLabel: toText(checkoutState?.buttons?.processingButtonLabel),
         },
         cartItemSection: {
           ...currentCustomization.checkout?.cartItemSection,
           ...checkoutState?.cartItemSection,
           sectionTitle: toText(checkoutState?.cartItemSection?.sectionTitle),
           orderSummaryLabel: toText(checkoutState?.cartItemSection?.orderSummaryLabel),
+          sectionDescription: toText(checkoutState?.cartItemSection?.sectionDescription),
+          estimatedTotalLabel: toText(checkoutState?.cartItemSection?.estimatedTotalLabel),
+          itemCountSuffix: toText(checkoutState?.cartItemSection?.itemCountSuffix),
           applyButtonLabel: toText(checkoutState?.cartItemSection?.applyButtonLabel),
+          applyingButtonLabel: toText(checkoutState?.cartItemSection?.applyingButtonLabel),
+          couponCodeLabel: toText(checkoutState?.cartItemSection?.couponCodeLabel),
+          couponCodePlaceholder: toText(checkoutState?.cartItemSection?.couponCodePlaceholder),
+          couponHelperText: toText(checkoutState?.cartItemSection?.couponHelperText),
+          itemPriceLabel: toText(checkoutState?.cartItemSection?.itemPriceLabel),
           subTotalLabel: toText(checkoutState?.cartItemSection?.subTotalLabel),
+          shippingLabel: toText(checkoutState?.cartItemSection?.shippingLabel),
           discountLabel: toText(checkoutState?.cartItemSection?.discountLabel),
+          taxLabel: toText(checkoutState?.cartItemSection?.taxLabel),
           totalCostLabel: toText(checkoutState?.cartItemSection?.totalCostLabel),
+          postSubmitNotice: toText(checkoutState?.cartItemSection?.postSubmitNotice),
+          confirmationHelperText: toText(
+            checkoutState?.cartItemSection?.confirmationHelperText
+          ),
+          summaryReadyHint: toText(checkoutState?.cartItemSection?.summaryReadyHint),
+          submitNextLabel: toText(checkoutState?.cartItemSection?.submitNextLabel),
+          previewFirstLabel: toText(checkoutState?.cartItemSection?.previewFirstLabel),
         },
       },
       dashboardSetting: {
@@ -4875,6 +5000,10 @@ export default function StoreCustomizationPage() {
         checkoutState?.personalDetails?.sectionTitle,
         checkoutDefaults.personalDetails.sectionTitle
       ),
+      sectionHint: toText(
+        checkoutState?.personalDetails?.sectionHint,
+        checkoutDefaults.personalDetails.sectionHint
+      ),
       firstNameLabel: toText(
         checkoutState?.personalDetails?.firstNameLabel,
         checkoutDefaults.personalDetails.firstNameLabel
@@ -4915,89 +5044,95 @@ export default function StoreCustomizationPage() {
         checkoutState?.shippingDetails?.sectionTitle,
         checkoutDefaults.shippingDetails.sectionTitle
       ),
-      streetAddressLabel: toText(
-        checkoutState?.shippingDetails?.streetAddressLabel,
-        checkoutDefaults.shippingDetails.streetAddressLabel
+      sectionHint: toText(
+        checkoutState?.shippingDetails?.sectionHint,
+        checkoutDefaults.shippingDetails.sectionHint
+      ),
+      provinceLabel: toText(
+        checkoutState?.shippingDetails?.provinceLabel ??
+          checkoutState?.shippingDetails?.countryLabel,
+        checkoutDefaults.shippingDetails.provinceLabel
       ),
       cityLabel: toText(
         checkoutState?.shippingDetails?.cityLabel,
         checkoutDefaults.shippingDetails.cityLabel
       ),
-      countryLabel: toText(
-        checkoutState?.shippingDetails?.countryLabel,
-        checkoutDefaults.shippingDetails.countryLabel
+      districtLabel: toText(
+        checkoutState?.shippingDetails?.districtLabel,
+        checkoutDefaults.shippingDetails.districtLabel
       ),
-      zipLabel: toText(
-        checkoutState?.shippingDetails?.zipLabel,
-        checkoutDefaults.shippingDetails.zipLabel
+      postalCodeLabel: toText(
+        checkoutState?.shippingDetails?.postalCodeLabel ??
+          checkoutState?.shippingDetails?.zipLabel,
+        checkoutDefaults.shippingDetails.postalCodeLabel
       ),
-      streetAddressPlaceholder: toText(
-        checkoutState?.shippingDetails?.streetAddressPlaceholder,
-        checkoutDefaults.shippingDetails.streetAddressPlaceholder
+      streetNameLabel: toText(
+        checkoutState?.shippingDetails?.streetNameLabel ??
+          checkoutState?.shippingDetails?.streetAddressLabel,
+        checkoutDefaults.shippingDetails.streetNameLabel
+      ),
+      houseNumberLabel: toText(
+        checkoutState?.shippingDetails?.houseNumberLabel,
+        checkoutDefaults.shippingDetails.houseNumberLabel
+      ),
+      buildingLabel: toText(
+        checkoutState?.shippingDetails?.buildingLabel,
+        checkoutDefaults.shippingDetails.buildingLabel
+      ),
+      otherDetailsLabel: toText(
+        checkoutState?.shippingDetails?.otherDetailsLabel,
+        checkoutDefaults.shippingDetails.otherDetailsLabel
+      ),
+      provincePlaceholder: toText(
+        checkoutState?.shippingDetails?.provincePlaceholder ??
+          checkoutState?.shippingDetails?.countryPlaceholder,
+        checkoutDefaults.shippingDetails.provincePlaceholder
       ),
       cityPlaceholder: toText(
         checkoutState?.shippingDetails?.cityPlaceholder,
         checkoutDefaults.shippingDetails.cityPlaceholder
       ),
-      countryPlaceholder: toText(
-        checkoutState?.shippingDetails?.countryPlaceholder,
-        checkoutDefaults.shippingDetails.countryPlaceholder
+      districtPlaceholder: toText(
+        checkoutState?.shippingDetails?.districtPlaceholder,
+        checkoutDefaults.shippingDetails.districtPlaceholder
       ),
-      zipPlaceholder: toText(
-        checkoutState?.shippingDetails?.zipPlaceholder,
-        checkoutDefaults.shippingDetails.zipPlaceholder
+      postalCodePlaceholder: toText(
+        checkoutState?.shippingDetails?.postalCodePlaceholder ??
+          checkoutState?.shippingDetails?.zipPlaceholder,
+        checkoutDefaults.shippingDetails.postalCodePlaceholder
       ),
-      shippingCostLabel: toText(
-        checkoutState?.shippingDetails?.shippingCostLabel,
-        checkoutDefaults.shippingDetails.shippingCostLabel
+      streetNamePlaceholder: toText(
+        checkoutState?.shippingDetails?.streetNamePlaceholder ??
+          checkoutState?.shippingDetails?.streetAddressPlaceholder,
+        checkoutDefaults.shippingDetails.streetNamePlaceholder
       ),
-      shippingOneNameLabel: toText(
-        checkoutState?.shippingDetails?.shippingOneNameLabel,
-        checkoutDefaults.shippingDetails.shippingOneNameLabel
+      houseNumberPlaceholder: toText(
+        checkoutState?.shippingDetails?.houseNumberPlaceholder,
+        checkoutDefaults.shippingDetails.houseNumberPlaceholder
       ),
-      shippingOneNameDefault: toText(
-        checkoutState?.shippingDetails?.shippingOneNameDefault,
-        checkoutDefaults.shippingDetails.shippingOneNameDefault
+      buildingPlaceholder: toText(
+        checkoutState?.shippingDetails?.buildingPlaceholder,
+        checkoutDefaults.shippingDetails.buildingPlaceholder
       ),
-      shippingOneDescriptionLabel: toText(
-        checkoutState?.shippingDetails?.shippingOneDescriptionLabel,
-        checkoutDefaults.shippingDetails.shippingOneDescriptionLabel
+      otherDetailsPlaceholder: toText(
+        checkoutState?.shippingDetails?.otherDetailsPlaceholder,
+        checkoutDefaults.shippingDetails.otherDetailsPlaceholder
       ),
-      shippingOneDescriptionDefault: toText(
-        checkoutState?.shippingDetails?.shippingOneDescriptionDefault,
-        checkoutDefaults.shippingDetails.shippingOneDescriptionDefault
+      defaultShippingToggleLabel: toText(
+        checkoutState?.shippingDetails?.defaultShippingToggleLabel,
+        checkoutDefaults.shippingDetails.defaultShippingToggleLabel
       ),
-      shippingOneCostLabel: toText(
-        checkoutState?.shippingDetails?.shippingOneCostLabel,
-        checkoutDefaults.shippingDetails.shippingOneCostLabel
+      defaultShippingToggleEnabledLabel: toText(
+        checkoutState?.shippingDetails?.defaultShippingToggleEnabledLabel,
+        checkoutDefaults.shippingDetails.defaultShippingToggleEnabledLabel
       ),
-      shippingOneCostDefault: toText(
-        checkoutState?.shippingDetails?.shippingOneCostDefault,
-        checkoutDefaults.shippingDetails.shippingOneCostDefault
+      defaultShippingToggleDisabledLabel: toText(
+        checkoutState?.shippingDetails?.defaultShippingToggleDisabledLabel,
+        checkoutDefaults.shippingDetails.defaultShippingToggleDisabledLabel
       ),
-      shippingTwoNameLabel: toText(
-        checkoutState?.shippingDetails?.shippingTwoNameLabel,
-        checkoutDefaults.shippingDetails.shippingTwoNameLabel
-      ),
-      shippingTwoNameDefault: toText(
-        checkoutState?.shippingDetails?.shippingTwoNameDefault,
-        checkoutDefaults.shippingDetails.shippingTwoNameDefault
-      ),
-      shippingTwoDescriptionLabel: toText(
-        checkoutState?.shippingDetails?.shippingTwoDescriptionLabel,
-        checkoutDefaults.shippingDetails.shippingTwoDescriptionLabel
-      ),
-      shippingTwoDescriptionDefault: toText(
-        checkoutState?.shippingDetails?.shippingTwoDescriptionDefault,
-        checkoutDefaults.shippingDetails.shippingTwoDescriptionDefault
-      ),
-      shippingTwoCostLabel: toText(
-        checkoutState?.shippingDetails?.shippingTwoCostLabel,
-        checkoutDefaults.shippingDetails.shippingTwoCostLabel
-      ),
-      shippingTwoCostDefault: toText(
-        checkoutState?.shippingDetails?.shippingTwoCostDefault,
-        checkoutDefaults.shippingDetails.shippingTwoCostDefault
+      defaultShippingLoadingLabel: toText(
+        checkoutState?.shippingDetails?.defaultShippingLoadingLabel,
+        checkoutDefaults.shippingDetails.defaultShippingLoadingLabel
       ),
       paymentMethodLabel: toText(
         checkoutState?.shippingDetails?.paymentMethodLabel,
@@ -5019,6 +5154,10 @@ export default function StoreCustomizationPage() {
         checkoutState?.buttons?.confirmButtonLabel,
         checkoutDefaults.buttons.confirmButtonLabel
       ),
+      processingButtonLabel: toText(
+        checkoutState?.buttons?.processingButtonLabel,
+        checkoutDefaults.buttons.processingButtonLabel
+      ),
     },
     cartItemSection: {
       ...checkoutDefaults.cartItemSection,
@@ -5031,21 +5170,81 @@ export default function StoreCustomizationPage() {
         checkoutState?.cartItemSection?.orderSummaryLabel,
         checkoutDefaults.cartItemSection.orderSummaryLabel
       ),
+      sectionDescription: toText(
+        checkoutState?.cartItemSection?.sectionDescription,
+        checkoutDefaults.cartItemSection.sectionDescription
+      ),
+      estimatedTotalLabel: toText(
+        checkoutState?.cartItemSection?.estimatedTotalLabel,
+        checkoutDefaults.cartItemSection.estimatedTotalLabel
+      ),
+      itemCountSuffix: toText(
+        checkoutState?.cartItemSection?.itemCountSuffix,
+        checkoutDefaults.cartItemSection.itemCountSuffix
+      ),
       applyButtonLabel: toText(
         checkoutState?.cartItemSection?.applyButtonLabel,
         checkoutDefaults.cartItemSection.applyButtonLabel
+      ),
+      applyingButtonLabel: toText(
+        checkoutState?.cartItemSection?.applyingButtonLabel,
+        checkoutDefaults.cartItemSection.applyingButtonLabel
+      ),
+      couponCodeLabel: toText(
+        checkoutState?.cartItemSection?.couponCodeLabel,
+        checkoutDefaults.cartItemSection.couponCodeLabel
+      ),
+      couponCodePlaceholder: toText(
+        checkoutState?.cartItemSection?.couponCodePlaceholder,
+        checkoutDefaults.cartItemSection.couponCodePlaceholder
+      ),
+      couponHelperText: toText(
+        checkoutState?.cartItemSection?.couponHelperText,
+        checkoutDefaults.cartItemSection.couponHelperText
+      ),
+      itemPriceLabel: toText(
+        checkoutState?.cartItemSection?.itemPriceLabel,
+        checkoutDefaults.cartItemSection.itemPriceLabel
       ),
       subTotalLabel: toText(
         checkoutState?.cartItemSection?.subTotalLabel,
         checkoutDefaults.cartItemSection.subTotalLabel
       ),
+      shippingLabel: toText(
+        checkoutState?.cartItemSection?.shippingLabel,
+        checkoutDefaults.cartItemSection.shippingLabel
+      ),
       discountLabel: toText(
         checkoutState?.cartItemSection?.discountLabel,
         checkoutDefaults.cartItemSection.discountLabel
       ),
+      taxLabel: toText(
+        checkoutState?.cartItemSection?.taxLabel,
+        checkoutDefaults.cartItemSection.taxLabel
+      ),
       totalCostLabel: toText(
         checkoutState?.cartItemSection?.totalCostLabel,
         checkoutDefaults.cartItemSection.totalCostLabel
+      ),
+      postSubmitNotice: toText(
+        checkoutState?.cartItemSection?.postSubmitNotice,
+        checkoutDefaults.cartItemSection.postSubmitNotice
+      ),
+      confirmationHelperText: toText(
+        checkoutState?.cartItemSection?.confirmationHelperText,
+        checkoutDefaults.cartItemSection.confirmationHelperText
+      ),
+      summaryReadyHint: toText(
+        checkoutState?.cartItemSection?.summaryReadyHint,
+        checkoutDefaults.cartItemSection.summaryReadyHint
+      ),
+      submitNextLabel: toText(
+        checkoutState?.cartItemSection?.submitNextLabel,
+        checkoutDefaults.cartItemSection.submitNextLabel
+      ),
+      previewFirstLabel: toText(
+        checkoutState?.cartItemSection?.previewFirstLabel,
+        checkoutDefaults.cartItemSection.previewFirstLabel
       ),
     },
   };
@@ -6640,6 +6839,23 @@ export default function StoreCustomizationPage() {
                   className={`${inputBase} mt-2`}
                 />
               </label>
+              <label className="block md:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Section Helper Text
+                </span>
+                <input
+                  type="text"
+                  value={checkout.personalDetails.sectionHint}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "personalDetails",
+                      "sectionHint",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   First Name Label
@@ -6805,18 +7021,34 @@ export default function StoreCustomizationPage() {
                   className={`${inputBase} mt-2`}
                 />
               </label>
-
-              <label className="block">
+              <label className="block md:col-span-2">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Street Address Label
+                  Section Helper Text
                 </span>
                 <input
                   type="text"
-                  value={checkout.shippingDetails.streetAddressLabel}
+                  value={checkout.shippingDetails.sectionHint}
                   onChange={(event) =>
                     onChangeCheckoutField(
                       "shippingDetails",
-                      "streetAddressLabel",
+                      "sectionHint",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block md:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Default Shipping Toggle Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.shippingDetails.defaultShippingToggleLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "shippingDetails",
+                      "defaultShippingToggleLabel",
                       event.target.value
                     )
                   }
@@ -6825,15 +7057,15 @@ export default function StoreCustomizationPage() {
               </label>
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Street Address Placeholder
+                  Toggle Enabled Label
                 </span>
                 <input
                   type="text"
-                  value={checkout.shippingDetails.streetAddressPlaceholder}
+                  value={checkout.shippingDetails.defaultShippingToggleEnabledLabel}
                   onChange={(event) =>
                     onChangeCheckoutField(
                       "shippingDetails",
-                      "streetAddressPlaceholder",
+                      "defaultShippingToggleEnabledLabel",
                       event.target.value
                     )
                   }
@@ -6842,7 +7074,75 @@ export default function StoreCustomizationPage() {
               </label>
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  City Label
+                  Toggle Disabled Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.shippingDetails.defaultShippingToggleDisabledLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "shippingDetails",
+                      "defaultShippingToggleDisabledLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block md:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Default Shipping Loading Text
+                </span>
+                <input
+                  type="text"
+                  value={checkout.shippingDetails.defaultShippingLoadingLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "shippingDetails",
+                      "defaultShippingLoadingLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Province Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.shippingDetails.provinceLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "shippingDetails",
+                      "provinceLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Province Placeholder
+                </span>
+                <input
+                  type="text"
+                  value={checkout.shippingDetails.provincePlaceholder}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "shippingDetails",
+                      "provincePlaceholder",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  City/Regency Label
                 </span>
                 <input
                   type="text"
@@ -6855,7 +7155,7 @@ export default function StoreCustomizationPage() {
               </label>
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  City Placeholder
+                  City/Regency Placeholder
                 </span>
                 <input
                   type="text"
@@ -6872,15 +7172,15 @@ export default function StoreCustomizationPage() {
               </label>
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Country Label
+                  Subdistrict Label
                 </span>
                 <input
                   type="text"
-                  value={checkout.shippingDetails.countryLabel}
+                  value={checkout.shippingDetails.districtLabel}
                   onChange={(event) =>
                     onChangeCheckoutField(
                       "shippingDetails",
-                      "countryLabel",
+                      "districtLabel",
                       event.target.value
                     )
                   }
@@ -6889,15 +7189,15 @@ export default function StoreCustomizationPage() {
               </label>
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Country Placeholder
+                  Subdistrict Placeholder
                 </span>
                 <input
                   type="text"
-                  value={checkout.shippingDetails.countryPlaceholder}
+                  value={checkout.shippingDetails.districtPlaceholder}
                   onChange={(event) =>
                     onChangeCheckoutField(
                       "shippingDetails",
-                      "countryPlaceholder",
+                      "districtPlaceholder",
                       event.target.value
                     )
                   }
@@ -6906,270 +7206,174 @@ export default function StoreCustomizationPage() {
               </label>
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Zip / Postal Label
+                  Postal Code Label
                 </span>
                 <input
                   type="text"
-                  value={checkout.shippingDetails.zipLabel}
+                  value={checkout.shippingDetails.postalCodeLabel}
                   onChange={(event) =>
-                    onChangeCheckoutField("shippingDetails", "zipLabel", event.target.value)
+                    onChangeCheckoutField(
+                      "shippingDetails",
+                      "postalCodeLabel",
+                      event.target.value
+                    )
                   }
                   className={`${inputBase} mt-2`}
                 />
               </label>
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Zip Placeholder
+                  Postal Code Placeholder
                 </span>
                 <input
                   type="text"
-                  value={checkout.shippingDetails.zipPlaceholder}
+                  value={checkout.shippingDetails.postalCodePlaceholder}
                   onChange={(event) =>
                     onChangeCheckoutField(
                       "shippingDetails",
-                      "zipPlaceholder",
+                      "postalCodePlaceholder",
                       event.target.value
                     )
                   }
                   className={`${inputBase} mt-2`}
                 />
               </label>
-              <label className="block md:col-span-2">
+              <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Shipping Cost Label
+                  Street Name Label
                 </span>
                 <input
                   type="text"
-                  value={checkout.shippingDetails.shippingCostLabel}
+                  value={checkout.shippingDetails.streetNameLabel}
                   onChange={(event) =>
                     onChangeCheckoutField(
                       "shippingDetails",
-                      "shippingCostLabel",
+                      "streetNameLabel",
                       event.target.value
                     )
                   }
                   className={`${inputBase} mt-2`}
                 />
               </label>
-            </div>
-
-            <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
-              <h3 className="text-sm font-semibold text-slate-900">Shipping One</h3>
-              <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Shipping One Name Label
-                  </span>
-                  <input
-                    type="text"
-                    value={checkout.shippingDetails.shippingOneNameLabel}
-                    onChange={(event) =>
-                      onChangeCheckoutField(
-                        "shippingDetails",
-                        "shippingOneNameLabel",
-                        event.target.value
-                      )
-                    }
-                    className={`${inputBase} mt-2`}
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Shipping One Name Default
-                  </span>
-                  <input
-                    type="text"
-                    value={checkout.shippingDetails.shippingOneNameDefault}
-                    onChange={(event) =>
-                      onChangeCheckoutField(
-                        "shippingDetails",
-                        "shippingOneNameDefault",
-                        event.target.value
-                      )
-                    }
-                    className={`${inputBase} mt-2`}
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Shipping One Description Label
-                  </span>
-                  <input
-                    type="text"
-                    value={checkout.shippingDetails.shippingOneDescriptionLabel}
-                    onChange={(event) =>
-                      onChangeCheckoutField(
-                        "shippingDetails",
-                        "shippingOneDescriptionLabel",
-                        event.target.value
-                      )
-                    }
-                    className={`${inputBase} mt-2`}
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Shipping One Description Default
-                  </span>
-                  <input
-                    type="text"
-                    value={checkout.shippingDetails.shippingOneDescriptionDefault}
-                    onChange={(event) =>
-                      onChangeCheckoutField(
-                        "shippingDetails",
-                        "shippingOneDescriptionDefault",
-                        event.target.value
-                      )
-                    }
-                    className={`${inputBase} mt-2`}
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Shipping One Cost Label
-                  </span>
-                  <input
-                    type="text"
-                    value={checkout.shippingDetails.shippingOneCostLabel}
-                    onChange={(event) =>
-                      onChangeCheckoutField(
-                        "shippingDetails",
-                        "shippingOneCostLabel",
-                        event.target.value
-                      )
-                    }
-                    className={`${inputBase} mt-2`}
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Shipping One Cost Default
-                  </span>
-                  <input
-                    type="text"
-                    value={checkout.shippingDetails.shippingOneCostDefault}
-                    onChange={(event) =>
-                      onChangeCheckoutField(
-                        "shippingDetails",
-                        "shippingOneCostDefault",
-                        event.target.value
-                      )
-                    }
-                    className={`${inputBase} mt-2`}
-                  />
-                </label>
-              </div>
-            </div>
-
-            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
-              <h3 className="text-sm font-semibold text-slate-900">Shipping Two</h3>
-              <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Shipping Two Name Label
-                  </span>
-                  <input
-                    type="text"
-                    value={checkout.shippingDetails.shippingTwoNameLabel}
-                    onChange={(event) =>
-                      onChangeCheckoutField(
-                        "shippingDetails",
-                        "shippingTwoNameLabel",
-                        event.target.value
-                      )
-                    }
-                    className={`${inputBase} mt-2`}
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Shipping Two Name Default
-                  </span>
-                  <input
-                    type="text"
-                    value={checkout.shippingDetails.shippingTwoNameDefault}
-                    onChange={(event) =>
-                      onChangeCheckoutField(
-                        "shippingDetails",
-                        "shippingTwoNameDefault",
-                        event.target.value
-                      )
-                    }
-                    className={`${inputBase} mt-2`}
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Shipping Two Description Label
-                  </span>
-                  <input
-                    type="text"
-                    value={checkout.shippingDetails.shippingTwoDescriptionLabel}
-                    onChange={(event) =>
-                      onChangeCheckoutField(
-                        "shippingDetails",
-                        "shippingTwoDescriptionLabel",
-                        event.target.value
-                      )
-                    }
-                    className={`${inputBase} mt-2`}
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Shipping Two Description Default
-                  </span>
-                  <input
-                    type="text"
-                    value={checkout.shippingDetails.shippingTwoDescriptionDefault}
-                    onChange={(event) =>
-                      onChangeCheckoutField(
-                        "shippingDetails",
-                        "shippingTwoDescriptionDefault",
-                        event.target.value
-                      )
-                    }
-                    className={`${inputBase} mt-2`}
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Shipping Two Cost Label
-                  </span>
-                  <input
-                    type="text"
-                    value={checkout.shippingDetails.shippingTwoCostLabel}
-                    onChange={(event) =>
-                      onChangeCheckoutField(
-                        "shippingDetails",
-                        "shippingTwoCostLabel",
-                        event.target.value
-                      )
-                    }
-                    className={`${inputBase} mt-2`}
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Shipping Two Cost Default
-                  </span>
-                  <input
-                    type="text"
-                    value={checkout.shippingDetails.shippingTwoCostDefault}
-                    onChange={(event) =>
-                      onChangeCheckoutField(
-                        "shippingDetails",
-                        "shippingTwoCostDefault",
-                        event.target.value
-                      )
-                    }
-                    className={`${inputBase} mt-2`}
-                  />
-                </label>
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Street Name Placeholder
+                </span>
+                <input
+                  type="text"
+                  value={checkout.shippingDetails.streetNamePlaceholder}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "shippingDetails",
+                      "streetNamePlaceholder",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  House Number Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.shippingDetails.houseNumberLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "shippingDetails",
+                      "houseNumberLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  House Number Placeholder
+                </span>
+                <input
+                  type="text"
+                  value={checkout.shippingDetails.houseNumberPlaceholder}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "shippingDetails",
+                      "houseNumberPlaceholder",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Building Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.shippingDetails.buildingLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "shippingDetails",
+                      "buildingLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Building Placeholder
+                </span>
+                <input
+                  type="text"
+                  value={checkout.shippingDetails.buildingPlaceholder}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "shippingDetails",
+                      "buildingPlaceholder",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Other Details Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.shippingDetails.otherDetailsLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "shippingDetails",
+                      "otherDetailsLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Other Details Placeholder
+                </span>
+                <input
+                  type="text"
+                  value={checkout.shippingDetails.otherDetailsPlaceholder}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "shippingDetails",
+                      "otherDetailsPlaceholder",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Payment Method Label
@@ -7218,7 +7422,7 @@ export default function StoreCustomizationPage() {
             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Continue Button Label
+                  Back to Cart Button Label
                 </span>
                 <input
                   type="text"
@@ -7235,7 +7439,7 @@ export default function StoreCustomizationPage() {
               </label>
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Confirm Button Label
+                  Place Order Button Label
                 </span>
                 <input
                   type="text"
@@ -7244,6 +7448,23 @@ export default function StoreCustomizationPage() {
                     onChangeCheckoutField(
                       "buttons",
                       "confirmButtonLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block md:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Processing Button Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.buttons.processingButtonLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "buttons",
+                      "processingButtonLabel",
                       event.target.value
                     )
                   }
@@ -7264,7 +7485,7 @@ export default function StoreCustomizationPage() {
             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
               <label className="block md:col-span-2">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Section Title
+                  Summary Badge Title
                 </span>
                 <input
                   type="text"
@@ -7273,6 +7494,23 @@ export default function StoreCustomizationPage() {
                     onChangeCheckoutField(
                       "cartItemSection",
                       "sectionTitle",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block md:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Summary Description
+                </span>
+                <input
+                  type="text"
+                  value={checkout.cartItemSection.sectionDescription}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "cartItemSection",
+                      "sectionDescription",
                       event.target.value
                     )
                   }
@@ -7298,6 +7536,40 @@ export default function StoreCustomizationPage() {
               </label>
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Estimated Total Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.cartItemSection.estimatedTotalLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "cartItemSection",
+                      "estimatedTotalLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Item Count Suffix
+                </span>
+                <input
+                  type="text"
+                  value={checkout.cartItemSection.itemCountSuffix}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "cartItemSection",
+                      "itemCountSuffix",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Apply Button Label
                 </span>
                 <input
@@ -7315,7 +7587,92 @@ export default function StoreCustomizationPage() {
               </label>
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Sub Total Label
+                  Applying Button Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.cartItemSection.applyingButtonLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "cartItemSection",
+                      "applyingButtonLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Coupon Code Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.cartItemSection.couponCodeLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "cartItemSection",
+                      "couponCodeLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Coupon Code Placeholder
+                </span>
+                <input
+                  type="text"
+                  value={checkout.cartItemSection.couponCodePlaceholder}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "cartItemSection",
+                      "couponCodePlaceholder",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block md:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Coupon Helper Text
+                </span>
+                <input
+                  type="text"
+                  value={checkout.cartItemSection.couponHelperText}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "cartItemSection",
+                      "couponHelperText",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Item Price Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.cartItemSection.itemPriceLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "cartItemSection",
+                      "itemPriceLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Subtotal Label
                 </span>
                 <input
                   type="text"
@@ -7324,6 +7681,23 @@ export default function StoreCustomizationPage() {
                     onChangeCheckoutField(
                       "cartItemSection",
                       "subTotalLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Shipping Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.cartItemSection.shippingLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "cartItemSection",
+                      "shippingLabel",
                       event.target.value
                     )
                   }
@@ -7347,6 +7721,23 @@ export default function StoreCustomizationPage() {
                   className={`${inputBase} mt-2`}
                 />
               </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Tax Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.cartItemSection.taxLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "cartItemSection",
+                      "taxLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
               <label className="block md:col-span-2">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Total Cost Label
@@ -7358,6 +7749,91 @@ export default function StoreCustomizationPage() {
                     onChangeCheckoutField(
                       "cartItemSection",
                       "totalCostLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block md:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Summary Ready Helper Text
+                </span>
+                <input
+                  type="text"
+                  value={checkout.cartItemSection.summaryReadyHint}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "cartItemSection",
+                      "summaryReadyHint",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Summary Ready Pill Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.cartItemSection.submitNextLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "cartItemSection",
+                      "submitNextLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Summary Pending Pill Label
+                </span>
+                <input
+                  type="text"
+                  value={checkout.cartItemSection.previewFirstLabel}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "cartItemSection",
+                      "previewFirstLabel",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block md:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Post Submit Notice
+                </span>
+                <input
+                  type="text"
+                  value={checkout.cartItemSection.postSubmitNotice}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "cartItemSection",
+                      "postSubmitNotice",
+                      event.target.value
+                    )
+                  }
+                  className={`${inputBase} mt-2`}
+                />
+              </label>
+              <label className="block md:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Confirmation Helper Text
+                </span>
+                <input
+                  type="text"
+                  value={checkout.cartItemSection.confirmationHelperText}
+                  onChange={(event) =>
+                    onChangeCheckoutField(
+                      "cartItemSection",
+                      "confirmationHelperText",
                       event.target.value
                     )
                   }

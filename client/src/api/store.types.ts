@@ -200,7 +200,9 @@ export type StoreCustomizationResponse = {
     offers?: Record<string, any>;
     contactUs?: Record<string, any>;
     checkout?: Record<string, any>;
+    seoSettings?: Record<string, any>;
     dashboardSetting?: Record<string, any>;
+    productSlugPage?: Record<string, any>;
   };
 };
 

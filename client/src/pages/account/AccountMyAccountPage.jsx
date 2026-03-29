@@ -1,7 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { getUserMe, updateUserMe } from "../../api/userMe.ts";
+import { useQuery } from "@tanstack/react-query";
+import {
+  getUserMe,
+  updateUserMe,
+  uploadUserProfileImage,
+} from "../../api/userMe.ts";
 import { getDefaultAddress } from "../../api/userAddresses.ts";
+import { getStoreCustomization } from "../../api/public/storeCustomizationPublic.ts";
+import { normalizeDashboardSettingCopy } from "../../utils/dashboardSettingCopy.js";
+import { resolveAssetUrl } from "../../lib/assetUrl.js";
+import { useAccountAuth } from "../../auth/authDomainHooks.js";
 
 const safeText = (value, fallback = "-") => {
   const text = String(value ?? "").trim();
@@ -9,6 +18,17 @@ const safeText = (value, fallback = "-") => {
 };
 
 export default function AccountMyAccountPage() {
+  const { refreshSession } = useAccountAuth();
+  const fileInputRef = useRef(null);
+  const dashboardSettingQuery = useQuery({
+    queryKey: ["store-customization", "dashboard-setting", "en"],
+    queryFn: () => getStoreCustomization({ lang: "en", include: "dashboardSetting" }),
+    staleTime: 60_000,
+  });
+  const dashboardSettingCopy = normalizeDashboardSettingCopy(
+    dashboardSettingQuery.data?.customization?.dashboardSetting
+  );
+  const profileCopy = dashboardSettingCopy.updateProfile;
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [profile, setProfile] = useState(null);
@@ -16,8 +36,10 @@ export default function AccountMyAccountPage() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
   const [status, setStatus] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const loadAccountData = async (withLoading = true) => {
     if (withLoading) setIsLoading(true);
@@ -30,6 +52,7 @@ export default function AccountMyAccountPage() {
       setProfile(meData);
       setName(String(meData?.name || ""));
       setPhone(String(meData?.phone || ""));
+      setAvatarUrl(String(meData?.avatarUrl || ""));
       setDefaultAddress(defaultAddressData);
     } catch (requestError) {
       setError(requestError?.response?.data?.message || "Failed to load account profile.");
@@ -52,6 +75,7 @@ export default function AccountMyAccountPage() {
     setStatus(null);
     setName(String(profile?.name || ""));
     setPhone(String(profile?.phone || ""));
+    setAvatarUrl(String(profile?.avatarUrl || ""));
   };
 
   const handleSave = async (event) => {
@@ -68,12 +92,15 @@ export default function AccountMyAccountPage() {
       const updated = await updateUserMe({
         name: nextName,
         phone: String(phone || "").trim(),
+        avatarUrl: avatarUrl || null,
       });
       setProfile(updated);
       setName(String(updated?.name || ""));
       setPhone(String(updated?.phone || ""));
+      setAvatarUrl(String(updated?.avatarUrl || ""));
       setIsEditMode(false);
       setStatus({ type: "success", message: "Profile updated successfully." });
+      await refreshSession?.();
       await loadAccountData(false);
     } catch (requestError) {
       setStatus({
@@ -102,6 +129,30 @@ export default function AccountMyAccountPage() {
   const editAddressHref = defaultAddress?.id
     ? `/user/shipping-address?id=${encodeURIComponent(defaultAddress.id)}`
     : "/user/shipping-address";
+  const avatarSrc = resolveAssetUrl(avatarUrl || "");
+
+  const handleAvatarUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setIsUploadingImage(true);
+    setStatus(null);
+    try {
+      const nextUrl = await uploadUserProfileImage(file);
+      setAvatarUrl(nextUrl);
+      setStatus({ type: "success", message: "Profile image uploaded. Save to persist the change." });
+    } catch (requestError) {
+      setStatus({
+        type: "error",
+        message:
+          requestError?.response?.data?.message ||
+          requestError?.message ||
+          "Failed to upload profile image.",
+      });
+    } finally {
+      setIsUploadingImage(false);
+      event.target.value = "";
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -126,6 +177,13 @@ export default function AccountMyAccountPage() {
 
       {!isLoading && !error && profile ? (
         <div className="space-y-4">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg"
+            className="hidden"
+            onChange={handleAvatarUpload}
+          />
           <form
             onSubmit={handleSave}
             className="overflow-hidden rounded-xl border border-slate-200 bg-white"
@@ -143,9 +201,46 @@ export default function AccountMyAccountPage() {
               ) : null}
             </div>
 
+            <div className="border-b border-slate-100 px-4 py-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Profile Image
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-4">
+                <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-50 text-lg font-semibold text-slate-400">
+                  {avatarSrc ? (
+                    <img src={avatarSrc} alt={profile?.name || profile?.email || "Profile avatar"} className="h-full w-full object-cover" />
+                  ) : (
+                    "UP"
+                  )}
+                </div>
+                {isEditMode ? (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isSaving || isUploadingImage}
+                      className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      {isUploadingImage ? "Uploading..." : avatarSrc ? "Replace image" : "Upload image"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAvatarUrl("")}
+                      disabled={isSaving || isUploadingImage || !avatarUrl}
+                      className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 disabled:opacity-60"
+                    >
+                      Remove image
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 divide-y divide-slate-100 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
               <div className="p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Name</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {profileCopy.fullNameLabel}
+                </p>
                 {isEditMode ? (
                   <input
                     type="text"
@@ -158,14 +253,18 @@ export default function AccountMyAccountPage() {
                 )}
               </div>
               <div className="p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Email</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {profileCopy.emailAddressLabel}
+                </p>
                 <p className="mt-2 text-sm font-medium text-slate-900">{safeText(profile?.email)}</p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 divide-y divide-slate-100 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
               <div className="p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Phone</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {profileCopy.phoneMobileLabel}
+                </p>
                 {isEditMode ? (
                   <input
                     type="text"
@@ -180,7 +279,9 @@ export default function AccountMyAccountPage() {
                 )}
               </div>
               <div className="p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Address</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {profileCopy.addressLabel}
+                </p>
                 <p className="mt-2 text-sm font-medium text-slate-900">
                   {safeText(profile?.address, "Not set")}
                 </p>
@@ -213,7 +314,7 @@ export default function AccountMyAccountPage() {
                   disabled={isSaving}
                   className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isSaving ? "Saving..." : "Save"}
+                  {isSaving ? "Saving..." : profileCopy.updateButtonValue}
                 </button>
               </div>
             ) : null}

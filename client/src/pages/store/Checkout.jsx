@@ -44,6 +44,7 @@ const checkoutCustomerSchema = createOrderSchema.shape.customer;
 const DEFAULT_CHECKOUT_COPY = {
   personalDetails: {
     sectionTitle: "Personal Details",
+    sectionHint: "Enter your contact details.",
     firstNameLabel: "First Name",
     lastNameLabel: "Last Name",
     emailLabel: "Email Address",
@@ -55,6 +56,7 @@ const DEFAULT_CHECKOUT_COPY = {
   },
   shippingDetails: {
     sectionTitle: "Shipping Details",
+    sectionHint: "Confirm the delivery destination.",
     provinceLabel: "Province",
     cityLabel: "City/Regency",
     districtLabel: "Subdistrict",
@@ -71,20 +73,43 @@ const DEFAULT_CHECKOUT_COPY = {
     houseNumberPlaceholder: "House Number",
     buildingPlaceholder: "Building",
     otherDetailsPlaceholder: "Block / Unit / Reference",
+    defaultShippingToggleLabel: "Use Default Shipping Address",
+    defaultShippingToggleEnabledLabel: "Yes",
+    defaultShippingToggleDisabledLabel: "No",
+    defaultShippingLoadingLabel: "Loading your default shipping address...",
     paymentMethodLabel: "Payment Method",
     paymentMethodPlaceholder: "Select a preferred payment option.",
   },
   buttons: {
     continueButtonLabel: "Back to Cart",
     confirmButtonLabel: "Place an Order",
+    processingButtonLabel: "Processing...",
   },
   cartItemSection: {
-    sectionTitle: "Cart Item Section",
+    sectionTitle: "Checkout Summary",
     orderSummaryLabel: "Order Summary",
+    sectionDescription: "Review items, coupon impact, and the final amount before you submit.",
+    estimatedTotalLabel: "Estimated Total",
+    itemCountSuffix: "Items",
     applyButtonLabel: "Apply",
+    applyingButtonLabel: "Applying...",
+    couponCodeLabel: "Coupon Code",
+    couponCodePlaceholder: "Coupon Code",
+    couponHelperText:
+      "Use this single field for either a platform coupon or the linked store coupon.",
+    itemPriceLabel: "Item Price",
     subTotalLabel: "Subtotal",
+    shippingLabel: "Shipping",
     discountLabel: "Discount",
+    taxLabel: "Tax",
     totalCostLabel: "TOTAL COST",
+    postSubmitNotice:
+      "After placing the order, you will be redirected to the payment page with a trackable order reference.",
+    confirmationHelperText:
+      "By placing this order, you confirm the contact and shipping details above.",
+    summaryReadyHint: "Discounts and store settings are reflected live in this summary.",
+    submitNextLabel: "Submit Next",
+    previewFirstLabel: "Preview First",
   },
 };
 
@@ -129,6 +154,35 @@ const normalizeRegionPlaceholder = (value, fallback) => {
   return normalized;
 };
 
+const normalizeCheckoutButtonLabel = (value, fallback) => {
+  const normalized = toCopyText(value, fallback);
+  const lowered = normalized.toLowerCase();
+  if (lowered === "continue shipping") return DEFAULT_CHECKOUT_COPY.buttons.continueButtonLabel;
+  if (lowered === "confirm order") return DEFAULT_CHECKOUT_COPY.buttons.confirmButtonLabel;
+  return normalized;
+};
+
+const normalizeCheckoutSectionTitle = (value, fallback) => {
+  const normalized = toCopyText(value, fallback);
+  return normalized.toLowerCase() === "cart item section"
+    ? DEFAULT_CHECKOUT_COPY.cartItemSection.sectionTitle
+    : normalized;
+};
+
+const normalizeCheckoutSubtotalLabel = (value, fallback) => {
+  const normalized = toCopyText(value, fallback);
+  return normalized.toLowerCase() === "sub total"
+    ? DEFAULT_CHECKOUT_COPY.cartItemSection.subTotalLabel
+    : normalized;
+};
+
+const normalizeCheckoutTotalLabel = (value, fallback) => {
+  const normalized = toCopyText(value, fallback);
+  return normalized.toLowerCase() === "total cost"
+    ? DEFAULT_CHECKOUT_COPY.cartItemSection.totalCostLabel
+    : normalized;
+};
+
 const normalizeCheckoutCopy = (raw) => {
   const source = raw && typeof raw === "object" ? raw : {};
   const personalDetails =
@@ -150,6 +204,10 @@ const normalizeCheckoutCopy = (raw) => {
       sectionTitle: toCopyText(
         personalDetails.sectionTitle,
         DEFAULT_CHECKOUT_COPY.personalDetails.sectionTitle
+      ),
+      sectionHint: toCopyText(
+        personalDetails.sectionHint,
+        DEFAULT_CHECKOUT_COPY.personalDetails.sectionHint
       ),
       firstNameLabel: toCopyText(
         personalDetails.firstNameLabel,
@@ -188,6 +246,10 @@ const normalizeCheckoutCopy = (raw) => {
       sectionTitle: toCopyText(
         shippingDetails.sectionTitle,
         DEFAULT_CHECKOUT_COPY.shippingDetails.sectionTitle
+      ),
+      sectionHint: toCopyText(
+        shippingDetails.sectionHint,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.sectionHint
       ),
       provinceLabel: normalizeRegionLabel(
         shippingDetails.provinceLabel ?? shippingDetails.countryLabel,
@@ -253,6 +315,22 @@ const normalizeCheckoutCopy = (raw) => {
         shippingDetails.otherDetailsPlaceholder,
         DEFAULT_CHECKOUT_COPY.shippingDetails.otherDetailsPlaceholder
       ),
+      defaultShippingToggleLabel: toCopyText(
+        shippingDetails.defaultShippingToggleLabel,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.defaultShippingToggleLabel
+      ),
+      defaultShippingToggleEnabledLabel: toCopyText(
+        shippingDetails.defaultShippingToggleEnabledLabel,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.defaultShippingToggleEnabledLabel
+      ),
+      defaultShippingToggleDisabledLabel: toCopyText(
+        shippingDetails.defaultShippingToggleDisabledLabel,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.defaultShippingToggleDisabledLabel
+      ),
+      defaultShippingLoadingLabel: toCopyText(
+        shippingDetails.defaultShippingLoadingLabel,
+        DEFAULT_CHECKOUT_COPY.shippingDetails.defaultShippingLoadingLabel
+      ),
       paymentMethodLabel: toCopyText(
         shippingDetails.paymentMethodLabel,
         DEFAULT_CHECKOUT_COPY.shippingDetails.paymentMethodLabel
@@ -263,23 +341,21 @@ const normalizeCheckoutCopy = (raw) => {
       ),
     },
     buttons: {
-      continueButtonLabel: toCopyText(
+      continueButtonLabel: normalizeCheckoutButtonLabel(
         buttons.continueButtonLabel,
         DEFAULT_CHECKOUT_COPY.buttons.continueButtonLabel
       ),
-      confirmButtonLabel:
-        toCopyText(
-          buttons.confirmButtonLabel,
-          DEFAULT_CHECKOUT_COPY.buttons.confirmButtonLabel
-        ).toLowerCase() === "confirm order"
-          ? "Place an Order"
-          : toCopyText(
-              buttons.confirmButtonLabel,
-              DEFAULT_CHECKOUT_COPY.buttons.confirmButtonLabel
-            ),
+      confirmButtonLabel: normalizeCheckoutButtonLabel(
+        buttons.confirmButtonLabel,
+        DEFAULT_CHECKOUT_COPY.buttons.confirmButtonLabel
+      ),
+      processingButtonLabel: toCopyText(
+        buttons.processingButtonLabel,
+        DEFAULT_CHECKOUT_COPY.buttons.processingButtonLabel
+      ),
     },
     cartItemSection: {
-      sectionTitle: toCopyText(
+      sectionTitle: normalizeCheckoutSectionTitle(
         cartItemSection.sectionTitle,
         DEFAULT_CHECKOUT_COPY.cartItemSection.sectionTitle
       ),
@@ -287,21 +363,81 @@ const normalizeCheckoutCopy = (raw) => {
         cartItemSection.orderSummaryLabel,
         DEFAULT_CHECKOUT_COPY.cartItemSection.orderSummaryLabel
       ),
+      sectionDescription: toCopyText(
+        cartItemSection.sectionDescription,
+        DEFAULT_CHECKOUT_COPY.cartItemSection.sectionDescription
+      ),
+      estimatedTotalLabel: toCopyText(
+        cartItemSection.estimatedTotalLabel,
+        DEFAULT_CHECKOUT_COPY.cartItemSection.estimatedTotalLabel
+      ),
+      itemCountSuffix: toCopyText(
+        cartItemSection.itemCountSuffix,
+        DEFAULT_CHECKOUT_COPY.cartItemSection.itemCountSuffix
+      ),
       applyButtonLabel: toCopyText(
         cartItemSection.applyButtonLabel,
         DEFAULT_CHECKOUT_COPY.cartItemSection.applyButtonLabel
       ),
-      subTotalLabel: toCopyText(
+      applyingButtonLabel: toCopyText(
+        cartItemSection.applyingButtonLabel,
+        DEFAULT_CHECKOUT_COPY.cartItemSection.applyingButtonLabel
+      ),
+      couponCodeLabel: toCopyText(
+        cartItemSection.couponCodeLabel,
+        DEFAULT_CHECKOUT_COPY.cartItemSection.couponCodeLabel
+      ),
+      couponCodePlaceholder: toCopyText(
+        cartItemSection.couponCodePlaceholder,
+        DEFAULT_CHECKOUT_COPY.cartItemSection.couponCodePlaceholder
+      ),
+      couponHelperText: toCopyText(
+        cartItemSection.couponHelperText,
+        DEFAULT_CHECKOUT_COPY.cartItemSection.couponHelperText
+      ),
+      itemPriceLabel: toCopyText(
+        cartItemSection.itemPriceLabel,
+        DEFAULT_CHECKOUT_COPY.cartItemSection.itemPriceLabel
+      ),
+      subTotalLabel: normalizeCheckoutSubtotalLabel(
         cartItemSection.subTotalLabel,
         DEFAULT_CHECKOUT_COPY.cartItemSection.subTotalLabel
+      ),
+      shippingLabel: toCopyText(
+        cartItemSection.shippingLabel,
+        DEFAULT_CHECKOUT_COPY.cartItemSection.shippingLabel
       ),
       discountLabel: toCopyText(
         cartItemSection.discountLabel,
         DEFAULT_CHECKOUT_COPY.cartItemSection.discountLabel
       ),
-      totalCostLabel: toCopyText(
+      taxLabel: toCopyText(
+        cartItemSection.taxLabel,
+        DEFAULT_CHECKOUT_COPY.cartItemSection.taxLabel
+      ),
+      totalCostLabel: normalizeCheckoutTotalLabel(
         cartItemSection.totalCostLabel,
         DEFAULT_CHECKOUT_COPY.cartItemSection.totalCostLabel
+      ),
+      postSubmitNotice: toCopyText(
+        cartItemSection.postSubmitNotice,
+        DEFAULT_CHECKOUT_COPY.cartItemSection.postSubmitNotice
+      ),
+      confirmationHelperText: toCopyText(
+        cartItemSection.confirmationHelperText,
+        DEFAULT_CHECKOUT_COPY.cartItemSection.confirmationHelperText
+      ),
+      summaryReadyHint: toCopyText(
+        cartItemSection.summaryReadyHint,
+        DEFAULT_CHECKOUT_COPY.cartItemSection.summaryReadyHint
+      ),
+      submitNextLabel: toCopyText(
+        cartItemSection.submitNextLabel,
+        DEFAULT_CHECKOUT_COPY.cartItemSection.submitNextLabel
+      ),
+      previewFirstLabel: toCopyText(
+        cartItemSection.previewFirstLabel,
+        DEFAULT_CHECKOUT_COPY.cartItemSection.previewFirstLabel
       ),
     },
   };
@@ -389,6 +525,46 @@ function resolveInvalidCheckoutItemMessage(item) {
     default:
       return "This item is currently blocked from checkout.";
   }
+}
+
+function resolveCheckoutSubmitErrorMessage(data, fallbackMessage) {
+  const serverMessage =
+    typeof fallbackMessage === "string" && fallbackMessage.trim()
+      ? fallbackMessage.trim()
+      : "";
+  const invalidItems = Array.isArray(data?.data?.invalidItems) ? data.data.invalidItems : [];
+  if (invalidItems.length > 0) {
+    const invalidDetail = resolveInvalidCheckoutItemMessage(invalidItems[0]);
+    return serverMessage ? `${serverMessage} ${invalidDetail}` : invalidDetail;
+  }
+
+  const couponMessage =
+    typeof data?.data?.coupon?.message === "string" && data.data.coupon.message.trim()
+      ? data.data.coupon.message.trim()
+      : "";
+  if (couponMessage) {
+    return serverMessage || couponMessage;
+  }
+
+  const available = Number(data?.data?.available);
+  const requested = Number(data?.data?.requested);
+  const productName =
+    typeof data?.data?.name === "string" && data.data.name.trim() ? data.data.name.trim() : "";
+  if (Number.isFinite(available) && Number.isFinite(requested)) {
+    const stockDetail = productName
+      ? `${productName} only has ${Math.max(0, available)} left, but checkout requested ${requested}.`
+      : `Stock changed before checkout. Only ${Math.max(0, available)} left for the requested quantity ${requested}.`;
+    return serverMessage ? `${serverMessage} ${stockDetail}` : stockDetail;
+  }
+
+  if (Array.isArray(data?.data?.groups)) {
+    return (
+      serverMessage ||
+      "One or more stores are not ready for checkout yet. Fix the blocked store groups and try again."
+    );
+  }
+
+  return serverMessage || ORDER_FAILED;
 }
 
 export default function CheckoutPage() {
@@ -1249,15 +1425,15 @@ export default function CheckoutPage() {
         return;
       }
       if (err?.response?.status === 409 && Array.isArray(data?.data?.invalidItems)) {
-        setError(
-          serverMessage ||
-            "Some cart items are no longer eligible for checkout. Remove or update them, then try again."
-        );
-      } else if (err?.response?.status === 409 && Array.isArray(data?.data?.groups)) {
-        setError(
-          serverMessage ||
-            "One or more stores are not ready for checkout yet. Fix the blocked store groups and try again."
-        );
+        setError(resolveCheckoutSubmitErrorMessage(data, serverMessage));
+      } else if (
+        err?.response?.status === 409 &&
+        (Array.isArray(data?.data?.groups) ||
+          data?.data?.coupon ||
+          Number.isFinite(Number(data?.data?.available)) ||
+          Number.isFinite(Number(data?.data?.requested)))
+      ) {
+        setError(resolveCheckoutSubmitErrorMessage(data, serverMessage));
       } else if (err?.response?.status === 400 && Array.isArray(data?.missing)) {
         clearCart();
         setError("Cart items are no longer available. Please add them again.");
@@ -1336,13 +1512,13 @@ export default function CheckoutPage() {
               </div>
               <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:w-auto sm:flex-nowrap sm:justify-end sm:gap-3">
                 <span className="text-sm font-medium text-slate-700">
-                  Use Default Shipping Address
+                  {checkoutCopy.shippingDetails.defaultShippingToggleLabel}
                 </span>
                 <button
                   type="button"
                   role="switch"
                   aria-checked={useDefaultShipping}
-                  aria-label="Use Default Shipping Address"
+                  aria-label={checkoutCopy.shippingDetails.defaultShippingToggleLabel}
                   onClick={handleToggleDefaultShipping}
                   disabled={isAddressLoading}
                   className={`relative inline-flex h-6 w-12 items-center rounded-full transition ${
@@ -1360,7 +1536,9 @@ export default function CheckoutPage() {
                     useDefaultShipping ? "text-emerald-600" : "text-rose-600"
                   }`}
                 >
-                  {useDefaultShipping ? "Yes" : "No"}
+                  {useDefaultShipping
+                    ? checkoutCopy.shippingDetails.defaultShippingToggleEnabledLabel
+                    : checkoutCopy.shippingDetails.defaultShippingToggleDisabledLabel}
                 </span>
               </div>
             </div>
@@ -1403,7 +1581,7 @@ export default function CheckoutPage() {
                 }`}
               >
                 {isAddressLoading
-                  ? "Loading your default shipping address..."
+                  ? checkoutCopy.shippingDetails.defaultShippingLoadingLabel
                   : addressStatus}
               </p>
             ) : null}
@@ -1413,7 +1591,7 @@ export default function CheckoutPage() {
                 <SectionTitle
                   number="01."
                   title={checkoutCopy.personalDetails.sectionTitle}
-                  hint="Enter your contact details."
+                  hint={checkoutCopy.personalDetails.sectionHint}
                 />
                 <div className="grid gap-4 lg:grid-cols-2">
                   <div>
@@ -1501,7 +1679,7 @@ export default function CheckoutPage() {
                 <SectionTitle
                   number="02."
                   title={checkoutCopy.shippingDetails.sectionTitle}
-                  hint="Confirm the delivery destination."
+                  hint={checkoutCopy.shippingDetails.sectionHint}
                 />
                 <div className="space-y-4">
                   <div className="grid gap-4 lg:grid-cols-2">
@@ -1966,8 +2144,8 @@ export default function CheckoutPage() {
                                 >
                                   {groupCouponStates?.[String(group.storeId)]?.status ===
                                   "loading"
-                                    ? "Applying..."
-                                    : "Apply"}
+                                    ? checkoutCopy.cartItemSection.applyingButtonLabel
+                                    : checkoutCopy.cartItemSection.applyButtonLabel}
                                 </button>
                               </div>
                               {groupCouponStates?.[String(group.storeId)]?.appliedMeta?.code ? (
@@ -2218,24 +2396,24 @@ export default function CheckoutPage() {
           <div className="rounded-[30px] border border-slate-200 bg-white p-4 shadow-[0_16px_34px_rgba(15,23,42,0.06)] sm:p-6">
             <div className="space-y-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                Checkout Summary
+                {checkoutCopy.cartItemSection.sectionTitle}
               </p>
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-slate-900 sm:text-xl">
                   {checkoutCopy.cartItemSection.orderSummaryLabel}
                 </h3>
                 <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                  {totalQty} Items
+                  {totalQty} {checkoutCopy.cartItemSection.itemCountSuffix}
                 </span>
               </div>
               <p className="text-sm leading-6 text-slate-500">
-                Review items, coupon impact, and the final amount before you submit.
+                {checkoutCopy.cartItemSection.sectionDescription}
               </p>
             </div>
 
             <div className="mt-5 rounded-[24px] bg-slate-900 px-4 py-4 text-white shadow-[0_18px_34px_rgba(15,23,42,0.18)] sm:px-5">
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-300">
-                Estimated Total
+                {checkoutCopy.cartItemSection.estimatedTotalLabel}
               </p>
               <div className="mt-2 flex items-end justify-between gap-4">
                 <div>
@@ -2244,12 +2422,14 @@ export default function CheckoutPage() {
                   </p>
                   <p className="mt-2 text-xs text-slate-300">
                     {isCheckoutSummaryReady
-                      ? "Discounts and store settings are reflected live in this summary."
+                      ? checkoutCopy.cartItemSection.summaryReadyHint
                       : checkoutSummaryGuardMessage}
                   </p>
                 </div>
                 <div className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-200">
-                  {isCheckoutSummaryReady ? "Submit Next" : "Preview First"}
+                  {isCheckoutSummaryReady
+                    ? checkoutCopy.cartItemSection.submitNextLabel
+                    : checkoutCopy.cartItemSection.previewFirstLabel}
                 </div>
               </div>
             </div>
@@ -2284,7 +2464,7 @@ export default function CheckoutPage() {
                           {item.name}
                         </p>
                         <p className="mt-1 text-xs text-slate-500">
-                          Item Price {formatCurrency(item.price)}
+                          {checkoutCopy.cartItemSection.itemPriceLabel} {formatCurrency(item.price)}
                         </p>
                         <p className="mt-1 text-sm font-bold text-slate-900">
                           {formatCurrency(item.price * item.qty)}
@@ -2364,7 +2544,9 @@ export default function CheckoutPage() {
                 </>
               ) : (
                 <>
-                  <p className="text-xs font-semibold uppercase text-slate-600">Coupon Code</p>
+                  <p className="text-xs font-semibold uppercase text-slate-600">
+                    {checkoutCopy.cartItemSection.couponCodeLabel}
+                  </p>
                   <div className="mt-2 flex items-center gap-2.5">
                     <input
                       type="text"
@@ -2373,7 +2555,7 @@ export default function CheckoutPage() {
                       disabled={
                         isSubmitting || couponStatus === "loading" || previewBlocksPricingActions
                       }
-                      placeholder="Coupon Code"
+                      placeholder={checkoutCopy.cartItemSection.couponCodePlaceholder}
                       className="h-11 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm focus:border-emerald-400 focus:outline-none"
                     />
                     <button
@@ -2385,12 +2567,12 @@ export default function CheckoutPage() {
                       className="h-11 w-24 shrink-0 rounded-2xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-28"
                     >
                       {couponStatus === "loading"
-                        ? "Applying..."
+                        ? checkoutCopy.cartItemSection.applyingButtonLabel
                         : checkoutCopy.cartItemSection.applyButtonLabel}
                     </button>
                   </div>
                   <p className="mt-2 text-xs text-slate-500">
-                    Use this single field for either a platform coupon or the linked store coupon.
+                    {checkoutCopy.cartItemSection.couponHelperText}
                   </p>
                   {appliedCouponMeta?.code ? (
                     <div className="mt-2 flex items-center justify-between gap-2">
@@ -2444,7 +2626,7 @@ export default function CheckoutPage() {
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-slate-600">
-                  <span>Shipping</span>
+                  <span>{checkoutCopy.cartItemSection.shippingLabel}</span>
                   <span
                     className={`tabular-nums ${
                       isCheckoutSummaryReady
@@ -2474,7 +2656,7 @@ export default function CheckoutPage() {
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-slate-600">
-                  <span>Tax</span>
+                  <span>{checkoutCopy.cartItemSection.taxLabel}</span>
                   <span
                     className={`tabular-nums ${
                       isCheckoutSummaryReady
@@ -2508,8 +2690,7 @@ export default function CheckoutPage() {
             </div>
 
             <div className="mt-6 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3.5 text-sm text-emerald-900">
-              After placing the order, you will be redirected to the payment page with a trackable
-              order reference.
+              {checkoutCopy.cartItemSection.postSubmitNotice}
             </div>
 
             <button
@@ -2531,7 +2712,9 @@ export default function CheckoutPage() {
                 }`}
               />
               <span>
-                {isSubmitting ? "Processing..." : checkoutCopy.buttons.confirmButtonLabel}
+                {isSubmitting
+                  ? checkoutCopy.buttons.processingButtonLabel
+                  : checkoutCopy.buttons.confirmButtonLabel}
               </span>
             </button>
             {isPreviewBlockingSubmission ? (
@@ -2548,7 +2731,7 @@ export default function CheckoutPage() {
               </p>
             ) : null}
             <p className="mt-3 text-center text-xs leading-5 text-slate-500">
-              By placing this order, you confirm the contact and shipping details above.
+              {checkoutCopy.cartItemSection.confirmationHelperText}
             </p>
           </div>
         </aside>

@@ -9,21 +9,21 @@ import {
 
 const DEFAULT_LANG = "en";
 const FAQ_ITEMS_LENGTH = 8;
-const DEFAULT_FAQS = {
+const DEFAULT_FAQS_DISABLED = {
   pageHeader: {
-    enabled: true,
+    enabled: false,
     backgroundImageDataUrl: "",
-    pageTitle: "FAQs",
+    pageTitle: "",
   },
   leftColumn: {
-    enabled: true,
+    enabled: false,
     leftImageDataUrl: "",
   },
   content: {
-    enabled: true,
+    enabled: false,
     items: Array.from({ length: FAQ_ITEMS_LENGTH }, (_, index) => ({
-      title: `FAQ Title ${index + 1}`,
-      description: `FAQ Description ${index + 1}`,
+      title: "",
+      description: "",
     })),
   },
 };
@@ -44,6 +44,34 @@ const toBool = (value, fallback = false) => {
   return fallback;
 };
 
+const toImageDataUrl = (...values) => {
+  for (const value of values) {
+    const normalized = String(value ?? "").trim();
+    if (normalized) return normalized;
+  }
+  return "";
+};
+
+const hasText = (value) => String(value ?? "").trim().length > 0;
+
+const isPlaceholderFaqTitle = (value) => /^faq title\s+\d+$/i.test(String(value ?? "").trim());
+
+const isPlaceholderFaqDescription = (value) =>
+  /^faq description\s+\d+$/i.test(String(value ?? "").trim());
+
+const buildDisplayFaqItem = (item) => {
+  const title = isPlaceholderFaqTitle(item?.title) ? "" : toText(item?.title, "");
+  const description = isPlaceholderFaqDescription(item?.description)
+    ? ""
+    : toText(item?.description, "");
+  return {
+    title,
+    description,
+  };
+};
+
+const hasDisplayFaqItemContent = (item) => hasText(item?.title) || hasText(item?.description);
+
 const normalizeFaqs = (raw) => {
   const source = raw && typeof raw === "object" ? raw : {};
   const pageHeader = source.pageHeader && typeof source.pageHeader === "object" ? source.pageHeader : {};
@@ -53,27 +81,28 @@ const normalizeFaqs = (raw) => {
 
   return {
     pageHeader: {
-      enabled: toBool(pageHeader.enabled, DEFAULT_FAQS.pageHeader.enabled),
-      backgroundImageDataUrl: toText(
-        pageHeader.backgroundImageDataUrl ?? pageHeader.backgroundImage ?? pageHeader.imageDataUrl,
-        DEFAULT_FAQS.pageHeader.backgroundImageDataUrl
+      enabled: toBool(pageHeader.enabled, DEFAULT_FAQS_DISABLED.pageHeader.enabled),
+      backgroundImageDataUrl: toImageDataUrl(
+        pageHeader.backgroundImageDataUrl,
+        pageHeader.backgroundImage,
+        pageHeader.imageDataUrl,
+        pageHeader.image
       ),
-      pageTitle: toText(pageHeader.pageTitle, DEFAULT_FAQS.pageHeader.pageTitle),
+      pageTitle: toText(pageHeader.pageTitle, DEFAULT_FAQS_DISABLED.pageHeader.pageTitle),
     },
     leftColumn: {
-      enabled: toBool(leftColumn.enabled, DEFAULT_FAQS.leftColumn.enabled),
-      leftImageDataUrl: toText(
-        leftColumn.leftImageDataUrl ??
-          leftColumn.imageDataUrl ??
-          leftColumn.leftImage ??
-          leftColumn.image,
-        DEFAULT_FAQS.leftColumn.leftImageDataUrl
+      enabled: toBool(leftColumn.enabled, DEFAULT_FAQS_DISABLED.leftColumn.enabled),
+      leftImageDataUrl: toImageDataUrl(
+        leftColumn.leftImageDataUrl,
+        leftColumn.imageDataUrl,
+        leftColumn.leftImage,
+        leftColumn.image
       ),
     },
     content: {
-      enabled: toBool(content.enabled, DEFAULT_FAQS.content.enabled),
+      enabled: toBool(content.enabled, DEFAULT_FAQS_DISABLED.content.enabled),
       items: Array.from({ length: FAQ_ITEMS_LENGTH }, (_, index) => {
-        const fallback = DEFAULT_FAQS.content.items[index];
+        const fallback = DEFAULT_FAQS_DISABLED.content.items[index];
         const item =
           index < sourceItems.length && sourceItems[index] && typeof sourceItems[index] === "object"
             ? sourceItems[index]
@@ -119,11 +148,14 @@ export default function StoreFaqPage() {
   const faqs = useMemo(() => normalizeFaqs(faqsRaw), [faqsRaw]);
   const items = useMemo(
     () =>
-      faqs.content.items.filter(
-        (item) => String(item.title || "").trim() || String(item.description || "").trim()
-      ),
-    [faqs]
+      faqs.content.items
+        .map(buildDisplayFaqItem)
+        .filter(hasDisplayFaqItemContent),
+    [faqs.content.items]
   );
+  const shouldRenderFaqHeader = faqs.pageHeader.enabled;
+  const shouldRenderFaqLeftColumn = faqs.leftColumn.enabled;
+  const shouldRenderFaqContent = faqs.content.enabled && items.length > 0;
 
   if (faqQuery.isLoading) return <FaqSkeleton />;
 
@@ -155,7 +187,7 @@ export default function StoreFaqPage() {
   }
 
   const hasAnyEnabledBlock =
-    faqs.pageHeader.enabled || faqs.leftColumn.enabled || faqs.content.enabled;
+    shouldRenderFaqHeader || shouldRenderFaqLeftColumn || shouldRenderFaqContent;
   if (!hasAnyEnabledBlock) {
     return (
       <div className="mx-auto max-w-7xl px-3 py-6 sm:px-4 sm:py-8 lg:px-6">
@@ -167,22 +199,16 @@ export default function StoreFaqPage() {
     );
   }
 
-  if (faqs.content.enabled && items.length === 0) {
-    return (
-      <div className="mx-auto max-w-7xl px-3 py-6 sm:px-4 sm:py-8 lg:px-6">
-        <UiEmptyState
-          title="FAQ not configured yet."
-          description="No FAQ items are available."
-        />
-      </div>
-    );
-  }
-
   const hasHeaderBackground = Boolean(faqs.pageHeader.backgroundImageDataUrl);
+  const shouldRenderFaqGrid = shouldRenderFaqLeftColumn || shouldRenderFaqContent;
+  const faqGridClassName =
+    shouldRenderFaqLeftColumn && shouldRenderFaqContent
+      ? "grid gap-6 lg:grid-cols-[0.9fr_1.1fr]"
+      : "grid gap-6";
 
   return (
     <div className="mx-auto max-w-7xl space-y-8 px-3 py-6 sm:px-4 sm:py-8 lg:px-6">
-      {faqs.pageHeader.enabled ? (
+      {shouldRenderFaqHeader ? (
         <header
           className="relative overflow-hidden rounded-3xl border border-slate-200 bg-slate-900 px-6 py-12 text-white sm:px-8 sm:py-16"
           style={
@@ -199,67 +225,63 @@ export default function StoreFaqPage() {
         </header>
       ) : null}
 
-      <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-        <div>
-          {faqs.leftColumn.enabled ? (
-            faqs.leftColumn.leftImageDataUrl ? (
-              <img
-                src={faqs.leftColumn.leftImageDataUrl}
-                alt="FAQ visual"
-                className="h-full min-h-[280px] w-full rounded-2xl border border-slate-200 object-cover"
-              />
-            ) : (
-              <div className="flex min-h-[280px] items-center justify-center rounded-2xl border border-slate-200 bg-slate-100 text-sm font-medium text-slate-500">
-                Left image is not configured yet.
-              </div>
-            )
-          ) : (
-            <div className="flex min-h-[280px] items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-sm text-slate-500">
-              Left column is disabled.
+      {shouldRenderFaqGrid ? (
+        <section className={faqGridClassName}>
+          {shouldRenderFaqLeftColumn ? (
+            <div>
+              {faqs.leftColumn.leftImageDataUrl ? (
+                <img
+                  src={faqs.leftColumn.leftImageDataUrl}
+                  alt="FAQ visual"
+                  className="h-full min-h-[280px] w-full rounded-2xl border border-slate-200 object-cover"
+                />
+              ) : (
+                <div className="flex min-h-[280px] items-center justify-center rounded-2xl border border-slate-200 bg-slate-100 text-sm font-medium text-slate-500">
+                  Left image is not configured yet.
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          ) : null}
 
-        <div className="space-y-3">
-          {faqs.content.enabled ? (
-            items.map((item, index) => {
-              const isOpen = openIndex === index;
-              return (
-                <article
-                  key={`faq-item-${index}`}
-                  className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
-                >
-                  <button
-                    type="button"
-                    onClick={() => setOpenIndex((prev) => (prev === index ? -1 : index))}
-                    className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+          {shouldRenderFaqContent ? (
+            <div className="space-y-3">
+              {items.map((item, index) => {
+                const isOpen = openIndex === index;
+                return (
+                  <article
+                    key={`faq-item-${index}`}
+                    className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
                   >
-                    <span className="text-sm font-semibold text-slate-900 sm:text-base">
-                      {item.title}
-                    </span>
-                    <ChevronDown
-                      className={`h-4 w-4 shrink-0 text-slate-500 transition-transform ${
-                        isOpen ? "rotate-180" : ""
+                    <button
+                      type="button"
+                      onClick={() => setOpenIndex((prev) => (prev === index ? -1 : index))}
+                      className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                    >
+                      <span className="text-sm font-semibold text-slate-900 sm:text-base">
+                        {item.title || "FAQ"}
+                      </span>
+                      <ChevronDown
+                        className={`h-4 w-4 shrink-0 text-slate-500 transition-transform ${
+                          isOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+                    <div
+                      className={`overflow-hidden px-4 transition-all duration-200 ${
+                        isOpen ? "max-h-80 pb-4 opacity-100" : "max-h-0 pb-0 opacity-0"
                       }`}
-                    />
-                  </button>
-                  <div
-                    className={`overflow-hidden px-4 transition-all duration-200 ${
-                      isOpen ? "max-h-80 pb-4 opacity-100" : "max-h-0 pb-0 opacity-0"
-                    }`}
-                  >
-                    <p className="text-sm leading-6 text-slate-600">{item.description}</p>
-                  </div>
-                </article>
-              );
-            })
-          ) : (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
-              FAQ content is currently disabled.
+                    >
+                      {hasText(item.description) ? (
+                        <p className="text-sm leading-6 text-slate-600">{item.description}</p>
+                      ) : null}
+                    </div>
+                  </article>
+                );
+              })}
             </div>
-          )}
-        </div>
-      </section>
+          ) : null}
+        </section>
+      ) : null}
     </div>
   );
 }

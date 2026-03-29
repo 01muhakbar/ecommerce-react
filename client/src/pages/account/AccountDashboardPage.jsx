@@ -26,6 +26,7 @@ import {
   buildPublicOrderTrackingPath,
   resolvePublicOrderReference,
 } from "../../utils/publicOrderReference.js";
+import { normalizeDashboardSettingCopy } from "../../utils/dashboardSettingCopy.js";
 
 const fetchOrders = async () => {
   const { data } = await api.get("/store/my/orders");
@@ -52,11 +53,6 @@ const getOrderTimestamp = (order) => {
 };
 
 const getPublicOrderRef = (order) => resolvePublicOrderReference(order?.invoiceNo);
-
-const toText = (value, fallback) => {
-  const normalized = String(value ?? "").trim();
-  return normalized || fallback;
-};
 
 const ONBOARDING_TONE = {
   stone: "bg-slate-100 text-slate-700",
@@ -208,19 +204,6 @@ const resolveDashboardOnboardingState = ({ application, ownerStore, fallbackStor
   };
 };
 
-const normalizeDashboardSettingCopy = (raw) => {
-  const source = raw && typeof raw === "object" ? raw : {};
-  const dashboard = source.dashboard && typeof source.dashboard === "object" ? source.dashboard : {};
-  return {
-    dashboardLabel: toText(dashboard.dashboardLabel, "Dashboard"),
-    totalOrdersLabel: toText(dashboard.totalOrdersLabel, "Total Orders"),
-    pendingOrderValue: toText(dashboard.pendingOrderValue, "Pending Orders"),
-    processingOrderValue: toText(dashboard.processingOrderValue, "Processing Orders"),
-    completeOrderValue: toText(dashboard.completeOrderValue, "Complete Orders"),
-    recentOrderValue: toText(dashboard.recentOrderValue, "Recent Orders"),
-  };
-};
-
 export default function AccountDashboardPage() {
   const { user } = useOutletContext() || {};
   const dashboardSettingQuery = useQuery({
@@ -231,6 +214,7 @@ export default function AccountDashboardPage() {
   const dashboardSettingCopy = normalizeDashboardSettingCopy(
     dashboardSettingQuery.data?.customization?.dashboardSetting
   );
+  const dashboardCopy = dashboardSettingCopy.dashboard;
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["account", "orders", "my"],
     queryFn: () => fetchOrders(),
@@ -260,25 +244,25 @@ export default function AccountDashboardPage() {
 
   const statCards = [
     {
-      label: dashboardSettingCopy.totalOrdersLabel,
+      label: dashboardCopy.totalOrdersLabel,
       value: totalOrders,
       Icon: ShoppingCart,
       tone: "bg-rose-100 text-rose-600",
     },
     {
-      label: dashboardSettingCopy.pendingOrderValue,
+      label: dashboardCopy.pendingOrderValue,
       value: pendingOrders,
       Icon: RotateCw,
       tone: "bg-amber-100 text-amber-600",
     },
     {
-      label: dashboardSettingCopy.processingOrderValue,
+      label: dashboardCopy.processingOrderValue,
       value: processingOrders,
       Icon: Truck,
       tone: "bg-sky-100 text-sky-600",
     },
     {
-      label: dashboardSettingCopy.completeOrderValue,
+      label: dashboardCopy.completeOrderValue,
       value: completeOrders,
       Icon: CheckCircle,
       tone: "bg-emerald-100 text-emerald-600",
@@ -311,7 +295,7 @@ export default function AccountDashboardPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-slate-900">
-          {dashboardSettingCopy.dashboardLabel}
+          {dashboardCopy.sectionTitle}
         </h1>
         <p className="mt-1 text-sm text-slate-500">
           {user?.name ? `Welcome back, ${user.name}.` : "Welcome back."}
@@ -386,7 +370,7 @@ export default function AccountDashboardPage() {
 
       <div className="space-y-3">
         <h2 className="text-lg font-semibold text-slate-900">
-          {dashboardSettingCopy.recentOrderValue}
+          {dashboardCopy.recentOrderValue}
         </h2>
         <div className="rounded-xl border border-slate-200 bg-white">
           {isLoading ? (

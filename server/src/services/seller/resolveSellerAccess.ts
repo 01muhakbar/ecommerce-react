@@ -17,6 +17,8 @@ export type SellerAccessContext = {
     name: string;
     slug: string;
     status: string;
+    logoUrl?: string | null;
+    imageUrl?: string | null;
   };
   accessMode: SellerAccessMode;
   roleCode: string;
@@ -31,7 +33,7 @@ type ResolveResult =
   | { ok: true; data: SellerAccessContext }
   | { ok: false; status: 400 | 401 | 403 | 404; code: string; message: string };
 
-const storeAttributes = ["id", "ownerUserId", "name", "slug", "status"] as const;
+const storeAttributes = ["id", "ownerUserId", "name", "slug", "status", "logoUrl"] as const;
 
 function isMissingTableError(error: any) {
   const code = String(error?.original?.code || error?.parent?.code || error?.code || "");
@@ -140,6 +142,8 @@ export async function resolveSellerAccess(input: {
           name: String((store as any).name || ""),
           slug: String((store as any).slug || ""),
           status: String((store as any).status || "ACTIVE"),
+          logoUrl: String((store as any).logoUrl || "").trim() || null,
+          imageUrl: String((store as any).logoUrl || "").trim() || null,
         },
         accessMode: "OWNER_BRIDGE",
         roleCode,
@@ -167,6 +171,8 @@ export async function resolveSellerAccess(input: {
           name: String((store as any).name || ""),
           slug: String((store as any).slug || ""),
           status: String((store as any).status || "ACTIVE"),
+          logoUrl: String((store as any).logoUrl || "").trim() || null,
+          imageUrl: String((store as any).logoUrl || "").trim() || null,
         },
         accessMode: "MEMBER",
         roleCode: memberRoleCode,
