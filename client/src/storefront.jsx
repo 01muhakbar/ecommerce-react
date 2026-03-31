@@ -164,6 +164,14 @@ export function ProductCard({ product, variant = "default" }) {
   const displayRating = Number.isFinite(ratingValue) && ratingValue > 0 ? ratingValue : 4.5;
   const stockValue = Number(product?.stock);
   const isOutOfStock = Number.isFinite(stockValue) && stockValue <= 0;
+  const purchaseState = product?.purchaseState || null;
+  const isPurchasable =
+    typeof purchaseState?.isPurchasable === "boolean"
+      ? purchaseState.isPurchasable
+      : !isOutOfStock;
+  const purchaseLabel = isPurchasable
+    ? null
+    : purchaseState?.label || (isOutOfStock ? "Out of stock" : "Unavailable");
 
   useEffect(() => {
     setImageSrc(resolvedSrc);
@@ -177,7 +185,7 @@ export function ProductCard({ product, variant = "default" }) {
   const handleAdd = (event) => {
     event.preventDefault();
     event.stopPropagation();
-    if (isAdding || isOutOfStock) return;
+    if (isAdding || !isPurchasable) return;
     setIsAdding(true);
     add(product?.id, 1, {
       name: product?.name || product?.title,
@@ -239,9 +247,9 @@ export function ProductCard({ product, variant = "default" }) {
           type="button"
           onClick={handleAdd}
           aria-label={
-            isOutOfStock ? `${productName} is out of stock` : `Add ${productName} to cart`
+            !isPurchasable ? `${productName} is unavailable` : `Add ${productName} to cart`
           }
-          disabled={isAdding || isLoading || isOutOfStock}
+          disabled={isAdding || isLoading || !isPurchasable}
           className={
             isSearchVariant
               ? "inline-flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500 text-lg font-semibold text-white shadow-sm transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
@@ -249,13 +257,13 @@ export function ProductCard({ product, variant = "default" }) {
           }
         >
           {isSearchVariant
-            ? isOutOfStock
+            ? !isPurchasable
               ? "!"
               : isAdding
                 ? "✓"
                 : "+"
-            : isOutOfStock
-              ? "Out of stock"
+            : !isPurchasable
+              ? purchaseLabel
               : isAdding
                 ? "Added"
                 : "Add to cart"}

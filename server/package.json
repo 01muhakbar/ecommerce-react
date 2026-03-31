@@ -28,6 +28,7 @@
     "smoke:orders": "node scripts/smoke-orders-admin.mjs",
     "smoke:product-visibility": "tsx src/scripts/smokeProductVisibility.ts",
     "smoke:order-payment": "tsx src/scripts/smokeOrderPayment.ts",
+    "smoke:stripe-webhook": "tsx src/scripts/smokeStripeWebhook.ts",
     "smoke:store-customization-right-box": "tsx src/scripts/smokeStoreCustomizationRightBox.ts",
     "smoke:store-customization-about-us": "tsx src/scripts/smokeStoreCustomizationAboutUs.ts",
     "smoke:store-customization-checkout": "tsx src/scripts/smokeStoreCustomizationCheckout.ts",
@@ -38,6 +39,8 @@
     "smoke:store-customization-our-team": "tsx src/scripts/smokeStoreCustomizationOurTeam.ts",
     "smoke:profile-image-sync": "tsx src/scripts/smokeProfileImageSync.ts",
     "smoke:store-customization-seo": "tsx src/scripts/smokeStoreCustomizationSeo.ts",
+    "smoke:store-settings": "tsx src/scripts/smokeStoreSettings.ts",
+    "smoke:admin-store-payment-profiles": "tsx src/scripts/smokeAdminStorePaymentProfiles.ts",
     "smoke:store-readiness": "tsx src/scripts/smokeStoreReadiness.ts",
     "smoke:store-application": "tsx src/scripts/smokeStoreApplication.ts",
     "smoke:store-application-activation": "tsx src/scripts/smokeStoreOnboardingActivation.ts",
@@ -56,7 +59,8 @@
     "multer": "^2.0.2",
     "mysql2": "^3.10.0",
     "nodemailer": "^7.0.13",
-    "sequelize": "^6.37.3"
+    "sequelize": "^6.37.3",
+    "stripe": "^21.0.1"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",

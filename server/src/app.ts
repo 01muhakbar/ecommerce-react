@@ -57,6 +57,7 @@ import storesRouter from "./routes/stores.js";
 import storeCouponsRouter from "./routes/store.coupons.js";
 import storeCustomizationRouter from "./routes/store.customization.js";
 import storeSettingsRouter from "./routes/store.settings.js";
+import stripeWebhookRouter from "./routes/store.stripeWebhook.js";
 import publicRouter from "./routes/public.js";
 import healthRouter from "./routes/health.js";
 
@@ -65,6 +66,7 @@ const app = express();
 app.set("trust proxy", 1);
 
 app.use(cookieParser());
+app.use("/api/store", stripeWebhookRouter);
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 

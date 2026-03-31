@@ -189,6 +189,14 @@ export default function StoreCategoryPage() {
           {products.map((product) => {
             const stockValue = Number(product?.stock);
             const isOutOfStock = Number.isFinite(stockValue) && stockValue <= 0;
+            const purchaseState = product?.purchaseState || null;
+            const isPurchasable =
+              typeof purchaseState?.isPurchasable === "boolean"
+                ? purchaseState.isPurchasable
+                : !isOutOfStock;
+            const purchaseLabel = isPurchasable
+              ? null
+              : purchaseState?.label || (isOutOfStock ? "Out of stock" : "Unavailable");
             return (
               <Link
                 key={product.id}
@@ -199,25 +207,30 @@ export default function StoreCategoryPage() {
                 <div className="text-xs text-slate-500">
                   {formatCurrency(Number(product.price || 0))}
                 </div>
-                {isOutOfStock ? (
-                  <p className="text-xs font-medium text-rose-600">Out of stock</p>
+                {purchaseLabel ? (
+                  <p
+                    className="text-xs font-medium text-rose-600"
+                    title={purchaseState?.description || purchaseLabel}
+                  >
+                    {purchaseLabel}
+                  </p>
                 ) : null}
                 <button
                   type="button"
                   onClick={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
-                    if (isOutOfStock) return;
+                    if (!isPurchasable) return;
                     add(product.id, 1, {
                       name: product?.name || product?.title,
                       price: product?.salePrice ?? product?.sellingPrice ?? product?.price,
                       imageUrl: resolveProductImageUrl(product),
                     });
                   }}
-                  disabled={isOutOfStock}
+                  disabled={!isPurchasable}
                   className="mt-auto self-start rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {isOutOfStock ? "Unavailable" : "Add to cart"}
+                  {!isPurchasable ? purchaseLabel || "Unavailable" : "Add to cart"}
                 </button>
               </Link>
             );

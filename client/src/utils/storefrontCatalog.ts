@@ -253,6 +253,10 @@ export const normalizeStorefrontProduct = (rawProduct: any) => {
   const published = toBoolean(rawProduct?.published ?? rawProduct?.isPublished, false);
   const status = toText(rawProduct?.status) || (published ? "active" : "draft");
   const preorderDays = toNumberOrNull(rawProduct?.preorderDays);
+  const rawPurchaseState =
+    rawProduct?.purchaseState && typeof rawProduct.purchaseState === "object"
+      ? rawProduct.purchaseState
+      : null;
 
   return {
     ...rawProduct,
@@ -292,6 +296,14 @@ export const normalizeStorefrontProduct = (rawProduct: any) => {
     weight: toNumberOrNull(rawProduct?.weight),
     condition: toText(rawProduct?.condition) || null,
     variations: rawProduct?.variations ?? null,
+    purchaseState: rawPurchaseState
+      ? {
+          code: toText(rawPurchaseState.code || rawPurchaseState.label || "UNKNOWN"),
+          label: toText(rawPurchaseState.label || rawPurchaseState.code || "Unavailable"),
+          isPurchasable: Boolean(rawPurchaseState.isPurchasable),
+          description: toText(rawPurchaseState.description) || null,
+        }
+      : null,
     published,
     status,
     rating: ratingAvg,

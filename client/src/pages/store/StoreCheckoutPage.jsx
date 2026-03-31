@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useOutletContext } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCartStore } from "../../store/cart.store.ts";
 import { validateStoreCoupon } from "../../api/public/storeCoupons.ts";
@@ -9,6 +9,7 @@ import { resolvePublicOrderReference } from "../../utils/publicOrderReference.js
 
 export default function StoreCheckoutPage() {
   const navigate = useNavigate();
+  const outletContext = useOutletContext() || {};
   const queryClient = useQueryClient();
   const items = useCartStore((state) => state.items);
   const subtotal = useCartStore((state) => state.subtotal);
@@ -17,7 +18,7 @@ export default function StoreCheckoutPage() {
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("COD");
+  const [paymentMethod, setPaymentMethod] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [showCartLink, setShowCartLink] = useState(false);
@@ -25,6 +26,31 @@ export default function StoreCheckoutPage() {
   const [couponMessage, setCouponMessage] = useState("");
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const storeSettings = outletContext?.storeSettings || null;
+  const availablePaymentMethods = Array.isArray(storeSettings?.payments?.methods)
+    ? storeSettings.payments.methods
+    : [];
+  const selectedPaymentMethod = availablePaymentMethods.find(
+    (method) => String(method?.code || "").toUpperCase() === String(paymentMethod || "").toUpperCase()
+  );
+  const hasAvailablePaymentMethod = availablePaymentMethods.length > 0;
+
+  useEffect(() => {
+    if (!hasAvailablePaymentMethod) {
+      if (paymentMethod) {
+        setPaymentMethod("");
+      }
+      return;
+    }
+    const firstMethodCode = String(availablePaymentMethods[0]?.code || "").toUpperCase();
+    const selectedStillAvailable = availablePaymentMethods.some(
+      (method) =>
+        String(method?.code || "").toUpperCase() === String(paymentMethod || "").toUpperCase()
+    );
+    if (!selectedStillAvailable && firstMethodCode) {
+      setPaymentMethod(firstMethodCode);
+    }
+  }, [availablePaymentMethods, hasAvailablePaymentMethod, paymentMethod]);
 
   useEffect(() => {
     if (items.length === 0) {
@@ -106,6 +132,16 @@ export default function StoreCheckoutPage() {
       return;
     }
 
+    if (!hasAvailablePaymentMethod) {
+      setError("No payment methods are currently available for checkout.");
+      return;
+    }
+
+    if (!selectedPaymentMethod) {
+      setError("Please choose an available payment method.");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const response = await createStoreOrder({
@@ -123,9 +159,16 @@ export default function StoreCheckoutPage() {
         })),
       });
 
-      if (response?.data?.orderId != null) {
+      if (response?.data?.id != null) {
         clearCart();
         queryClient.invalidateQueries({ queryKey: ["account", "orders"] });
+      }
+      if (
+        String(paymentMethod || "").toUpperCase() === "STRIPE" &&
+        response?.data?.checkoutRedirectUrl
+      ) {
+        window.location.assign(String(response.data.checkoutRedirectUrl));
+        return;
       }
       const publicOrderRef = resolvePublicOrderReference(
         response?.data?.invoiceNo,
@@ -157,6 +200,11 @@ export default function StoreCheckoutPage() {
         setShowCartLink(true);
       } else {
         const message = data?.message;
+        if (err?.response?.status === 409 && data?.code === "STORE_PAYMENT_METHOD_NOT_AVAILABLE") {
+          setError(message || "Selected payment method is no longer available.");
+          setShowCartLink(false);
+          return;
+        }
         setError(message || "Checkout failed. Please try again.");
         setShowCartLink(false);
       }
@@ -207,10 +255,28 @@ export default function StoreCheckoutPage() {
             value={paymentMethod}
             onChange={(event) => setPaymentMethod(event.target.value)}
             style={{ display: "block", width: "100%", padding: "8px" }}
+            disabled={!hasAvailablePaymentMethod}
           >
-            <option value="COD">COD</option>
-            <option value="TRANSFER">Bank Transfer</option>
+            {hasAvailablePaymentMethod ? (
+              availablePaymentMethods.map((method) => (
+                <option key={method.code} value={method.code}>
+                  {method.label}
+                </option>
+              ))
+            ) : (
+              <option value="">No payment methods available</option>
+            )}
           </select>
+          {selectedPaymentMethod?.description ? (
+            <p style={{ marginTop: "6px", fontSize: "12px", color: "#475569" }}>
+              {selectedPaymentMethod.description}
+            </p>
+          ) : null}
+          {!hasAvailablePaymentMethod ? (
+            <p style={{ marginTop: "6px", fontSize: "12px", color: "crimson" }}>
+              Checkout is temporarily unavailable because no payment method is active.
+            </p>
+          ) : null}
         </div>
         <div style={{ marginBottom: "12px" }}>
           <label htmlFor="checkout-notes">Notes (optional)</label>
@@ -279,7 +345,10 @@ export default function StoreCheckoutPage() {
             ) : null}
           </div>
         ) : null}
-        <button type="submit" disabled={isSubmitting || items.length === 0}>
+        <button
+          type="submit"
+          disabled={isSubmitting || items.length === 0 || !hasAvailablePaymentMethod}
+        >
           {isSubmitting ? "Placing order..." : "Place Order"}
         </button>
       </form>

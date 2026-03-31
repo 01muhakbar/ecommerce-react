@@ -64,7 +64,7 @@ export const createOrderSchema = z.object({
     address: z.string().trim().min(8),
     notes: z.string().optional(),
   }),
-  paymentMethod: z.enum(["COD"]),
+  paymentMethod: z.enum(["COD", "STRIPE"]),
   items: z.array(createOrderItemSchema).min(1),
   couponCode: z.string().trim().min(1).optional(),
 });

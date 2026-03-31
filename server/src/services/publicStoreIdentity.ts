@@ -1,6 +1,9 @@
 import { Op, QueryTypes } from "sequelize";
 import { Product, sequelize } from "../models/index.js";
-import { resolvePreferredStorePaymentProfile } from "./sharedContracts/storePaymentProfileCompat.js";
+import {
+  resolvePreferredStorePaymentProfile,
+  STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES,
+} from "./sharedContracts/storePaymentProfileCompat.js";
 import { buildStorePaymentProfileReadiness } from "./sharedContracts/storePaymentProfileState.js";
 
 export const PUBLIC_STORE_IDENTITY_ATTRIBUTES = [
@@ -163,6 +166,30 @@ export const serializePublicStoreIdentityContract = () => ({
     "Store description is the fallback for store microsite about content when rich-about customization is empty.",
     "Public store-facing lanes should not present a store as operational until store status is ACTIVE and payment profile readiness is READY.",
   ],
+});
+
+export const buildPublicOperationalPaymentProfileInclude = (
+  attributes: readonly string[] = STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES
+) => ({
+  association: "activePaymentProfile",
+  attributes: [...attributes],
+  required: true,
+  where: {
+    isActive: true,
+    verificationStatus: "ACTIVE",
+  } as any,
+});
+
+export const buildPublicOperationalStoreInclude = (
+  options: {
+    attributes?: readonly string[];
+  } = {}
+) => ({
+  association: "store",
+  attributes: [...(options.attributes || ["id"])],
+  required: true,
+  where: { status: "ACTIVE" } as any,
+  include: [buildPublicOperationalPaymentProfileInclude()],
 });
 
 export const buildPublicStoreOperationalReadiness = (

@@ -98,15 +98,33 @@ const mapGroupedCounts = (rows: any[]) => {
   return map;
 };
 
-const countProductsByStoreIds = async (storeIds: number[], where: any) => {
-  if (!storeIds.length) return new Map<number, number>();
+const normalizeUniqueStoreIds = (storeIds: number[]) =>
+  [...new Set(storeIds.map((storeId) => Number(storeId || 0)).filter((storeId) => storeId > 0))];
+
+const countProductsByStoreIds = async (
+  storeIds: number[],
+  where: any,
+  options: { requireActiveStore?: boolean } = {}
+) => {
+  const normalizedStoreIds = normalizeUniqueStoreIds(storeIds);
+  if (!normalizedStoreIds.length) return new Map<number, number>();
 
   const rows = await Product.findAll({
-    attributes: ["storeId", [fn("COUNT", col("id")), "count"]],
+    attributes: ["storeId", [fn("COUNT", col("Product.id")), "count"]],
     where: {
-      storeId: { [Op.in]: storeIds },
+      storeId: { [Op.in]: normalizedStoreIds },
       ...where,
     } as any,
+    include: options.requireActiveStore
+      ? [
+          {
+            association: "store",
+            attributes: [],
+            required: true,
+            where: { status: "ACTIVE" } as any,
+          },
+        ]
+      : undefined,
     group: ["storeId"],
     raw: true,
   });
@@ -115,12 +133,13 @@ const countProductsByStoreIds = async (storeIds: number[], where: any) => {
 };
 
 const countMembersByStoreIds = async (storeIds: number[], status: string) => {
-  if (!storeIds.length) return new Map<number, number>();
+  const normalizedStoreIds = normalizeUniqueStoreIds(storeIds);
+  if (!normalizedStoreIds.length) return new Map<number, number>();
 
   const rows = await StoreMember.findAll({
     attributes: ["storeId", [fn("COUNT", col("id")), "count"]],
     where: {
-      storeId: { [Op.in]: storeIds },
+      storeId: { [Op.in]: normalizedStoreIds },
       status,
     } as any,
     group: ["storeId"],
@@ -775,7 +794,8 @@ const buildWorkspaceReadinessSummary = (input: {
 };
 
 const loadProductPipelineSummaryByStoreIds = async (storeIds: number[]) => {
-  if (!storeIds.length) return new Map<number, ProductPipelineSummary>();
+  const normalizedStoreIds = normalizeUniqueStoreIds(storeIds);
+  if (!normalizedStoreIds.length) return new Map<number, ProductPipelineSummary>();
 
   const [
     totalProducts,
@@ -789,35 +809,35 @@ const loadProductPipelineSummaryByStoreIds = async (storeIds: number[]) => {
     publishedBlocked,
     internalOnly,
   ] = await Promise.all([
-    countProductsByStoreIds(storeIds, {}),
-    countProductsByStoreIds(storeIds, { status: "draft" }),
-    countProductsByStoreIds(storeIds, {
+    countProductsByStoreIds(normalizedStoreIds, {}),
+    countProductsByStoreIds(normalizedStoreIds, { status: "draft" }),
+    countProductsByStoreIds(normalizedStoreIds, {
       status: "draft",
       sellerSubmissionStatus: "none",
     }),
-    countProductsByStoreIds(storeIds, { status: "active" }),
-    countProductsByStoreIds(storeIds, { status: "inactive" }),
-    countProductsByStoreIds(storeIds, { sellerSubmissionStatus: "submitted" }),
-    countProductsByStoreIds(storeIds, { sellerSubmissionStatus: "needs_revision" }),
-    countProductsByStoreIds(storeIds, {
+    countProductsByStoreIds(normalizedStoreIds, { status: "active" }),
+    countProductsByStoreIds(normalizedStoreIds, { status: "inactive" }),
+    countProductsByStoreIds(normalizedStoreIds, { sellerSubmissionStatus: "submitted" }),
+    countProductsByStoreIds(normalizedStoreIds, { sellerSubmissionStatus: "needs_revision" }),
+    countProductsByStoreIds(normalizedStoreIds, {
       isPublished: true,
       status: "active",
       sellerSubmissionStatus: "none",
-    }),
-    countProductsByStoreIds(storeIds, {
+    }, { requireActiveStore: true }),
+    countProductsByStoreIds(normalizedStoreIds, {
       isPublished: true,
       [Op.or]: [
         { status: { [Op.ne]: "active" } },
         { sellerSubmissionStatus: { [Op.in]: ["submitted", "needs_revision"] } },
       ],
     }),
-    countProductsByStoreIds(storeIds, {
+    countProductsByStoreIds(normalizedStoreIds, {
       isPublished: false,
     }),
   ]);
 
   const summaryMap = new Map<number, ProductPipelineSummary>();
-  for (const storeId of storeIds) {
+  for (const storeId of normalizedStoreIds) {
     const result = {
       totalProducts: totalProducts.get(storeId) || 0,
       drafts: drafts.get(storeId) || 0,
@@ -838,17 +858,18 @@ const loadProductPipelineSummaryByStoreIds = async (storeIds: number[]) => {
 };
 
 const loadTeamWorkspaceSummaryByStoreIds = async (storeIds: number[]) => {
-  if (!storeIds.length) return new Map<number, TeamWorkspaceSummary>();
+  const normalizedStoreIds = normalizeUniqueStoreIds(storeIds);
+  if (!normalizedStoreIds.length) return new Map<number, TeamWorkspaceSummary>();
 
   const [activeMembers, invitedMembers, disabledMembers, removedMembers] = await Promise.all([
-    countMembersByStoreIds(storeIds, "ACTIVE"),
-    countMembersByStoreIds(storeIds, "INVITED"),
-    countMembersByStoreIds(storeIds, "DISABLED"),
-    countMembersByStoreIds(storeIds, "REMOVED"),
+    countMembersByStoreIds(normalizedStoreIds, "ACTIVE"),
+    countMembersByStoreIds(normalizedStoreIds, "INVITED"),
+    countMembersByStoreIds(normalizedStoreIds, "DISABLED"),
+    countMembersByStoreIds(normalizedStoreIds, "REMOVED"),
   ]);
 
   const summaryMap = new Map<number, TeamWorkspaceSummary>();
-  for (const storeId of storeIds) {
+  for (const storeId of normalizedStoreIds) {
     summaryMap.set(storeId, {
       activeMembers: activeMembers.get(storeId) || 0,
       invitedMembers: invitedMembers.get(storeId) || 0,

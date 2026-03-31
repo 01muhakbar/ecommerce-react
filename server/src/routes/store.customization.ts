@@ -4,9 +4,9 @@ import { sequelize } from "../models/index.js";
 import { Store } from "../models/index.js";
 import {
   PUBLIC_STORE_IDENTITY_ATTRIBUTES,
+  buildPublicOperationalPaymentProfileInclude,
   serializePublicStoreIdentityPayload,
 } from "../services/sharedContracts/publicStoreIdentity.js";
-import { STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES } from "../services/sharedContracts/storePaymentProfileCompat.js";
 import {
   buildEffectiveStoreMicrositeRichAboutPayload,
   buildPublicStoreCustomizationHeaderSettings,
@@ -90,18 +90,7 @@ const resolvePrimaryPublicStore = async () => {
   return Store.findOne({
     where: { status: "ACTIVE" } as any,
     attributes: [...PUBLIC_STORE_IDENTITY_ATTRIBUTES],
-    include: [
-      {
-        association: "paymentProfile",
-        attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
-        required: false,
-      },
-      {
-        association: "activePaymentProfile",
-        attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
-        required: false,
-      },
-    ],
+    include: [buildPublicOperationalPaymentProfileInclude()],
     order: [["id", "ASC"]],
   });
 };
@@ -118,13 +107,13 @@ const resolvePublicStoreBySlug = async (slug: string) => {
     attributes: [...PUBLIC_STORE_IDENTITY_ATTRIBUTES],
     include: [
       {
-        association: "paymentProfile",
-        attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+        association: "activePaymentProfile",
+        attributes: [...buildPublicOperationalPaymentProfileInclude().attributes],
         required: false,
       },
       {
-        association: "activePaymentProfile",
-        attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+        association: "paymentProfile",
+        attributes: [...buildPublicOperationalPaymentProfileInclude().attributes],
         required: false,
       },
     ],

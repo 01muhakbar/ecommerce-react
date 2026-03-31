@@ -218,6 +218,13 @@ export default function StoreOrderTrackingPage() {
   const customerAddress =
     order?.customerAddress || customer.address || order?.shippingAddress || "-";
   const paymentMethod = order?.paymentMethod || order?.method || "-";
+  const stripeContinuePath =
+    String(paymentMethod || "").toUpperCase() === "STRIPE" &&
+    String(order?.paymentStatus || "").toUpperCase() !== "PAID" &&
+    !isCancelled &&
+    invoiceRef
+      ? `/checkout/success?ref=${encodeURIComponent(invoiceRef)}&method=STRIPE&cancelled=1`
+      : null;
   const items = order?.items || order?.orderItems || order?.products || [];
   const storeSplits = Array.isArray(order?.storeSplits) ? order.storeSplits : [];
   const shippingCost =
@@ -716,6 +723,14 @@ export default function StoreOrderTrackingPage() {
             <Printer className="h-4 w-4" />
             {dashboardCopy.printButtonValue}
           </button>
+          {stripeContinuePath ? (
+            <Link
+              to={stripeContinuePath}
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:w-auto"
+            >
+              Continue Stripe Payment
+            </Link>
+          ) : null}
         </div>
       </div>
     </section>

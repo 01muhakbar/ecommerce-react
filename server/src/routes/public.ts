@@ -7,6 +7,7 @@ import multer from "multer";
 import bcrypt from "bcrypt";
 import { Category, Product, Store, User } from "../models/index.js";
 import { protect } from "../middleware/authMiddleware.js";
+import { buildPublicOperationalStoreInclude } from "../services/sharedContracts/publicStoreIdentity.js";
 import {
   clearUserNotifications,
   getUserNotifications,
@@ -228,20 +229,16 @@ router.get("/products", async (req: Request, res: Response) => {
 
     const offset = (page - 1) * limit;
 
-    const { rows, count } = await Product.findAndCountAll({
-      where,
-      include: [
-        { model: Category, as: "category", attributes: ["id", "name", "code"] },
-        {
-          model: Store,
-          as: "store",
-          attributes: ["id"],
-          required: true,
-          where: { status: "ACTIVE" } as any,
-        },
-      ],
-      order: [["createdAt", "DESC"]],
-      limit,
+      const { rows, count } = await Product.findAndCountAll({
+        where,
+        include: [
+          { model: Category, as: "category", attributes: ["id", "name", "code"] },
+          buildPublicOperationalStoreInclude({
+            attributes: ["id"],
+          }),
+        ],
+        order: [["createdAt", "DESC"]],
+        limit,
       offset,
     });
 

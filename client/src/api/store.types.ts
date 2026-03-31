@@ -38,6 +38,12 @@ export type StoreProduct = {
   weight?: number | null;
   condition?: string | null;
   variations?: any;
+  purchaseState?: {
+    code: string;
+    label: string;
+    isPurchasable: boolean;
+    description?: string | null;
+  } | null;
   status?: string | null;
   published?: boolean;
 };
@@ -309,6 +315,12 @@ export type PublicStoreSettings = {
     stripeEnabled: boolean;
     razorPayEnabled: boolean;
     stripeKey: string;
+    razorPayKeyId?: string;
+    methods?: Array<{
+      code: string;
+      label: string;
+      description?: string;
+    }>;
   };
   socialLogin: {
     googleEnabled: boolean;

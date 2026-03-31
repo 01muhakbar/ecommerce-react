@@ -23,6 +23,14 @@ export default function SearchProductCard({ product }) {
   const hasDiscount = discountPercent > 0 || (originalPrice > price && price > 0);
   const stockValue = Number(product?.stock);
   const isOutOfStock = Number.isFinite(stockValue) && stockValue <= 0;
+  const purchaseState = product?.purchaseState || null;
+  const isPurchasable =
+    typeof purchaseState?.isPurchasable === "boolean"
+      ? purchaseState.isPurchasable
+      : !isOutOfStock;
+  const purchaseLabel = isPurchasable
+    ? null
+    : purchaseState?.label || (isOutOfStock ? "Out of stock" : "Unavailable");
 
   useEffect(() => {
     setImageSrc(resolvedImage);
@@ -41,7 +49,7 @@ export default function SearchProductCard({ product }) {
   const handleAdd = (event) => {
     event.preventDefault();
     event.stopPropagation();
-    if (isAdding || isOutOfStock) return;
+    if (isAdding || !isPurchasable) return;
     setIsAdding(true);
     add(product?.id, 1, {
       name: product?.name || product?.title,
@@ -101,14 +109,14 @@ export default function SearchProductCard({ product }) {
           <button
             type="button"
             aria-label={
-              isOutOfStock ? `${productName} is out of stock` : `Add ${productName} to cart`
+              !isPurchasable ? `${productName} is unavailable` : `Add ${productName} to cart`
             }
             onClick={handleAdd}
-            disabled={isAdding || isLoading || isOutOfStock}
+            disabled={isAdding || isLoading || !isPurchasable}
             className="absolute bottom-3 right-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 sm:h-10 sm:w-10"
           >
-            {isOutOfStock ? (
-              <span className="text-[10px] font-semibold">OOS</span>
+            {!isPurchasable ? (
+              <span className="text-[10px] font-semibold">Off</span>
             ) : isAdding ? (
               <span className="text-base">✓</span>
             ) : (
@@ -135,8 +143,13 @@ export default function SearchProductCard({ product }) {
               </span>
             ) : null}
           </div>
-          {isOutOfStock ? (
-            <p className="text-[11px] font-medium text-rose-600">Out of stock</p>
+          {purchaseLabel ? (
+            <p
+              className="text-[11px] font-medium text-rose-600"
+              title={purchaseState?.description || purchaseLabel}
+            >
+              {purchaseLabel}
+            </p>
           ) : null}
         </div>
       </div>

@@ -20,6 +20,8 @@ const DEFAULT_PUBLIC_STORE_SETTINGS = {
     stripeEnabled: false,
     razorPayEnabled: false,
     stripeKey: "",
+    razorPayKeyId: "",
+    methods: [],
   },
   socialLogin: {
     googleEnabled: false,
@@ -88,6 +90,29 @@ const normalizePublicStoreSettings = (raw) => {
         DEFAULT_PUBLIC_STORE_SETTINGS.payments.razorPayEnabled
       ),
       stripeKey: toText(payments.stripeKey, ""),
+      razorPayKeyId: toText(payments.razorPayKeyId, ""),
+      methods: Array.isArray(payments.methods)
+        ? payments.methods
+            .map((method) => ({
+              code: toText(method?.code, "").toUpperCase(),
+              label: toText(method?.label, ""),
+              description: toText(method?.description, ""),
+            }))
+            .filter((method) => method.code && method.label)
+        : [
+            ...(toBool(
+              payments.cashOnDeliveryEnabled,
+              DEFAULT_PUBLIC_STORE_SETTINGS.payments.cashOnDeliveryEnabled
+            )
+              ? [
+                  {
+                    code: "COD",
+                    label: "Cash on Delivery",
+                    description: "Pay when your order arrives.",
+                  },
+                ]
+              : []),
+          ],
     },
     socialLogin: {
       googleEnabled: toBool(

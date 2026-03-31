@@ -8,6 +8,7 @@ import {
   Product,
   Store,
   StoreMember,
+  StorePaymentProfile,
   User,
   sequelize,
 } from "../models/index.js";
@@ -87,6 +88,7 @@ class CookieClient {
 
 const createdUserIds: number[] = [];
 const createdStoreIds: number[] = [];
+const createdPaymentProfileIds: number[] = [];
 const createdProductIds: number[] = [];
 
 const slugify = (value: string) =>
@@ -169,6 +171,33 @@ async function createFixtureStore(
   const id = Number(store.getDataValue("id"));
   createdStoreIds.push(id);
   return { id, slug, status, ownerUserId };
+}
+
+async function createReadyPaymentProfile(storeId: number) {
+  const now = new Date();
+  const profile = await StorePaymentProfile.create({
+    storeId,
+    providerCode: "MANUAL_QRIS",
+    paymentType: "QRIS_STATIC",
+    version: 1,
+    snapshotStatus: "ACTIVE",
+    accountName: `MVF Account ${storeId}`,
+    merchantName: `MVF Merchant ${storeId}`,
+    merchantId: `MVF-${storeId}`,
+    qrisImageUrl: `https://example.com/${RUN_ID}-${storeId}.png`,
+    qrisPayload: `${RUN_ID}-${storeId}-payload`,
+    instructionText: "MVF visibility smoke payment instructions.",
+    isActive: true,
+    verificationStatus: "ACTIVE",
+    verifiedAt: now,
+    activatedAt: now,
+  } as any);
+  const id = Number(profile.getDataValue("id"));
+  createdPaymentProfileIds.push(id);
+  await Store.update(
+    { activeStorePaymentProfileId: id } as any,
+    { where: { id: storeId } as any }
+  );
 }
 
 async function createFixtureProduct(input: {
@@ -283,6 +312,40 @@ async function assertVisibleEverywhere(product: FixtureProduct, label: string) {
   );
 }
 
+async function assertHiddenFromDiscoveryWithDetailGate(
+  product: FixtureProduct,
+  storeSlug: string,
+  label: string
+) {
+  const storeList = await fetchStoreList(product.name);
+  assertStatus(storeList, 200, `${label} storefront list`);
+  assertListMissing(toStoreListItems(storeList.body), product.slug, `${label} storefront list`);
+
+  const publicList = await fetchPublicList(product.name);
+  assertStatus(publicList, 200, `${label} public list`);
+  assertListMissing(toPublicListItems(publicList.body), product.slug, `${label} public list`);
+
+  const storeDetail = await new CookieClient().request(
+    `/api/store/products/${encodeURIComponent(product.slug)}?storeSlug=${encodeURIComponent(storeSlug)}`
+  );
+  assertStatus(storeDetail, 200, `${label} storefront detail`);
+  assert.equal(
+    String(storeDetail.body?.data?.slug || ""),
+    product.slug,
+    `${label}: storefront detail returned unexpected product`
+  );
+  assert.equal(
+    String(storeDetail.body?.data?.purchaseState?.code || ""),
+    "STORE_NOT_READY",
+    `${label}: storefront detail purchaseState mismatch`
+  );
+  assert.equal(
+    Boolean(storeDetail.body?.data?.purchaseState?.isPurchasable),
+    false,
+    `${label}: storefront detail should stay non-purchasable`
+  );
+}
+
 async function resetCartForUser(userId: number) {
   const carts = await Cart.findAll({
     where: { userId } as any,
@@ -348,6 +411,13 @@ async function cleanupFixtures() {
     });
   }
 
+  if (createdPaymentProfileIds.length > 0) {
+    await StorePaymentProfile.destroy({
+      where: { id: { [Op.in]: createdPaymentProfileIds } } as any,
+      force: true,
+    });
+  }
+
   if (createdStoreIds.length > 0 || createdUserIds.length > 0) {
     await StoreMember.destroy({
       where: {
@@ -379,10 +449,17 @@ async function run() {
 
   logStep("creating fixtures");
   const sellerUser = await createFixtureUser("seller-owner");
+  const notReadySellerUser = await createFixtureUser("not-ready-owner");
   const inactiveSellerUser = await createFixtureUser("inactive-owner");
   const customerUser = await createFixtureUser("customer");
 
   const activeStore = await createFixtureStore(sellerUser.id, "store-active", "ACTIVE");
+  await createReadyPaymentProfile(activeStore.id);
+  const activeStoreNotReady = await createFixtureStore(
+    notReadySellerUser.id,
+    "store-active-not-ready",
+    "ACTIVE"
+  );
   const inactiveStore = await createFixtureStore(
     inactiveSellerUser.id,
     "store-inactive",
@@ -437,6 +514,14 @@ async function run() {
     published: true,
     sellerSubmissionStatus: "none",
   });
+  const notReadyStoreProduct = await createFixtureProduct({
+    ownerUserId: notReadySellerUser.id,
+    storeId: activeStoreNotReady.id,
+    label: "store-not-ready-hidden",
+    status: "active",
+    published: true,
+    sellerSubmissionStatus: "none",
+  });
 
   logStep("authenticating admin, seller, and customer clients");
   const adminClient = new CookieClient();
@@ -464,6 +549,12 @@ async function run() {
   logPass("needs revision hidden");
   await assertHiddenEverywhere(inactiveStoreProduct, "inactive store hidden");
   logPass("inactive store hidden");
+  await assertHiddenFromDiscoveryWithDetailGate(
+    notReadyStoreProduct,
+    activeStoreNotReady.slug,
+    "not-ready store hidden"
+  );
+  logPass("not-ready store discovery hidden with gated detail");
 
   logStep("checking visible scenario on public/storefront routes");
   await assertVisibleEverywhere(visibleProduct, "visible product");

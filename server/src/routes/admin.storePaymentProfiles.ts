@@ -27,6 +27,9 @@ import {
 
 const router = Router();
 
+const normalizeUniqueStoreIds = (stores: any[]) =>
+  [...new Set(stores.map((store) => Number(store?.id || 0)).filter((storeId) => storeId > 0))];
+
 const reviewSchema = z.object({
   verificationStatus: z.enum(["ACTIVE", "REJECTED", "INACTIVE"]),
   adminReviewNote: z.string().trim().max(4_000).optional().nullable(),
@@ -342,12 +345,9 @@ router.get("/payment-profiles", async (_req, res) => {
       order: [["createdAt", "DESC"]],
     });
 
-    const requestMap = await loadAdminVisibleRequestsByStore(
-      stores.map((store) => Number(store.id))
-    );
-    const productSummaryMap = await loadProductPipelineSummaryByStoreIds(
-      stores.map((store) => Number(store.id))
-    );
+    const storeIds = normalizeUniqueStoreIds(stores);
+    const requestMap = await loadAdminVisibleRequestsByStore(storeIds);
+    const productSummaryMap = await loadProductPipelineSummaryByStoreIds(storeIds);
     const seenStoreIds = new Set<number>();
     const items = stores
       .map((store) =>

@@ -65,11 +65,19 @@ export default function ProductCardKacha({ product }) {
   const displayReviewCount = Number.isFinite(reviewCount) ? reviewCount : 0;
   const stockValue = Number(product?.stock);
   const isOutOfStock = Number.isFinite(stockValue) && stockValue <= 0;
+  const purchaseState = product?.purchaseState || null;
+  const isPurchasable =
+    typeof purchaseState?.isPurchasable === "boolean"
+      ? purchaseState.isPurchasable
+      : !isOutOfStock;
+  const purchaseLabel = isPurchasable
+    ? null
+    : purchaseState?.label || (isOutOfStock ? "Out of stock" : "Unavailable");
 
   const handleAdd = (event) => {
     event.preventDefault();
     event.stopPropagation();
-    if (isAdding || !product?.id || isOutOfStock) return;
+    if (isAdding || !product?.id || !isPurchasable) return;
     setIsAdding(true);
     add(product.id, 1, {
       name: productName,
@@ -114,12 +122,12 @@ export default function ProductCardKacha({ product }) {
           <button
             type="button"
             onClick={handleAdd}
-            aria-label={isOutOfStock ? "Out of stock" : "Add to cart"}
-            title={isOutOfStock ? "Out of stock" : "Add to cart"}
-            disabled={isAdding || isLoading || isOutOfStock}
+            aria-label={!isPurchasable ? "Unavailable" : "Add to cart"}
+            title={!isPurchasable ? purchaseLabel || "Unavailable" : "Add to cart"}
+            disabled={isAdding || isLoading || !isPurchasable}
             className="absolute bottom-3 right-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-70 sm:h-10 sm:w-10"
           >
-            {isOutOfStock ? "!" : isAdding ? "✓" : <ShoppingBag className="h-5 w-5" />}
+            {!isPurchasable ? "!" : isAdding ? "✓" : <ShoppingBag className="h-5 w-5" />}
           </button>
         </div>
         <div className="mt-3 space-y-1.5">
@@ -142,7 +150,7 @@ export default function ProductCardKacha({ product }) {
             ) : null}
           </div>
           <p className="text-[11px] text-slate-500">
-            {isOutOfStock ? "Out of stock" : unit}
+            {purchaseLabel || unit}
           </p>
         </div>
       </Link>

@@ -18,11 +18,27 @@ import {
   sequelize,
 } from "../models/index.js";
 import { validateCoupon } from "../services/coupon.service.js";
-import { serializePublicSellerInfo } from "../services/sharedContracts/publicStoreIdentity.js";
+import {
+  buildPublicOperationalStoreInclude,
+  buildPublicStoreOperationalReadiness,
+  serializePublicSellerInfo,
+} from "../services/sharedContracts/publicStoreIdentity.js";
 import {
   createNewOrderNotification,
   createUserOrderPlacedNotification,
 } from "../services/notification.service.js";
+import {
+  ensureSettingsTable,
+  getAvailableCheckoutPaymentMethods,
+  getPersistedStoreSettings,
+  getStripeRuntimeConfig,
+} from "../services/storeSettings.js";
+import {
+  createStripeCheckoutSession,
+  resolveStripeCheckoutBaseUrl,
+  retrieveStripeCheckoutSession,
+} from "../services/stripeCheckout.js";
+import { syncStoreOrderFromStripeSession } from "../services/stripeOrderSync.js";
 import {
   buildBuyerOrderPaymentEntry,
   resolveBuyerFacingPaymentStatus,
@@ -40,6 +56,7 @@ const normalizeStoreSlug = (value: any) =>
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "");
+const normalizeStripeSessionId = (value: any) => String(value || "").trim();
 const getAuthUserId = (req: Request, res: Response) => {
   const user = (req as any).user;
   const userId = Number(user?.id);
@@ -79,6 +96,28 @@ const toCanonicalOrderStatus = (raw: any) => {
   }
   return "pending";
 };
+
+const buildStripeCheckoutLineItems = (items: Array<{
+  name: string;
+  quantity: number;
+  price: number;
+}>) =>
+  items.map((item) => ({
+    name: String(item.name || "Product"),
+    quantity: Math.max(1, Number(item.quantity || 0)),
+    unitAmount: Math.max(0, Math.round(Number(item.price || 0))),
+  }));
+
+const resolveRequestBaseUrl = (req: Request) =>
+  resolveStripeCheckoutBaseUrl({
+    explicitBaseUrl:
+      process.env.STORE_PUBLIC_BASE_URL ||
+      process.env.CLIENT_PUBLIC_BASE_URL ||
+      process.env.PUBLIC_BASE_URL,
+    origin: req.get("origin"),
+    protocol: req.get("x-forwarded-proto") || req.protocol,
+    host: req.get("x-forwarded-host") || req.get("host"),
+  });
 
 const createOrderRequestSchema = createOrderSchema.partial({
   customer: true,
@@ -186,6 +225,41 @@ const resolveOrderAmountSnapshot = (order: any, computedSubtotal = 0) => {
     total,
   };
 };
+
+const loadStoreOrderForStripe = async (invoiceNo: string, userId: number) =>
+  Order.findOne({
+    where: {
+      invoiceNo,
+      userId,
+    } as any,
+    attributes: [
+      "id",
+      "invoiceNo",
+      "status",
+      "paymentStatus",
+      "paymentMethod",
+      "totalAmount",
+      "customerName",
+      "customerPhone",
+      "customerAddress",
+      "customerNotes",
+      "createdAt",
+    ],
+    include: [
+      {
+        model: OrderItem,
+        as: "items",
+        attributes: ["id", "quantity", "price", ["product_id", "productId"]],
+        include: [
+          {
+            model: Product,
+            as: "product",
+            attributes: ["id", "name"],
+          },
+        ],
+      },
+    ],
+  });
 
 const getMissingShippingField = (
   details: ShippingDetailsSnapshot | null
@@ -376,6 +450,39 @@ const toSafeNumber = (value: any, fallback = 0) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const buildPublicPurchaseState = (product: any, store: any) => {
+  const stock = toNumber(product?.stock);
+  const operationalReadiness = store ? buildPublicStoreOperationalReadiness(store) : null;
+  const isStoreReady = operationalReadiness ? Boolean(operationalReadiness.isReady) : true;
+
+  if (!isStoreReady) {
+    return {
+      code: "STORE_NOT_READY",
+      label: "Store not ready",
+      isPurchasable: false,
+      description:
+        operationalReadiness?.description ||
+        "This store is not operational for buyer checkout yet.",
+    };
+  }
+
+  if (Number.isFinite(Number(stock)) && Number(stock) <= 0) {
+    return {
+      code: "OUT_OF_STOCK",
+      label: "Out of stock",
+      isPurchasable: false,
+      description: "This product stays visible, but checkout is blocked until stock is available.",
+    };
+  }
+
+  return {
+    code: "READY",
+    label: "Ready to buy",
+    isPurchasable: true,
+    description: "This product currently passes the public buyer gate for add-to-cart.",
+  };
+};
+
 const toProductListItem = (product: any) => {
   const plain = product?.get ? product.get({ plain: true }) : product;
   const rawImage = plain?.promoImagePath || plain?.imagePaths?.[0] || null;
@@ -403,6 +510,7 @@ const toProductListItem = (product: any) => {
         slug: plain.category.code,
       }
     : null;
+  const purchaseState = buildPublicPurchaseState(plain, plain?.store ?? null);
 
   return {
     id: plain?.id,
@@ -421,6 +529,7 @@ const toProductListItem = (product: any) => {
     categoryId: plain?.categoryId ?? null,
     category,
     stock: plain?.stock ?? null,
+    purchaseState,
     status: plain?.status,
     published: plain?.isPublished ?? plain?.published ?? false,
     updatedAt: plain?.updatedAt,
@@ -547,6 +656,17 @@ router.get(
             status: "ACTIVE",
           } as any,
           attributes: ["id"],
+          include: [
+            {
+              association: "activePaymentProfile",
+              attributes: ["id"],
+              required: true,
+              where: {
+                isActive: true,
+                verificationStatus: "ACTIVE",
+              } as any,
+            },
+          ],
         });
 
         if (!store) {
@@ -597,13 +717,9 @@ router.get(
         ],
         include: [
           { model: Category, as: "category", attributes: ["id", "name", "code"] },
-          {
-            model: Store,
-            as: "store",
-            attributes: ["id"],
-            required: true,
-            where: { status: "ACTIVE" } as any,
-          },
+          buildPublicOperationalStoreInclude({
+            attributes: ["id", "status"],
+          }),
         ],
         order: [["createdAt", "DESC"]],
         limit,
@@ -1820,6 +1936,42 @@ router.post(
           return res.status(400).json({ message: "Invalid cart items." });
         }
 
+        await ensureSettingsTable();
+        const storeSettings = await getPersistedStoreSettings();
+        const availablePaymentMethods = getAvailableCheckoutPaymentMethods(storeSettings);
+        const availablePaymentMethodCodes = new Set(
+          availablePaymentMethods.map((method) => String(method?.code || "").toUpperCase())
+        );
+        const normalizedPaymentMethod = String(paymentMethod || "").toUpperCase().trim();
+        const stripeRuntimeConfig = getStripeRuntimeConfig(storeSettings);
+        const shouldUseStripe = normalizedPaymentMethod === "STRIPE";
+        if (!availablePaymentMethodCodes.has(normalizedPaymentMethod)) {
+          return res.status(409).json({
+            code: "STORE_PAYMENT_METHOD_NOT_AVAILABLE",
+            message: "Selected payment method is not available for checkout.",
+            data: {
+              paymentMethod: normalizedPaymentMethod,
+              availableMethods: availablePaymentMethods,
+            },
+          });
+        }
+        if (shouldUseStripe && !stripeRuntimeConfig.enabled) {
+          return res.status(409).json({
+            code: "STORE_PAYMENT_METHOD_NOT_READY",
+            message: "Stripe checkout is not ready for this store yet.",
+          });
+        }
+        const checkoutBaseUrl = shouldUseStripe ? resolveRequestBaseUrl(req) : "";
+        if (shouldUseStripe && !checkoutBaseUrl) {
+          return res.status(500).json({
+            code: "STORE_PAYMENT_CHECKOUT_BASE_URL_MISSING",
+            message: "Stripe checkout cannot start because the public base URL is missing.",
+          });
+        }
+        const checkoutUser = shouldUseStripe
+          ? await User.findByPk(userId, { attributes: ["id", "name", "email"] })
+          : null;
+
       const tx = await sequelize.transaction();
       try {
         const itemsNorm = Array.from(normalizedItems.entries()).map(([productId, qty]) => ({
@@ -1848,13 +2000,9 @@ router.post(
             "sellerSubmissionStatus",
           ],
           include: [
-            {
-              model: Store,
-              as: "store",
+            buildPublicOperationalStoreInclude({
               attributes: ["id"],
-              required: true,
-              where: { status: "ACTIVE" } as any,
-            },
+            }),
           ],
           transaction: tx,
           lock: tx.LOCK.UPDATE,
@@ -2033,6 +2181,12 @@ router.post(
       }
 
         const orderStatus = "pending";
+        let stripeCheckout:
+          | {
+              sessionId: string;
+              url: string | null;
+            }
+          | null = null;
         const order = await Order.create(
             {
               invoiceNo: `STORE-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
@@ -2042,7 +2196,8 @@ router.post(
               customerPhone: resolvedCustomer.phone,
               customerAddress: resolvedCustomer.address,
               customerNotes: resolvedCustomer.notes ?? null,
-              paymentMethod,
+              paymentMethod: normalizedPaymentMethod,
+              paymentStatus: "UNPAID",
               totalAmount,
               couponCode: appliedCouponCode,
               discountAmount,
@@ -2063,6 +2218,33 @@ router.post(
           );
           product.stock = currentStock - item.qty;
           await product.save({ transaction: tx });
+        }
+
+        const invoiceNoForPayment =
+          order?.getDataValue?.("invoiceNo") ??
+          order?.get?.("invoiceNo") ??
+          (order as any)?.dataValues?.invoiceNo ??
+          (order as any)?.invoiceNo ??
+          null;
+        if (!invoiceNoForPayment) {
+          throw new Error("Order invoice reference is missing.");
+        }
+
+        if (shouldUseStripe) {
+          stripeCheckout = await createStripeCheckoutSession({
+            secretKey: stripeRuntimeConfig.secretKey,
+            baseUrl: checkoutBaseUrl,
+            invoiceNo: String(invoiceNoForPayment),
+            orderId: Number(order.id),
+            amountTotal: totalAmount,
+            lineItems: buildStripeCheckoutLineItems(responseItems),
+            customerEmail: checkoutUser?.get?.("email") ? String(checkoutUser.get("email")) : null,
+            customerName: resolvedCustomer.name,
+            currency: stripeRuntimeConfig.currency,
+          });
+          if (!stripeCheckout?.url) {
+            throw new Error("Stripe checkout session did not return a redirect URL.");
+          }
         }
 
         await tx.commit();
@@ -2111,7 +2293,11 @@ router.post(
               total: totalAmount,
               shippingDetails: shippingDetails ?? null,
               useDefaultShipping,
-              paymentMethod,
+              paymentStatus: "UNPAID",
+              paymentMethod: normalizedPaymentMethod,
+              checkoutRedirectMode: stripeCheckout ? "HOSTED" : null,
+              checkoutRedirectUrl: stripeCheckout?.url || null,
+              checkoutSessionId: stripeCheckout?.sessionId || null,
               items: responseItems,
             },
           });
@@ -2129,6 +2315,199 @@ router.post(
       return res
         .status(500)
         .json({ message: errorMessage || "Failed to create order" });
+    }
+  }
+);
+
+router.get(
+  "/orders/:ref/stripe/session",
+  protect,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = getAuthUserId(req, res);
+      if (!userId) return;
+
+      const refParam = String(req.params.ref || "").trim();
+      const sessionId = normalizeStripeSessionId(req.query.sessionId);
+      if (!refParam || !sessionId) {
+        return res.status(400).json({
+          code: "STRIPE_SESSION_QUERY_INVALID",
+          message: "Order reference and Stripe session id are required.",
+        });
+      }
+
+      await ensureSettingsTable();
+      const storeSettings = await getPersistedStoreSettings();
+      const stripeRuntimeConfig = getStripeRuntimeConfig(storeSettings);
+      if (!stripeRuntimeConfig.enabled) {
+        return res.status(409).json({
+          code: "STORE_PAYMENT_METHOD_NOT_READY",
+          message: "Stripe checkout is not ready for this store yet.",
+        });
+      }
+
+      const order = await loadStoreOrderForStripe(refParam, userId);
+      if (!order) {
+        return res.status(404).json({
+          code: "STORE_ORDER_NOT_FOUND",
+          message: "Order not found.",
+        });
+      }
+
+      const paymentMethod = String(getAttr(order, "paymentMethod") || "").toUpperCase().trim();
+      if (paymentMethod !== "STRIPE") {
+        return res.status(409).json({
+          code: "STORE_ORDER_PAYMENT_METHOD_MISMATCH",
+          message: "This order does not use Stripe checkout.",
+        });
+      }
+
+      const session = await retrieveStripeCheckoutSession({
+        secretKey: stripeRuntimeConfig.secretKey,
+        sessionId,
+      });
+
+      const invoiceNo = String(getAttr(order, "invoiceNo") || refParam);
+      const sessionInvoiceNo =
+        String(session.client_reference_id || "") ||
+        String(session.metadata?.invoiceNo || "");
+      if (sessionInvoiceNo !== invoiceNo) {
+        return res.status(409).json({
+          code: "STRIPE_SESSION_ORDER_MISMATCH",
+          message: "Stripe session does not belong to this order.",
+        });
+      }
+
+      const syncResult = await syncStoreOrderFromStripeSession({
+        session,
+        source: "return",
+      });
+      const nextPaymentStatus = syncResult.ok
+        ? syncResult.paymentStatus || "UNPAID"
+        : String(getAttr(order, "paymentStatus") || "UNPAID").toUpperCase().trim() || "UNPAID";
+      const nextOrderStatus = syncResult.ok
+        ? syncResult.orderStatus || "pending"
+        : String(getAttr(order, "status") || "pending").toLowerCase().trim() || "pending";
+
+      return res.json({
+        success: true,
+        data: {
+          orderRef: invoiceNo,
+          sessionId,
+          sessionStatus: String(session.status || "").toLowerCase() || null,
+          sessionPaymentStatus: String(session.payment_status || "").toUpperCase() || null,
+          paymentStatus: nextPaymentStatus,
+          orderStatus: nextOrderStatus,
+          paid: nextPaymentStatus === "PAID",
+          updatedBySync: syncResult.ok ? syncResult.updated : false,
+          checkoutUrl:
+            String(session.status || "").toLowerCase() === "open" && session.url
+              ? String(session.url)
+              : null,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.post(
+  "/orders/:ref/stripe/session",
+  protect,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = getAuthUserId(req, res);
+      if (!userId) return;
+
+      const refParam = String(req.params.ref || "").trim();
+      if (!refParam) {
+        return res.status(400).json({
+          code: "STORE_ORDER_REFERENCE_INVALID",
+          message: "Order reference is required.",
+        });
+      }
+
+      await ensureSettingsTable();
+      const storeSettings = await getPersistedStoreSettings();
+      const stripeRuntimeConfig = getStripeRuntimeConfig(storeSettings);
+      if (!stripeRuntimeConfig.enabled) {
+        return res.status(409).json({
+          code: "STORE_PAYMENT_METHOD_NOT_READY",
+          message: "Stripe checkout is not ready for this store yet.",
+        });
+      }
+
+      const order = await loadStoreOrderForStripe(refParam, userId);
+      if (!order) {
+        return res.status(404).json({
+          code: "STORE_ORDER_NOT_FOUND",
+          message: "Order not found.",
+        });
+      }
+
+      const paymentMethod = String(getAttr(order, "paymentMethod") || "").toUpperCase().trim();
+      const paymentStatus =
+        String(getAttr(order, "paymentStatus") || "UNPAID").toUpperCase().trim() || "UNPAID";
+      if (paymentMethod !== "STRIPE") {
+        return res.status(409).json({
+          code: "STORE_ORDER_PAYMENT_METHOD_MISMATCH",
+          message: "This order does not use Stripe checkout.",
+        });
+      }
+      if (paymentStatus === "PAID") {
+        return res.status(409).json({
+          code: "STORE_ORDER_ALREADY_PAID",
+          message: "This order has already been paid.",
+        });
+      }
+
+      const checkoutBaseUrl = resolveRequestBaseUrl(req);
+      if (!checkoutBaseUrl) {
+        return res.status(500).json({
+          code: "STORE_PAYMENT_CHECKOUT_BASE_URL_MISSING",
+          message: "Stripe checkout cannot start because the public base URL is missing.",
+        });
+      }
+
+      const orderItems = Array.isArray((order as any).items) ? ((order as any).items as any[]) : [];
+      const stripeCheckout = await createStripeCheckoutSession({
+        secretKey: stripeRuntimeConfig.secretKey,
+        baseUrl: checkoutBaseUrl,
+        invoiceNo: String(getAttr(order, "invoiceNo") || refParam),
+        orderId: Number(getAttr(order, "id") || 0),
+        amountTotal: Number(getAttr(order, "totalAmount") || 0),
+        lineItems: buildStripeCheckoutLineItems(
+          orderItems.map((item: any) => ({
+            name:
+              String(item?.product?.name || item?.get?.("product")?.name || "").trim() ||
+              `Product #${String(item?.productId || item?.get?.("productId") || "")}`,
+            quantity: Number(item?.quantity || item?.get?.("quantity") || 0),
+            price: Number(item?.price || item?.get?.("price") || 0),
+          }))
+        ),
+        customerName: String(getAttr(order, "customerName") || ""),
+        currency: stripeRuntimeConfig.currency,
+      });
+
+      if (!stripeCheckout?.url) {
+        return res.status(502).json({
+          code: "STRIPE_SESSION_URL_MISSING",
+          message: "Stripe checkout session did not return a redirect URL.",
+        });
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          orderRef: String(getAttr(order, "invoiceNo") || refParam),
+          checkoutRedirectMode: "HOSTED",
+          checkoutRedirectUrl: stripeCheckout.url,
+          checkoutSessionId: stripeCheckout.sessionId,
+        },
+      });
+    } catch (error) {
+      next(error);
     }
   }
 );

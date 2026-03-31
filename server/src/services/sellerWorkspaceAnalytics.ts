@@ -1,5 +1,6 @@
 import { Coupon, Product, Suborder, SuborderItem } from "../models/index.js";
 import { getCouponTimeWindow } from "./sharedContracts/couponGovernance.js";
+import { buildProductVisibilitySnapshot } from "./productVisibility.js";
 import { sellerHasPermission } from "./seller/resolveSellerAccess.js";
 import {
   emptyProductPipelineSummary,
@@ -483,8 +484,19 @@ const buildTopProducts = (items: any[]) => {
       stock: product ? toNumber(getAttr(product, "stock")) : 0,
       qtySold: 0,
       revenueAmount: 0,
-      storefrontVisible: Boolean(product ? getAttr(product, "isPublished") : false),
+      storefrontVisible: false,
     };
+
+    if (product) {
+      const visibility = buildProductVisibilitySnapshot({
+        isPublished: Boolean(getAttr(product, "isPublished")),
+        status: getAttr(product, "status"),
+        submissionStatus: getAttr(product, "sellerSubmissionStatus"),
+        storeStatus: getAttr(getAttr(product, "store"), "status"),
+        storeId: getAttr(product, "storeId"),
+      });
+      current.storefrontVisible = Boolean(visibility.storefrontVisible);
+    }
 
     current.qtySold += toNumber(getAttr(item, "qty"));
     current.revenueAmount += toNumber(getAttr(item, "totalPrice"));
@@ -803,7 +815,22 @@ export const loadSellerWorkspaceAnalyticsSummary = async (input: {
             {
               model: Product,
               as: "product",
-              attributes: ["id", "slug", "status", "stock", "isPublished"],
+              attributes: [
+                "id",
+                "slug",
+                "status",
+                "stock",
+                "isPublished",
+                "sellerSubmissionStatus",
+                "storeId",
+              ],
+              include: [
+                {
+                  association: "store",
+                  attributes: ["id", "status"],
+                  required: false,
+                },
+              ],
               required: false,
             },
           ],

@@ -275,6 +275,8 @@ function ProductSummaryPanel({
   hasFiniteStock,
   stockValue,
   isAtStockLimit,
+  purchaseState,
+  isPurchasable,
   cartLoading,
   isProductLoading,
   selectedOptions,
@@ -383,6 +385,12 @@ function ProductSummaryPanel({
         : "Ready to order"
       : "Out of stock";
   const discountLabel = hasDiscount ? `-${discountPercent.toFixed(0)}%` : null;
+  const purchaseLabel = purchaseState?.label || (isPurchasable ? "Ready to order" : "Unavailable");
+  const purchaseDescription =
+    purchaseState?.description ||
+    (isPurchasable
+      ? "Choose a quantity and add this item to your cart."
+      : "This product is not available for checkout right now.");
 
   return (
     <div className="space-y-5">
@@ -511,17 +519,17 @@ function ProductSummaryPanel({
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
               Buy now
             </p>
-            <p className="mt-1 text-sm text-slate-500">Choose a quantity and add this item to your cart.</p>
+            <p className="mt-1 text-sm text-slate-500">{purchaseDescription}</p>
           </div>
           <div className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">
-            {hasStock ? "Ready to order" : "Unavailable"}
+            {purchaseLabel}
           </div>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="grid h-12 w-full grid-cols-3 overflow-hidden rounded-full border border-slate-300 bg-white sm:w-[188px]">
             <button
               type="button"
-              disabled={qty <= 1}
+              disabled={!isPurchasable || qty <= 1}
               onClick={onDecreaseQty}
               className="inline-flex items-center justify-center border-r border-slate-300 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -532,7 +540,7 @@ function ProductSummaryPanel({
             </span>
             <button
               type="button"
-              disabled={!hasStock || isAtStockLimit}
+              disabled={!isPurchasable || !hasStock || isAtStockLimit}
               onClick={onIncreaseQty}
               className="inline-flex items-center justify-center border-l border-slate-300 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -541,15 +549,17 @@ function ProductSummaryPanel({
           </div>
           <button
             type="button"
-            disabled={!hasStock || cartLoading || isProductLoading}
+            disabled={!isPurchasable || !hasStock || cartLoading || isProductLoading}
             onClick={onAddToCart}
             className="inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-8 text-base font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:flex-1"
           >
-            Add to Cart
+            {isPurchasable ? "Add to Cart" : purchaseLabel}
           </button>
         </div>
         <p className="text-xs text-slate-500">
-          {hasFiniteStock
+          {!isPurchasable
+            ? purchaseDescription
+            : hasFiniteStock
             ? `Stock available: ${stockLabel}`
             : "Stock is confirmed during checkout."}
         </p>
@@ -702,6 +712,11 @@ export default function StoreProductDetailPage() {
     [productData?.data?.reviews, product?.reviews]
   );
   const sellerInfo = productData?.data?.sellerInfo ?? product?.sellerInfo ?? null;
+  const purchaseState = product?.purchaseState || null;
+  const isPurchasable =
+    typeof purchaseState?.isPurchasable === "boolean"
+      ? purchaseState.isPurchasable
+      : hasStock;
   const variationGroups = useMemo(
     () => normalizeVariationGroups(product?.variations),
     [product?.variations]
@@ -759,7 +774,7 @@ export default function StoreProductDetailPage() {
   }, [variationGroups]);
 
   const handleAddMainProduct = () => {
-    if (hasFiniteStock && stockValue <= 0) return;
+    if (!isPurchasable || (hasFiniteStock && stockValue <= 0)) return;
     add(product.id, qty, {
       name: product?.name || product?.title,
       price: product?.salePrice ?? product?.sellingPrice ?? product?.price,
@@ -769,7 +784,12 @@ export default function StoreProductDetailPage() {
 
   const handleAddRelated = (item) => {
     const relatedStock = Number(item?.stock);
-    if (Number.isFinite(relatedStock) && relatedStock <= 0) return;
+    const relatedPurchaseState = item?.purchaseState || null;
+    const isRelatedPurchasable =
+      typeof relatedPurchaseState?.isPurchasable === "boolean"
+        ? relatedPurchaseState.isPurchasable
+        : !(Number.isFinite(relatedStock) && relatedStock <= 0);
+    if (!isRelatedPurchasable || (Number.isFinite(relatedStock) && relatedStock <= 0)) return;
     const relatedImage = resolveProductImageUrl(item);
     add(item?.id, 1, {
       name: item?.name || item?.title,
@@ -897,6 +917,8 @@ export default function StoreProductDetailPage() {
                 hasFiniteStock={hasFiniteStock}
                 stockValue={stockValue}
                 isAtStockLimit={isAtStockLimit}
+                purchaseState={purchaseState}
+                isPurchasable={isPurchasable}
                 cartLoading={cartLoading}
                 isProductLoading={isLoading}
                 selectedOptions={selectedOptions}
@@ -1112,6 +1134,15 @@ export default function StoreProductDetailPage() {
               const relatedStock = Number(item?.stock);
               const isRelatedOutOfStock =
                 Number.isFinite(relatedStock) && relatedStock <= 0;
+              const relatedPurchaseState = item?.purchaseState || null;
+              const isRelatedPurchasable =
+                typeof relatedPurchaseState?.isPurchasable === "boolean"
+                  ? relatedPurchaseState.isPurchasable
+                  : !isRelatedOutOfStock;
+              const relatedPurchaseLabel = isRelatedPurchasable
+                ? null
+                : relatedPurchaseState?.label ||
+                  (isRelatedOutOfStock ? "Out of stock" : "Unavailable");
               return (
                 <article
                   key={item.id}
@@ -1131,15 +1162,15 @@ export default function StoreProductDetailPage() {
                       type="button"
                       onClick={() => handleAddRelated(item)}
                       aria-label={
-                        isRelatedOutOfStock
-                          ? `${relatedName} is out of stock`
+                        !isRelatedPurchasable
+                          ? `${relatedName} is unavailable`
                           : `Add ${relatedName} to cart`
                       }
-                      disabled={isRelatedOutOfStock}
+                      disabled={!isRelatedPurchasable}
                       className="absolute right-4 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-300"
                     >
-                      {isRelatedOutOfStock ? (
-                        <span className="text-[10px] font-semibold">OOS</span>
+                      {!isRelatedPurchasable ? (
+                        <span className="text-[10px] font-semibold">Off</span>
                       ) : isAdding ? (
                         <span className="text-xs font-semibold">OK</span>
                       ) : (
@@ -1163,8 +1194,13 @@ export default function StoreProductDetailPage() {
                     <div className="pt-1 text-lg font-bold text-slate-900">
                       {formatCurrency(toSafeNumber(item?.price, 0))}
                     </div>
-                    {isRelatedOutOfStock ? (
-                      <p className="text-xs font-medium text-rose-600">Out of stock</p>
+                    {relatedPurchaseLabel ? (
+                      <p
+                        className="text-xs font-medium text-rose-600"
+                        title={relatedPurchaseState?.description || relatedPurchaseLabel}
+                      >
+                        {relatedPurchaseLabel}
+                      </p>
                     ) : null}
                   </div>
                 </article>
