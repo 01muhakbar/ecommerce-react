@@ -282,6 +282,26 @@ function assertInitialState(data: any, label: string) {
   );
   assert.ok(group?.payment?.id, `${label}: payment record missing`);
   assert.equal(String(group?.payment?.status || ""), "CREATED", `${label}: payment record should start CREATED`);
+  assert.equal(
+    String(group?.paymentReadModel?.status || ""),
+    "CREATED",
+    `${label}: paymentReadModel status should start CREATED`
+  );
+  assert.equal(
+    Boolean(group?.paymentReadModel?.proofActionability?.canStartProof),
+    true,
+    `${label}: paymentReadModel proofActionability should start actionable`
+  );
+  assert.equal(
+    Boolean(group?.payment?.readModel?.cancelability?.canCancel),
+    true,
+    `${label}: nested payment readModel cancelability should start actionable`
+  );
+  assert.equal(
+    String(data?.paymentEntry?.summaryStatus || ""),
+    "ACTION_REQUIRED",
+    `${label}: paymentEntry should start actionable`
+  );
 }
 
 async function addProductToCart(customerClient: CookieClient, buyerUserId: number, productId: number) {
@@ -344,6 +364,13 @@ async function fetchBuyerGroupedOrder(customerClient: CookieClient, orderId: num
   return response.body?.data ?? null;
 }
 
+async function fetchPaymentDetail(customerClient: CookieClient, paymentId: number, label: string) {
+  const response = await customerClient.request(`/api/payments/${paymentId}`);
+  assertStatus(response, 200, label);
+  assert.equal(Boolean(response.body?.success), true, `${label}: payment detail missing success`);
+  return response.body?.data ?? null;
+}
+
 async function fetchSellerOrderDetail(
   sellerClient: CookieClient,
   storeId: number,
@@ -379,6 +406,29 @@ async function fetchAdminAuditDetail(adminClient: CookieClient, orderId: number,
   assertStatus(response, 200, label);
   assert.equal(Boolean(response.body?.success), true, `${label}: admin audit detail missing success`);
   return response.body?.data ?? null;
+}
+
+async function fetchAdminOrderDetail(
+  adminClient: CookieClient,
+  invoiceNo: string,
+  label: string
+) {
+  const response = await adminClient.request(
+    `/api/admin/orders/by-invoice/${encodeURIComponent(invoiceNo)}`
+  );
+  assertStatus(response, 200, label);
+  assert.equal(Boolean(response.body?.success), true, `${label}: admin order detail missing success`);
+  return response.body?.data ?? null;
+}
+
+async function fetchPublicTracking(invoiceNo: string, label: string) {
+  const response = await fetch(`${BASE_URL}/api/store/orders/${encodeURIComponent(invoiceNo)}`, {
+    headers: { Accept: "application/json" },
+  });
+  const text = await response.text();
+  const body = text ? JSON.parse(text) : null;
+  assert.equal(response.status, 200, `${label}: expected HTTP 200, received ${response.status} (${text})`);
+  return body?.data ?? null;
 }
 
 async function submitProof(customerClient: CookieClient, paymentId: number, label: string) {
@@ -549,9 +599,30 @@ async function runApproveScenario(input: {
   );
   const buyerPaidGroup = getSingleGroup(buyerPaid, "approve buyer grouped paid view");
   assert.equal(String(buyerPaid?.paymentStatus || ""), "PAID", "approve buyer: parent paymentStatus should be PAID");
+  assert.equal(
+    String(buyerPaid?.paymentEntry?.summaryStatus || ""),
+    "PAID",
+    "approve buyer: paymentEntry should be PAID"
+  );
   assert.equal(String(buyerPaid?.orderStatus || ""), "processing", "approve buyer: parent orderStatus should move to processing");
   assert.equal(String(buyerPaidGroup?.paymentStatus || ""), "PAID", "approve buyer: suborder paymentStatus should be PAID");
   assert.equal(String(buyerPaidGroup?.payment?.status || ""), "PAID", "approve buyer: payment record should be PAID");
+  assert.equal(
+    String(buyerPaidGroup?.paymentReadModel?.status || ""),
+    "PAID",
+    "approve buyer: paymentReadModel should be PAID"
+  );
+
+  const paidPaymentDetail = await fetchPaymentDetail(
+    input.customerClient,
+    scenario.paymentId,
+    "approve payment detail"
+  );
+  assert.equal(
+    String(paidPaymentDetail?.readModel?.status || ""),
+    "PAID",
+    "approve payment detail: readModel should be PAID"
+  );
 
   const adminPaid = await fetchAdminAuditDetail(
     input.adminClient,
@@ -564,6 +635,42 @@ async function runApproveScenario(input: {
   assert.equal(String(adminPaid?.parent?.orderStatus || ""), "processing", "approve admin: parent orderStatus should be processing");
   assert.equal(String(adminPaidGroup?.payment?.status || ""), "PAID", "approve admin: split payment should be PAID");
   assert.equal(String(adminPaidSuborder?.paymentStatus || ""), "PAID", "approve admin: suborder paymentStatus should be PAID");
+
+  const adminOrderDetail = await fetchAdminOrderDetail(
+    input.adminClient,
+    scenario.invoiceNo,
+    "approve admin order detail"
+  );
+  assert.equal(
+    String(adminOrderDetail?.contract?.paymentActionability?.code || ""),
+    "PAID",
+    "approve admin order detail: paymentActionability should be PAID"
+  );
+  assert.equal(
+    String(adminOrderDetail?.contract?.statusSummary?.label || ""),
+    "Processing",
+    "approve admin order detail: statusSummary should be Processing"
+  );
+
+  const publicTracking = await fetchPublicTracking(
+    scenario.invoiceNo,
+    "approve public tracking"
+  );
+  assert.equal(
+    String(publicTracking?.contract?.paymentActionability?.code || ""),
+    "PAID",
+    "approve public tracking: paymentActionability should be PAID"
+  );
+  assert.equal(
+    String(publicTracking?.storeSplits?.[0]?.contract?.paymentStatus || ""),
+    "PAID",
+    "approve public tracking: split contract paymentStatus should be PAID"
+  );
+  assert.equal(
+    String(publicTracking?.storeSplits?.[0]?.paymentReadModel?.status || ""),
+    "PAID",
+    "approve public tracking: split paymentReadModel should be PAID"
+  );
   logPass("approve scenario cross-lane sync");
 }
 
@@ -640,6 +747,27 @@ async function runRejectScenario(input: {
     "REJECTED",
     "reject buyer: displayStatus should be REJECTED"
   );
+  assert.equal(
+    String(buyerRejectedGroup?.paymentReadModel?.status || ""),
+    "REJECTED",
+    "reject buyer: paymentReadModel should be REJECTED"
+  );
+
+  const rejectedPaymentDetail = await fetchPaymentDetail(
+    input.customerClient,
+    scenario.paymentId,
+    "reject payment detail"
+  );
+  assert.equal(
+    String(rejectedPaymentDetail?.readModel?.status || ""),
+    "REJECTED",
+    "reject payment detail: readModel should be REJECTED"
+  );
+  assert.equal(
+    Boolean(rejectedPaymentDetail?.readModel?.proofActionability?.canStartProof),
+    true,
+    "reject payment detail: proof should remain actionable"
+  );
 
   const adminRejected = await fetchAdminAuditDetail(
     input.adminClient,
@@ -659,6 +787,52 @@ async function runRejectScenario(input: {
   assert.equal(String(adminRejected?.parent?.paymentStatus || ""), "UNPAID", "reject admin: parent paymentStatus should be UNPAID");
   assert.equal(String(adminRejectedGroup?.payment?.status || ""), "REJECTED", "reject admin: split payment should be REJECTED");
   assert.equal(String(adminRejectedSuborder?.paymentStatus || ""), "UNPAID", "reject admin: suborder paymentStatus should be UNPAID");
+
+  const adminOrderDetail = await fetchAdminOrderDetail(
+    input.adminClient,
+    scenario.invoiceNo,
+    "reject admin order detail"
+  );
+  assert.equal(
+    String(adminOrderDetail?.contract?.paymentActionability?.code || ""),
+    "ACTION_REQUIRED",
+    "reject admin order detail: paymentActionability should be ACTION_REQUIRED"
+  );
+  assert.equal(
+    Boolean(
+      Array.isArray(adminOrderDetail?.contract?.availableActions) &&
+        adminOrderDetail.contract.availableActions.some(
+          (action: any) => action?.code === "processing" && action?.enabled === false
+        )
+    ),
+    true,
+    "reject admin order detail: processing action should stay disabled while unpaid"
+  );
+
+  const publicTracking = await fetchPublicTracking(
+    scenario.invoiceNo,
+    "reject public tracking"
+  );
+  assert.equal(
+    String(publicTracking?.contract?.paymentActionability?.code || ""),
+    "ACTION_REQUIRED",
+    "reject public tracking: paymentActionability should be ACTION_REQUIRED"
+  );
+  assert.equal(
+    Boolean(
+      Array.isArray(publicTracking?.contract?.availableActions) &&
+        publicTracking.contract.availableActions.some(
+          (action: any) => action?.code === "CONTINUE_PAYMENT" && action?.enabled === true
+        )
+    ),
+    true,
+    "reject public tracking: continue payment action should stay enabled"
+  );
+  assert.equal(
+    String(publicTracking?.storeSplits?.[0]?.paymentReadModel?.status || ""),
+    "REJECTED",
+    "reject public tracking: split paymentReadModel should be REJECTED"
+  );
   logPass("reject scenario cross-lane sync");
 }
 
@@ -728,6 +902,27 @@ async function runExpiryScenario(input: {
     "EXPIRED",
     "expiry buyer: displayStatus should be EXPIRED"
   );
+  assert.equal(
+    String(buyerExpiredGroup?.paymentReadModel?.status || ""),
+    "EXPIRED",
+    "expiry buyer: paymentReadModel should be EXPIRED"
+  );
+
+  const expiredPaymentDetail = await fetchPaymentDetail(
+    input.customerClient,
+    scenario.paymentId,
+    "expiry payment detail"
+  );
+  assert.equal(
+    String(expiredPaymentDetail?.readModel?.status || ""),
+    "EXPIRED",
+    "expiry payment detail: readModel should be EXPIRED"
+  );
+  assert.equal(
+    Boolean(expiredPaymentDetail?.readModel?.cancelability?.canCancel),
+    false,
+    "expiry payment detail: cancelability should be closed"
+  );
 
   const adminExpired = await fetchAdminAuditDetail(
     input.adminClient,
@@ -754,6 +949,42 @@ async function runExpiryScenario(input: {
     String(adminExpiredSuborder?.paymentStatus || ""),
     "EXPIRED",
     "expiry admin: suborder paymentStatus should be EXPIRED"
+  );
+
+  const adminOrderDetail = await fetchAdminOrderDetail(
+    input.adminClient,
+    scenario.invoiceNo,
+    "expiry admin order detail"
+  );
+  assert.equal(
+    String(adminOrderDetail?.contract?.statusSummary?.code || ""),
+    "EXPIRED",
+    "expiry admin order detail: statusSummary should be EXPIRED"
+  );
+
+  const publicTracking = await fetchPublicTracking(
+    scenario.invoiceNo,
+    "expiry public tracking"
+  );
+  assert.equal(
+    String(publicTracking?.contract?.statusSummary?.code || ""),
+    "EXPIRED",
+    "expiry public tracking: statusSummary should be EXPIRED"
+  );
+  assert.equal(
+    Boolean(
+      Array.isArray(publicTracking?.contract?.availableActions) &&
+        publicTracking.contract.availableActions.some(
+          (action: any) => action?.code === "CONTINUE_PAYMENT" && action?.enabled === true
+        )
+    ),
+    false,
+    "expiry public tracking: continue payment action should be closed"
+  );
+  assert.equal(
+    String(publicTracking?.storeSplits?.[0]?.paymentReadModel?.status || ""),
+    "EXPIRED",
+    "expiry public tracking: split paymentReadModel should be EXPIRED"
   );
   logPass("expiry scenario cross-lane sync");
 }

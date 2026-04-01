@@ -125,7 +125,21 @@ export default function StoreLoginPage() {
             : "/account";
       navigate(target, { replace: true });
     } catch (err) {
-      setError("Login failed. Please check your credentials.");
+      if (err?.response?.status === 403 && err?.response?.data?.code === "VERIFICATION_REQUIRED") {
+        const pendingRegistration = err?.response?.data?.data?.pending || null;
+        navigate("/auth/register", {
+          replace: true,
+          state: {
+            pendingRegistration,
+            pendingNotice:
+              err?.response?.data?.message || "Verify your email before signing in.",
+          },
+        });
+        return;
+      }
+      setError(
+        err?.response?.data?.message || "Login failed. Please check your credentials."
+      );
     } finally {
       setIsSubmitting(false);
     }

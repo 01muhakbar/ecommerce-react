@@ -519,7 +519,7 @@ function resolveInvalidCheckoutItemMessage(item) {
       }
       return "Stock changed before checkout. Update the cart quantity and try again.";
     case "PRODUCT_NOT_PUBLIC":
-      return "This item is no longer available in the storefront.";
+      return "This item is no longer publicly purchasable because the product or its store is currently gated.";
     case "PRODUCT_STORE_UNMAPPED":
       return "This item is missing store binding and is blocked from checkout.";
     default:

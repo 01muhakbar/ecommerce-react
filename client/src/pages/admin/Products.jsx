@@ -108,9 +108,12 @@ const getStorefrontBadgeMeta = ({ visibility, published, status, submissionStatu
     };
   }
 
-  if (stateCode === "PUBLISHED_BLOCKED" && reasonCode === "STORE_NOT_ACTIVE") {
+  if (
+    stateCode === "PUBLISHED_BLOCKED" &&
+    (reasonCode === "STORE_NOT_ACTIVE" || reasonCode === "STORE_NOT_READY")
+  ) {
     return {
-      label: "Store blocked",
+      label: reasonCode === "STORE_NOT_READY" ? "Store not ready" : "Store blocked",
       className: "border-amber-200 bg-amber-50 text-amber-800",
       dotClassName: "bg-amber-500",
     };

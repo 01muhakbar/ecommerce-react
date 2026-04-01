@@ -29,18 +29,25 @@ import {
 import { appendPaymentStatusLog } from "../services/paymentStatusLog.service.js";
 import { quoteCoupon } from "../services/coupon.service.js";
 import {
-  buildBuyerCancelActionability,
-  buildBuyerProofActionability,
-  resolveBuyerFacingPaymentStatus,
+  buildBuyerOrderPaymentEntry,
 } from "../services/paymentCheckoutView.service.js";
+import { buildGroupedPaymentReadModel } from "../services/groupedPaymentReadModel.service.js";
+import {
+  buildAdminOrderContract,
+  buildFulfillmentStatusMeta,
+  buildPaymentStatusMeta,
+  buildSellerSuborderContract,
+} from "../services/orderLifecycleContract.service.js";
 import {
   getLatestTimelineRecord,
   sortTimelineDesc,
 } from "../services/paymentReadModel.js";
 import {
   resolvePreferredStorePaymentProfile,
+  STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES,
   STORE_PAYMENT_PROFILE_CHECKOUT_ATTRIBUTES,
 } from "../services/sharedContracts/storePaymentProfileCompat.js";
+import { buildPublicStoreOperationalReadiness } from "../services/sharedContracts/publicStoreIdentity.js";
 import { getDefaultAddressByUser } from "../services/userAddress.service.js";
 
 const router = Router();
@@ -203,13 +210,13 @@ const isStorefrontProductVisible = (product: any) => {
     .trim()
     .toLowerCase();
   const store = product?.store ?? product?.get?.("store") ?? null;
-  const storeStatus = String(store?.status || "").trim().toUpperCase();
+  const operationalReadiness = store ? buildPublicStoreOperationalReadiness(store) : null;
   return (
     status === "active" &&
     isPublished &&
     submissionStatus === "none" &&
     Boolean(getAttr(product, "storeId")) &&
-    storeStatus === "ACTIVE"
+    Boolean(operationalReadiness?.isReady)
   );
 };
 
@@ -304,13 +311,13 @@ const buildCartInclude = (includePaymentMedia = false) => [
           {
             model: StorePaymentProfile,
             as: "paymentProfile",
-            attributes: [...STORE_PAYMENT_PROFILE_CHECKOUT_ATTRIBUTES],
+            attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
             required: false,
           },
           {
             model: StorePaymentProfile,
             as: "activePaymentProfile",
-            attributes: [...STORE_PAYMENT_PROFILE_CHECKOUT_ATTRIBUTES],
+            attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
             required: false,
           },
         ],
@@ -332,6 +339,56 @@ const findCartForUser = async (
     include: buildCartInclude(includePaymentMedia),
     transaction,
   });
+};
+
+const loadCheckoutStoreSnapshots = async (storeIds: number[], transaction?: any) => {
+  const normalizedIds = Array.from(
+    new Set(storeIds.map((value) => toNumber(value, 0)).filter((value) => value > 0))
+  );
+  if (!normalizedIds.length) {
+    return new Map<number, any>();
+  }
+
+  const stores = await Store.findAll({
+    where: { id: { [Op.in]: normalizedIds } } as any,
+    attributes: ["id", "activeStorePaymentProfileId", "name", "slug", "status"],
+    include: [
+      {
+        model: StorePaymentProfile,
+        as: "paymentProfile",
+        attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+        required: false,
+      },
+      {
+        model: StorePaymentProfile,
+        as: "activePaymentProfile",
+        attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+        required: false,
+      },
+    ],
+    transaction,
+  });
+
+  return new Map<number, any>(stores.map((store: any) => [toNumber(getAttr(store, "id")), store]));
+};
+
+const attachStoreSnapshotsToProducts = async (products: any[], transaction?: any) => {
+  const storeSnapshots = await loadCheckoutStoreSnapshots(
+    (Array.isArray(products) ? products : []).map((product: any) =>
+      toNumber(getAttr(product, "storeId"), 0)
+    ),
+    transaction
+  );
+
+  for (const product of Array.isArray(products) ? products : []) {
+    const storeId = toNumber(getAttr(product, "storeId"), 0);
+    const store = storeSnapshots.get(storeId);
+    if (!store) continue;
+    product.setDataValue?.("store", store);
+    (product as any).store = store;
+  }
+
+  return products;
 };
 
 const serializePreviewGroup = (group: any) => ({
@@ -595,13 +652,13 @@ const lockVisibleProductsForCheckout = async (
           {
             model: StorePaymentProfile,
             as: "paymentProfile",
-            attributes: [...STORE_PAYMENT_PROFILE_CHECKOUT_ATTRIBUTES],
+            attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
             required: false,
           },
           {
             model: StorePaymentProfile,
             as: "activePaymentProfile",
-            attributes: [...STORE_PAYMENT_PROFILE_CHECKOUT_ATTRIBUTES],
+            attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
             required: false,
           },
         ],
@@ -807,18 +864,28 @@ const serializeSplitOrder = (order: any) => {
     serviceFeeAmount: toNumber(getAttr(order, "serviceFeeAmount"), 0),
     grandTotal: toNumber(getAttr(order, "totalAmount"), 0),
   };
+  const orderStatus = String(getAttr(order, "status") || "pending");
 
   if (suborders.length === 0) {
+    const contract = buildAdminOrderContract({
+      orderStatus,
+      paymentStatus,
+      paymentMethod: getAttr(order, "paymentMethod"),
+      displayStatuses: [],
+      fulfillmentStatuses: [orderStatus],
+      availableActions: [],
+    });
     return {
       orderId: toNumber(getAttr(order, "id")),
       ref: String(getAttr(order, "invoiceNo") || getAttr(order, "id") || ""),
       invoiceNo: String(getAttr(order, "invoiceNo") || ""),
       checkoutMode: checkoutMode === "LEGACY" ? "LEGACY" : "SINGLE_STORE",
       paymentStatus,
-      orderStatus: String(getAttr(order, "status") || "pending"),
+      orderStatus,
       paymentMethod: getAttr(order, "paymentMethod") ? String(getAttr(order, "paymentMethod")) : null,
       createdAt: getAttr(order, "createdAt") || null,
       summary,
+      contract,
       groups: [
         {
           legacy: true,
@@ -837,6 +904,8 @@ const serializeSplitOrder = (order: any) => {
           paymentProfileStatus: "LEGACY",
           paymentAvailable: false,
           warning: "This order was created before multi-store payment split was enabled.",
+          paymentStatusMeta: buildPaymentStatusMeta(paymentStatus),
+          fulfillmentStatusMeta: buildFulfillmentStatusMeta(orderStatus),
           items: legacyItems.map((item: any) => ({
             id: toNumber(getAttr(item, "id")),
             productId: toNumber(getAttr(item, "productId")),
@@ -849,113 +918,161 @@ const serializeSplitOrder = (order: any) => {
             lineTotal: toNumber(getAttr(item, "price")) * toNumber(getAttr(item, "quantity")),
           })),
           payment: null,
+          contract: buildSellerSuborderContract({
+            orderStatus,
+            paymentStatus,
+            parentOrderStatus: orderStatus,
+            parentPaymentStatus: paymentStatus,
+            availableActions: [],
+          }),
         },
       ],
     };
   }
 
+  const groups = suborders.map((suborder: any) => {
+    const payments = sortTimelineDesc(Array.isArray(suborder?.payments) ? suborder.payments : []);
+    const payment = payments[0] ?? null;
+    const items = Array.isArray(suborder?.items) ? suborder.items : [];
+    const proof = normalizeProofSummary(payment?.proofs ?? []);
+    const suborderPaymentStatus = String(getAttr(suborder, "paymentStatus") || "UNPAID");
+    const fulfillmentStatus = String(getAttr(suborder, "fulfillmentStatus") || "UNFULFILLED");
+    const paymentReadModel = buildGroupedPaymentReadModel({
+      paymentStatus: getAttr(payment, "status") || "CREATED",
+      suborderPaymentStatus,
+      expiresAt: getAttr(payment, "expiresAt") || null,
+      hasPaymentRecord: Boolean(payment),
+      missingPaymentReason: "Payment record not found for this suborder.",
+    });
+    const displayStatus = paymentReadModel.status;
+    const proofActionability = paymentReadModel.proofActionability;
+    const cancelability = paymentReadModel.cancelability;
+
+    return {
+      suborderId: toNumber(getAttr(suborder, "id")),
+      suborderNumber: String(getAttr(suborder, "suborderNumber") || ""),
+      storeId: toNumber(getAttr(suborder, "storeId")),
+      storeName: String(getAttr(suborder?.store, "name") || `Store #${getAttr(suborder, "storeId")}`),
+      storeSlug: getAttr(suborder?.store, "slug")
+        ? String(getAttr(suborder?.store, "slug"))
+        : null,
+      subtotalAmount: toNumber(getAttr(suborder, "subtotalAmount")),
+      shippingAmount: toNumber(getAttr(suborder, "shippingAmount")),
+      serviceFeeAmount: toNumber(getAttr(suborder, "serviceFeeAmount")),
+      totalAmount: toNumber(getAttr(suborder, "totalAmount")),
+      paymentMethod: String(getAttr(suborder, "paymentMethod") || "QRIS"),
+      paymentStatus: suborderPaymentStatus,
+      paymentStatusMeta: buildPaymentStatusMeta(suborderPaymentStatus),
+      fulfillmentStatus,
+      fulfillmentStatusMeta: buildFulfillmentStatusMeta(fulfillmentStatus),
+      paymentProfileStatus: getAttr(suborder?.paymentProfile, "verificationStatus")
+        ? String(getAttr(suborder?.paymentProfile, "verificationStatus"))
+        : "ACTIVE",
+      paymentAvailable: Boolean(payment),
+      warning: payment ? null : "Payment record not found for this suborder.",
+      paymentReadModel,
+      paymentInstruction: getAttr(suborder?.paymentProfile, "instructionText")
+        ? String(getAttr(suborder?.paymentProfile, "instructionText"))
+        : null,
+      merchantName: getAttr(suborder?.paymentProfile, "merchantName")
+        ? String(getAttr(suborder?.paymentProfile, "merchantName"))
+        : null,
+      accountName: getAttr(suborder?.paymentProfile, "accountName")
+        ? String(getAttr(suborder?.paymentProfile, "accountName"))
+        : null,
+      items: items.map((item: any) => ({
+        id: toNumber(getAttr(item, "id")),
+        productId: toNumber(getAttr(item, "productId")),
+        productName: String(
+          getAttr(item, "productNameSnapshot") ||
+            getAttr(item?.product, "name") ||
+            `Product #${getAttr(item, "productId")}`
+        ),
+        slug: getAttr(item?.product, "slug") ? String(getAttr(item?.product, "slug")) : "",
+        qty: toNumber(getAttr(item, "qty")),
+        price: toNumber(getAttr(item, "priceSnapshot")),
+        lineTotal: toNumber(getAttr(item, "totalPrice")),
+      })),
+      payment: payment
+        ? {
+            id: toNumber(getAttr(payment, "id")),
+            internalReference: String(getAttr(payment, "internalReference") || ""),
+            externalReference: getAttr(payment, "externalReference")
+              ? String(getAttr(payment, "externalReference"))
+              : null,
+            paymentChannel: String(getAttr(payment, "paymentChannel") || "QRIS"),
+            paymentType: String(getAttr(payment, "paymentType") || "QRIS_STATIC"),
+            amount: toNumber(getAttr(payment, "amount")),
+            qrImageUrl: getAttr(payment, "qrImageUrl")
+              ? String(getAttr(payment, "qrImageUrl"))
+              : null,
+            qrPayload: getAttr(payment, "qrPayload")
+              ? String(getAttr(payment, "qrPayload"))
+              : null,
+            instructionText: getAttr(suborder?.paymentProfile, "instructionText")
+              ? String(getAttr(suborder?.paymentProfile, "instructionText"))
+              : null,
+            merchantName: getAttr(suborder?.paymentProfile, "merchantName")
+              ? String(getAttr(suborder?.paymentProfile, "merchantName"))
+              : null,
+            accountName: getAttr(suborder?.paymentProfile, "accountName")
+              ? String(getAttr(suborder?.paymentProfile, "accountName"))
+              : null,
+            status: String(getAttr(payment, "status") || "CREATED"),
+            statusMeta: buildPaymentStatusMeta(getAttr(payment, "status") || "CREATED"),
+            displayStatus,
+            displayStatusMeta: buildPaymentStatusMeta(displayStatus),
+            readModel: paymentReadModel,
+            expiresAt: getAttr(payment, "expiresAt") || null,
+            paidAt: getAttr(payment, "paidAt") || null,
+            proofSubmitted:
+              Array.isArray(payment?.proofs) && payment.proofs.length > 0,
+            proof,
+            proofActionability,
+            cancelability,
+          }
+        : null,
+      contract: buildSellerSuborderContract({
+        orderStatus: fulfillmentStatus,
+        paymentStatus: suborderPaymentStatus,
+        parentOrderStatus: orderStatus,
+        parentPaymentStatus: paymentStatus,
+        availableActions: [],
+      }),
+    };
+  });
+
+  const contract = buildAdminOrderContract({
+    orderStatus,
+    paymentStatus,
+    paymentMethod: getAttr(order, "paymentMethod"),
+    displayStatuses: groups.map((group: any) => group.payment?.displayStatus || group.paymentStatus),
+    fulfillmentStatuses: groups.map((group: any) => group.fulfillmentStatus),
+    availableActions: [],
+  });
+  const orderId = toNumber(getAttr(order, "id"));
+  const paymentEntryBase = buildBuyerOrderPaymentEntry(
+    groups.map((group: any) => group.paymentReadModel?.status || group.paymentStatus)
+  );
+  const paymentEntry = {
+    ...paymentEntryBase,
+    targetPath: paymentEntryBase.visible ? `/user/my-orders/${orderId}/payment` : null,
+  };
+
   return {
-    orderId: toNumber(getAttr(order, "id")),
+    orderId,
     ref: String(getAttr(order, "invoiceNo") || getAttr(order, "id") || ""),
     invoiceNo: String(getAttr(order, "invoiceNo") || ""),
     checkoutMode,
     paymentStatus,
-    orderStatus: String(getAttr(order, "status") || "pending"),
+    paymentStatusMeta: buildPaymentStatusMeta(paymentStatus),
+    orderStatus,
     paymentMethod: getAttr(order, "paymentMethod") ? String(getAttr(order, "paymentMethod")) : null,
     createdAt: getAttr(order, "createdAt") || null,
     summary,
-    groups: suborders.map((suborder: any) => {
-      const payments = sortTimelineDesc(Array.isArray(suborder?.payments) ? suborder.payments : []);
-      const payment = payments[0] ?? null;
-      const items = Array.isArray(suborder?.items) ? suborder.items : [];
-      const proof = normalizeProofSummary(payment?.proofs ?? []);
-      const displayStatus = resolveBuyerFacingPaymentStatus({
-        paymentStatus: getAttr(payment, "status") || "CREATED",
-        suborderPaymentStatus: getAttr(suborder, "paymentStatus") || "UNPAID",
-        expiresAt: getAttr(payment, "expiresAt") || null,
-      });
-      const proofActionability = buildBuyerProofActionability(displayStatus);
-      const cancelability = buildBuyerCancelActionability(displayStatus);
-      return {
-        suborderId: toNumber(getAttr(suborder, "id")),
-        suborderNumber: String(getAttr(suborder, "suborderNumber") || ""),
-        storeId: toNumber(getAttr(suborder, "storeId")),
-        storeName: String(getAttr(suborder?.store, "name") || `Store #${getAttr(suborder, "storeId")}`),
-        storeSlug: getAttr(suborder?.store, "slug")
-          ? String(getAttr(suborder?.store, "slug"))
-          : null,
-        subtotalAmount: toNumber(getAttr(suborder, "subtotalAmount")),
-        shippingAmount: toNumber(getAttr(suborder, "shippingAmount")),
-        serviceFeeAmount: toNumber(getAttr(suborder, "serviceFeeAmount")),
-        totalAmount: toNumber(getAttr(suborder, "totalAmount")),
-        paymentMethod: String(getAttr(suborder, "paymentMethod") || "QRIS"),
-        paymentStatus: String(getAttr(suborder, "paymentStatus") || "UNPAID"),
-        fulfillmentStatus: String(getAttr(suborder, "fulfillmentStatus") || "UNFULFILLED"),
-        paymentProfileStatus: getAttr(suborder?.paymentProfile, "verificationStatus")
-          ? String(getAttr(suborder?.paymentProfile, "verificationStatus"))
-          : "ACTIVE",
-        paymentAvailable: Boolean(payment),
-        warning: payment ? null : "Payment record not found for this suborder.",
-        paymentInstruction: getAttr(suborder?.paymentProfile, "instructionText")
-          ? String(getAttr(suborder?.paymentProfile, "instructionText"))
-          : null,
-        merchantName: getAttr(suborder?.paymentProfile, "merchantName")
-          ? String(getAttr(suborder?.paymentProfile, "merchantName"))
-          : null,
-        accountName: getAttr(suborder?.paymentProfile, "accountName")
-          ? String(getAttr(suborder?.paymentProfile, "accountName"))
-          : null,
-        items: items.map((item: any) => ({
-          id: toNumber(getAttr(item, "id")),
-          productId: toNumber(getAttr(item, "productId")),
-          productName: String(
-            getAttr(item, "productNameSnapshot") ||
-              getAttr(item?.product, "name") ||
-              `Product #${getAttr(item, "productId")}`
-          ),
-          slug: getAttr(item?.product, "slug") ? String(getAttr(item?.product, "slug")) : "",
-          qty: toNumber(getAttr(item, "qty")),
-          price: toNumber(getAttr(item, "priceSnapshot")),
-          lineTotal: toNumber(getAttr(item, "totalPrice")),
-        })),
-        payment: payment
-          ? {
-              id: toNumber(getAttr(payment, "id")),
-              internalReference: String(getAttr(payment, "internalReference") || ""),
-              externalReference: getAttr(payment, "externalReference")
-                ? String(getAttr(payment, "externalReference"))
-                : null,
-              paymentChannel: String(getAttr(payment, "paymentChannel") || "QRIS"),
-              paymentType: String(getAttr(payment, "paymentType") || "QRIS_STATIC"),
-              amount: toNumber(getAttr(payment, "amount")),
-              qrImageUrl: getAttr(payment, "qrImageUrl")
-                ? String(getAttr(payment, "qrImageUrl"))
-                : null,
-              qrPayload: getAttr(payment, "qrPayload")
-                ? String(getAttr(payment, "qrPayload"))
-                : null,
-              instructionText: getAttr(suborder?.paymentProfile, "instructionText")
-                ? String(getAttr(suborder?.paymentProfile, "instructionText"))
-                : null,
-              merchantName: getAttr(suborder?.paymentProfile, "merchantName")
-                ? String(getAttr(suborder?.paymentProfile, "merchantName"))
-                : null,
-              accountName: getAttr(suborder?.paymentProfile, "accountName")
-                ? String(getAttr(suborder?.paymentProfile, "accountName"))
-                : null,
-              status: String(getAttr(payment, "status") || "CREATED"),
-              displayStatus,
-              expiresAt: getAttr(payment, "expiresAt") || null,
-              paidAt: getAttr(payment, "paidAt") || null,
-              proofSubmitted:
-                Array.isArray(payment?.proofs) && payment.proofs.length > 0,
-              proof,
-              proofActionability,
-              cancelability,
-            }
-          : null,
-      };
-    }),
+    contract,
+    paymentEntry,
+    groups,
   };
 };
 
@@ -986,7 +1103,7 @@ router.post("/preview", async (req, res) => {
       });
     }
 
-    const prepared = prepareCartGroups(cartItems);
+    const prepared = prepareCartGroups(await attachStoreSnapshotsToProducts(cartItems));
     return res.json({
       success: true,
       data: serializeCheckoutPreview(prepared),
@@ -1110,7 +1227,9 @@ router.post("/create-multi-store", async (req, res) => {
         })
         .filter(Boolean);
 
-      const prepared = prepareCartGroups(lockedCartItems);
+      const prepared = prepareCartGroups(
+        await attachStoreSnapshotsToProducts(lockedCartItems, tx)
+      );
       if (missingLockedItems.length > 0) {
         prepared.invalidItems.unshift(...missingLockedItems);
         prepared.summary.invalidItemCount = prepared.invalidItems.length;
@@ -1138,7 +1257,7 @@ router.post("/create-multi-store", async (req, res) => {
         await tx.rollback();
         return res.status(409).json({
           success: false,
-          message: "One or more stores do not have an active payment profile.",
+          message: "One or more stores are no longer operationally ready for checkout.",
           data: {
             groups: inactiveGroups.map(serializePreviewGroup),
           },

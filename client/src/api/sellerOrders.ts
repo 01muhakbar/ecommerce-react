@@ -37,6 +37,9 @@ const FULFILLMENT_STATUSES = new Set([
   "CANCELLED",
 ]);
 
+const asObject = (value: unknown) =>
+  value && typeof value === "object" ? (value as Record<string, any>) : null;
+
 const asNumber = (value: unknown, fallback = 0) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -68,443 +71,392 @@ const normalizeOrderStatus = (value: unknown) => {
   return ORDER_STATUSES.has(status) ? status : "pending";
 };
 
-const buildSuborderPaymentMeta = (status: string) => ({
-  code: status,
-  label:
-    status === "PENDING_CONFIRMATION"
-      ? "Awaiting Review"
-      : status === "UNPAID"
-        ? "Unpaid"
-        : status === "PARTIALLY_PAID"
-          ? "Partially Paid"
-        : status === "PAID"
-          ? "Paid"
-          : status === "FAILED"
-            ? "Failed"
-            : status === "EXPIRED"
-              ? "Expired"
-              : "Cancelled",
-  description:
-    status === "PENDING_CONFIRMATION"
-      ? "Payment proof exists and is waiting for review."
-      : status === "UNPAID"
-        ? "The store split has not been settled yet."
-        : status === "PARTIALLY_PAID"
-          ? "At least one store split is settled, but the full parent payment is not complete yet."
-        : status === "PAID"
-          ? "The store split is settled."
-          : status === "FAILED"
-            ? "The latest payment attempt failed."
-            : status === "EXPIRED"
-              ? "The payment window expired before settlement."
-              : "The store split was cancelled.",
-});
+const normalizeStatusMeta = (value: unknown) => {
+  const meta = asObject(value);
+  if (!meta) return null;
+  return {
+    ...meta,
+    code: normalizeText(meta.code) || null,
+    label: normalizeText(meta.label) || null,
+    tone: normalizeText(meta.tone) || "stone",
+    description: normalizeText(meta.description) || null,
+    isFinal: Boolean(meta.isFinal),
+  };
+};
 
-const buildPaymentRecordMeta = (status: string) => ({
-  code: status,
-  label:
-    status === "PENDING_CONFIRMATION"
-      ? "Awaiting Review"
-      : status === "CREATED"
-        ? "Created"
-        : status === "PAID"
-          ? "Paid"
-          : status === "FAILED"
-            ? "Failed"
-            : status === "EXPIRED"
-              ? "Expired"
-              : "Rejected",
-  description:
-    status === "PENDING_CONFIRMATION"
-      ? "Proof was submitted and is still waiting for approval."
-      : status === "CREATED"
-        ? "Payment record exists but settlement is not complete yet."
-        : status === "PAID"
-          ? "Payment record is settled."
-          : status === "FAILED"
-            ? "Payment record failed."
-            : status === "EXPIRED"
-              ? "Payment record expired."
-              : "Payment record or proof was rejected.",
-});
+const normalizeCheckoutModeMeta = (value: unknown, fallbackCode = "LEGACY") => {
+  const meta = asObject(value);
+  const code =
+    normalizeText(meta?.code ?? fallbackCode)
+      .toUpperCase()
+      .trim() || "LEGACY";
+  if (!meta) {
+    return {
+      code,
+      label:
+        code === "MULTI_STORE"
+          ? "Multi-store"
+          : code === "SINGLE_STORE"
+            ? "Single-store"
+            : "Legacy",
+      description: null,
+    };
+  }
+  return {
+    ...meta,
+    code,
+    label: normalizeText(meta.label) || null,
+    description: normalizeText(meta.description) || null,
+  };
+};
 
-const buildFulfillmentMeta = (status: string) => ({
-  code: status,
-  label:
-    status === "UNFULFILLED"
-      ? "Unfulfilled"
-      : status === "PROCESSING"
-        ? "Processing"
-        : status === "SHIPPED"
-          ? "Shipped"
-          : status === "DELIVERED"
-            ? "Delivered"
-            : "Cancelled",
-  description:
-    status === "UNFULFILLED"
-      ? "The seller has not started fulfillment yet."
-      : status === "PROCESSING"
-        ? "The seller is preparing or packing the suborder."
-        : status === "SHIPPED"
-          ? "The suborder is already in delivery."
-          : status === "DELIVERED"
-            ? "The suborder reached the buyer."
-            : "The suborder fulfillment was cancelled.",
-});
-
-const buildOrderStatusMeta = (status: string) => ({
-  code: status,
-  label:
-    status === "pending"
-      ? "Pending"
-      : status === "paid"
-        ? "Paid"
-        : status === "processing"
-          ? "Processing"
-          : status === "shipped"
-            ? "Shipped"
-            : status === "delivered"
-              ? "Delivered"
-              : status === "completed"
-                ? "Completed"
-                : "Cancelled",
-  description:
-    status === "pending"
-      ? "Parent order is still waiting for the next lifecycle transition."
-      : status === "paid"
-        ? "Parent order is paid at order level."
-        : status === "processing"
-          ? "Parent order is being processed."
-          : status === "shipped"
-            ? "Parent order has been shipped."
-            : status === "delivered"
-              ? "Parent order was delivered."
-              : status === "completed"
-                ? "Parent order is completed."
-                : "Parent order was cancelled.",
-});
+const normalizeProofReviewMeta = (value: unknown) => {
+  const meta = asObject(value);
+  if (!meta) return null;
+  return {
+    ...meta,
+    code: normalizeText(meta.code).toUpperCase() || null,
+    label: normalizeText(meta.label) || null,
+  };
+};
 
 const normalizeProof = (proof: any) => {
-  if (!proof || typeof proof !== "object") return null;
-  const reviewStatus = normalizeText(proof.reviewStatus).toUpperCase() || "PENDING";
+  const source = asObject(proof);
+  if (!source) return null;
   return {
-    ...proof,
-    id: asNumber(proof.id, 0),
-    reviewStatus,
-    reviewMeta: {
-      code: reviewStatus,
-      label:
-        reviewStatus === "APPROVED"
-          ? "Approved"
-          : reviewStatus === "REJECTED"
-            ? "Rejected"
-            : "Pending",
-    },
-    senderName: normalizeText(proof.senderName) || null,
-    transferAmount: asNumber(proof.transferAmount, 0),
-    transferTime: proof.transferTime || null,
-    createdAt: proof.createdAt || null,
+    ...source,
+    id: asNumber(source.id, 0),
+    reviewStatus: normalizeText(source.reviewStatus).toUpperCase() || "PENDING",
+    reviewMeta: normalizeProofReviewMeta(source.reviewMeta),
+    senderName: normalizeText(source.senderName) || null,
+    transferAmount: asNumber(source.transferAmount, 0),
+    transferTime: source.transferTime || null,
+    createdAt: source.createdAt || null,
+  };
+};
+
+const normalizeFulfillmentAction = (action: unknown) => {
+  const source = asObject(action);
+  if (!source) return null;
+  return {
+    ...source,
+    code: normalizeText(source.code).toUpperCase() || null,
+    label: normalizeText(source.label) || null,
+    nextStatus: normalizeText(source.nextStatus).toUpperCase() || null,
+    allowedFrom: normalizeStringArray(source.allowedFrom).map((entry) => entry.toUpperCase()),
+    description: normalizeText(source.description) || null,
+    enabled: source.enabled !== false,
+    reason: normalizeText(source.reason) || null,
+    tone: normalizeText(source.tone) || null,
+    scope: normalizeText(source.scope) || null,
   };
 };
 
 const normalizeFulfillmentGovernance = (governance: any) => {
-  const fulfillment = governance?.fulfillment;
-  if (!fulfillment || typeof fulfillment !== "object") {
-    return {
-      fulfillment: {
-        entity: "SUBORDER",
-        scopeLabel: "Fulfillment actions must stay scoped to the active store suborder.",
-        permissionKey: "ORDER_FULFILLMENT_MANAGE",
-        actorHasManagePermission: false,
-        currentMode: "READ_ONLY",
-        mutationOpened: false,
-        currentStatus: null,
-        isFinal: false,
-        mutationBlockedReason:
-          "Seller fulfillment mutations are still closed in the current workspace phase.",
-        sellerCandidateActions: ["MARK_PROCESSING", "MARK_SHIPPED", "MARK_DELIVERED"],
-        readOnlyActions: [
-          "VIEW_PAYMENT_PROOF",
-          "VIEW_PARENT_ORDER_REFERENCE",
-          "VIEW_PAYMENT_RECORD",
-        ],
-        adminOnlyActions: [
-          "UPDATE_PARENT_ORDER_STATUS",
-          "UPDATE_PARENT_PAYMENT_STATUS",
-          "REVIEW_PAYMENT_RECORD",
-          "REFUND_OR_DISPUTE",
-          "CANCEL_PARENT_ORDER",
-        ],
-        availableActions: [],
-        auditRequired: true,
-        parentOrderMutationAllowed: false,
-      },
-    };
-  }
+  const source = asObject(governance);
+  const fulfillment = asObject(source?.fulfillment);
 
   return {
     fulfillment: {
-      entity: normalizeText(fulfillment.entity) || "SUBORDER",
-      scopeLabel:
-        normalizeText(fulfillment.scopeLabel) ||
-        "Fulfillment actions must stay scoped to the active store suborder.",
-      permissionKey:
-        normalizeText(fulfillment.permissionKey) || "ORDER_FULFILLMENT_MANAGE",
-      actorHasManagePermission: Boolean(fulfillment.actorHasManagePermission),
-      currentMode: normalizeText(fulfillment.currentMode) || "READ_ONLY",
-      mutationOpened: Boolean(fulfillment.mutationOpened),
-      currentStatus: normalizeText(fulfillment.currentStatus).toUpperCase() || null,
-      isFinal: Boolean(fulfillment.isFinal),
-      mutationBlockedReason:
-        normalizeText(fulfillment.mutationBlockedReason) ||
-        "Seller fulfillment mutations are still closed in the current workspace phase.",
-      sellerCandidateActions: normalizeStringArray(fulfillment.sellerCandidateActions),
-      readOnlyActions: normalizeStringArray(fulfillment.readOnlyActions),
-      adminOnlyActions: normalizeStringArray(fulfillment.adminOnlyActions),
-      availableActions: Array.isArray(fulfillment.availableActions)
-        ? fulfillment.availableActions
-            .map((item: any) => ({
-              code: normalizeText(item?.code).toUpperCase() || null,
-              label: normalizeText(item?.label) || null,
-              nextStatus: normalizeText(item?.nextStatus).toUpperCase() || null,
-              allowedFrom: normalizeStringArray(item?.allowedFrom).map((entry) =>
-                entry.toUpperCase()
-              ),
-              description: normalizeText(item?.description) || null,
-            }))
-            .filter((item: any) => item.code && item.nextStatus)
+      entity: normalizeText(fulfillment?.entity) || null,
+      scopeLabel: normalizeText(fulfillment?.scopeLabel) || null,
+      permissionKey: normalizeText(fulfillment?.permissionKey) || null,
+      actorHasManagePermission: Boolean(fulfillment?.actorHasManagePermission),
+      currentMode: normalizeText(fulfillment?.currentMode) || null,
+      mutationOpened: Boolean(fulfillment?.mutationOpened),
+      currentStatus: normalizeText(fulfillment?.currentStatus).toUpperCase() || null,
+      isFinal: Boolean(fulfillment?.isFinal),
+      mutationBlockedReason: normalizeText(fulfillment?.mutationBlockedReason) || null,
+      sellerCandidateActions: normalizeStringArray(fulfillment?.sellerCandidateActions),
+      readOnlyActions: normalizeStringArray(fulfillment?.readOnlyActions),
+      adminOnlyActions: normalizeStringArray(fulfillment?.adminOnlyActions),
+      availableActions: Array.isArray(fulfillment?.availableActions)
+        ? fulfillment.availableActions.map(normalizeFulfillmentAction).filter(Boolean)
         : [],
-      auditRequired: Boolean(fulfillment.auditRequired),
-      parentOrderMutationAllowed: Boolean(fulfillment.parentOrderMutationAllowed),
+      auditRequired: Boolean(fulfillment?.auditRequired),
+      parentOrderMutationAllowed: Boolean(fulfillment?.parentOrderMutationAllowed),
     },
   };
 };
 
 const normalizePaymentSummary = (summary: any) => {
-  if (!summary || typeof summary !== "object") return null;
-  const status = normalizePaymentRecordStatus(summary.status ?? summary.statusMeta?.code);
+  const source = asObject(summary);
+  if (!source) return null;
   return {
-    ...summary,
-    id: asNumber(summary.id, 0),
-    internalReference: normalizeText(summary.internalReference) || null,
-    paymentChannel: normalizeText(summary.paymentChannel) || null,
-    paymentType: normalizeText(summary.paymentType) || null,
-    status,
-    statusMeta: buildPaymentRecordMeta(status),
-    amount: asNumber(summary.amount, 0),
-    expiresAt: summary.expiresAt || null,
-    paidAt: summary.paidAt || null,
-    proof: normalizeProof(summary.proof),
+    ...source,
+    id: asNumber(source.id, 0),
+    internalReference: normalizeText(source.internalReference) || null,
+    paymentChannel: normalizeText(source.paymentChannel) || null,
+    paymentType: normalizeText(source.paymentType) || null,
+    status: normalizePaymentRecordStatus(source.status ?? source.statusMeta?.code),
+    statusMeta: normalizeStatusMeta(source.statusMeta),
+    amount: asNumber(source.amount, 0),
+    expiresAt: source.expiresAt || null,
+    paidAt: source.paidAt || null,
+    proof: normalizeProof(source.proof),
   };
 };
 
-const normalizeBuyer = (buyer: any) => ({
-  userId: asNumber(buyer?.userId, 0) || null,
-  name: normalizeText(buyer?.name) || "Customer",
-  email: normalizeText(buyer?.email) || null,
-  phone: normalizeText(buyer?.phone) || null,
-});
+const normalizeContract = (contract: any) => {
+  const source = asObject(contract);
+  if (!source) return null;
+  return {
+    ...source,
+    orderStatus: normalizeText(source.orderStatus) || null,
+    orderStatusMeta: normalizeStatusMeta(source.orderStatusMeta),
+    paymentStatus: normalizeText(source.paymentStatus) || null,
+    paymentStatusMeta: normalizeStatusMeta(source.paymentStatusMeta),
+    parentOrderStatus: normalizeText(source.parentOrderStatus) || null,
+    parentOrderStatusMeta: normalizeStatusMeta(source.parentOrderStatusMeta),
+    parentPaymentStatus: normalizeText(source.parentPaymentStatus) || null,
+    parentPaymentStatusMeta: normalizeStatusMeta(source.parentPaymentStatusMeta),
+    statusSummary: normalizeStatusMeta(source.statusSummary),
+    paymentActionability:
+      source.paymentActionability && typeof source.paymentActionability === "object"
+        ? {
+            ...source.paymentActionability,
+            code: normalizeText(source.paymentActionability.code) || null,
+            label: normalizeText(source.paymentActionability.label) || null,
+            tone: normalizeText(source.paymentActionability.tone) || "stone",
+            ctaLabel: normalizeText(source.paymentActionability.ctaLabel) || null,
+            canPay: Boolean(source.paymentActionability.canPay),
+            visible: Boolean(source.paymentActionability.visible),
+            isFinal: Boolean(source.paymentActionability.isFinal),
+            reason: normalizeText(source.paymentActionability.reason) || null,
+          }
+        : null,
+    fulfillmentReadiness: normalizeStatusMeta(source.fulfillmentReadiness),
+    availableActions: Array.isArray(source.availableActions)
+      ? source.availableActions.map(normalizeFulfillmentAction).filter(Boolean)
+      : [],
+  };
+};
 
-const normalizeOrderSummary = (order: any, fallback: any = {}) => {
-  const orderStatus = normalizeOrderStatus(order?.status ?? fallback?.status);
+const normalizeBuyer = (buyer: any) => {
+  const source = asObject(buyer);
+  return {
+    userId: asNumber(source?.userId, 0) || null,
+    name: normalizeText(source?.name) || "Customer",
+    email: normalizeText(source?.email) || null,
+    phone: normalizeText(source?.phone) || null,
+  };
+};
+
+const normalizeOrderSummary = (order: any, fallback: any = {}, contract: any = null) => {
+  const source = asObject(order) || {};
+  const status = normalizeOrderStatus(source.status ?? fallback?.status);
   const paymentStatus = normalizeSuborderPaymentStatus(
-    order?.paymentStatus ?? fallback?.paymentStatus
+    source.paymentStatus ?? fallback?.paymentStatus
   );
-  const checkoutMode = normalizeText(order?.checkoutMode ?? fallback?.checkoutMode).toUpperCase() || "LEGACY";
+  const checkoutMode =
+    normalizeText(source.checkoutMode ?? fallback?.checkoutMode)
+      .toUpperCase()
+      .trim() || "LEGACY";
+
   return {
-    id: asNumber(order?.id ?? fallback?.id, 0) || null,
-    orderNumber: normalizeText(order?.orderNumber ?? fallback?.orderNumber) || null,
+    ...source,
+    id: asNumber(source.id ?? fallback?.id, 0) || null,
+    orderNumber: normalizeText(source.orderNumber ?? fallback?.orderNumber) || null,
     checkoutMode,
-    checkoutModeMeta:
-      order?.checkoutModeMeta ?? {
-        code: checkoutMode,
-        label:
-          checkoutMode === "MULTI_STORE"
-            ? "Multi-store"
-            : checkoutMode === "SINGLE_STORE"
-              ? "Single-store"
-              : "Legacy",
-        description:
-          checkoutMode === "MULTI_STORE"
-            ? "One parent order is split into multiple seller suborders."
-            : checkoutMode === "SINGLE_STORE"
-              ? "One parent order maps to a single seller suborder."
-              : "Older order flow without the new split-payment structure.",
-      },
-    status: orderStatus,
-    statusMeta: buildOrderStatusMeta(orderStatus),
+    checkoutModeMeta: normalizeCheckoutModeMeta(source.checkoutModeMeta, checkoutMode),
+    status,
+    statusMeta:
+      normalizeStatusMeta(source.statusMeta) ?? normalizeStatusMeta(contract?.parentOrderStatusMeta),
     paymentStatus,
-    paymentStatusMeta: buildSuborderPaymentMeta(paymentStatus),
-    createdAt: order?.createdAt ?? fallback?.createdAt ?? null,
+    paymentStatusMeta:
+      normalizeStatusMeta(source.paymentStatusMeta) ??
+      normalizeStatusMeta(contract?.parentPaymentStatusMeta),
+    createdAt: source.createdAt ?? fallback?.createdAt ?? null,
+    source: normalizeText(source.source) || null,
+    note: normalizeText(source.note) || null,
   };
 };
 
-const normalizeReadModel = (readModel: any, fallback: any = {}) => {
-  const primaryStatus = normalizeFulfillmentStatus(
-    readModel?.primaryStatus?.code ?? fallback?.fulfillmentStatus
-  );
-  const paymentState = normalizeSuborderPaymentStatus(
-    readModel?.paymentState?.code ?? fallback?.paymentStatus
-  );
-  const parentOrder = normalizeOrderSummary(readModel?.parentOrder, fallback?.order);
+const normalizeReadModelStatus = (value: unknown, fallbackMeta: unknown = null) => {
+  const source = asObject(value);
+  const fallback = asObject(fallbackMeta);
+  if (!source && !fallback) return null;
+  return {
+    ...(source || fallback || {}),
+    code: normalizeText(source?.code ?? fallback?.code) || null,
+    label: normalizeText(source?.label ?? fallback?.label) || null,
+    description: normalizeText(source?.description ?? fallback?.description) || null,
+    source: normalizeText(source?.source ?? fallback?.source) || null,
+    scope: normalizeText(source?.scope ?? fallback?.scope) || null,
+    tone: normalizeText(source?.tone ?? fallback?.tone) || null,
+    isFinal: Boolean(source?.isFinal ?? fallback?.isFinal),
+  };
+};
+
+const normalizeReadModel = (readModel: any, fallback: any = {}, contract: any = null) => {
+  const source = asObject(readModel);
+  const fallbackOrder = fallback?.order ?? null;
+  const sellerScope = asObject(source?.sellerScope);
 
   return {
-    primaryStatus: {
-      code: primaryStatus,
-      label: normalizeText(readModel?.primaryStatus?.label) || buildFulfillmentMeta(primaryStatus).label,
-      description:
-        normalizeText(readModel?.primaryStatus?.description) ||
-        buildFulfillmentMeta(primaryStatus).description,
-      source: normalizeText(readModel?.primaryStatus?.source) || "SUBORDER.fulfillmentStatus",
-      scope: normalizeText(readModel?.primaryStatus?.scope) || "SELLER_SUBORDER",
-    },
-    paymentState: {
-      code: paymentState,
-      label: normalizeText(readModel?.paymentState?.label) || buildSuborderPaymentMeta(paymentState).label,
-      description:
-        normalizeText(readModel?.paymentState?.description) ||
-        buildSuborderPaymentMeta(paymentState).description,
-      source: normalizeText(readModel?.paymentState?.source) || "SUBORDER.paymentStatus",
-      scope: normalizeText(readModel?.paymentState?.scope) || "SELLER_SUBORDER",
-    },
-    parentOrder: {
-      ...parentOrder,
-      source: normalizeText(readModel?.parentOrder?.source) || "ORDER",
-      note:
-        normalizeText(readModel?.parentOrder?.note) ||
-        "Parent order lifecycle stays read-only in seller workspace.",
-    },
+    primaryStatus: normalizeReadModelStatus(source?.primaryStatus, contract?.orderStatusMeta),
+    paymentState: normalizeReadModelStatus(source?.paymentState, contract?.paymentStatusMeta),
+    parentOrder: normalizeOrderSummary(source?.parentOrder, fallbackOrder, contract),
     sellerScope: {
-      entity: normalizeText(readModel?.sellerScope?.entity) || "SUBORDER",
-      itemCount: asNumber(readModel?.sellerScope?.itemCount, asNumber(fallback?.itemCount, 0)),
+      entity: normalizeText(sellerScope?.entity) || "SUBORDER",
+      itemCount: asNumber(sellerScope?.itemCount, asNumber(fallback?.itemCount, 0)),
       subtotalAmount: asNumber(
-        readModel?.sellerScope?.subtotalAmount,
+        sellerScope?.subtotalAmount,
         asNumber(fallback?.totals?.subtotalAmount, 0)
       ),
       shippingAmount: asNumber(
-        readModel?.sellerScope?.shippingAmount,
+        sellerScope?.shippingAmount,
         asNumber(fallback?.totals?.shippingAmount, 0)
       ),
       serviceFeeAmount: asNumber(
-        readModel?.sellerScope?.serviceFeeAmount,
+        sellerScope?.serviceFeeAmount,
         asNumber(fallback?.totals?.serviceFeeAmount, 0)
       ),
       totalAmount: asNumber(
-        readModel?.sellerScope?.totalAmount,
+        sellerScope?.totalAmount,
         asNumber(fallback?.totalAmount ?? fallback?.totals?.totalAmount, 0)
       ),
-      itemScopeLabel:
-        normalizeText(readModel?.sellerScope?.itemScopeLabel) ||
-        "Item counts and totals only include this store-owned suborder.",
-      parentReferenceLabel:
-        normalizeText(readModel?.sellerScope?.parentReferenceLabel) ||
-        "Parent order lifecycle and payment remain read-only references.",
+      itemScopeLabel: normalizeText(sellerScope?.itemScopeLabel) || null,
+      parentReferenceLabel: normalizeText(sellerScope?.parentReferenceLabel) || null,
     },
-    operationalNote:
-      normalizeText(readModel?.operationalNote) ||
-      "Use suborder payment readiness and seller fulfillment as the operational truth.",
+    operationalNote: normalizeText(source?.operationalNote) || null,
+  };
+};
+
+const normalizeScope = (scope: unknown, fallbackStoreId: unknown, fallbackLabel: string) => {
+  const source = asObject(scope);
+  return {
+    storeId: asNumber(source?.storeId ?? fallbackStoreId, 0) || null,
+    relationLabel: normalizeText(source?.relationLabel) || fallbackLabel,
   };
 };
 
 const normalizeListItem = (item: any) => {
-  if (!item || typeof item !== "object") return null;
-  const paymentStatus = normalizeSuborderPaymentStatus(item.paymentStatus ?? item.paymentStatusMeta?.code);
-  const fulfillmentStatus = normalizeFulfillmentStatus(
-    item.fulfillmentStatus ?? item.fulfillmentStatusMeta?.code
+  const source = asObject(item);
+  if (!source) return null;
+
+  const contract = normalizeContract(source.contract);
+  const paymentStatus = normalizeSuborderPaymentStatus(
+    source.paymentStatus ?? source.paymentStatusMeta?.code ?? contract?.paymentStatus
   );
-  const order = normalizeOrderSummary(item.order, {
-    id: item.orderId,
-    orderNumber: item.orderNumber,
-    checkoutMode: item.checkoutMode,
-  });
-  const readModel = normalizeReadModel(item.readModel, {
-    fulfillmentStatus,
-    paymentStatus,
-    order,
-    itemCount: item.itemCount,
-    totalAmount: item.totalAmount,
-  });
+  const fulfillmentStatus = normalizeFulfillmentStatus(
+    source.fulfillmentStatus ?? source.fulfillmentStatusMeta?.code ?? contract?.orderStatus
+  );
+  const order = normalizeOrderSummary(
+    source.order,
+    {
+      id: source.orderId,
+      orderNumber: source.orderNumber,
+      checkoutMode: source.checkoutMode,
+      createdAt: source.createdAt,
+    },
+    contract
+  );
+  const readModel = normalizeReadModel(
+    source.readModel,
+    {
+      fulfillmentStatus,
+      paymentStatus,
+      order,
+      itemCount: source.itemCount,
+      totalAmount: source.totalAmount,
+      totals: source.totals,
+    },
+    contract
+  );
 
   return {
-    ...item,
-    suborderId: asNumber(item.suborderId, 0),
-    suborderNumber: normalizeText(item.suborderNumber) || "-",
+    ...source,
+    suborderId: asNumber(source.suborderId, 0),
+    suborderNumber: normalizeText(source.suborderNumber) || "-",
     orderId: order.id,
     orderNumber: order.orderNumber || "-",
     checkoutMode: order.checkoutMode,
     checkoutModeMeta: order.checkoutModeMeta,
     paymentStatus,
-    paymentStatusMeta: buildSuborderPaymentMeta(paymentStatus),
+    paymentStatusMeta:
+      normalizeStatusMeta(source.paymentStatusMeta) ?? normalizeStatusMeta(contract?.paymentStatusMeta),
     fulfillmentStatus,
-    fulfillmentStatusMeta: buildFulfillmentMeta(fulfillmentStatus),
+    fulfillmentStatusMeta:
+      normalizeStatusMeta(source.fulfillmentStatusMeta) ??
+      normalizeStatusMeta(contract?.orderStatusMeta),
     totalAmount: readModel.sellerScope.totalAmount,
     itemCount: readModel.sellerScope.itemCount,
-    createdAt: item.createdAt || null,
-    buyer: normalizeBuyer(item.buyer),
+    createdAt: source.createdAt || null,
+    buyer: normalizeBuyer(source.buyer),
     order,
     readModel,
-    scope: {
-      storeId: asNumber(item.scope?.storeId ?? item.storeId, 0) || null,
-      relationLabel:
-        normalizeText(item.scope?.relationLabel) ||
-        "Seller suborder for the active store only.",
-    },
-    governance: normalizeFulfillmentGovernance(item.governance),
-    paymentSummary: normalizePaymentSummary(item.paymentSummary),
+    scope: normalizeScope(
+      source.scope,
+      source.storeId,
+      "Seller suborder for the active store only."
+    ),
+    governance: normalizeFulfillmentGovernance(source.governance),
+    paymentSummary: normalizePaymentSummary(source.paymentSummary),
+    contract,
   };
 };
 
 const normalizeDetail = (detail: any) => {
-  if (!detail || typeof detail !== "object") return null;
+  const source = asObject(detail);
+  if (!source) return null;
+
+  const contract = normalizeContract(source.contract);
   const paymentStatus = normalizeSuborderPaymentStatus(
-    detail.paymentStatus ?? detail.paymentStatusMeta?.code
+    source.paymentStatus ?? source.paymentStatusMeta?.code ?? contract?.paymentStatus
   );
   const fulfillmentStatus = normalizeFulfillmentStatus(
-    detail.fulfillmentStatus ?? detail.fulfillmentStatusMeta?.code
+    source.fulfillmentStatus ?? source.fulfillmentStatusMeta?.code ?? contract?.orderStatus
   );
-  const order = normalizeOrderSummary(detail.order);
-  const readModel = normalizeReadModel(detail.readModel, {
-    fulfillmentStatus,
-    paymentStatus,
-    order,
-    totals: detail.totals,
-  });
+  const order = normalizeOrderSummary(source.order, {}, contract);
+  const readModel = normalizeReadModel(
+    source.readModel,
+    {
+      fulfillmentStatus,
+      paymentStatus,
+      order,
+      totals: source.totals,
+    },
+    contract
+  );
 
   return {
-    ...detail,
-    suborderId: asNumber(detail.suborderId, 0),
-    suborderNumber: normalizeText(detail.suborderNumber) || "-",
-    storeId: asNumber(detail.storeId, 0),
+    ...source,
+    suborderId: asNumber(source.suborderId, 0),
+    suborderNumber: normalizeText(source.suborderNumber) || "-",
+    storeId: asNumber(source.storeId, 0),
     order,
     readModel,
-    scope: {
-      storeId: asNumber(detail.scope?.storeId ?? detail.storeId, 0) || null,
-      relationLabel:
-        normalizeText(detail.scope?.relationLabel) ||
-        "This seller detail is scoped to one store-owned suborder.",
-    },
-    governance: normalizeFulfillmentGovernance(detail.governance),
-    buyer: normalizeBuyer(detail.buyer),
+    scope: normalizeScope(
+      source.scope,
+      source.storeId,
+      "This seller detail is scoped to one store-owned suborder."
+    ),
+    governance: normalizeFulfillmentGovernance(source.governance),
+    buyer: normalizeBuyer(source.buyer),
     shipping: {
-      fullName: normalizeText(detail.shipping?.fullName) || "Customer",
-      phoneNumber: normalizeText(detail.shipping?.phoneNumber) || null,
-      addressLine: normalizeText(detail.shipping?.addressLine) || null,
-      markAs: normalizeText(detail.shipping?.markAs) || null,
+      fullName: normalizeText(source.shipping?.fullName) || "Customer",
+      phoneNumber: normalizeText(source.shipping?.phoneNumber) || null,
+      addressLine: normalizeText(source.shipping?.addressLine) || null,
+      markAs: normalizeText(source.shipping?.markAs) || null,
     },
     paymentStatus,
-    paymentStatusMeta: buildSuborderPaymentMeta(paymentStatus),
+    paymentStatusMeta:
+      normalizeStatusMeta(source.paymentStatusMeta) ?? normalizeStatusMeta(contract?.paymentStatusMeta),
     fulfillmentStatus,
-    fulfillmentStatusMeta: buildFulfillmentMeta(fulfillmentStatus),
+    fulfillmentStatusMeta:
+      normalizeStatusMeta(source.fulfillmentStatusMeta) ??
+      normalizeStatusMeta(contract?.orderStatusMeta),
     totals: {
       subtotalAmount: readModel.sellerScope.subtotalAmount,
       shippingAmount: readModel.sellerScope.shippingAmount,
       serviceFeeAmount: readModel.sellerScope.serviceFeeAmount,
       totalAmount: readModel.sellerScope.totalAmount,
     },
-    paidAt: detail.paidAt || null,
-    createdAt: detail.createdAt || null,
-    items: Array.isArray(detail.items)
-      ? detail.items.map((item: any) => ({
+    paidAt: source.paidAt || null,
+    createdAt: source.createdAt || null,
+    items: Array.isArray(source.items)
+      ? source.items.map((item: any) => ({
           ...item,
           id: asNumber(item.id, 0),
           productId: asNumber(item.productId, 0),
@@ -514,17 +466,18 @@ const normalizeDetail = (detail: any) => {
           totalPrice: asNumber(item.totalPrice, 0),
         }))
       : [],
-    paymentSummary: normalizePaymentSummary(detail.paymentSummary),
-    paymentProfileSummary: detail.paymentProfileSummary
+    paymentSummary: normalizePaymentSummary(source.paymentSummary),
+    contract,
+    paymentProfileSummary: source.paymentProfileSummary
       ? {
-          ...detail.paymentProfileSummary,
-          id: asNumber(detail.paymentProfileSummary.id, 0),
-          accountName: normalizeText(detail.paymentProfileSummary.accountName) || null,
-          merchantName: normalizeText(detail.paymentProfileSummary.merchantName) || null,
+          ...source.paymentProfileSummary,
+          id: asNumber(source.paymentProfileSummary.id, 0),
+          accountName: normalizeText(source.paymentProfileSummary.accountName) || null,
+          merchantName: normalizeText(source.paymentProfileSummary.merchantName) || null,
           verificationStatus:
-            normalizeText(detail.paymentProfileSummary.verificationStatus).toUpperCase() ||
+            normalizeText(source.paymentProfileSummary.verificationStatus).toUpperCase() ||
             "PENDING",
-          isActive: Boolean(detail.paymentProfileSummary.isActive),
+          isActive: Boolean(source.paymentProfileSummary.isActive),
         }
       : null,
   };

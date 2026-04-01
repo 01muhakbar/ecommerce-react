@@ -6,6 +6,7 @@ import { createUserOrderStatusUpdatedNotification } from "../services/notificati
 import { recalculateParentOrderFulfillmentStatus } from "../services/orderPaymentAggregation.service.js";
 import { expireOverduePaymentsForOrder } from "../services/paymentExpiry.service.js";
 import { getLatestTimelineRecord } from "../services/paymentReadModel.js";
+import { buildSellerSuborderContract } from "../services/orderLifecycleContract.service.js";
 import {
   Order,
   Payment,
@@ -683,6 +684,19 @@ const serializeListItem = (suborder: any, sellerAccess: any = null) => {
     parentPaymentStatus,
     checkoutMode,
   });
+  const governance = {
+    fulfillment: buildFulfillmentGovernance(sellerAccess, fulfillmentStatus, {
+      blockerCode: fulfillmentBlocker?.code,
+      blockerMessage: fulfillmentBlocker?.message,
+    }),
+  };
+  const contract = buildSellerSuborderContract({
+    orderStatus: fulfillmentStatus,
+    paymentStatus,
+    parentOrderStatus: orderStatus,
+    parentPaymentStatus,
+    availableActions: governance.fulfillment.availableActions,
+  });
 
   return {
     suborderId: toNumber(getAttr(suborder, "id")),
@@ -714,12 +728,8 @@ const serializeListItem = (suborder: any, sellerAccess: any = null) => {
       relationLabel: "Seller suborder for the active store only.",
     },
     readModel,
-    governance: {
-      fulfillment: buildFulfillmentGovernance(sellerAccess, fulfillmentStatus, {
-        blockerCode: fulfillmentBlocker?.code,
-        blockerMessage: fulfillmentBlocker?.message,
-      }),
-    },
+    governance,
+    contract,
     buyer: {
       userId: toNumber(getAttr(order, "userId"), 0) || null,
       name: String(
@@ -768,6 +778,19 @@ const serializeDetail = (suborder: any, sellerAccess: any = null) => {
     parentPaymentStatus,
     checkoutMode,
   });
+  const governance = {
+    fulfillment: buildFulfillmentGovernance(sellerAccess, fulfillmentStatus, {
+      blockerCode: fulfillmentBlocker?.code,
+      blockerMessage: fulfillmentBlocker?.message,
+    }),
+  };
+  const contract = buildSellerSuborderContract({
+    orderStatus: fulfillmentStatus,
+    paymentStatus,
+    parentOrderStatus: orderStatus,
+    parentPaymentStatus,
+    availableActions: governance.fulfillment.availableActions,
+  });
 
   return {
     suborderId: toNumber(getAttr(suborder, "id")),
@@ -789,12 +812,8 @@ const serializeDetail = (suborder: any, sellerAccess: any = null) => {
       relationLabel: "This seller detail is scoped to one store-owned suborder.",
     },
     readModel,
-    governance: {
-      fulfillment: buildFulfillmentGovernance(sellerAccess, fulfillmentStatus, {
-        blockerCode: fulfillmentBlocker?.code,
-        blockerMessage: fulfillmentBlocker?.message,
-      }),
-    },
+    governance,
+    contract,
     buyer: {
       userId: toNumber(getAttr(order, "userId"), 0) || null,
       name: String(

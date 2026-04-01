@@ -19,8 +19,6 @@ import { GENERIC_ERROR, UPDATING } from "../../constants/uiMessages.js";
 import {
   ADMIN_ORDER_ACTION_OPTIONS,
   getAdminOrderTransitionErrorMeta,
-  getAdminOrderLifecycleNote,
-  normalizeAdminOrderLifecycle,
   toAdminOrderActionValue,
 } from "./orderLifecyclePresentation.js";
 
@@ -449,8 +447,19 @@ export default function Orders() {
               </thead>
               <tbody>
                 {hasItems ? items.map((order, rowIndex) => {
-                  const lifecycleStatus = normalizeAdminOrderLifecycle(order.status || "pending");
-                  const actionStatus = toAdminOrderActionValue(order.status || "pending");
+                  const contract = order.contract || null;
+                  const actionOptions = Array.isArray(contract?.availableActions) &&
+                    contract.availableActions.length > 0
+                    ? contract.availableActions
+                    : ADMIN_ORDER_ACTION_OPTIONS.map((option) => ({
+                        code: option.value,
+                        label: option.label,
+                        enabled: true,
+                        reason: null,
+                      }));
+                  const actionStatus = toAdminOrderActionValue(
+                    order.rawStatus || order.status || "pending"
+                  );
                   const isUpdating = pendingUpdateId === order.id;
                   const orderId = order?.id;
                   const invoiceParam = getInvoiceParam(order);
@@ -489,12 +498,17 @@ export default function Orders() {
                       </td>
                       <td className={`${tableCell} w-[13%]`}>
                         <div className="space-y-0.5">
-                          <OrderStatusBadge status={lifecycleStatus || "-"} />
+                          <OrderStatusBadge
+                            status={order.rawStatus || order.status || "-"}
+                            meta={contract?.statusSummary || null}
+                          />
                           <div className="origin-left scale-90 opacity-85">
                             <PaymentStatusBadge status={order.paymentStatus} prefix="Parent Payment" />
                           </div>
                           <div className="text-[10px] text-slate-400">
-                            {getAdminOrderLifecycleNote(order.status)}
+                            {contract?.statusSummary?.description ||
+                              contract?.fulfillmentReadiness?.description ||
+                              "-"}
                           </div>
                         </div>
                       </td>
@@ -506,8 +520,12 @@ export default function Orders() {
                             disabled={isUpdating}
                             className="h-7 w-[102px] rounded-lg border border-slate-200 bg-white px-2 text-[10px] font-medium text-slate-700 focus:border-emerald-500 focus:outline-none disabled:opacity-60"
                           >
-                            {ADMIN_ORDER_ACTION_OPTIONS.map((option) => (
-                              <option key={option.value} value={option.value}>
+                            {actionOptions.map((option) => (
+                              <option
+                                key={option.code}
+                                value={option.code}
+                                disabled={Boolean(option.enabled === false)}
+                              >
                                 {option.label}
                               </option>
                             ))}

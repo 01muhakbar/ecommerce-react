@@ -270,12 +270,15 @@ const normalizeOrdersList = (payload, params = {}) => {
   const data = items.map((order) => ({
     ...order,
     id: order.id || order.orderId,
+    rawStatus: order.rawStatus || order.status,
     status: toUIStatus(order.status),
     invoice: order.invoiceNo || order.invoice_no || order.invoice || order.ref || null,
     invoiceNo: order.invoiceNo || order.invoice_no || order.invoice || order.ref || null,
     createdAt: order.createdAt || order.created_at || null,
     totalAmount: Number(order.totalAmount || order.total || order.total_amount || 0),
     paymentMethod: order.paymentMethod || order.method || null,
+    paymentStatusMeta: order.paymentStatusMeta || null,
+    contract: order.contract || null,
   }));
 
   return {
@@ -291,9 +294,11 @@ const normalizeAdminOrderDetail = (raw) => {
     invoice: raw.invoiceNo || raw.invoice || `#${raw.id}`,
     invoiceNo: raw.invoiceNo || raw.invoice || null,
     checkoutMode: raw.checkoutMode || raw.checkout_mode || "LEGACY",
+    rawStatus: raw.rawStatus || raw.status,
     status: toUIStatus(raw.status),
     totalAmount: Number(raw.totalAmount || raw.total || 0),
     paymentStatus: raw.paymentStatus || raw.payment_status || "UNPAID",
+    paymentStatusMeta: raw.paymentStatusMeta || null,
     subtotal: Number(raw.subtotal ?? raw.subtotalAmount ?? 0),
     discount: Number(raw.discount || 0),
     shipping: Number(raw.shipping ?? raw.shippingAmount ?? raw.shippingCost ?? 0),
@@ -308,6 +313,7 @@ const normalizeAdminOrderDetail = (raw) => {
     customerAddress: raw.customerAddress || null,
     customerNotes: raw.customerNotes || null,
     method: raw.method || raw.paymentMethod || "COD",
+    contract: raw.contract || null,
     items: (raw.items || []).map((it) => ({
       id: it.id,
       productId: it.productId ?? it.product_id ?? it.get?.("productId") ?? null,
@@ -380,12 +386,55 @@ export const fetchAdminCustomer = async (id) => {
   return { data: customer };
 };
 
+export const updateAdminCustomer = async (id, payload) => {
+  const { data } = await adminApi.put(`/admin/customers/${id}`, payload);
+  return data;
+};
+
+export const exportAdminCustomers = async (params = {}) => {
+  const query = new URLSearchParams(
+    Object.entries({
+      q: params?.q || undefined,
+      status: params?.status || undefined,
+    }).filter(([, value]) => value !== undefined && value !== null && value !== "")
+  ).toString();
+  const endpoint = query
+    ? `/api/admin/customers/export?${query}`
+    : "/api/admin/customers/export";
+  const response = await fetch(endpoint, { credentials: "include" });
+
+  if (!response.ok) {
+    const fallback = `Failed to export customers (${response.status}).`;
+    try {
+      const payload = await response.json();
+      throw new Error(payload?.message || fallback);
+    } catch {
+      throw new Error(fallback);
+    }
+  }
+
+  return response;
+};
+
+export const importAdminCustomers = async (file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await adminApi.post("/admin/customers/import", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+};
+
 export const fetchAdminCustomerOrders = async (customerId, params) => {
-  const mergedParams = {
-    ...params,
-    userId: customerId,
-    status: params?.status || undefined,
-  };
+  const mergedParams = Object.fromEntries(
+    Object.entries({
+      page: params?.page,
+      pageSize: params?.pageSize ?? params?.limit,
+      search: params?.search ?? params?.q,
+      status: params?.status || undefined,
+      userId: customerId,
+    }).filter(([, value]) => value !== undefined && value !== null && value !== "")
+  );
   const { data } = await adminApi.get("/admin/orders", { params: mergedParams });
   return normalizeOrdersList(data, mergedParams);
 };

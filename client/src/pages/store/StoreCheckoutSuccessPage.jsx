@@ -12,6 +12,10 @@ import {
   isPublicOrderReference,
   buildPublicOrderTrackingPath,
 } from "../../utils/publicOrderReference.js";
+import {
+  getOrderContractAction,
+  getOrderContractSummary,
+} from "../../utils/orderContract.ts";
 
 const cardClass =
   "mx-auto max-w-2xl rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_20px_45px_rgba(15,23,42,0.08)] sm:p-8";
@@ -88,9 +92,18 @@ export default function StoreCheckoutSuccessPage() {
 
   const stripeVerification = verifyStripeQuery.data?.data || null;
   const stripeOrderSnapshot = stripeOrderStatusQuery.data?.data || null;
+  const stripeContract = stripeVerification?.contract || stripeOrderSnapshot?.contract || null;
+  const stripeStatusSummary = getOrderContractSummary(stripeContract);
   const stripeOrderPaid =
     String(stripeOrderSnapshot?.paymentStatus || "").toUpperCase().trim() === "PAID";
-  const stripePaid = Boolean(stripeVerification?.paid) || stripeOrderPaid;
+  const stripeContinueAction = getOrderContractAction(
+    stripeContract,
+    "CONTINUE_STRIPE_PAYMENT"
+  );
+  const stripePaid =
+    Boolean(stripeVerification?.paid) ||
+    stripeOrderPaid ||
+    String(stripeContract?.paymentStatus || "").toUpperCase() === "PAID";
   const stripeVerificationError =
     verifyStripeQuery.error?.response?.data?.message ||
     verifyStripeQuery.error?.message ||
@@ -194,12 +207,14 @@ export default function StoreCheckoutSuccessPage() {
             {stripeVerificationError}
           </p>
           <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
-            <StripeActionButton
-              onClick={handleRetryStripe}
-              disabled={retryStripeMutation.isPending}
-              busy={retryStripeMutation.isPending}
-              label="Open Stripe Again"
-            />
+            {stripeContinueAction?.enabled ? (
+              <StripeActionButton
+                onClick={handleRetryStripe}
+                disabled={retryStripeMutation.isPending}
+                busy={retryStripeMutation.isPending}
+                label={stripeContinueAction.label || "Open Stripe Again"}
+              />
+            ) : null}
             <Link
               to={trackingPath}
               className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
@@ -207,6 +222,11 @@ export default function StoreCheckoutSuccessPage() {
               Track Order
             </Link>
           </div>
+          {!stripeContinueAction?.enabled ? (
+            <p className="mt-3 text-center text-sm text-slate-500">
+              Payment is not currently actionable from this screen.
+            </p>
+          ) : null}
           {retryStripeMutation.isError ? (
             <p className="mt-3 text-center text-sm text-rose-600">
               {retryStripeMutation.error?.response?.data?.message ||
@@ -236,11 +256,14 @@ export default function StoreCheckoutSuccessPage() {
             {stripeOrderStatusError}
           </p>
           <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
-            <StripeActionButton
-              onClick={handleRetryStripe}
-              disabled={retryStripeMutation.isPending}
-              busy={retryStripeMutation.isPending}
-            />
+            {stripeContinueAction?.enabled ? (
+              <StripeActionButton
+                onClick={handleRetryStripe}
+                disabled={retryStripeMutation.isPending}
+                busy={retryStripeMutation.isPending}
+                label={stripeContinueAction.label || "Continue Stripe Payment"}
+              />
+            ) : null}
             <Link
               to={trackingPath}
               className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
@@ -248,6 +271,11 @@ export default function StoreCheckoutSuccessPage() {
               Track Order
             </Link>
           </div>
+          {!stripeContinueAction?.enabled ? (
+            <p className="mt-3 text-center text-sm text-slate-500">
+              Payment is not currently actionable from this screen.
+            </p>
+          ) : null}
           {retryStripeMutation.isError ? (
             <p className="mt-3 text-center text-sm text-rose-600">
               {retryStripeMutation.error?.response?.data?.message ||
@@ -263,11 +291,13 @@ export default function StoreCheckoutSuccessPage() {
   if (
     isStripeFlow &&
     !stripePaid &&
+    stripeContinueAction?.enabled &&
     (stripeCancelled || Boolean(stripeSessionId) || stripeOrderStatusQuery.isSuccess)
   ) {
     const description = stripeCancelled
       ? "You returned before completing payment. The order still exists and you can reopen Stripe Checkout."
-      : "This order is still waiting for Stripe payment completion.";
+      : stripeStatusSummary?.description ||
+        "This order is still waiting for Stripe payment completion.";
     return (
       <section className="mx-auto max-w-[1100px] px-3 py-6 sm:px-4 sm:py-8 lg:px-6">
         <div className={cardClass}>
@@ -275,7 +305,7 @@ export default function StoreCheckoutSuccessPage() {
             <CreditCard className="h-8 w-8 sm:h-10 sm:w-10" />
           </div>
           <p className="mt-5 text-center text-sm font-semibold uppercase tracking-[0.14em] text-amber-600">
-            Payment Incomplete
+            {stripeStatusSummary?.label || "Payment Incomplete"}
           </p>
           <h1 className="mt-2 text-center text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
             Continue Stripe payment
@@ -324,14 +354,17 @@ export default function StoreCheckoutSuccessPage() {
             <CheckCircle2 className="h-8 w-8 sm:h-10 sm:w-10" />
           </div>
           <p className="mt-5 text-sm font-semibold uppercase tracking-[0.14em] text-emerald-600">
-            {isStripeFlow ? "Payment Confirmed" : "Order Created"}
+            {isStripeFlow
+              ? stripeStatusSummary?.label || "Payment Confirmed"
+              : "Order Created"}
           </p>
           <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
             {isStripeFlow ? "Stripe payment completed" : "Continue Payment From Your Account"}
           </h1>
           <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500 sm:text-base">
             {isStripeFlow
-              ? "Your Stripe session has been verified by the backend and the order is now marked as paid."
+              ? stripeStatusSummary?.description ||
+                "Your Stripe session has been verified by the backend and the order is now marked as paid."
               : "Your order reference is ready. If this checkout uses per-store QRIS payment, payment can still be pending until you complete transfer and proof review from your account."}
           </p>
 

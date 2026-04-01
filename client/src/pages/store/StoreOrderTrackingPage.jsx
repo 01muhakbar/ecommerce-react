@@ -5,7 +5,6 @@ import { Download, Printer } from "lucide-react";
 import { fetchStoreOrder } from "../../api/public/storeOrders.ts";
 import { getStoreCustomization } from "../../api/public/storeCustomizationPublic.ts";
 import { formatCurrency } from "../../utils/format.js";
-import { getOrderStatusLabel } from "../../utils/orderStatus.js";
 import { PaymentStatusBadge } from "../../components/payments/PaymentReadModelBadges.jsx";
 import {
   UiEmptyState,
@@ -23,6 +22,12 @@ import {
   resolvePublicOrderReference,
 } from "../../utils/publicOrderReference.js";
 import { normalizeDashboardSettingCopy } from "../../utils/dashboardSettingCopy.js";
+import {
+  getOrderContractAction,
+  getOrderContractSummary,
+  isOrderContractFinal,
+} from "../../utils/orderContract.ts";
+import { isGroupedPaymentFinal } from "../../utils/groupedPaymentReadModel.ts";
 
 const formatDate = (value) => {
   if (!value) return "-";
@@ -57,23 +62,14 @@ const getStoreSplitStatusClass = (status) => {
   return "border-slate-200 bg-slate-100 text-slate-700";
 };
 
-const getStatusBadgeClass = (status) => {
-  const value = String(status || "").toLowerCase();
-  if (value === "pending") {
-    return "border-amber-200 bg-amber-50 text-amber-700";
-  }
-  if (value === "processing") {
-    return "border-sky-200 bg-sky-50 text-sky-700";
-  }
-  if (value === "shipping" || value === "shipped") {
-    return "border-indigo-200 bg-indigo-50 text-indigo-700";
-  }
-  if (value === "complete" || value === "delivered") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  }
-  if (value === "cancelled" || value === "canceled") {
-    return "border-rose-200 bg-rose-50 text-rose-700";
-  }
+const getToneBadgeClass = (tone) => {
+  const value = String(tone || "").trim().toLowerCase();
+  if (value === "amber") return "border-amber-200 bg-amber-50 text-amber-700";
+  if (value === "sky") return "border-sky-200 bg-sky-50 text-sky-700";
+  if (value === "indigo") return "border-indigo-200 bg-indigo-50 text-indigo-700";
+  if (value === "emerald") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (value === "rose") return "border-rose-200 bg-rose-50 text-rose-700";
+  if (value === "orange") return "border-orange-200 bg-orange-50 text-orange-700";
   return "border-slate-200 bg-slate-100 text-slate-700";
 };
 
@@ -87,24 +83,16 @@ const normalizeTrackingPayload = (response) =>
 
 const normalizeStatusValue = (status) => String(status || "").trim().toLowerCase();
 
-const isTrackingOrderFinal = (status) => {
-  const normalized = normalizeStatusValue(status);
-  return ["complete", "delivered", "cancelled", "canceled"].includes(normalized);
-};
-
 const shouldPollTrackingOrder = (order) => {
   if (!order || typeof order !== "object") return false;
-  if (!isTrackingOrderFinal(order?.status)) return true;
+  if (!isOrderContractFinal(order?.contract)) return true;
 
   const storeSplits = Array.isArray(order?.storeSplits) ? order.storeSplits : [];
   return storeSplits.some((split) => {
-    const paymentStatus = String(split?.paymentStatus || "").trim().toUpperCase();
-    const fulfillmentStatus = String(split?.fulfillmentStatus || "")
-      .trim()
-      .toUpperCase();
-    const paymentFinal = ["PAID", "FAILED", "EXPIRED", "CANCELLED"].includes(paymentStatus);
-    const fulfillmentFinal = ["DELIVERED", "CANCELLED"].includes(fulfillmentStatus);
-    return !paymentFinal || !fulfillmentFinal;
+    const paymentFinal = isGroupedPaymentFinal(split);
+    const fulfillmentFinal = Boolean(split?.fulfillmentStatusMeta?.isFinal);
+    const contractFinal = isOrderContractFinal(split?.contract);
+    return !contractFinal || !paymentFinal || !fulfillmentFinal;
   });
 };
 
@@ -218,10 +206,12 @@ export default function StoreOrderTrackingPage() {
   const customerAddress =
     order?.customerAddress || customer.address || order?.shippingAddress || "-";
   const paymentMethod = order?.paymentMethod || order?.method || "-";
+  const contract = order?.contract || null;
+  const statusSummary = getOrderContractSummary(contract);
+  const continueStripeAction = getOrderContractAction(contract, "CONTINUE_STRIPE_PAYMENT");
   const stripeContinuePath =
     String(paymentMethod || "").toUpperCase() === "STRIPE" &&
-    String(order?.paymentStatus || "").toUpperCase() !== "PAID" &&
-    !isCancelled &&
+    continueStripeAction?.enabled &&
     invoiceRef
       ? `/checkout/success?ref=${encodeURIComponent(invoiceRef)}&method=STRIPE&cancelled=1`
       : null;
@@ -231,7 +221,8 @@ export default function StoreOrderTrackingPage() {
     order?.shippingCost ?? order?.shipping ?? order?.shipping?.cost ?? order?.deliveryFee ?? 0;
   const discount = order?.discount ?? order?.discountAmount ?? order?.discountTotal ?? 0;
   const totalAmount = order?.totalAmount ?? order?.total ?? order?.grandTotal ?? 0;
-  const statusLabel = getOrderStatusLabel(order?.status);
+  const statusLabel =
+    statusSummary?.label || contract?.orderStatusMeta?.label || String(order?.status || "-");
   const normalizedStatus = normalizeStatusValue(order?.status);
   const trackingStepIndex = getTrackingStepIndex(order?.status);
   const trackingSummary = getTrackingSummary(order?.status);
@@ -522,8 +513,8 @@ export default function StoreOrderTrackingPage() {
               <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-slate-600">
                 <span>Status:</span>
                 <span
-                  className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClass(
-                    order?.status
+                    className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getToneBadgeClass(
+                    statusSummary?.tone
                   )}`}
                 >
                   {statusLabel}

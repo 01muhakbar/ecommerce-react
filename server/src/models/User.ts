@@ -21,7 +21,7 @@ export class User extends Model<
   declare role: string;     // "super_admin" | "admin" | "staff" | "user" | ...
   declare sellerRoleCode: CreationOptional<string | null>;
   declare permissionKeys: CreationOptional<string | null>;
-  declare status: string;   // "active" | "inactive" | ...
+  declare status: string;   // "active" | "inactive" | "pending_verification" | ...
   declare isPublished: CreationOptional<boolean>;
 
   declare created_at: CreationOptional<Date>;
@@ -98,7 +98,10 @@ export function initUser(sequelize: Sequelize) {
       modelName: "User",
       tableName: "users",
       underscored: true, // pakai created_at / updated_at (cocok dengan log kamu sebelumnya)
-      indexes: [{ unique: true, fields: ["email"] }],
+      indexes: [
+        { unique: true, fields: ["email"] },
+        { unique: true, fields: ["phone_number"], name: "users_phone_number_unique" },
+      ],
     }
   );
 }

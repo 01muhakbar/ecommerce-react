@@ -8,6 +8,14 @@ import {
   PaymentStatusBadge,
   ProofReviewBadge,
 } from "../../components/payments/PaymentReadModelBadges.jsx";
+import {
+  getOrderContractSummary,
+  isOrderContractFinal,
+} from "../../utils/orderContract.ts";
+import {
+  getGroupedPaymentReadModel,
+  isGroupedPaymentFinal,
+} from "../../utils/groupedPaymentReadModel.ts";
 
 const fetchOrder = async (orderId) => {
   const { data } = await api.get(`/store/orders/my/${orderId}`);
@@ -18,6 +26,12 @@ const money = (value) => formatCurrency(Number(value || 0));
 
 const statusStyles = (status = "") => {
   const s = String(status).toLowerCase();
+  if (s.includes("emerald")) return "bg-emerald-100 text-emerald-700";
+  if (s.includes("indigo")) return "bg-blue-100 text-blue-700";
+  if (s.includes("sky") || s.includes("amber"))
+    return "bg-amber-100 text-amber-700";
+  if (s.includes("rose") || s.includes("orange")) return "bg-rose-100 text-rose-700";
+  if (s.includes("stone")) return "bg-slate-100 text-slate-600";
   if (s.includes("deliver")) return "bg-emerald-100 text-emerald-700";
   if (s.includes("ship")) return "bg-blue-100 text-blue-700";
   if (s.includes("process") || s.includes("pending"))
@@ -33,29 +47,15 @@ const formatDate = (value) => {
   return date.toLocaleString();
 };
 
-const normalizePaymentStatus = (value) => String(value || "").trim().toUpperCase();
-
-const isOrderFinal = (status = "") => {
-  const value = String(status || "").trim().toLowerCase();
-  return ["delivered", "complete", "completed", "cancelled", "canceled"].includes(value);
-};
-
 const isGroupOperationallyFinal = (group) => {
-  const fulfillmentStatus = String(group?.fulfillmentStatus || "")
-    .trim()
-    .toUpperCase();
-  const paymentStatus = normalizePaymentStatus(
-    group?.payment?.displayStatus || group?.payment?.status || group?.paymentStatus
-  );
-
-  const paymentFinal = ["PAID", "FAILED", "EXPIRED", "CANCELLED"].includes(paymentStatus);
-  const fulfillmentFinal = ["DELIVERED", "CANCELLED"].includes(fulfillmentStatus);
-  return paymentFinal && fulfillmentFinal;
+  const paymentFinal = isGroupedPaymentFinal(group);
+  const fulfillmentFinal = Boolean(group?.fulfillmentStatusMeta?.isFinal);
+  return isOrderContractFinal(group?.contract) && paymentFinal && fulfillmentFinal;
 };
 
 const shouldPollGroupedOrder = (groupedOrder) => {
   if (!groupedOrder || typeof groupedOrder !== "object") return false;
-  if (!isOrderFinal(groupedOrder.orderStatus)) return true;
+  if (!isOrderContractFinal(groupedOrder?.contract)) return true;
   const groups = Array.isArray(groupedOrder.groups) ? groupedOrder.groups : [];
   return groups.some((group) => !isGroupOperationallyFinal(group));
 };
@@ -70,7 +70,7 @@ export default function AccountOrderDetailPage() {
     refetchIntervalInBackground: false,
     refetchInterval: (query) => {
       const order = query.state.data?.data ?? query.state.data?.data?.data ?? null;
-      return !isOrderFinal(order?.status) ? 15000 : false;
+      return !isOrderContractFinal(order?.contract) ? 15000 : false;
     },
   });
   const groupedQuery = useQuery({
@@ -125,6 +125,8 @@ export default function AccountOrderDetailPage() {
   const subtotalValue = order.subtotal ?? 0;
   const groupedOrder = groupedQuery.data?.data ?? null;
   const parentPaymentStatus = groupedOrder?.paymentStatus || order.paymentStatus;
+  const paymentEntry = order.paymentEntry || groupedOrder?.paymentEntry || null;
+  const statusSummary = getOrderContractSummary(order.contract);
 
   return (
     <div className="space-y-6">
@@ -141,10 +143,10 @@ export default function AccountOrderDetailPage() {
         </div>
         <span
           className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${statusStyles(
-            order.status
+            statusSummary?.tone || order.status
           )}`}
         >
-          {order.status}
+          {statusSummary?.label || order.status}
         </span>
       </div>
 
@@ -159,17 +161,19 @@ export default function AccountOrderDetailPage() {
             <div>Discount: {money(discountValue)}</div>
             <div>Subtotal: {money(subtotalValue)}</div>
         </div>
-        {order.id ? (
+        {order.id && paymentEntry?.visible && paymentEntry?.targetPath ? (
           <div className="mt-4">
             <Link
-              to={`/user/my-orders/${order.id}/payment`}
+              to={paymentEntry.targetPath}
               className="inline-flex h-10 items-center justify-center rounded-full border border-emerald-200 px-4 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
             >
-              {String(parentPaymentStatus).toUpperCase() === "PAID"
-                ? "View Payment by Store"
-                : "Continue to QRIS Payment"}
+              {paymentEntry.label || "Order Payment"}
             </Link>
           </div>
+        ) : order.id ? (
+          <p className="mt-4 text-sm text-slate-500">
+            {paymentEntry?.summaryLabel || "Payment is no longer actionable from this page."}
+          </p>
         ) : null}
       </div>
 
@@ -190,76 +194,76 @@ export default function AccountOrderDetailPage() {
             </div>
           ) : (
             <div className="mt-4 space-y-3">
-              {groupedOrder.groups.map((group) => (
-                <div
-                  key={`${group.suborderId || group.storeId || group.storeName}`}
-                  className="rounded-xl border border-slate-200 bg-slate-50 p-4"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h4 className="font-semibold text-slate-900">{group.storeName}</h4>
-                        <PaymentStatusBadge status={group.paymentStatus} prefix="Suborder" />
-                        {group.payment?.status ? (
-                          <PaymentStatusBadge
-                            status={group.payment.displayStatus || group.payment.status}
-                            prefix="Payment"
-                          />
-                        ) : null}
-                        {group.payment?.proof?.reviewStatus ? (
-                          <ProofReviewBadge
-                            status={group.payment.proof.reviewStatus}
-                            prefix="Proof"
-                          />
+              {groupedOrder.groups.map((group) => {
+                const splitPayment = getGroupedPaymentReadModel(group);
+                return (
+                  <div
+                    key={`${group.suborderId || group.storeId || group.storeName}`}
+                    className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="font-semibold text-slate-900">{group.storeName}</h4>
+                          <PaymentStatusBadge status={group.paymentStatus} prefix="Suborder" />
+                          {group.payment?.status || group.paymentReadModel ? (
+                            <PaymentStatusBadge status={splitPayment.status} prefix="Payment" />
+                          ) : null}
+                          {group.payment?.proof?.reviewStatus ? (
+                            <ProofReviewBadge
+                              status={group.payment.proof.reviewStatus}
+                              prefix="Proof"
+                            />
+                          ) : null}
+                        </div>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {group.suborderNumber || "Legacy"} • {group.items.length} item
+                          {group.items.length === 1 ? "" : "s"}
+                        </p>
+                        {group.payment?.proof?.reviewNote ? (
+                          <p className="mt-2 text-sm text-slate-600">
+                            Review note: {group.payment.proof.reviewNote}
+                          </p>
                         ) : null}
                       </div>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {group.suborderNumber || "Legacy"} • {group.items.length} item
-                        {group.items.length === 1 ? "" : "s"}
-                      </p>
-                      {group.payment?.proof?.reviewNote ? (
-                        <p className="mt-2 text-sm text-slate-600">
-                          Review note: {group.payment.proof.reviewNote}
+                      <div className="text-right text-sm text-slate-600">
+                        <p className="font-semibold text-slate-900">{money(group.totalAmount)}</p>
+                        <p>Fulfillment: {group.fulfillmentStatus}</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 grid gap-3 md:grid-cols-[160px_minmax(0,1fr)]">
+                      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white p-3">
+                        {group.payment?.qrImageUrl ? (
+                          <img
+                            src={group.payment.qrImageUrl}
+                            alt={`QRIS ${group.storeName}`}
+                            className="mx-auto h-28 w-full object-contain"
+                          />
+                        ) : (
+                          <div className="flex h-28 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 text-center text-xs text-slate-500">
+                            QRIS image unavailable
+                          </div>
+                        )}
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+                        <p>
+                          <span className="font-semibold text-slate-900">Merchant:</span>{" "}
+                          {group.payment?.merchantName || group.merchantName || "-"}
                         </p>
-                      ) : null}
-                    </div>
-                    <div className="text-right text-sm text-slate-600">
-                      <p className="font-semibold text-slate-900">{money(group.totalAmount)}</p>
-                      <p>Fulfillment: {group.fulfillmentStatus}</p>
-                    </div>
-                  </div>
-                  <div className="mt-3 grid gap-3 md:grid-cols-[160px_minmax(0,1fr)]">
-                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white p-3">
-                      {group.payment?.qrImageUrl ? (
-                        <img
-                          src={group.payment.qrImageUrl}
-                          alt={`QRIS ${group.storeName}`}
-                          className="mx-auto h-28 w-full object-contain"
-                        />
-                      ) : (
-                        <div className="flex h-28 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 text-center text-xs text-slate-500">
-                          QRIS image unavailable
-                        </div>
-                      )}
-                    </div>
-                    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-                      <p>
-                        <span className="font-semibold text-slate-900">Merchant:</span>{" "}
-                        {group.payment?.merchantName || group.merchantName || "-"}
-                      </p>
-                      <p className="mt-1">
-                        <span className="font-semibold text-slate-900">Account Label:</span>{" "}
-                        {group.payment?.accountName || group.accountName || "-"}
-                      </p>
-                      <p className="mt-2 leading-6">
-                        {group.payment?.instructionText ||
-                          group.paymentInstruction ||
-                          "Per-store payment instructions are available on the payment page."}
-                      </p>
+                        <p className="mt-1">
+                          <span className="font-semibold text-slate-900">Account Label:</span>{" "}
+                          {group.payment?.accountName || group.accountName || "-"}
+                        </p>
+                        <p className="mt-2 leading-6">
+                          {group.payment?.instructionText ||
+                            group.paymentInstruction ||
+                            "Per-store payment instructions are available on the payment page."}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

@@ -6,6 +6,8 @@ import { requireAdmin, requireStaffOrAdmin } from "../middleware/requireRole.js"
 import { Product } from "../models/Product.js";
 import { Category, ProductCategory, Store, sequelize } from "../models/index.js";
 import { buildProductVisibilitySnapshot } from "../services/productVisibility.js";
+import { buildPublicStoreOperationalReadiness } from "../services/sharedContracts/publicStoreIdentity.js";
+import { STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES } from "../services/sharedContracts/storePaymentProfileCompat.js";
 
 const router = Router();
 router.use(requireStaffOrAdmin);
@@ -503,11 +505,68 @@ const resolveProductSelectedCategories = (plain: any) => {
 const resolveProductDefaultCategory = (plain: any) =>
   toAdminCategorySummary(plain?.defaultCategory ?? plain?.category);
 
+const getAdminProductStoreId = (product: any) => {
+  const direct =
+    Number((product as any)?.storeId ?? product?.get?.("storeId") ?? 0) ||
+    Number(
+      (product as any)?.store?.id ??
+        product?.get?.("store")?.id ??
+        product?.dataValues?.store?.id ??
+        0
+    );
+  return Number.isInteger(direct) && direct > 0 ? direct : 0;
+};
+
+const loadAdminStoreOperationalReadinessByIds = async (storeIds: number[]) => {
+  const normalizedIds = Array.from(
+    new Set(storeIds.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value > 0))
+  );
+  if (!normalizedIds.length) {
+    return new Map<number, any>();
+  }
+
+  const stores = await Store.findAll({
+    where: { id: { [Op.in]: normalizedIds } } as any,
+    attributes: ["id", "status", "activeStorePaymentProfileId"],
+    include: [
+      {
+        association: "paymentProfile",
+        attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+        required: false,
+      },
+      {
+        association: "activePaymentProfile",
+        attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+        required: false,
+      },
+    ],
+  });
+
+  return new Map<number, any>(
+    stores.map((store: any) => [
+      Number(store?.id || 0),
+      buildPublicStoreOperationalReadiness(store),
+    ])
+  );
+};
+
 const buildAdminProductIncludes = (categoryFilterId?: number | null) => [
   {
     model: Store,
     as: "store",
-    attributes: ["id", "slug", "status"],
+    attributes: ["id", "slug", "status", "activeStorePaymentProfileId"],
+    include: [
+      {
+        association: "paymentProfile",
+        attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+        required: false,
+      },
+      {
+        association: "activePaymentProfile",
+        attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+        required: false,
+      },
+    ],
     required: false,
   },
   {
@@ -681,7 +740,7 @@ const resolveAdminPriceFields = (plain: any) => {
   };
 };
 
-const toAdminProductListItem = (product: any) => {
+const toAdminProductListItem = (product: any, storeOperationalReadiness: any = null) => {
   const plain = product?.get ? product.get({ plain: true }) : product;
   const imagePaths = normalizeImagePathList(plain?.imagePaths);
   const imageUrl = normalizeUploadsUrl(plain?.promoImagePath) || imagePaths[0] || null;
@@ -694,6 +753,7 @@ const toAdminProductListItem = (product: any) => {
     isPublished: published,
     status: plain?.status,
     submissionStatus: plain?.sellerSubmissionStatus,
+    storeOperationalReadiness,
     storeStatus: plain?.store?.status,
     storeId: plain?.storeId,
   });
@@ -733,7 +793,7 @@ const toAdminProductListItem = (product: any) => {
   };
 };
 
-const toAdminProductDetail = (product: any) => {
+const toAdminProductDetail = (product: any, storeOperationalReadiness: any = null) => {
   const plain = product?.get ? product.get({ plain: true }) : product;
   const imagePaths = normalizeImagePathList(plain?.imagePaths);
   const imageUrl = normalizeUploadsUrl(plain?.promoImagePath) || imagePaths[0] || null;
@@ -747,6 +807,7 @@ const toAdminProductDetail = (product: any) => {
     isPublished: published,
     status: plain?.status,
     submissionStatus: plain?.sellerSubmissionStatus,
+    storeOperationalReadiness,
     storeStatus: plain?.store?.status,
     storeId: plain?.storeId,
   });
@@ -1196,9 +1257,17 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
         order: [["createdAt", "DESC"]],
       }),
     ]);
+    const storeReadinessById = await loadAdminStoreOperationalReadinessByIds(
+      rows.map((row: any) => getAdminProductStoreId(row))
+    );
 
     res.json({
-      data: rows.map(toAdminProductListItem),
+      data: rows.map((row: any) =>
+        toAdminProductListItem(
+          row,
+          storeReadinessById.get(getAdminProductStoreId(row)) || null
+        )
+      ),
       meta: {
         page,
         limit,
@@ -1498,7 +1567,15 @@ router.get(
         include: buildAdminProductIncludes(null),
       });
       if (!p) return res.status(404).json({ success: false, message: "Not found" });
-      res.json({ data: toAdminProductDetail(p) });
+      const storeReadinessById = await loadAdminStoreOperationalReadinessByIds([
+        getAdminProductStoreId(p),
+      ]);
+      res.json({
+        data: toAdminProductDetail(
+          p,
+          storeReadinessById.get(getAdminProductStoreId(p)) || null
+        ),
+      });
     } catch (err) {
       next(err);
     }
@@ -1555,7 +1632,15 @@ router.post(
           transaction,
         });
       });
-      return res.status(201).json({ data: toAdminProductDetail(created) });
+      const storeReadinessById = await loadAdminStoreOperationalReadinessByIds([
+        getAdminProductStoreId(created),
+      ]);
+      return res.status(201).json({
+        data: toAdminProductDetail(
+          created,
+          storeReadinessById.get(getAdminProductStoreId(created)) || null
+        ),
+      });
     } catch (err) {
       if ((err as any)?.status === 400) {
         return res.status(400).json({ message: (err as any).message });
@@ -1652,7 +1737,15 @@ router.patch(
           transaction,
         });
       });
-      return res.json({ data: toAdminProductDetail(updated) });
+      const storeReadinessById = await loadAdminStoreOperationalReadinessByIds([
+        getAdminProductStoreId(updated),
+      ]);
+      return res.json({
+        data: toAdminProductDetail(
+          updated,
+          storeReadinessById.get(getAdminProductStoreId(updated)) || null
+        ),
+      });
     } catch (err) {
       if ((err as any)?.status === 400) {
         return res.status(400).json({ message: (err as any).message });
@@ -1706,7 +1799,15 @@ router.patch(
         });
       });
 
-      return res.json({ data: toAdminProductDetail(updated) });
+      const storeReadinessById = await loadAdminStoreOperationalReadinessByIds([
+        getAdminProductStoreId(updated),
+      ]);
+      return res.json({
+        data: toAdminProductDetail(
+          updated,
+          storeReadinessById.get(getAdminProductStoreId(updated)) || null
+        ),
+      });
     } catch (err) {
       if ((err as any)?.name === "ZodError") {
         return res.status(400).json({ message: (err as any).issues?.[0]?.message || "Invalid payload" });

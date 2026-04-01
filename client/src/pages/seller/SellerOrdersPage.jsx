@@ -18,6 +18,10 @@ import {
   SellerWorkspaceSectionHeader,
   SellerWorkspaceStatCard,
 } from "../../components/seller/SellerWorkspaceFoundation.jsx";
+import {
+  getOrderContractMeta,
+  getOrderContractSummary,
+} from "../../utils/orderContract.ts";
 
 const PAYMENT_STATUS_CLASS = {
   UNPAID: "stone",
@@ -100,11 +104,13 @@ function buildOrderStats(items) {
 
 const getParentLifecycleHint = (item) => {
   const parentOrderStatus =
+    getOrderContractMeta(item.contract, "parentOrderStatusMeta")?.label ||
     item.readModel?.parentOrder?.statusMeta?.label ||
     item.order?.statusMeta?.label ||
     item.order?.status ||
     "-";
   const parentPaymentStatus =
+    getOrderContractMeta(item.contract, "parentPaymentStatusMeta")?.label ||
     item.readModel?.parentOrder?.paymentStatusMeta?.label ||
     item.order?.paymentStatusMeta?.label ||
     item.order?.paymentStatus ||
@@ -126,6 +132,30 @@ const getPaymentSnapshotHint = (item) => {
 const getSellerOperationalHint = (item) =>
   item.readModel?.operationalNote ||
   "Use suborder payment and seller fulfillment as the operational truth for this store split.";
+
+const getSellerStatusMeta = (item) =>
+  getOrderContractSummary(item.contract) ||
+  item.readModel?.primaryStatus ||
+  item.fulfillmentStatusMeta ||
+  null;
+
+const getSellerPaymentMeta = (item) =>
+  getOrderContractMeta(item.contract, "paymentStatusMeta") ||
+  item.readModel?.paymentState ||
+  item.paymentStatusMeta ||
+  null;
+
+const getParentOrderMeta = (item) =>
+  getOrderContractMeta(item.contract, "parentOrderStatusMeta") ||
+  item.readModel?.parentOrder?.statusMeta ||
+  item.order?.statusMeta ||
+  null;
+
+const getParentPaymentMeta = (item) =>
+  getOrderContractMeta(item.contract, "parentPaymentStatusMeta") ||
+  item.readModel?.parentOrder?.paymentStatusMeta ||
+  item.order?.paymentStatusMeta ||
+  null;
 
 const formatMoney = (value) =>
   new Intl.NumberFormat("id-ID", {
@@ -489,10 +519,16 @@ export default function SellerOrdersPage() {
 
       {!ordersQuery.isLoading && !ordersQuery.isError && items.length > 0 ? (
         <div className="space-y-3.5">
-          {items.map((item) => (
-            <SellerWorkspacePanel key={item.suborderId} className="p-4">
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                <div className="space-y-3">
+          {items.map((item) => {
+            const sellerStatusMeta = getSellerStatusMeta(item);
+            const sellerPaymentMeta = getSellerPaymentMeta(item);
+            const parentOrderMeta = getParentOrderMeta(item);
+            const parentPaymentMeta = getParentPaymentMeta(item);
+
+            return (
+              <SellerWorkspacePanel key={item.suborderId} className="p-4">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                  <div className="space-y-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
                       Seller suborder
@@ -508,12 +544,12 @@ export default function SellerOrdersPage() {
                   <div className="flex flex-wrap gap-2">
                     <StatusChip
                       value={item.fulfillmentStatus}
-                      label={`Seller ${item.readModel?.primaryStatus?.label || item.fulfillmentStatusMeta?.label || item.fulfillmentStatus}`}
+                      label={`Seller ${sellerStatusMeta?.label || item.fulfillmentStatus}`}
                       map={FULFILLMENT_STATUS_CLASS}
                     />
                     <StatusChip
                       value={item.paymentStatus}
-                      label={`Store split ${item.readModel?.paymentState?.label || item.paymentStatusMeta?.label || item.paymentStatus}`}
+                      label={`Store split ${sellerPaymentMeta?.label || item.paymentStatus}`}
                       map={PAYMENT_STATUS_CLASS}
                     />
                     <StatusChip
@@ -554,21 +590,11 @@ export default function SellerOrdersPage() {
                   <div className="flex flex-wrap gap-2 text-xs text-slate-600">
                     <InfoPill
                       label="Parent lifecycle"
-                      value={
-                        item.readModel?.parentOrder?.statusMeta?.label ||
-                        item.order?.statusMeta?.label ||
-                        item.order?.status ||
-                        "-"
-                      }
+                      value={parentOrderMeta?.label || item.order?.status || "-"}
                     />
                     <InfoPill
                       label="Parent payment"
-                      value={
-                        item.readModel?.parentOrder?.paymentStatusMeta?.label ||
-                        item.order?.paymentStatusMeta?.label ||
-                        item.order?.paymentStatus ||
-                        "-"
-                      }
+                      value={parentPaymentMeta?.label || item.order?.paymentStatus || "-"}
                     />
                     <InfoPill label="Scope" value="Store-only items and totals" />
                   </div>
@@ -579,17 +605,13 @@ export default function SellerOrdersPage() {
                   <p className="mt-2">
                     Seller Status:{" "}
                     <span className="font-semibold text-slate-900">
-                      {item.readModel?.primaryStatus?.label ||
-                        item.fulfillmentStatusMeta?.label ||
-                        item.fulfillmentStatus}
+                      {sellerStatusMeta?.label || item.fulfillmentStatus}
                     </span>
                   </p>
                   <p className="mt-1">
                     Store Split Payment:{" "}
                     <span className="font-medium text-slate-900">
-                      {item.readModel?.paymentState?.label ||
-                        item.paymentStatusMeta?.label ||
-                        item.paymentStatus}
+                      {sellerPaymentMeta?.label || item.paymentStatus}
                     </span>
                   </p>
                   <p className="mt-1">
@@ -625,7 +647,7 @@ export default function SellerOrdersPage() {
                     </span>
                   </p>
                   <p className="mt-3 text-xs leading-5 text-slate-500">
-                    {getSellerOperationalHint(item)}
+                    {sellerStatusMeta?.description || getSellerOperationalHint(item)}
                   </p>
                   <p className="mt-2 text-xs leading-5 text-slate-500">
                     {item.readModel?.parentOrder?.note || getPaymentSnapshotHint(item)}
@@ -670,8 +692,9 @@ export default function SellerOrdersPage() {
                   </Link>
                 </div>
               </div>
-            </SellerWorkspacePanel>
-          ))}
+              </SellerWorkspacePanel>
+            );
+          })}
 
           <section className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
             <p className="text-sm text-slate-500">

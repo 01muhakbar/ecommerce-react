@@ -70,14 +70,33 @@ app.use("/api/store", stripeWebhookRouter);
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 
-const allowedOrigins = [
-  process.env.CLIENT_URL,
-  process.env.CORS_ORIGIN,
-  "http://localhost:5173",
-].filter((origin): origin is string => Boolean(origin));
-const corsOrigin: string | string[] =
-  allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins;
-app.use(cors({ origin: corsOrigin, credentials: true }));
+const parseOriginList = (...values: Array<string | undefined>) =>
+  values
+    .flatMap((value) => String(value || "").split(","))
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+const allowedOrigins = new Set<string>([
+  ...parseOriginList(process.env.CLIENT_URL, process.env.CORS_ORIGIN),
+  ...(process.env.NODE_ENV === "production" ? [] : ["http://localhost:5173"]),
+]);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      if (allowedOrigins.has(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error("CORS origin not allowed."));
+    },
+    credentials: true,
+  })
+);
 
 // optional: boleh tetap dipakai, tapi pastikan tidak konflik dengan requireAuth
 app.use(authFromCookie);
@@ -166,6 +185,12 @@ app.use("/api/admin/staff", requireSuperAdmin, staffRouter);
 app.use("/api/admin", requireStaffOrAdmin, adminUploadsRouter);
 
 app.use((error: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (error?.message === "CORS origin not allowed.") {
+    return res.status(403).json({
+      success: false,
+      message: "CORS origin not allowed.",
+    });
+  }
   if (error?.type === "entity.too.large" || error?.status === 413) {
     return res.status(413).json({
       success: false,

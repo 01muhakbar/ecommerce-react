@@ -10,6 +10,7 @@ import {
   Category,
   Order,
   OrderItem,
+  Payment,
   Product,
   ProductReview,
   Store,
@@ -43,6 +44,13 @@ import {
   buildBuyerOrderPaymentEntry,
   resolveBuyerFacingPaymentStatus,
 } from "../services/paymentCheckoutView.service.js";
+import { buildGroupedPaymentReadModel } from "../services/groupedPaymentReadModel.service.js";
+import {
+  buildBuyerOrderContract,
+  buildFulfillmentStatusMeta,
+  buildPaymentStatusMeta,
+  buildSellerSuborderContract,
+} from "../services/orderLifecycleContract.service.js";
 import { getDefaultAddressByUser } from "../services/userAddress.service.js";
 import { protect } from "../middleware/authMiddleware.js";
 import { STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES } from "../services/sharedContracts/storePaymentProfileCompat.js";
@@ -223,6 +231,49 @@ const resolveOrderAmountSnapshot = (order: any, computedSubtotal = 0) => {
     serviceFee,
     discount,
     total,
+  };
+};
+
+const buildBuyerPaymentEntryWithTargetPath = (
+  orderId: number,
+  displayStatuses: unknown[]
+) => {
+  const paymentEntry = buildBuyerOrderPaymentEntry(displayStatuses);
+  return {
+    ...paymentEntry,
+    targetPath: paymentEntry.visible ? `/user/my-orders/${orderId}/payment` : null,
+  };
+};
+
+const buildBuyerOrderContractPayload = (input: {
+  orderId?: number;
+  orderStatus?: unknown;
+  paymentStatus?: unknown;
+  paymentMethod?: unknown;
+  displayStatuses?: unknown[];
+  fulfillmentStatuses?: unknown[];
+}) => {
+  const contract = buildBuyerOrderContract({
+    orderStatus: input.orderStatus,
+    paymentStatus: input.paymentStatus,
+    paymentMethod: input.paymentMethod,
+    displayStatuses: input.displayStatuses,
+    fulfillmentStatuses: input.fulfillmentStatuses,
+  });
+
+  return {
+    ...contract,
+    availableActions: contract.availableActions.map((action) =>
+      action.code === "CONTINUE_PAYMENT" || action.code === "CONTINUE_STRIPE_PAYMENT"
+        ? {
+            ...action,
+            targetPath:
+              input.orderId && action.enabled
+                ? `/user/my-orders/${input.orderId}/payment`
+                : null,
+          }
+        : action
+    ),
   };
 };
 
@@ -1058,9 +1109,16 @@ router.get(
         data: orderRows.map((row: any) => {
           const orderId = Number(row.id ?? 0);
           const paymentGroups = paymentGroupsByOrderId.get(orderId) ?? [];
-          const paymentEntry = buildBuyerOrderPaymentEntry(
-            paymentGroups.map((group: any) => group.displayStatus)
-          );
+          const displayStatuses = paymentGroups.map((group: any) => group.displayStatus);
+          const paymentEntry = buildBuyerPaymentEntryWithTargetPath(orderId, displayStatuses);
+          const contract = buildBuyerOrderContractPayload({
+            orderId,
+            orderStatus: row.status ?? null,
+            paymentStatus: row.payment_status ?? row.paymentStatus ?? "UNPAID",
+            paymentMethod: row.payment_method ?? row.paymentMethod ?? null,
+            displayStatuses,
+            fulfillmentStatuses: [],
+          });
           return {
             id: row.id,
             invoiceNo: row.invoice_no ?? row.invoiceNo ?? null,
@@ -1071,13 +1129,14 @@ router.get(
             paymentStatus: String(row.payment_status ?? row.paymentStatus ?? "UNPAID")
               .toUpperCase()
               .trim() || "UNPAID",
+            paymentStatusMeta: buildPaymentStatusMeta(
+              row.payment_status ?? row.paymentStatus ?? "UNPAID"
+            ),
             totalAmount: Number(row.total_amount ?? row.totalAmount ?? 0),
             createdAt: row.created_at ?? row.createdAt ?? null,
             paymentMethod: row.payment_method ?? row.paymentMethod ?? null,
-            paymentEntry: {
-              ...paymentEntry,
-              targetPath: paymentEntry.visible ? `/user/my-orders/${orderId}/payment` : null,
-            },
+            paymentEntry,
+            contract,
           };
         }),
         meta: {
@@ -1158,12 +1217,45 @@ router.get(
         price: Number(item.price || 0),
         lineTotal: Number(item.price || 0) * Number(item.quantity || 0),
       }));
+      const paymentGroups = await Suborder.findAll({
+        where: { orderId },
+        attributes: ["id", "paymentStatus", "fulfillmentStatus", "expiresAt"],
+        include: [
+          {
+            model: Payment,
+            as: "payments",
+            attributes: ["id", "status", "expiresAt", "updatedAt"],
+            required: false,
+          },
+        ],
+        order: [["id", "ASC"]],
+      });
+      const displayStatuses = paymentGroups.map((suborder: any) => {
+        const payment = Array.isArray(suborder?.payments) ? suborder.payments[0] : null;
+        return resolveBuyerFacingPaymentStatus({
+          paymentStatus: payment?.status,
+          suborderPaymentStatus: suborder?.paymentStatus,
+          expiresAt: payment?.expiresAt ?? suborder?.expiresAt ?? null,
+        });
+      });
+      const paymentEntryWithPath = buildBuyerPaymentEntryWithTargetPath(orderId, displayStatuses);
       const subtotal = items.reduce(
         (sum: number, item: any) => sum + Number(item.lineTotal || 0),
         0
       );
       const amounts = resolveOrderAmountSnapshot(order, subtotal);
       const tax = 0;
+      const contract = buildBuyerOrderContractPayload({
+        orderId,
+        orderStatus: order.status,
+        paymentStatus:
+          String((order as any).paymentStatus || order.get?.("paymentStatus") || "UNPAID")
+            .toUpperCase()
+            .trim() || "UNPAID",
+        paymentMethod: order.paymentMethod ?? "COD",
+        displayStatuses,
+        fulfillmentStatuses: paymentGroups.map((suborder: any) => suborder?.fulfillmentStatus),
+      });
 
       return res.json({
         data: {
@@ -1179,6 +1271,9 @@ router.get(
             String((order as any).paymentStatus || order.get?.("paymentStatus") || "UNPAID")
               .toUpperCase()
               .trim() || "UNPAID",
+          paymentStatusMeta: buildPaymentStatusMeta(
+            (order as any).paymentStatus || order.get?.("paymentStatus") || "UNPAID"
+          ),
           totalAmount: amounts.total,
           subtotal: amounts.subtotal,
           subtotalAmount: amounts.subtotal,
@@ -1191,6 +1286,8 @@ router.get(
           grandTotal: amounts.total,
           couponCode: (order as any).couponCode ?? null,
           paymentMethod: order.paymentMethod ?? "COD",
+          paymentEntry: paymentEntryWithPath,
+          contract,
           createdAt: order.createdAt,
           shippingDetails: normalizeShippingDetailsOutput(
             (order as any).shippingDetails ??
@@ -1345,6 +1442,12 @@ router.get(
                 attributes: ["id", "name", "slug"],
                 required: false,
               },
+              {
+                model: Payment,
+                as: "payments",
+                attributes: ["id", "status", "expiresAt", "paidAt", "updatedAt"],
+                required: false,
+              },
             ],
           },
         ],
@@ -1443,6 +1546,22 @@ router.get(
               suborder?.store ??
               suborder?.get?.("store") ??
               null;
+            const payments = Array.isArray(suborder?.payments) ? suborder.payments : [];
+            const payment = payments[0] ?? null;
+            const paymentStatus =
+              String(getAttr(suborder, "paymentStatus") || "UNPAID").toUpperCase().trim() ||
+              "UNPAID";
+            const fulfillmentStatus =
+              String(getAttr(suborder, "fulfillmentStatus") || "UNFULFILLED")
+                .toUpperCase()
+                .trim() || "UNFULFILLED";
+            const paymentReadModel = buildGroupedPaymentReadModel({
+              paymentStatus: getAttr(payment, "status") || "CREATED",
+              suborderPaymentStatus: paymentStatus,
+              expiresAt: getAttr(payment, "expiresAt") || null,
+              hasPaymentRecord: Boolean(payment),
+            });
+            const displayStatus = paymentReadModel.status;
             return {
               suborderId: Number(getAttr(suborder, "id") || 0),
               suborderNumber: String(getAttr(suborder, "suborderNumber") || ""),
@@ -1450,16 +1569,56 @@ router.get(
               storeName: String(getAttr(store, "name") || `Store #${getAttr(suborder, "storeId")}`),
               storeSlug: getAttr(store, "slug") ? String(getAttr(store, "slug")) : null,
               totalAmount: Number(getAttr(suborder, "totalAmount") || 0),
-              paymentStatus:
-                String(getAttr(suborder, "paymentStatus") || "UNPAID").toUpperCase().trim() ||
-                "UNPAID",
-              fulfillmentStatus:
-                String(getAttr(suborder, "fulfillmentStatus") || "UNFULFILLED")
-                  .toUpperCase()
-                  .trim() || "UNFULFILLED",
+              paymentStatus,
+              paymentStatusMeta: buildPaymentStatusMeta(paymentStatus),
+              paymentReadModel,
+              fulfillmentStatus,
+              fulfillmentStatusMeta: buildFulfillmentStatusMeta(fulfillmentStatus),
+              payment: payment
+                ? {
+                    id: Number(getAttr(payment, "id") || 0) || null,
+                    status: String(getAttr(payment, "status") || "CREATED"),
+                    statusMeta: buildPaymentStatusMeta(getAttr(payment, "status") || "CREATED"),
+                    displayStatus,
+                    displayStatusMeta: buildPaymentStatusMeta(displayStatus),
+                    readModel: paymentReadModel,
+                    expiresAt: getAttr(payment, "expiresAt") || null,
+                    paidAt: getAttr(payment, "paidAt") || null,
+                  }
+                : null,
+              contract: buildSellerSuborderContract({
+                orderStatus: fulfillmentStatus,
+                paymentStatus,
+                parentOrderStatus: status,
+                parentPaymentStatus:
+                  (order as any).paymentStatus ??
+                  order.get?.("paymentStatus") ??
+                  (order as any).payment_status ??
+                  order.get?.("payment_status") ??
+                  "UNPAID",
+                availableActions: [],
+              }),
             };
           })
         : [];
+      const contract = buildBuyerOrderContractPayload({
+        orderStatus: status,
+        paymentStatus:
+          String(
+            (order as any).paymentStatus ??
+              order.get?.("paymentStatus") ??
+              (order as any).payment_status ??
+              order.get?.("payment_status") ??
+              "UNPAID"
+          )
+            .toUpperCase()
+            .trim() || "UNPAID",
+        paymentMethod,
+        displayStatuses: storeSplits.map(
+          (split) => split.payment?.displayStatus || split.paymentStatus
+        ),
+        fulfillmentStatuses: storeSplits.map((split) => split.fulfillmentStatus),
+      });
 
       return res.json({
         data: {
@@ -1486,6 +1645,13 @@ router.get(
             )
               .toUpperCase()
               .trim() || "UNPAID",
+          paymentStatusMeta: buildPaymentStatusMeta(
+            (order as any).paymentStatus ??
+              order.get?.("paymentStatus") ??
+              (order as any).payment_status ??
+              order.get?.("payment_status") ??
+              "UNPAID"
+          ),
           totalAmount: amounts.total,
           subtotal: amounts.subtotal,
           subtotalAmount: amounts.subtotal,
@@ -1505,6 +1671,7 @@ router.get(
           customerAddress,
           items,
           storeSplits,
+          contract,
         },
       });
     } catch (error) {
@@ -1849,6 +2016,9 @@ router.put(
 );
 
 // POST /api/store/orders
+// Legacy compatibility path for direct storefront order creation.
+// Active storefront checkout should use /api/checkout/preview + /api/checkout/create-multi-store
+// so readiness, payment availability, and order/payment contract stay aligned across apps.
 router.post(
   "/orders",
   protect,
@@ -2388,6 +2558,13 @@ router.get(
       const nextOrderStatus = syncResult.ok
         ? syncResult.orderStatus || "pending"
         : String(getAttr(order, "status") || "pending").toLowerCase().trim() || "pending";
+      const contract = buildBuyerOrderContractPayload({
+        orderStatus: nextOrderStatus,
+        paymentStatus: nextPaymentStatus,
+        paymentMethod,
+        displayStatuses: [nextPaymentStatus === "PAID" ? "PAID" : "CREATED"],
+        fulfillmentStatuses: [nextOrderStatus],
+      });
 
       return res.json({
         success: true,
@@ -2400,6 +2577,7 @@ router.get(
           orderStatus: nextOrderStatus,
           paid: nextPaymentStatus === "PAID",
           updatedBySync: syncResult.ok ? syncResult.updated : false,
+          contract,
           checkoutUrl:
             String(session.status || "").toLowerCase() === "open" && session.url
               ? String(session.url)

@@ -3,13 +3,86 @@ import { Router } from "express";
 import bcrypt from "bcrypt";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import * as models from "../models/index.js";
-import { loginSchema, registerSchema } from "@ecommerce/schemas";
+import {
+  clientRegistrationResendSchema,
+  clientRegistrationSchema,
+  clientRegistrationVerifySchema,
+  loginSchema,
+} from "@ecommerce/schemas";
 import requireAuth from "../middleware/requireAuth.js";
+import {
+  ClientRegistrationError,
+  ensurePendingVerificationForLogin,
+  isPendingClientUser,
+  registerClientAccount,
+  resendClientRegistrationOtp,
+  verifyClientRegistrationOtp,
+} from "../services/clientRegistration.service.js";
 
 const { User } = models as { User?: any };
 const AUTH_DEBUG_COOKIES = process.env.AUTH_DEBUG_COOKIES === "true";
 
 const router = Router();
+
+const resolveAuthCookieOptions = (req: any) => {
+  const secure =
+    process.env.COOKIE_SECURE === "true" ||
+    (process.env.NODE_ENV === "production" && req.secure);
+  return {
+    httpOnly: true,
+    secure,
+    sameSite: secure ? ("none" as const) : ("lax" as const),
+    path: "/",
+  };
+};
+
+const toAuthUser = (user: any) => ({
+  id: user.id,
+  email: user.email,
+  name: user.name,
+  role: user.role,
+  avatarUrl: user.avatarUrl ?? null,
+  phoneNumber: user.phoneNumber ?? null,
+  status: user.status ?? null,
+});
+
+const issueAuthSession = (req: any, res: any, user: any) => {
+  const secret: string = process.env.JWT_SECRET ?? "dev-secret";
+  const expiresIn = (process.env.JWT_EXPIRES_IN ?? "1h") as any;
+  const options: SignOptions = { expiresIn };
+  const token = jwt.sign(
+    { id: user.id, email: user.email, role: user.role, name: user.name },
+    secret,
+    options
+  );
+  const cookieName = process.env.AUTH_COOKIE_NAME || "token";
+  res.cookie(cookieName, token, resolveAuthCookieOptions(req));
+  return token;
+};
+
+const getRequestContext = (req: any) => ({
+  ipAddress:
+    String(req.headers["x-forwarded-for"] || "")
+      .split(",")[0]
+      .trim() ||
+    req.ip ||
+    "unknown",
+  userAgent: String(req.headers["user-agent"] || ""),
+});
+
+const sendClientRegistrationError = (res: any, error: unknown) => {
+  if (!(error instanceof ClientRegistrationError)) {
+    console.error(error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+  return res.status(error.status).json({
+    success: false,
+    code: error.code,
+    message: error.message,
+    errors: error.errors ? { fieldErrors: error.errors } : undefined,
+    data: error.data || undefined,
+  });
+};
 
 function logSetCookieDebug(res: any, label: string) {
   if (!AUTH_DEBUG_COOKIES) return;
@@ -48,7 +121,7 @@ router.post("/login", async (req, res) => {
   const { email, password } = parsed.data;
 
   try {
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findOne({ where: { email: String(email || "").trim().toLowerCase() } });
 
     if (!user) {
       return res.status(401).json({ success: false, message: "Invalid credentials" });
@@ -60,37 +133,31 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ success: false, message: "Invalid credentials" });
     }
 
-    const secret: string = process.env.JWT_SECRET ?? "dev-secret";
-    const expiresIn = (process.env.JWT_EXPIRES_IN ?? "1h") as any;
-    const options: SignOptions = { expiresIn };
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role, name: user.name },
-      secret,
-      options
-    );
+    if (isPendingClientUser(user)) {
+      const pendingVerification = await ensurePendingVerificationForLogin(String(user.email || ""));
+      return res.status(403).json({
+        success: false,
+        code: "VERIFICATION_REQUIRED",
+        message: "Verify your email before signing in.",
+        data: pendingVerification || undefined,
+      });
+    }
 
-    const cookieName = process.env.AUTH_COOKIE_NAME || "token";
-    const secure =
-      process.env.COOKIE_SECURE === "true" ||
-      (process.env.NODE_ENV === "production" && req.secure);
-    res.cookie(cookieName, token, {
-      httpOnly: true,
-      secure,
-      sameSite: "lax",
-      path: "/",
-    });
+    if (String(user.status || "").trim().toLowerCase() !== "active") {
+      return res.status(403).json({
+        success: false,
+        code: "ACCOUNT_NOT_ACTIVE",
+        message: "Your account is not active.",
+      });
+    }
+
+    issueAuthSession(req, res, user);
     logSetCookieDebug(res, "login");
 
     return res.json({
       success: true,
       data: {
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          avatarUrl: user.avatarUrl ?? null,
-        },
+        user: toAuthUser(user),
       },
     });
   } catch (error) {
@@ -100,75 +167,93 @@ router.post("/login", async (req, res) => {
 });
 
 router.post("/register", async (req, res) => {
-  const parsed = registerSchema.safeParse(req.body);
+  const parsed = clientRegistrationSchema.safeParse(req.body);
   if (!parsed.success) {
     if (process.env.NODE_ENV === "development") {
       return res.status(400).json({
         success: false,
-        message: "Invalid payload",
+        code: "INVALID_PAYLOAD",
+        message: "Invalid registration payload",
         errors: parsed.error.flatten(),
       });
     }
-    return res.status(400).json({ success: false, message: "Invalid payload" });
+    return res.status(400).json({
+      success: false,
+      code: "INVALID_PAYLOAD",
+      message: "Invalid registration payload",
+      errors: parsed.error.flatten(),
+    });
   }
 
   if (!User) {
     return res.status(500).json({ success: false, message: "User model not loaded" });
   }
 
-  const { name, email, password } = parsed.data;
-
   try {
-    const existing = await User.findOne({ where: { email } });
-    if (existing) {
-      return res.status(409).json({ success: false, message: "Email already registered" });
-    }
-
-    const hashed = await bcrypt.hash(password, 10);
-    const user = await User.create({
-      name,
-      email,
-      password: hashed,
-      role: "customer",
-      status: "active",
-    });
-
-    const secret: string = process.env.JWT_SECRET ?? "dev-secret";
-    const expiresIn = (process.env.JWT_EXPIRES_IN ?? "1h") as any;
-    const options: SignOptions = { expiresIn };
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role, name: user.name },
-      secret,
-      options
-    );
-
-    const cookieName = process.env.AUTH_COOKIE_NAME || "token";
-    const secure =
-      process.env.COOKIE_SECURE === "true" ||
-      (process.env.NODE_ENV === "production" && req.secure);
-    res.cookie(cookieName, token, {
-      httpOnly: true,
-      secure,
-      sameSite: "lax",
-      path: "/",
-    });
-    logSetCookieDebug(res, "register");
-
-    return res.json({
+    const result = await registerClientAccount(parsed.data, getRequestContext(req));
+    return res.status(202).json({
       success: true,
       data: {
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          avatarUrl: user.avatarUrl ?? null,
-        },
+        pendingRegistration: result.pending,
+      },
+      code: "VERIFICATION_REQUIRED",
+      message: result.message,
+    });
+  } catch (error) {
+    return sendClientRegistrationError(res, error);
+  }
+});
+
+router.post("/register/resend-otp", async (req, res) => {
+  const parsed = clientRegistrationResendSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({
+      success: false,
+      code: "INVALID_PAYLOAD",
+      message: "Invalid verification request.",
+      errors: parsed.error.flatten(),
+    });
+  }
+
+  try {
+    const result = await resendClientRegistrationOtp(parsed.data, getRequestContext(req));
+    return res.status(200).json({
+      success: true,
+      code: "VERIFICATION_REQUIRED",
+      message: result.message,
+      data: {
+        pendingRegistration: result.pending,
       },
     });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ success: false, message: "Internal server error" });
+    return sendClientRegistrationError(res, error);
+  }
+});
+
+router.post("/register/verify-otp", async (req, res) => {
+  const parsed = clientRegistrationVerifySchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({
+      success: false,
+      code: "INVALID_PAYLOAD",
+      message: "Invalid verification request.",
+      errors: parsed.error.flatten(),
+    });
+  }
+
+  try {
+    const result = await verifyClientRegistrationOtp(parsed.data, getRequestContext(req));
+    issueAuthSession(req, res, result.user);
+    logSetCookieDebug(res, "register_verify");
+    return res.status(200).json({
+      success: true,
+      message: result.message,
+      data: {
+        user: result.user,
+      },
+    });
+  } catch (error) {
+    return sendClientRegistrationError(res, error);
   }
 });
 
@@ -182,13 +267,20 @@ router.get("/me", requireAuth, (req, res) => {
   }
 
   return User.findByPk(user.id, {
-    attributes: ["id", "email", "name", "role", "avatarUrl"],
+    attributes: ["id", "email", "name", "role", "avatarUrl", "phoneNumber", "status"],
   })
     .then((dbUser: any) => {
       if (!dbUser) {
         return res.status(404).json({ success: false, message: "User not found" });
       }
-      return res.json({ success: true, data: { user: dbUser } });
+      if (String(dbUser.status || "").trim().toLowerCase() !== "active") {
+        return res.status(403).json({
+          success: false,
+          code: "ACCOUNT_NOT_ACTIVE",
+          message: "Your account is not active.",
+        });
+      }
+      return res.json({ success: true, data: { user: toAuthUser(dbUser) } });
     })
     .catch((error: any) => {
       console.error(error);
@@ -196,16 +288,9 @@ router.get("/me", requireAuth, (req, res) => {
     });
 });
 
-router.post("/logout", (_req, res) => {
+router.post("/logout", (req, res) => {
   const cookieName = process.env.AUTH_COOKIE_NAME || "token";
-  const secure =
-    process.env.COOKIE_SECURE === "true" || process.env.NODE_ENV === "production";
-  res.clearCookie(cookieName, {
-    httpOnly: true,
-    secure,
-    sameSite: "lax",
-    path: "/",
-  });
+  res.clearCookie(cookieName, resolveAuthCookieOptions(req));
   return res.json({ success: true });
 });
 
@@ -242,15 +327,7 @@ router.post("/admin/login", async (req, res) => {
     );
 
     const cookieName = process.env.AUTH_COOKIE_NAME || "token";
-    const secure =
-      process.env.COOKIE_SECURE === "true" ||
-      (process.env.NODE_ENV === "production" && req.secure);
-    res.cookie(cookieName, token, {
-      httpOnly: true,
-      secure,
-      sameSite: "lax",
-      path: "/",
-    });
+    res.cookie(cookieName, token, resolveAuthCookieOptions(req));
     logSetCookieDebug(res, "admin_login");
 
     res.json({
@@ -268,14 +345,9 @@ router.post("/admin/login", async (req, res) => {
   }
 });
 
-router.post("/admin/logout", (_req, res) => {
+router.post("/admin/logout", (req, res) => {
   const name = process.env.AUTH_COOKIE_NAME || "token";
-  res.clearCookie(name, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-  });
+  res.clearCookie(name, resolveAuthCookieOptions(req));
   res.status(204).end();
 });
 

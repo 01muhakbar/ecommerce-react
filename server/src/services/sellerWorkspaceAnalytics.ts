@@ -2,6 +2,7 @@ import { Coupon, Product, Suborder, SuborderItem } from "../models/index.js";
 import { getCouponTimeWindow } from "./sharedContracts/couponGovernance.js";
 import { buildProductVisibilitySnapshot } from "./productVisibility.js";
 import { sellerHasPermission } from "./seller/resolveSellerAccess.js";
+import { STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES } from "./sharedContracts/storePaymentProfileCompat.js";
 import {
   emptyProductPipelineSummary,
   loadProductPipelineSummaryByStoreIds,
@@ -492,6 +493,7 @@ const buildTopProducts = (items: any[]) => {
         isPublished: Boolean(getAttr(product, "isPublished")),
         status: getAttr(product, "status"),
         submissionStatus: getAttr(product, "sellerSubmissionStatus"),
+        store: getAttr(product, "store"),
         storeStatus: getAttr(getAttr(product, "store"), "status"),
         storeId: getAttr(product, "storeId"),
       });
@@ -827,7 +829,19 @@ export const loadSellerWorkspaceAnalyticsSummary = async (input: {
               include: [
                 {
                   association: "store",
-                  attributes: ["id", "status"],
+                  attributes: ["id", "status", "activeStorePaymentProfileId"],
+                  include: [
+                    {
+                      association: "paymentProfile",
+                      attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+                      required: false,
+                    },
+                    {
+                      association: "activePaymentProfile",
+                      attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+                      required: false,
+                    },
+                  ],
                   required: false,
                 },
               ],

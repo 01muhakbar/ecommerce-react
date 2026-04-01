@@ -31,6 +31,15 @@ const DEFAULT_SETTINGS = {
   contactPhone: "019579034",
   contactEmail: "kachabazar@gmail.com",
   website: "kachabazar-admin.vercel.app",
+  smtpProvider: "google",
+  smtpHost: "smtp.gmail.com",
+  smtpPort: "465",
+  smtpSecure: "true",
+  smtpUser: "",
+  smtpPassword: "",
+  smtpPasswordConfigured: "false",
+  smtpFromEmail: "",
+  smtpFromName: "TP PRENEURS",
 };
 
 const DEFAULT_BRANDING_SETTINGS = {
@@ -149,8 +158,34 @@ const mapSettingsToForm = (settings) => {
       DEFAULT_SETTINGS.contactEmail
     ),
     website: toStringValue(merged.website, DEFAULT_SETTINGS.website),
+    smtpProvider: toStringValue(merged.smtpProvider, DEFAULT_SETTINGS.smtpProvider),
+    smtpHost: toStringValue(merged.smtpHost, DEFAULT_SETTINGS.smtpHost),
+    smtpPort: toStringValue(merged.smtpPort, DEFAULT_SETTINGS.smtpPort),
+    smtpSecure: normalizeBooleanString(
+      merged.smtpSecure,
+      DEFAULT_SETTINGS.smtpSecure
+    ),
+    smtpUser: toStringValue(merged.smtpUser, DEFAULT_SETTINGS.smtpUser),
+    smtpPassword: "",
+    smtpPasswordConfigured: normalizeBooleanString(
+      merged.smtpPasswordConfigured,
+      DEFAULT_SETTINGS.smtpPasswordConfigured
+    ),
+    smtpFromEmail: toStringValue(
+      merged.smtpFromEmail,
+      DEFAULT_SETTINGS.smtpFromEmail
+    ),
+    smtpFromName: toStringValue(
+      merged.smtpFromName,
+      DEFAULT_SETTINGS.smtpFromName
+    ),
   };
 };
+
+const buildSmtpPasswordHint = (form) =>
+  form.smtpPasswordConfigured === "true"
+    ? "Password SMTP sudah tersimpan. Kosongkan field ini jika tidak ingin mengganti secret."
+    : "Masukkan App Password Gmail 16 karakter untuk mulai mengaktifkan pengiriman email.";
 
 const normalizeBrandingSettings = (settings) => {
   const branding = settings?.storeSettings?.branding || settings?.branding || {};
@@ -404,6 +439,7 @@ export default function Settings() {
         form.invoiceEmailEnabled,
         "true"
       ),
+      smtpSecure: normalizeBooleanString(form.smtpSecure, "true"),
     });
   };
 
@@ -693,6 +729,91 @@ export default function Settings() {
                 </option>
               ))}
             </select>
+          </Field>
+        </Section>
+
+        <Section id="smtp-settings" title="Google SMTP Account">
+          <div className="lg:col-span-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+            Konfigurasi ini dipakai backend untuk Email OTP dan email operasional lain. Password
+            tidak pernah ditampilkan kembali di form; biarkan kosong untuk mempertahankan secret
+            yang sudah tersimpan.
+          </div>
+
+          <Field label="Provider">
+            <input
+              type="text"
+              className={inputClass}
+              value={form.smtpProvider}
+              onChange={(event) => onInputChange("smtpProvider", event.target.value)}
+              placeholder="google"
+            />
+          </Field>
+
+          <ToggleField
+            label="Use Secure SMTP"
+            value={form.smtpSecure}
+            onChange={(value) => onInputChange("smtpSecure", value)}
+          />
+
+          <Field label="SMTP Host">
+            <input
+              type="text"
+              className={inputClass}
+              value={form.smtpHost}
+              onChange={(event) => onInputChange("smtpHost", event.target.value)}
+              placeholder="smtp.gmail.com"
+            />
+          </Field>
+
+          <Field label="SMTP Port">
+            <input
+              type="number"
+              min="1"
+              className={inputClass}
+              value={form.smtpPort}
+              onChange={(event) => onInputChange("smtpPort", event.target.value)}
+              placeholder="465"
+            />
+          </Field>
+
+          <Field label="SMTP Username / Gmail">
+            <input
+              type="email"
+              className={inputClass}
+              value={form.smtpUser}
+              onChange={(event) => onInputChange("smtpUser", event.target.value)}
+              placeholder="your_gmail@gmail.com"
+            />
+          </Field>
+
+          <Field label="SMTP Password" hint={buildSmtpPasswordHint(form)}>
+            <input
+              type="password"
+              className={inputClass}
+              value={form.smtpPassword}
+              onChange={(event) => onInputChange("smtpPassword", event.target.value)}
+              placeholder="App Password Gmail"
+            />
+          </Field>
+
+          <Field label="From Email">
+            <input
+              type="email"
+              className={inputClass}
+              value={form.smtpFromEmail}
+              onChange={(event) => onInputChange("smtpFromEmail", event.target.value)}
+              placeholder="your_gmail@gmail.com"
+            />
+          </Field>
+
+          <Field label="From Name">
+            <input
+              type="text"
+              className={inputClass}
+              value={form.smtpFromName}
+              onChange={(event) => onInputChange("smtpFromName", event.target.value)}
+              placeholder="TP PRENEURS"
+            />
           </Field>
         </Section>
 

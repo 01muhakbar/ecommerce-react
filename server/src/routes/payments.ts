@@ -17,9 +17,9 @@ import { expirePaymentIfNeeded } from "../services/paymentExpiry.service.js";
 import { appendPaymentStatusLog } from "../services/paymentStatusLog.service.js";
 import {
   buildBuyerCancelActionability,
-  buildBuyerProofActionability,
   resolveBuyerFacingPaymentStatus,
 } from "../services/paymentCheckoutView.service.js";
+import { buildGroupedPaymentReadModel } from "../services/groupedPaymentReadModel.service.js";
 import { createSellerNotificationsForStoreRecipients } from "../services/notification.service.js";
 
 const router = Router();
@@ -108,11 +108,13 @@ const serializePaymentDetail = (payment: any) => {
     payment?.paymentProfile ?? payment?.get?.("paymentProfile") ?? suborder?.paymentProfile ?? null;
   const proofs = payment?.proofs ?? payment?.get?.("proofs") ?? [];
   const proof = normalizeProofSummary(proofs);
-  const displayStatus = resolveBuyerFacingPaymentStatus({
+  const readModel = buildGroupedPaymentReadModel({
     paymentStatus: getAttr(payment, "status") || "CREATED",
     suborderPaymentStatus: getAttr(suborder, "paymentStatus") || "UNPAID",
     expiresAt: getAttr(payment, "expiresAt") || null,
+    hasPaymentRecord: true,
   });
+  const displayStatus = readModel.status;
   return {
     paymentId: toNumber(getAttr(payment, "id")),
     suborderId: toNumber(getAttr(payment, "suborderId")),
@@ -143,8 +145,9 @@ const serializePaymentDetail = (payment: any) => {
     paidAt: getAttr(payment, "paidAt") || null,
     proofSubmitted: Array.isArray(proofs) && proofs.length > 0,
     proof,
-    proofActionability: buildBuyerProofActionability(displayStatus),
-    cancelability: buildBuyerCancelActionability(displayStatus),
+    proofActionability: readModel.proofActionability,
+    cancelability: readModel.cancelability,
+    readModel,
     logs: serializePaymentStatusLogs(payment?.statusLogs ?? payment?.get?.("statusLogs") ?? []),
   };
 };

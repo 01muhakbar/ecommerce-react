@@ -39,6 +39,9 @@ const AdminSubCategoriesPage = lazy(() =>
 const AdminCustomerDetailPage = lazy(() =>
   import("./pages/admin/AdminCustomerDetailPage.jsx")
 );
+const AdminCustomerOrdersPage = lazy(() =>
+  import("./pages/admin/AdminCustomerOrdersPage.jsx")
+);
 const AdminCouponsPage = lazy(() => import("./pages/admin/AdminCouponsPage.jsx"));
 const AdminProfilePage = lazy(() => import("./pages/admin/Profile.jsx"));
 const ComingSoon = lazy(() => import("./pages/admin/ComingSoon.jsx"));
@@ -410,6 +413,14 @@ export default function App() {
                 element={
                   <RequirePerm perm="CUSTOMERS_VIEW">
                     <AdminCustomerDetailPage />
+                  </RequirePerm>
+                }
+              />
+              <Route
+                path="customer-orders/:id"
+                element={
+                  <RequirePerm perm="CUSTOMERS_VIEW">
+                    <AdminCustomerOrdersPage />
                   </RequirePerm>
                 }
               />

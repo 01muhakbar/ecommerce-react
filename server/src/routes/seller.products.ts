@@ -1,12 +1,14 @@
 import { Op } from "sequelize";
 import { Router } from "express";
 import requireSellerStoreAccess from "../middleware/requireSellerStoreAccess.js";
-import { Category, Product, ProductCategory } from "../models/index.js";
+import { Category, Product, ProductCategory, Store } from "../models/index.js";
 import {
   buildProductVisibilitySnapshot,
   isStorefrontStoreActive,
 } from "../services/productVisibility.js";
 import { sellerHasPermission } from "../services/seller/resolveSellerAccess.js";
+import { buildPublicStoreOperationalReadiness } from "../services/sharedContracts/publicStoreIdentity.js";
+import { STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES } from "../services/sharedContracts/storePaymentProfileCompat.js";
 
 const router = Router();
 
@@ -937,12 +939,19 @@ const serializeProductVisibility = (
   isPublished: boolean,
   status: string,
   submissionStatus: string = "none",
-  options: { storeStatus?: unknown; storeId?: unknown } = {}
+  options: {
+    store?: any;
+    storeOperationalReadiness?: any;
+    storeStatus?: unknown;
+    storeId?: unknown;
+  } = {}
 ) =>
   buildProductVisibilitySnapshot({
     isPublished,
     status,
     submissionStatus,
+    store: options.store,
+    storeOperationalReadiness: options.storeOperationalReadiness,
     storeStatus: options.storeStatus,
     storeId: options.storeId,
   });
@@ -951,7 +960,12 @@ const serializeProductPublishing = (
   product: any,
   sellerAccess: any = null,
   readiness = resolveSellerPublishReadiness(product),
-  options: { storeStatus?: unknown; storeId?: unknown } = {}
+  options: {
+    store?: any;
+    storeOperationalReadiness?: any;
+    storeStatus?: unknown;
+    storeId?: unknown;
+  } = {}
 ) => {
   const permissions = buildAuthoringPermissions(sellerAccess);
   const isPublished = Boolean(getAttr(product, "isPublished"));
@@ -963,6 +977,8 @@ const serializeProductPublishing = (
     isPublished,
     status,
     submissionStatus,
+    store: options.store,
+    storeOperationalReadiness: options.storeOperationalReadiness,
     storeStatus: options.storeStatus,
     storeId: options.storeId ?? getAttr(product, "storeId"),
   });
@@ -1023,8 +1039,8 @@ const serializeProductPublishing = (
     hint: canPublish
       ? visibility.storefrontVisible
         ? "This product is ready for storefront visibility."
-        : visibility.reasonCode === "STORE_NOT_ACTIVE"
-          ? "This product can be published, but storefront visibility stays blocked until the store becomes active."
+        : visibility.reasonCode === "STORE_NOT_ACTIVE" || visibility.reasonCode === "STORE_NOT_READY"
+          ? visibility.storefrontReason
           : "This product is ready for publish control."
       : canUnpublish
         ? visibility.storefrontVisible
@@ -1162,8 +1178,9 @@ const serializeCategorySummary = (category: any) => {
 const serializeProductListItem = (
   product: any,
   sellerAccess: any = null,
-  storeStatus: unknown = null
+  storeContext: any = null
 ) => {
+  const storeStatus = storeContext?.status ?? storeContext;
   const category =
     product?.defaultCategory ??
     product?.category ??
@@ -1185,11 +1202,15 @@ const serializeProductListItem = (
     status,
     normalizeSellerSubmissionStatus(getAttr(product, "sellerSubmissionStatus")),
     {
+      store: storeContext?.store ?? null,
+      storeOperationalReadiness: storeContext?.operationalReadiness ?? null,
       storeStatus,
       storeId: getAttr(product, "storeId"),
     }
   );
   const publishing = serializeProductPublishing(product, sellerAccess, undefined, {
+    store: storeContext?.store ?? null,
+    storeOperationalReadiness: storeContext?.operationalReadiness ?? null,
     storeStatus,
     storeId: getAttr(product, "storeId"),
   });
@@ -1241,8 +1262,9 @@ const serializeProductListItem = (
 const serializeProductDetail = (
   product: any,
   sellerAccess: any = null,
-  storeStatus: unknown = null
+  storeContext: any = null
 ) => {
+  const storeStatus = storeContext?.status ?? storeContext;
   const defaultCategory =
     product?.defaultCategory ?? product?.get?.("defaultCategory") ?? null;
   const primaryCategory = product?.category ?? product?.get?.("category") ?? null;
@@ -1270,11 +1292,15 @@ const serializeProductDetail = (
     status,
     normalizeSellerSubmissionStatus(getAttr(product, "sellerSubmissionStatus")),
     {
+      store: storeContext?.store ?? null,
+      storeOperationalReadiness: storeContext?.operationalReadiness ?? null,
       storeStatus,
       storeId: getAttr(product, "storeId"),
     }
   );
   const publishing = serializeProductPublishing(product, sellerAccess, undefined, {
+    store: storeContext?.store ?? null,
+    storeOperationalReadiness: storeContext?.operationalReadiness ?? null,
     storeStatus,
     storeId: getAttr(product, "storeId"),
   });
@@ -1381,10 +1407,14 @@ const serializeProductDetail = (
 
 const buildSellerProductSummary = async (
   storeId: number,
-  storeStatus: unknown = null
+  storeContext: any = null
 ) => {
   const baseWhere = { storeId } as any;
-  const storeActive = isStorefrontStoreActive({ storeStatus, storeId });
+  const storeStatus = storeContext?.status ?? storeContext;
+  const storefrontOperational =
+    typeof storeContext?.isOperational === "boolean"
+      ? storeContext.isOperational
+      : isStorefrontStoreActive({ storeStatus, storeId });
 
   const [
     totalProducts,
@@ -1431,9 +1461,9 @@ const buildSellerProductSummary = async (
         status: "active",
         sellerSubmissionStatus: "none",
       } as any,
-    }).then((count) => (storeActive ? count : 0)),
+    }).then((count) => (storefrontOperational ? count : 0)),
     Product.count({
-      where: storeActive
+      where: storefrontOperational
         ? {
             ...baseWhere,
             isPublished: true,
@@ -1480,10 +1510,13 @@ const parseSellerProductsFilterInput = (source: any = {}) => ({
 const buildSellerProductsWhere = (options: any = {}) => {
   const andConditions: any[] = [];
   const ids = Array.isArray(options?.ids) ? options.ids : [];
-  const storeActive = isStorefrontStoreActive({
-    storeStatus: options?.storeStatus,
-    storeId: options?.storeId,
-  });
+  const storeActive =
+    typeof options?.storefrontOperational === "boolean"
+      ? options.storefrontOperational
+      : isStorefrontStoreActive({
+          storeStatus: options?.storeStatus,
+          storeId: options?.storeId,
+        });
 
   if (allowedStatuses.has(options?.status)) {
     andConditions.push({ status: options.status });
@@ -1556,6 +1589,32 @@ const buildSellerProductsWhere = (options: any = {}) => {
   return {
     storeId: Number(options?.storeId),
     ...(andConditions.length > 0 ? { [Op.and]: andConditions } : {}),
+  };
+};
+
+const loadSellerStorefrontVisibilityContext = async (storeId: number) => {
+  const store = await Store.findByPk(storeId, {
+    attributes: ["id", "status", "activeStorePaymentProfileId"],
+    include: [
+      {
+        association: "paymentProfile",
+        attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+        required: false,
+      },
+      {
+        association: "activePaymentProfile",
+        attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+        required: false,
+      },
+    ],
+  });
+  const operationalReadiness = store ? buildPublicStoreOperationalReadiness(store) : null;
+
+  return {
+    store,
+    status: getAttr(store, "status") || null,
+    operationalReadiness,
+    isOperational: Boolean(operationalReadiness?.isReady),
   };
 };
 
@@ -1796,11 +1855,12 @@ router.post(
       }
 
       const detail = await findSellerScopedProductDetail(storeId, Number((product as any).id));
+      const storeContext = await loadSellerStorefrontVisibilityContext(storeId);
 
       return res.status(201).json({
         success: true,
         data: {
-          ...serializeProductDetail(detail || product, sellerAccess, sellerAccess?.store?.status),
+          ...serializeProductDetail(detail || product, sellerAccess, storeContext),
           contract: buildCatalogReadContract(),
         },
       });
@@ -1918,11 +1978,12 @@ router.patch(
       await syncProductCategoryAssignments(productId, payload.categoryIds);
 
       const detail = await findSellerScopedProductDetail(storeId, productId);
+      const storeContext = await loadSellerStorefrontVisibilityContext(storeId);
 
       return res.json({
         success: true,
         data: {
-          ...serializeProductDetail(detail || product, sellerAccess, sellerAccess?.store?.status),
+          ...serializeProductDetail(detail || product, sellerAccess, storeContext),
           contract: buildCatalogReadContract(),
         },
       });
@@ -2032,11 +2093,12 @@ router.patch(
       }
 
       const detail = await findSellerScopedProductDetail(storeId, productId);
+      const storeContext = await loadSellerStorefrontVisibilityContext(storeId);
 
       return res.json({
         success: true,
         data: {
-          ...serializeProductDetail(detail || product, sellerAccess, sellerAccess?.store?.status),
+          ...serializeProductDetail(detail || product, sellerAccess, storeContext),
           contract: buildCatalogReadContract(),
         },
       });
@@ -2114,11 +2176,12 @@ router.post(
       } as any);
 
       const detail = await findSellerScopedProductDetail(storeId, productId);
+      const storeContext = await loadSellerStorefrontVisibilityContext(storeId);
 
       return res.json({
         success: true,
         data: {
-          ...serializeProductDetail(detail || product, sellerAccess, sellerAccess?.store?.status),
+          ...serializeProductDetail(detail || product, sellerAccess, storeContext),
           contract: buildCatalogReadContract(),
         },
       });
@@ -2257,7 +2320,7 @@ router.post(
     try {
       const sellerAccess = (req as any).sellerAccess;
       const storeId = Number(req.params.storeId);
-      const storeStatus = sellerAccess?.store?.status;
+      const storeContext = await loadSellerStorefrontVisibilityContext(storeId);
       const idsInput = req.body?.ids;
       const hasSelectedIds = Array.isArray(idsInput);
       const ids = normalizePositiveIdList(idsInput, 500);
@@ -2273,7 +2336,8 @@ router.post(
       const filters = parseSellerProductsFilterInput(req.body?.filters);
       const where = buildSellerProductsWhere({
         storeId,
-        storeStatus,
+        storeStatus: storeContext.status,
+        storefrontOperational: storeContext.isOperational,
         ...filters,
         ids,
       });
@@ -2295,7 +2359,7 @@ router.post(
         }
       }
 
-      const csv = `\uFEFF${buildSellerProductsCsv(rows, sellerAccess, storeStatus)}`;
+      const csv = `\uFEFF${buildSellerProductsCsv(rows, sellerAccess, storeContext)}`;
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
       const scopeLabel = hasSelectedIds ? "selected" : "filtered";
 
@@ -2323,7 +2387,7 @@ router.get(
     try {
       const sellerAccess = (req as any).sellerAccess;
       const storeId = Number(req.params.storeId);
-      const storeStatus = sellerAccess?.store?.status;
+      const storeContext = await loadSellerStorefrontVisibilityContext(storeId);
       const page = parsePositiveInt(req.query.page, 1, 1, 10_000);
       const limit = parsePositiveInt(req.query.limit, 20, 1, 50);
       const offset = (page - 1) * limit;
@@ -2334,7 +2398,8 @@ router.get(
       const visibilityState = normalizeVisibilityStateFilter(req.query.visibilityState);
       const where = buildSellerProductsWhere({
         storeId,
-        storeStatus,
+        storeStatus: storeContext.status,
+        storefrontOperational: storeContext.isOperational,
         keyword,
         status,
         published,
@@ -2386,14 +2451,14 @@ router.get(
           offset,
           distinct: true,
         }),
-        buildSellerProductSummary(storeId, storeStatus),
+        buildSellerProductSummary(storeId, storeContext),
       ]);
 
       return res.json({
         success: true,
         data: {
           items: result.rows.map((product) =>
-            serializeProductListItem(product, sellerAccess, storeStatus)
+            serializeProductListItem(product, sellerAccess, storeContext)
           ),
           contract: buildCatalogReadContract(),
           governance: buildCatalogGovernance(sellerAccess),
@@ -2429,6 +2494,7 @@ router.get(
     try {
       const sellerAccess = (req as any).sellerAccess;
       const storeId = Number(req.params.storeId);
+      const storeContext = await loadSellerStorefrontVisibilityContext(storeId);
       const productId = Number(req.params.productId);
 
       if (!Number.isInteger(productId) || productId <= 0) {
@@ -2450,7 +2516,7 @@ router.get(
       return res.json({
         success: true,
         data: {
-          ...serializeProductDetail(product, sellerAccess, sellerAccess?.store?.status),
+          ...serializeProductDetail(product, sellerAccess, storeContext),
           contract: buildCatalogReadContract(),
         },
       });

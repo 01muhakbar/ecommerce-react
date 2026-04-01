@@ -3,11 +3,24 @@ import { sequelize, syncDb } from "./models/index.js";
 
 const BASE_PORT = Number(process.env.PORT) || 3001;
 
+const assertProductionRuntimeEnv = () => {
+  if (process.env.NODE_ENV !== "production") return;
+
+  const required = ["JWT_SECRET"];
+  const missing = required.filter((key) => !String(process.env[key] || "").trim());
+  if (missing.length > 0) {
+    throw new Error(
+      `Missing required production environment variables: ${missing.join(", ")}`
+    );
+  }
+};
+
 /**
  * Start the server: connect DB, sync models, then listen with port retry.
  */
 const startServer = async () => {
   try {
+    assertProductionRuntimeEnv();
     console.log("Attempting to connect to the database...");
     await sequelize.authenticate();
     console.log("Database connected successfully.");

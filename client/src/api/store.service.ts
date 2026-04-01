@@ -40,7 +40,6 @@ export {
   getStoreSettings,
 } from "./public/storeCustomizationPublic.ts";
 export {
-  createStoreOrder,
   fetchStoreMyOrders,
   fetchStoreOrder,
 } from "./public/storeOrders.ts";

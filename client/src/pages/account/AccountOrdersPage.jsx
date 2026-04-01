@@ -5,9 +5,6 @@ import { api } from "../../api/axios.ts";
 import { getStoreCustomization } from "../../api/public/storeCustomizationPublic.ts";
 import { formatCurrency } from "../../utils/format.js";
 import {
-  normalizeOrderStatus,
-} from "../../utils/orderStatus.js";
-import {
   CheckoutModeBadge,
   PaymentStatusBadge,
 } from "../../components/payments/PaymentReadModelBadges.jsx";
@@ -16,6 +13,10 @@ import {
   resolvePublicOrderReference,
 } from "../../utils/publicOrderReference.js";
 import { normalizeDashboardSettingCopy } from "../../utils/dashboardSettingCopy.js";
+import {
+  getOrderContractSummary,
+  isOrderContractFinal,
+} from "../../utils/orderContract.ts";
 
 const fetchOrders = async (page) => {
   const { data } = await api.get("/store/my/orders", {
@@ -38,15 +39,10 @@ const getOrderDateValue = (order) =>
 
 const getPublicOrderRef = (order) => resolvePublicOrderReference(order?.invoiceNo);
 
-const isOrderFinal = (status) => {
-  const normalized = normalizeOrderStatus(status);
-  return normalized === "complete" || normalized === "cancelled";
-};
-
 const shouldPollAccountOrders = (orders) =>
   Array.isArray(orders) &&
   orders.some((order) => {
-    if (!isOrderFinal(order?.status)) return true;
+    if (!isOrderContractFinal(order?.contract)) return true;
     return Boolean(order?.paymentEntry?.visible);
   });
 
@@ -95,22 +91,29 @@ export default function AccountOrdersPage() {
         : true;
   const hasPrev = page > 1;
 
-  const getStatusUI = (status) => {
-    const normalized = normalizeOrderStatus(status);
-    switch (normalized) {
-      case "pending":
-        return { label: "Pending", dot: "bg-amber-500", text: "text-amber-700" };
-      case "processing":
-        return { label: "Processing", dot: "bg-indigo-500", text: "text-indigo-700" };
-      case "shipping":
-        return { label: "Shipping", dot: "bg-sky-500", text: "text-sky-700" };
-      case "complete":
-        return { label: "Delivered", dot: "bg-emerald-500", text: "text-emerald-700" };
-      case "cancelled":
-        return { label: "Cancel", dot: "bg-rose-500", text: "text-rose-700" };
-      default:
-        return { label: "Unknown", dot: "bg-slate-400", text: "text-slate-600" };
+  const getStatusUI = (order) => {
+    const statusSummary = getOrderContractSummary(order?.contract);
+    const tone = String(statusSummary?.tone || "").trim();
+    const label =
+      statusSummary?.label ||
+      order?.contract?.orderStatusMeta?.label ||
+      String(order?.status || "Unknown");
+    if (tone === "amber") {
+      return { label, dot: "bg-amber-500", text: "text-amber-700" };
     }
+    if (tone === "sky" || tone === "teal") {
+      return { label, dot: "bg-sky-500", text: "text-sky-700" };
+    }
+    if (tone === "indigo") {
+      return { label, dot: "bg-indigo-500", text: "text-indigo-700" };
+    }
+    if (tone === "emerald") {
+      return { label, dot: "bg-emerald-500", text: "text-emerald-700" };
+    }
+    if (tone === "rose" || tone === "orange") {
+      return { label, dot: "bg-rose-500", text: "text-rose-700" };
+    }
+    return { label, dot: "bg-slate-400", text: "text-slate-600" };
   };
 
   const setPage = (nextPage) => {
@@ -202,7 +205,7 @@ export default function AccountOrdersPage() {
                 {orders.map((order) => {
                   const publicOrderRef = getPublicOrderRef(order);
                   const trackingPath = buildPublicOrderTrackingPath(publicOrderRef);
-                  const statusUI = getStatusUI(order.status);
+                  const statusUI = getStatusUI(order);
                   const shippingProvider =
                     order.shippingProvider || order.shipping?.provider || "-";
                   const shippingCostRaw =

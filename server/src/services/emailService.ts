@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { resolveEmailRuntimeSettings } from './systemSettings.js';
 
 interface EmailOptions {
   email: string;
@@ -7,20 +8,39 @@ interface EmailOptions {
 }
 
 const sendEmail = async (options: EmailOptions) => {
+  const config = await resolveEmailRuntimeSettings();
+  const missing = [
+    ["EMAIL_HOST / smtpHost", config.host],
+    ["EMAIL_USER / smtpUser", config.user],
+    ["EMAIL_PASS / smtpPassword", config.pass],
+    ["EMAIL_FROM / smtpFromEmail", config.fromEmail],
+  ]
+    .filter(([, value]) => !String(value || '').trim())
+    .map(([label]) => label);
+
+  if (missing.length > 0) {
+    throw new Error(`Email delivery is not configured: ${missing.join(", ")}`);
+  }
+
   // 1) Buat transporter
   const transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: parseInt(process.env.EMAIL_PORT || '587', 10),
-    secure: process.env.EMAIL_PORT === '465', // true for 465, false for other ports
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
     auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
+      user: config.user,
+      pass: config.pass,
     },
   });
 
   // 2) Definisikan opsi email
+  const normalizedFrom = String(config.fromEmail || '').includes('<')
+    ? config.fromEmail
+    : config.fromName
+      ? `${config.fromName} <${config.fromEmail}>`
+      : config.fromEmail;
   const mailOptions = {
-    from: process.env.EMAIL_FROM || 'Your App Name <your_email@example.com>',
+    from: normalizedFrom,
     to: options.email,
     subject: options.subject,
     html: options.message,

@@ -5,6 +5,7 @@ import { Order } from "../models/Order.js";
 import { User } from "../models/User.js";
 import { OrderItem } from "../models/OrderItem.js";
 import { Product } from "../models/Product.js";
+import { Payment } from "../models/Payment.js";
 import { Suborder } from "../models/Suborder.js";
 import { createUserOrderStatusUpdatedNotification } from "../services/notification.service.js";
 import {
@@ -12,6 +13,12 @@ import {
   resolveParentOrderFulfillmentStatus,
   resolveParentPaymentStatus,
 } from "../services/orderPaymentAggregation.service.js";
+import { resolveBuyerFacingPaymentStatus } from "../services/paymentCheckoutView.service.js";
+import {
+  buildAction,
+  buildAdminOrderContract,
+  buildPaymentStatusMeta,
+} from "../services/orderLifecycleContract.service.js";
 
 const router = Router();
 type UiOrderStatus = "pending" | "processing" | "shipping" | "complete" | "cancelled";
@@ -63,6 +70,14 @@ const toUiStatus = (raw: unknown) => {
   return "pending";
 };
 
+const toAdminActionStatus = (raw: unknown) => {
+  const status = toUiStatus(raw);
+  if (status === "shipping") return "shipping";
+  if (status === "complete") return "delivered";
+  if (status === "cancelled") return "cancel";
+  return status;
+};
+
 const normalizeSuborderPaymentStatus = (raw: unknown) => {
   const value = String(raw || "UNPAID").toUpperCase().trim();
   return value || "UNPAID";
@@ -75,6 +90,14 @@ const normalizeSuborderFulfillmentStatus = (raw: unknown) => {
 
 const STARTED_FULFILLMENT_STATUSES = new Set(["PROCESSING", "SHIPPED", "DELIVERED"]);
 const SHIPPED_COMPATIBLE_FULFILLMENT_STATUSES = new Set(["SHIPPED", "DELIVERED"]);
+const CLOSED_NEGATIVE_PAYMENT_STATUSES = new Set(["FAILED", "CANCELLED", "EXPIRED"]);
+const ADMIN_ACTION_OPTIONS = [
+  { code: "pending", label: "Pending", normalizedStatus: "pending" as DbOrderStatus },
+  { code: "processing", label: "Processing", normalizedStatus: "processing" as DbOrderStatus },
+  { code: "shipping", label: "In Delivery", normalizedStatus: "shipped" as DbOrderStatus },
+  { code: "delivered", label: "Delivered", normalizedStatus: "delivered" as DbOrderStatus },
+  { code: "cancel", label: "Cancelled", normalizedStatus: "cancelled" as DbOrderStatus },
+];
 
 const loadAdminOrderTransitionSnapshot = async (orderId: number) => {
   const suborders = await Suborder.findAll({
@@ -96,6 +119,7 @@ const loadAdminOrderTransitionSnapshot = async (orderId: number) => {
 
   return {
     totalSuborders: normalized.length,
+    allSuborders: normalized,
     activeSuborders,
     aggregatePaymentStatus: resolveParentPaymentStatus(
       activeSuborders.map((suborder) => suborder.paymentStatus)
@@ -104,6 +128,157 @@ const loadAdminOrderTransitionSnapshot = async (orderId: number) => {
       activeSuborders.map((suborder) => suborder.fulfillmentStatus)
     ),
   };
+};
+
+const loadAdminOrderLifecycleReadContext = async (orderId: number) => {
+  const suborders = await Suborder.findAll({
+    where: { orderId },
+    attributes: ["id", "paymentStatus", "fulfillmentStatus"],
+    include: [
+      {
+        model: Payment,
+        as: "payments",
+        attributes: ["id", "status", "expiresAt", "updatedAt"],
+        required: false,
+      } as any,
+    ],
+    order: [["id", "ASC"]],
+  });
+
+  const displayStatuses = suborders.map((suborder: any) => {
+    const payment = Array.isArray(suborder?.payments)
+      ? [...suborder.payments].sort((left: any, right: any) => {
+          const leftTime = new Date(getAttr(left, "updatedAt") || 0).getTime();
+          const rightTime = new Date(getAttr(right, "updatedAt") || 0).getTime();
+          if (rightTime !== leftTime) return rightTime - leftTime;
+          return Number(getAttr(right, "id") || 0) - Number(getAttr(left, "id") || 0);
+        })[0]
+      : null;
+    return resolveBuyerFacingPaymentStatus({
+      paymentStatus: getAttr(payment, "status") || "CREATED",
+      suborderPaymentStatus: getAttr(suborder, "paymentStatus") || "UNPAID",
+      expiresAt: getAttr(payment, "expiresAt") || null,
+    });
+  });
+
+  const fulfillmentStatuses = suborders.map((suborder: any) =>
+    normalizeSuborderFulfillmentStatus(getAttr(suborder, "fulfillmentStatus"))
+  );
+
+  return {
+    displayStatuses,
+    fulfillmentStatuses,
+  };
+};
+
+const getStaticAdminActionDisabledReason = (
+  currentStatus: string,
+  paymentStatus: string,
+  actionCode: string
+) => {
+  if (actionCode === currentStatus) {
+    return "Order is already in this status.";
+  }
+
+  if (currentStatus === "cancel") {
+    return actionCode === "cancel"
+      ? "Order is already in this status."
+      : "Order is already cancelled and cannot return to the active fulfillment flow.";
+  }
+
+  if (currentStatus === "delivered") {
+    if (actionCode === "delivered") return "Order is already in this status.";
+    if (actionCode === "cancel") {
+      return "Order is already delivered and is now in a final operational state, so cancellation is no longer allowed.";
+    }
+    return "Order is already delivered, so earlier operational statuses are no longer relevant.";
+  }
+
+  if (
+    CLOSED_NEGATIVE_PAYMENT_STATUSES.has(paymentStatus) &&
+    ["processing", "shipping", "delivered"].includes(actionCode)
+  ) {
+    return `Parent payment is already ${paymentStatus.toLowerCase()}, so operational fulfillment cannot move forward from this snapshot.`;
+  }
+
+  return null;
+};
+
+const buildAdminTransitionActions = async (input: {
+  orderId: number;
+  currentStatus: string;
+  paymentStatus: string;
+}) => {
+  const actions = [];
+
+  for (const option of ADMIN_ACTION_OPTIONS) {
+    const staticReason = getStaticAdminActionDisabledReason(
+      input.currentStatus,
+      input.paymentStatus,
+      option.code
+    );
+    let reason = staticReason;
+
+    if (!reason && (option.normalizedStatus === "processing" || option.normalizedStatus === "shipped")) {
+      const eligibility = await inspectAdminOrderTransitionEligibility(
+        input.orderId,
+        option.normalizedStatus
+      );
+      if (!eligibility.allowed) {
+        reason = eligibility.message || "This order cannot move to the requested status yet.";
+      }
+    }
+
+    if (!reason && option.normalizedStatus === "delivered") {
+      const precheck = await inspectAdminOrderTransitionEligibility(input.orderId, "delivered");
+      if (!precheck.allowed) {
+        reason = precheck.message || "This order cannot be finalized yet.";
+      } else {
+        const finalization = await inspectParentOrderFinalizationEligibility(input.orderId);
+        if (!finalization.allowed) {
+          reason = "This order cannot be finalized yet.";
+        }
+      }
+    }
+
+    actions.push(
+      buildAction({
+        code: option.code,
+        label: option.label,
+        enabled: !reason,
+        reason,
+        tone: !reason ? "emerald" : "stone",
+        nextStatus: option.normalizedStatus,
+        scope: "ADMIN_ORDER_STATUS",
+      })
+    );
+  }
+
+  return actions;
+};
+
+const buildAdminContractForOrder = async (input: {
+  orderId: number;
+  orderStatus: string;
+  paymentStatus: string;
+  paymentMethod?: string | null;
+}) => {
+  const lifecycleContext = await loadAdminOrderLifecycleReadContext(input.orderId);
+  const currentActionStatus = toAdminActionStatus(input.orderStatus);
+  const availableActions = await buildAdminTransitionActions({
+    orderId: input.orderId,
+    currentStatus: currentActionStatus,
+    paymentStatus: input.paymentStatus,
+  });
+
+  return buildAdminOrderContract({
+    orderStatus: input.orderStatus,
+    paymentStatus: input.paymentStatus,
+    paymentMethod: input.paymentMethod,
+    displayStatuses: lifecycleContext.displayStatuses,
+    fulfillmentStatuses: lifecycleContext.fulfillmentStatuses,
+    availableActions,
+  });
 };
 
 const inspectAdminOrderTransitionEligibility = async (
@@ -475,9 +650,13 @@ const toOrderDetailPayload = (orderItem: any) => {
     invoiceNo: getAttr(orderItem, "invoiceNo"),
     checkoutMode:
       String(getAttr(orderItem, "checkoutMode") || "").toUpperCase().trim() || "LEGACY",
+    rawStatus: String(getAttr(orderItem, "status") || "pending"),
     status: toUiStatus(getAttr(orderItem, "status")),
     paymentStatus:
       String(getAttr(orderItem, "paymentStatus") || "").toUpperCase().trim() || "UNPAID",
+    paymentStatusMeta: buildPaymentStatusMeta(
+      String(getAttr(orderItem, "paymentStatus") || "").toUpperCase().trim() || "UNPAID"
+    ),
     totalAmount,
     subtotal,
     subtotalAmount: subtotal,
@@ -534,51 +713,65 @@ router.get("/", requireStaffOrAdmin, async (req, res) => {
       col: "id",
     });
 
-    const items = rows.map((orderRow: any) => {
-      const customer =
-        orderRow?.customer ??
-        orderRow?.get?.("customer") ??
-        orderRow?.dataValues?.customer ??
-        null;
-      const id = getAttr(orderRow, "id");
-      const invoiceNo = getAttr(orderRow, "invoiceNo");
-      const amount = Number(
-        getAttr(orderRow, "totalAmount") ??
-          getAttr(orderRow, "total") ??
-          getAttr(orderRow, "grandTotal") ??
-          0
-      );
-      const methodRaw = getAttr(orderRow, "paymentMethod") ?? "COD";
-      const method = normalizeMethodOutput(methodRaw);
-      const customerName =
-        getAttr(orderRow, "customerName") ??
-        getAttr(orderRow, "shippingName") ??
-        customer?.name ??
-        "Guest";
-      return {
-        id,
-        ref: invoiceNo ?? String(id ?? ""),
-        orderId: id,
-        invoiceNo,
-        checkoutMode:
-          String(getAttr(orderRow, "checkoutMode") || "").toUpperCase().trim() || "LEGACY",
-        orderTime: getAttr(orderRow, "createdAt"),
-        createdAt: getAttr(orderRow, "createdAt"),
-        customerName,
-        customerPhone:
-          getAttr(orderRow, "customerPhone") ??
-          getAttr(orderRow, "shippingPhone") ??
-          customer?.phone ??
-          null,
-        method,
-        paymentMethod: method,
-        amount,
-        totalAmount: amount,
-        status: toUiStatus(getAttr(orderRow, "status")),
-        paymentStatus:
-          String(getAttr(orderRow, "paymentStatus") || "").toUpperCase().trim() || "UNPAID",
-      };
-    });
+    const items = await Promise.all(
+      rows.map(async (orderRow: any) => {
+        const customer =
+          orderRow?.customer ??
+          orderRow?.get?.("customer") ??
+          orderRow?.dataValues?.customer ??
+          null;
+        const id = Number(getAttr(orderRow, "id") || 0);
+        const invoiceNo = getAttr(orderRow, "invoiceNo");
+        const amount = Number(
+          getAttr(orderRow, "totalAmount") ??
+            getAttr(orderRow, "total") ??
+            getAttr(orderRow, "grandTotal") ??
+            0
+        );
+        const methodRaw = getAttr(orderRow, "paymentMethod") ?? "COD";
+        const method = normalizeMethodOutput(methodRaw);
+        const customerName =
+          getAttr(orderRow, "customerName") ??
+          getAttr(orderRow, "shippingName") ??
+          customer?.name ??
+          "Guest";
+        const rawOrderStatus = String(getAttr(orderRow, "status") || "pending");
+        const paymentStatus =
+          String(getAttr(orderRow, "paymentStatus") || "").toUpperCase().trim() || "UNPAID";
+        const contract = await buildAdminContractForOrder({
+          orderId: id,
+          orderStatus: rawOrderStatus,
+          paymentStatus,
+          paymentMethod: String(methodRaw || "COD"),
+        });
+
+        return {
+          id,
+          ref: invoiceNo ?? String(id ?? ""),
+          orderId: id,
+          invoiceNo,
+          checkoutMode:
+            String(getAttr(orderRow, "checkoutMode") || "").toUpperCase().trim() || "LEGACY",
+          orderTime: getAttr(orderRow, "createdAt"),
+          createdAt: getAttr(orderRow, "createdAt"),
+          customerName,
+          customerPhone:
+            getAttr(orderRow, "customerPhone") ??
+            getAttr(orderRow, "shippingPhone") ??
+            customer?.phone ??
+            null,
+          method,
+          paymentMethod: method,
+          amount,
+          totalAmount: amount,
+          rawStatus: rawOrderStatus,
+          status: toUiStatus(rawOrderStatus),
+          paymentStatus,
+          paymentStatusMeta: buildPaymentStatusMeta(paymentStatus),
+          contract,
+        };
+      })
+    );
 
     const totalPages = Math.max(1, Math.ceil(count / pageSize));
 
@@ -708,9 +901,19 @@ const sendOrderDetail = async (res: any, lookup: string, preferInvoiceLookup = f
   if (!orderItem) {
     return res.status(404).json({ message: "Not found" });
   }
+  const payload = toOrderDetailPayload(orderItem);
+  const contract = await buildAdminContractForOrder({
+    orderId: Number(payload.id || 0),
+    orderStatus: payload.rawStatus || payload.status || "pending",
+    paymentStatus: payload.paymentStatus || "UNPAID",
+    paymentMethod: String(payload.paymentMethod || payload.method || "COD"),
+  });
   return res.json({
     success: true,
-    data: toOrderDetailPayload(orderItem),
+    data: {
+      ...payload,
+      contract,
+    },
   });
 };
 
@@ -846,11 +1049,21 @@ router.patch("/:id/status", requireStaffOrAdmin, async (req, res) => {
       "id",
       "invoiceNo",
       "status",
+      "paymentStatus",
+      "paymentMethod",
       "totalAmount",
       "createdAt",
       "updatedAt",
       "userId",
     ],
+  });
+  const updatedPaymentStatus =
+    String(getAttr(updatedOrder, "paymentStatus") || "").toUpperCase().trim() || "UNPAID";
+  const updatedContract = await buildAdminContractForOrder({
+    orderId: Number(getAttr(updatedOrder, "id") || 0),
+    orderStatus: String(getAttr(updatedOrder, "status") || "pending"),
+    paymentStatus: updatedPaymentStatus,
+    paymentMethod: String(getAttr(updatedOrder, "paymentMethod") || "COD"),
   });
 
   try {
@@ -875,9 +1088,13 @@ router.patch("/:id/status", requireStaffOrAdmin, async (req, res) => {
       id: getAttr(updatedOrder, "id"),
       invoiceNo: getAttr(updatedOrder, "invoiceNo"),
       status: toUiStatus(getAttr(updatedOrder, "status")),
+      rawStatus: String(getAttr(updatedOrder, "status") || "pending"),
+      paymentStatus: updatedPaymentStatus,
+      paymentStatusMeta: buildPaymentStatusMeta(updatedPaymentStatus),
       totalAmount: Number(getAttr(updatedOrder, "totalAmount") || 0),
       createdAt: getAttr(updatedOrder, "createdAt"),
       updatedAt: getAttr(updatedOrder, "updatedAt"),
+      contract: updatedContract,
     },
   });
 });

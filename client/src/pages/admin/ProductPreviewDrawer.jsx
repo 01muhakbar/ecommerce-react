@@ -175,13 +175,21 @@ const getStorefrontMeta = (visibility, published, status, submissionStatus) => {
         "Publish is on, but storefront visibility stays hidden until seller revisions are resubmitted and approved.",
     };
   }
-  if (stateCode === "PUBLISHED_BLOCKED" && reasonCode === "STORE_NOT_ACTIVE") {
+  if (
+    stateCode === "PUBLISHED_BLOCKED" &&
+    (reasonCode === "STORE_NOT_ACTIVE" || reasonCode === "STORE_NOT_READY")
+  ) {
     return {
-      label: "Published but store-blocked",
+      label:
+        reasonCode === "STORE_NOT_READY"
+          ? "Published but store-not-ready"
+          : "Published but store-blocked",
       toneClass: "bg-amber-100 text-amber-800",
       description:
         visibility?.storefrontReason ||
-        "Publish is on, but the store is not active so storefront visibility stays blocked.",
+        (reasonCode === "STORE_NOT_READY"
+          ? "Publish is on, but the store is not operational yet so storefront visibility stays blocked."
+          : "Publish is on, but the store is not active so storefront visibility stays blocked."),
     };
   }
   if (!published) {

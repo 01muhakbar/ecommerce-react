@@ -49,6 +49,45 @@ export type GroupedPaymentDetail = {
     canCancel: boolean;
     reason?: string | null;
   };
+  readModel?: GroupedPaymentReadModel;
+};
+
+export type GroupedPaymentReadModel = {
+  status: string;
+  statusMeta?: {
+    code?: string;
+    label?: string;
+    tone?: string;
+    description?: string;
+    isFinal?: boolean;
+  };
+  rawStatus?: string;
+  rawStatusMeta?: {
+    code?: string;
+    label?: string;
+    tone?: string;
+    description?: string;
+    isFinal?: boolean;
+  };
+  settlementStatus?: string;
+  settlementStatusMeta?: {
+    code?: string;
+    label?: string;
+    tone?: string;
+    description?: string;
+    isFinal?: boolean;
+  };
+  expiresAt?: string | null;
+  proofActionability?: {
+    canStartProof: boolean;
+    reason?: string | null;
+  };
+  cancelability?: {
+    canCancel: boolean;
+    reason?: string | null;
+  };
+  isFinal?: boolean;
+  isActionable?: boolean;
 };
 
 export type GroupedOrderPaymentResponse = {
@@ -62,6 +101,21 @@ export type GroupedOrderPaymentResponse = {
     orderStatus: string;
     paymentMethod?: string | null;
     createdAt?: string | null;
+    paymentStatusMeta?: GroupedPaymentReadModel["settlementStatusMeta"];
+    paymentEntry?: {
+      visible?: boolean;
+      label?: string | null;
+      targetPath?: string | null;
+      summaryStatus?: string;
+      summaryLabel?: string | null;
+      actionableCount?: number;
+      reviewCount?: number;
+      paidCount?: number;
+      failedCount?: number;
+      cancelledCount?: number;
+      expiredCount?: number;
+      totalGroups?: number;
+    };
     summary: {
       totalItems: number;
       subtotalAmount: number;
@@ -82,6 +136,8 @@ export type GroupedOrderPaymentResponse = {
       totalAmount: number;
       paymentMethod?: string | null;
       paymentStatus: string;
+      paymentStatusMeta?: GroupedPaymentReadModel["settlementStatusMeta"];
+      paymentReadModel?: GroupedPaymentReadModel;
       fulfillmentStatus: string;
       paymentProfileStatus: string;
       paymentAvailable: boolean;
@@ -135,6 +191,7 @@ export type PaymentDetailResponse = {
       canCancel: boolean;
       reason?: string | null;
     };
+    readModel?: GroupedPaymentReadModel;
     logs?: Array<{
       id: number;
       oldStatus?: string | null;

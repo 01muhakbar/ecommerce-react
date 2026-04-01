@@ -13,9 +13,6 @@ import {
 import {
   ADMIN_ORDER_ACTION_OPTIONS,
   getAdminOrderTransitionErrorMeta,
-  getAdminOrderTransitionDisabledState,
-  getAdminOrderTransitionPrecheck,
-  getAdminOrderLifecycleNote,
   toAdminOrderActionValue,
 } from "./orderLifecyclePresentation.js";
 
@@ -76,22 +73,22 @@ export default function OrderDetail() {
     null;
   const items = order?.items || [];
   const currentStatus = (order?.status ?? "").toString();
+  const contract = order?.contract || null;
   const selectedStatus = status;
   const norm = (value) => (value || "").toString().trim().toLowerCase();
-  const currentActionStatus = toAdminOrderActionValue(currentStatus);
+  const currentActionStatus = toAdminOrderActionValue(order?.rawStatus || currentStatus);
   const isSameStatus = norm(selectedStatus) === norm(currentActionStatus);
-  const transitionPrecheck = getAdminOrderTransitionPrecheck({
-    currentStatus: currentActionStatus,
-    targetStatus: selectedStatus,
-    paymentStatus: order?.paymentStatus,
-    checkoutMode: order?.checkoutMode,
-  });
-  const transitionDisabledState = getAdminOrderTransitionDisabledState({
-    currentStatus: currentActionStatus,
-    paymentStatus: order?.paymentStatus,
-  });
+  const actionOptions = Array.isArray(contract?.availableActions) && contract.availableActions.length > 0
+    ? contract.availableActions
+    : ADMIN_ORDER_ACTION_OPTIONS.map((option) => ({
+        code: option.value,
+        label: option.label,
+        enabled: true,
+        reason: null,
+      }));
+  const selectedAction = actionOptions.find((option) => option.code === selectedStatus) || null;
   const selectedDisabledReason =
-    transitionDisabledState.disabledReasons[selectedStatus] || "";
+    selectedAction && selectedAction.enabled === false ? selectedAction.reason || "" : "";
   const isSelectedDisabled = Boolean(selectedDisabledReason);
   const shouldAutoPrint = searchParams.get("print") === "1";
 
@@ -150,7 +147,10 @@ export default function OrderDetail() {
   const orderNote = String(
     order?.customerNote || order?.note || order?.notes || ""
   ).trim();
-  const statusHelper = getAdminOrderLifecycleNote(order?.status);
+  const statusHelper =
+    contract?.statusSummary?.description ||
+    contract?.fulfillmentReadiness?.description ||
+    "Operational order lifecycle is tracked separately from payment review.";
 
   const handleCopy = async (value, label) => {
     if (!value || value === "—") return;
@@ -226,7 +226,10 @@ export default function OrderDetail() {
                       <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium">
                         {createdAtFull}
                       </span>
-                      <OrderStatusBadge status={order?.status || "-"} />
+                      <OrderStatusBadge
+                        status={order?.rawStatus || order?.status || "-"}
+                        meta={contract?.statusSummary || null}
+                      />
                       <CheckoutModeBadge mode={order?.checkoutMode} />
                       <PaymentStatusBadge status={order?.paymentStatus} prefix="Parent Payment" />
                       <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium">
@@ -415,7 +418,10 @@ export default function OrderDetail() {
                 Current Status
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                <OrderStatusBadge status={order?.status || "-"} />
+                <OrderStatusBadge
+                  status={order?.rawStatus || order?.status || "-"}
+                  meta={contract?.statusSummary || null}
+                />
                 <PaymentStatusBadge status={order?.paymentStatus} prefix="Parent Payment" />
               </div>
               <p className="mt-3 text-sm leading-6 text-slate-500">
@@ -444,22 +450,24 @@ export default function OrderDetail() {
                     className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm"
                   >
                     <option value="">Select status</option>
-                    {ADMIN_ORDER_ACTION_OPTIONS.map((option) => (
+                    {actionOptions.map((option) => (
                       <option
-                        key={option.value}
-                        value={option.value}
-                        disabled={Boolean(transitionDisabledState.disabledReasons[option.value])}
+                        key={option.code}
+                        value={option.code}
+                        disabled={Boolean(option.enabled === false)}
                       >
                         {labelize(option.label)}
                       </option>
                     ))}
                   </select>
-                  {transitionDisabledState.disabledActions.length > 0 ? (
+                  {actionOptions.filter((option) => option.enabled === false).length > 0 ? (
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
                       <p className="font-semibold text-slate-900">Unavailable now</p>
                       <div className="mt-2 space-y-1.5">
-                        {transitionDisabledState.disabledActions.map((action) => (
-                          <p key={action.value} className="leading-6">
+                        {actionOptions
+                          .filter((option) => option.enabled === false)
+                          .map((action) => (
+                          <p key={action.code} className="leading-6">
                             <span className="font-medium text-slate-900">
                               {labelize(action.label)}
                             </span>
@@ -473,12 +481,6 @@ export default function OrderDetail() {
                     <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                       <p className="font-semibold text-rose-900">Action unavailable</p>
                       <p className="mt-1 leading-6">{selectedDisabledReason}</p>
-                    </div>
-                  ) : null}
-                  {transitionPrecheck && !selectedDisabledReason ? (
-                    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                      <p className="font-semibold text-amber-900">{transitionPrecheck.title}</p>
-                      <p className="mt-1 leading-6">{transitionPrecheck.message}</p>
                     </div>
                   ) : null}
                   <button

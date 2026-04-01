@@ -4,6 +4,8 @@ import { CartItem } from '../models/CartItem.js';
 import { Product } from '../models/Product.js';
 import { sequelize } from "../models/index.js";
 import { Store } from "../models/index.js";
+import { buildPublicStoreOperationalReadiness } from "../services/sharedContracts/publicStoreIdentity.js";
+import { STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES } from "../services/sharedContracts/storePaymentProfileCompat.js";
 
 const asSingle = (v: unknown) => (Array.isArray(v) ? v[0] : v);
 const toId = (v: unknown): number | null => {
@@ -68,22 +70,41 @@ const isStorefrontCartEligible = (product: any) => {
     .toLowerCase();
   const storeId = Number(getAttr(product, "storeId") ?? product?.storeId ?? 0);
   const store = product?.store ?? product?.get?.("store") ?? null;
-  const storeStatus = String(store?.status || "").trim().toUpperCase();
+  const operationalReadiness = store ? buildPublicStoreOperationalReadiness(store) : null;
   return (
     status === "active" &&
     isPublished &&
     submissionStatus === "none" &&
     Number.isFinite(storeId) &&
     storeId > 0 &&
-    storeStatus === "ACTIVE"
+    Boolean(operationalReadiness?.isReady)
   );
 };
+
+const loadOperationalStoreSnapshot = async (storeId: number, transaction?: any) =>
+  Store.findByPk(storeId, {
+    attributes: ["id", "status", "activeStorePaymentProfileId"],
+    include: [
+      {
+        association: "paymentProfile",
+        attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+        required: false,
+      },
+      {
+        association: "activePaymentProfile",
+        attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+        required: false,
+      },
+    ],
+    transaction,
+    lock: transaction?.LOCK?.UPDATE,
+  });
 
 const loadCartProductForMutation = async (
   productId: number,
   transaction?: any
-) =>
-  Product.findByPk(productId, {
+) => {
+  const product = await Product.findByPk(productId, {
     attributes: [
       "id",
       "name",
@@ -97,13 +118,35 @@ const loadCartProductForMutation = async (
       {
         model: Store,
         as: "store",
-        attributes: ["id", "status"],
+        attributes: ["id", "status", "activeStorePaymentProfileId"],
+        include: [
+          {
+            association: "paymentProfile",
+            attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+            required: false,
+          },
+          {
+            association: "activePaymentProfile",
+            attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+            required: false,
+          },
+        ],
         required: false,
       },
     ],
     transaction,
     lock: transaction?.LOCK?.UPDATE,
   });
+  const storeId = Number(getAttr(product, "storeId") ?? product?.storeId ?? 0);
+  if (product && Number.isFinite(storeId) && storeId > 0) {
+    const store = await loadOperationalStoreSnapshot(storeId, transaction);
+    if (store) {
+      (product as any).setDataValue?.("store", store);
+      (product as any).store = store;
+    }
+  }
+  return product;
+};
 
 const validateCartMutationProduct = (
   product: any,

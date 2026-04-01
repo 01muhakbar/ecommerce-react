@@ -25,6 +25,11 @@ import {
   PaymentStatusBadge,
   ProofReviewBadge,
 } from "../../components/payments/PaymentReadModelBadges.jsx";
+import {
+  getGroupedPaymentReadModel,
+  hasGroupedPaymentDeadlinePassed,
+  shouldPollGroupedPaymentGroups,
+} from "../../utils/groupedPaymentReadModel.ts";
 
 const formatDateTime = (value) => {
   if (!value) return "-";
@@ -38,14 +43,6 @@ const getRemainingMs = (value, now) => {
   const expiresTime = new Date(value).getTime();
   if (!Number.isFinite(expiresTime)) return null;
   return expiresTime - now;
-};
-
-const isLocallyExpired = (status, expiresAt, now) => {
-  const code = String(status || "").toUpperCase();
-  if (code === "EXPIRED") return true;
-  if (code !== "CREATED") return false;
-  const remaining = getRemainingMs(expiresAt, now);
-  return remaining !== null && remaining <= 0;
 };
 
 const formatCountdown = (value, now) => {
@@ -303,17 +300,6 @@ const getExpiryMeta = (status, expiresAt, now) => {
     textClass: "text-slate-900",
   };
 };
-
-const shouldPollPaymentGroups = (groups) =>
-  Array.isArray(groups) &&
-  groups.some((group) => {
-    const status = String(
-      group?.payment?.displayStatus || group?.payment?.status || group?.paymentStatus || ""
-    )
-      .toUpperCase()
-      .trim();
-    return ["CREATED", "REJECTED", "PENDING_CONFIRMATION"].includes(status);
-  });
 
 function PaymentProgressBar({ progress }) {
   return (
@@ -714,21 +700,17 @@ function PaymentGroupCard({
   onOpenCancel,
 }) {
   const payment = group.payment;
-  const expired = isLocallyExpired(payment?.displayStatus || payment?.status, payment?.expiresAt, now);
-  const currentStatus = expired
-    ? "EXPIRED"
-    : payment?.displayStatus || payment?.status || group.paymentStatus || "UNPAID";
+  const readModel = getGroupedPaymentReadModel(group);
+  const currentStatus = readModel.status;
   const canSubmitProof =
-    Boolean(payment?.id) && !expired && Boolean(payment?.proofActionability?.canStartProof);
-  const canCancel = Boolean(payment?.id) && !expired && Boolean(payment?.cancelability?.canCancel);
-  const cancelReason = expired
-    ? "Payment deadline has expired."
-    : payment?.cancelability?.reason || null;
+    Boolean(payment?.id) && Boolean(readModel.proofActionability?.canStartProof);
+  const canCancel = Boolean(payment?.id) && Boolean(readModel.cancelability?.canCancel);
+  const cancelReason = readModel.cancelability?.reason || null;
   const isProofIntentActive = Boolean(proofIntent[payment?.id || group.suborderId]);
-  const countdown = formatCountdown(payment?.expiresAt, now);
+  const countdown = formatCountdown(readModel.expiresAt, now);
   const step = resolveBuyerPaymentStep(currentStatus);
   const progress = getBuyerPaymentProgress(currentStatus);
-  const expiryMeta = getExpiryMeta(currentStatus, payment?.expiresAt, now);
+  const expiryMeta = getExpiryMeta(currentStatus, readModel.expiresAt, now);
   const StepIcon = step.Icon;
 
   return (
@@ -795,7 +777,7 @@ function PaymentGroupCard({
                     </p>
                     <p className={`mt-2 text-lg font-semibold ${expiryMeta.textClass}`}>{countdown}</p>
                     <p className="mt-1 text-xs text-slate-500">
-                      Deadline {formatDateTime(payment?.expiresAt)}
+                      Deadline {formatDateTime(readModel.expiresAt)}
                     </p>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
@@ -1121,7 +1103,7 @@ export default function AccountOrderPaymentPage() {
     refetchIntervalInBackground: false,
     refetchInterval: (query) => {
       const groups = query.state.data?.data?.groups;
-      return shouldPollPaymentGroups(groups) ? 15000 : false;
+      return shouldPollGroupedPaymentGroups(groups) ? 15000 : false;
     },
   });
 
@@ -1183,7 +1165,7 @@ export default function AccountOrderPaymentPage() {
   useEffect(() => {
     if (groups.length === 0) return;
     const hasLocalExpiry = groups.some((group) =>
-      isLocallyExpired(group.payment?.displayStatus || group.payment?.status, group.payment?.expiresAt, now)
+      hasGroupedPaymentDeadlinePassed(group, now)
     );
     if (!hasLocalExpiry) return;
     const timeout = window.setTimeout(() => {
@@ -1193,11 +1175,11 @@ export default function AccountOrderPaymentPage() {
   }, [groups, now, refetch]);
 
   const groupedStats = useMemo(() => {
-    const expiringCount = groups.filter((group) =>
-      isLocallyExpired(group.payment?.displayStatus || group.payment?.status, group.payment?.expiresAt, now)
+    const expiredCount = groups.filter(
+      (group) => getGroupedPaymentReadModel(group).status === "EXPIRED"
     ).length;
-    return { expiringCount };
-  }, [groups, now]);
+    return { expiredCount };
+  }, [groups]);
 
   const handleSubmitProof = async (paymentId, payload) =>
     proofMutation.mutateAsync({ paymentId, payload });
@@ -1237,6 +1219,7 @@ export default function AccountOrderPaymentPage() {
   }
 
   const primaryPayment = groups[0]?.payment ?? null;
+  const primaryPaymentReadModel = groups[0] ? getGroupedPaymentReadModel(groups[0]) : null;
 
   return (
     <div className="space-y-6">
@@ -1293,9 +1276,11 @@ export default function AccountOrderPaymentPage() {
                 Deadline
               </p>
               <p className="mt-2 text-lg font-semibold text-slate-900">
-                {formatCountdown(primaryPayment?.expiresAt, now)}
+                {formatCountdown(primaryPaymentReadModel?.expiresAt || primaryPayment?.expiresAt, now)}
               </p>
-              <p className="mt-1 text-xs text-slate-500">{formatDateTime(primaryPayment?.expiresAt)}</p>
+              <p className="mt-1 text-xs text-slate-500">
+                {formatDateTime(primaryPaymentReadModel?.expiresAt || primaryPayment?.expiresAt)}
+              </p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
@@ -1303,7 +1288,7 @@ export default function AccountOrderPaymentPage() {
               </p>
               <p className="mt-2 text-lg font-semibold text-slate-900">{groups.length}</p>
               <p className="mt-1 text-xs text-slate-500">
-                {groupedStats.expiringCount > 0 ? `${groupedStats.expiringCount} expired` : "All active"}
+                {groupedStats.expiredCount > 0 ? `${groupedStats.expiredCount} expired` : "All active"}
               </p>
             </div>
           </div>

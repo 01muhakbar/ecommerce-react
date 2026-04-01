@@ -526,10 +526,17 @@ async function run() {
   logStep("authenticating admin, seller, and customer clients");
   const adminClient = new CookieClient();
   const sellerClient = new CookieClient();
+  const notReadySellerClient = new CookieClient();
   const inactiveSellerClient = new CookieClient();
   const customerClient = new CookieClient();
   await loginAdmin(adminClient);
   await login(sellerClient, sellerUser.email, sellerUser.password, "seller login");
+  await login(
+    notReadySellerClient,
+    notReadySellerUser.email,
+    notReadySellerUser.password,
+    "not-ready seller login"
+  );
   await login(
     inactiveSellerClient,
     inactiveSellerUser.email,
@@ -660,6 +667,25 @@ async function run() {
   );
   logPass("visible checkout preview allowed");
 
+  logStep("checking not-ready checkout preview eligibility");
+  const notReadyPreview = await previewCart(
+    customerClient,
+    customerUser.id,
+    notReadyStoreProduct.id,
+    "not-ready preview"
+  );
+  assert.equal(
+    notReadyPreview.addResponse.status,
+    409,
+    "not-ready preview add to cart should reject immediately"
+  );
+  assert.equal(
+    String(notReadyPreview.addResponse.body?.code || ""),
+    "PRODUCT_NOT_AVAILABLE",
+    "not-ready preview: unexpected add-to-cart rejection"
+  );
+  logPass("not-ready checkout preview blocked");
+
   logStep("checking seller visibility metadata");
   const sellerList = await sellerClient.request(
     `/api/seller/stores/${activeStore.id}/products?keyword=${encodeURIComponent(RUN_ID)}&limit=20`
@@ -708,6 +734,57 @@ async function run() {
     "seller list: visible product state mismatch"
   );
   logPass("seller visibility metadata");
+
+  logStep("checking not-ready seller visibility metadata");
+  const notReadySellerList = await notReadySellerClient.request(
+    `/api/seller/stores/${activeStoreNotReady.id}/products?keyword=${encodeURIComponent(
+      RUN_ID
+    )}&limit=20`
+  );
+  assertStatus(notReadySellerList, 200, "not-ready seller list");
+  const notReadySellerItems: any[] = Array.isArray(notReadySellerList.body?.data?.items)
+    ? notReadySellerList.body.data.items
+    : [];
+  const notReadySellerItem = notReadySellerItems.find(
+    (item: any) => String(item?.slug || "") === notReadyStoreProduct.slug
+  );
+  assert.ok(notReadySellerItem, "not-ready seller list: product missing");
+  assert.equal(
+    Boolean(notReadySellerItem?.visibility?.storefrontVisible),
+    false,
+    "not-ready seller list: product incorrectly marked visible"
+  );
+  assert.equal(
+    String(notReadySellerItem?.visibility?.reasonCode || ""),
+    "STORE_NOT_READY",
+    "not-ready seller list: product reason mismatch"
+  );
+  assert.equal(
+    Number(notReadySellerList.body?.data?.summary?.storefrontVisible || 0),
+    0,
+    "not-ready seller list: storefrontVisible summary mismatch"
+  );
+  assert.equal(
+    Number(notReadySellerList.body?.data?.summary?.publishedBlocked || 0),
+    1,
+    "not-ready seller list: publishedBlocked summary mismatch"
+  );
+  logPass("not-ready seller visibility metadata");
+
+  logStep("checking admin not-ready visibility metadata");
+  const adminNotReadyItem = adminItemBySlug.get(notReadyStoreProduct.slug);
+  assert.ok(adminNotReadyItem, "admin list: not-ready store item missing");
+  assert.equal(
+    String(adminNotReadyItem?.visibility?.stateCode || ""),
+    "PUBLISHED_BLOCKED",
+    "admin list: not-ready store product state mismatch"
+  );
+  assert.equal(
+    String(adminNotReadyItem?.visibility?.reasonCode || ""),
+    "STORE_NOT_READY",
+    "admin list: not-ready store product reason mismatch"
+  );
+  logPass("admin not-ready visibility metadata");
 
   logStep("checking inactive-store seller visibility metadata");
   const inactiveSellerList = await inactiveSellerClient.request(

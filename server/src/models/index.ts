@@ -28,6 +28,7 @@ import { Language } from "./Language.js";
 import { Currency } from "./Currency.js";
 import { Notification } from "./Notification.js";
 import { UserAddress } from "./UserAddress.js";
+import { UserRegistrationVerification } from "./UserRegistrationVerification.js";
 import { ensureSystemStoreRoles } from "../services/seller/storeRoles.js";
 
 type ProductUserIdFkRow = {
@@ -124,6 +125,7 @@ function initModels() {
   Currency.initModel(sequelize);
   Notification.initModel(sequelize);
   UserAddress.initModel(sequelize);
+  UserRegistrationVerification.initModel(sequelize);
 
   const models: any = {
     User,
@@ -153,6 +155,7 @@ function initModels() {
     Currency,
     Notification,
     UserAddress,
+    UserRegistrationVerification,
   };
 
   Object.values(models).forEach((model: any) => {
@@ -454,4 +457,5 @@ export {
   Currency,
   Notification,
   UserAddress,
+  UserRegistrationVerification,
 };
