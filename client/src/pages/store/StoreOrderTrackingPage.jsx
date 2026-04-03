@@ -5,7 +5,6 @@ import { Download, Printer } from "lucide-react";
 import { fetchStoreOrder } from "../../api/public/storeOrders.ts";
 import { getStoreCustomization } from "../../api/public/storeCustomizationPublic.ts";
 import { formatCurrency } from "../../utils/format.js";
-import { PaymentStatusBadge } from "../../components/payments/PaymentReadModelBadges.jsx";
 import {
   UiEmptyState,
   UiErrorState,
@@ -27,7 +26,11 @@ import {
   getOrderContractSummary,
   isOrderContractFinal,
 } from "../../utils/orderContract.ts";
-import { isGroupedPaymentFinal } from "../../utils/groupedPaymentReadModel.ts";
+import { getOrderTruthStatus } from "../../utils/orderTruth.js";
+import {
+  getGroupedPaymentReadModel,
+  isGroupedPaymentFinal,
+} from "../../utils/groupedPaymentReadModel.ts";
 
 const formatDate = (value) => {
   if (!value) return "-";
@@ -52,16 +55,6 @@ const getItemImage = (item) =>
   item?.product?.promoImagePath ??
   null;
 
-const getStoreSplitStatusClass = (status) => {
-  const value = String(status || "").toUpperCase().trim();
-  if (value === "DELIVERED") return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (value === "SHIPPED" || value === "PROCESSING") {
-    return "border-sky-200 bg-sky-50 text-sky-700";
-  }
-  if (value === "CANCELLED") return "border-rose-200 bg-rose-50 text-rose-700";
-  return "border-slate-200 bg-slate-100 text-slate-700";
-};
-
 const getToneBadgeClass = (tone) => {
   const value = String(tone || "").trim().toLowerCase();
   if (value === "amber") return "border-amber-200 bg-amber-50 text-amber-700";
@@ -73,6 +66,40 @@ const getToneBadgeClass = (tone) => {
   return "border-slate-200 bg-slate-100 text-slate-700";
 };
 
+const normalizeLabel = (value, fallback = "") => {
+  const label = String(value || "").trim();
+  if (label) return label;
+  return String(fallback || "").trim();
+};
+
+const getSplitPresentation = (split) => {
+  const summary = getOrderContractSummary(split?.contract);
+  const fulfillmentMeta =
+    split?.fulfillmentStatusMeta && typeof split.fulfillmentStatusMeta === "object"
+      ? split.fulfillmentStatusMeta
+      : null;
+  const paymentReadModel = getGroupedPaymentReadModel(split);
+  const paymentMeta =
+    paymentReadModel?.statusMeta && typeof paymentReadModel.statusMeta === "object"
+      ? paymentReadModel.statusMeta
+      : split?.paymentStatusMeta && typeof split.paymentStatusMeta === "object"
+        ? split.paymentStatusMeta
+        : null;
+
+  return {
+    summaryLabel: normalizeLabel(summary?.label, "Awaiting update"),
+    summaryDescription: normalizeLabel(summary?.description, "Latest seller split status."),
+    summaryTone: summary?.tone || "slate",
+    fulfillmentLabel: normalizeLabel(
+      fulfillmentMeta?.label,
+      String(split?.fulfillmentStatus || "UNFULFILLED")
+    ),
+    fulfillmentTone: fulfillmentMeta?.tone || "slate",
+    paymentLabel: normalizeLabel(paymentMeta?.label, paymentReadModel?.status || "UNPAID"),
+    paymentTone: paymentMeta?.tone || "slate",
+  };
+};
+
 const normalizeTrackingPayload = (response) =>
   response?.data?.data ??
   response?.data ??
@@ -80,8 +107,6 @@ const normalizeTrackingPayload = (response) =>
   response?.data?.order ??
   response ??
   null;
-
-const normalizeStatusValue = (status) => String(status || "").trim().toLowerCase();
 
 const shouldPollTrackingOrder = (order) => {
   if (!order || typeof order !== "object") return false;
@@ -97,46 +122,142 @@ const shouldPollTrackingOrder = (order) => {
 };
 
 const TRACKING_STEPS = [
-  { key: "pending", label: "Order received", matches: ["pending"] },
-  { key: "processing", label: "Processing", matches: ["processing"] },
-  { key: "shipping", label: "On delivery", matches: ["shipping", "shipped"] },
-  { key: "delivered", label: "Delivered", matches: ["complete", "delivered"] },
+  { key: "pending", label: "Order received" },
+  { key: "processing", label: "Processing" },
+  { key: "shipping", label: "On delivery" },
+  { key: "delivered", label: "Delivered" },
 ];
 
-const getTrackingStepIndex = (status) => {
-  const normalized = normalizeStatusValue(status);
-  return TRACKING_STEPS.findIndex((step) => step.matches.includes(normalized));
-};
+const STOPPED_TRACKING_CODES = new Set(["CANCELLED", "FAILED", "EXPIRED"]);
+const DELIVERED_TRACKING_CODES = new Set(["DELIVERED", "FINAL", "COMPLETE"]);
+const SHIPPING_TRACKING_CODES = new Set(["IN_DELIVERY", "SHIPPING", "SHIPPED"]);
+const PROCESSING_TRACKING_CODES = new Set(["READY", "PROCESSING", "IN_PROGRESS"]);
+const PENDING_TRACKING_CODES = new Set([
+  "PENDING",
+  "ACTION_REQUIRED",
+  "UNDER_REVIEW",
+  "AWAITING_PAYMENT",
+  "BLOCKED_BY_PAYMENT",
+]);
 
-const getTrackingSummary = (status) => {
-  const normalized = normalizeStatusValue(status);
-  if (normalized === "processing") {
+const getTrackingPresentation = (order) => {
+  const truthStatus = getOrderTruthStatus(order);
+  const code = String(truthStatus.code || "").trim().toUpperCase();
+  const truthDescription = String(truthStatus.summary?.description || "").trim();
+
+  if (code === "ACTION_REQUIRED" || code === "AWAITING_PAYMENT" || code === "BLOCKED_BY_PAYMENT") {
     return {
-      title: "Your order is being prepared",
-      description: "The store is confirming items and getting them ready for dispatch.",
+      stepIndex: 0,
+      title: "Complete payment to continue this order",
+      description: truthDescription,
+      isStopped: false,
+      stoppedTitle: "",
+      stoppedDescription: "",
     };
   }
-  if (normalized === "shipping" || normalized === "shipped") {
+  if (code === "UNDER_REVIEW") {
     return {
-      title: "Your order is on the way",
-      description: "Delivery is in progress. Keep this page for the latest status and invoice reference.",
+      stepIndex: 0,
+      title: "Payment is under review",
+      description: truthDescription,
+      isStopped: false,
+      stoppedTitle: "",
+      stoppedDescription: "",
     };
   }
-  if (normalized === "complete" || normalized === "delivered") {
+  if (code === "FAILED") {
     return {
-      title: "Your order has been delivered",
-      description: "The order is complete. You can keep this page as your invoice and delivery record.",
+      stepIndex: 0,
+      title: "This order cannot continue",
+      description: truthDescription,
+      isStopped: true,
+      stoppedTitle: "Payment can no longer continue",
+      stoppedDescription:
+        "This invoice remains available, but fulfillment will not start from this payment state.",
     };
   }
-  if (normalized === "cancelled" || normalized === "canceled") {
+  if (code === "EXPIRED") {
     return {
+      stepIndex: 0,
+      title: "Payment window expired",
+      description: truthDescription,
+      isStopped: true,
+      stoppedTitle: "Payment window already closed",
+      stoppedDescription:
+        "This invoice remains available, but fulfillment will not start unless a new payment flow is created.",
+    };
+  }
+  if (code === "CANCELLED") {
+    return {
+      stepIndex: 0,
       title: "This order was cancelled",
-      description: "Please contact the store if you need help placing the order again.",
+      description: truthDescription,
+      isStopped: true,
+      stoppedTitle: "Contact the store for resolution",
+      stoppedDescription:
+        "This invoice remains available, but the order will not move forward unless the store recreates it.",
     };
   }
+  if (PROCESSING_TRACKING_CODES.has(code)) {
+    return {
+      stepIndex: 1,
+      title: "Your order is being prepared",
+      description:
+        truthDescription ||
+        "The store is confirming items and getting them ready for dispatch.",
+      isStopped: false,
+      stoppedTitle: "",
+      stoppedDescription: "",
+    };
+  }
+  if (SHIPPING_TRACKING_CODES.has(code)) {
+    return {
+      stepIndex: 2,
+      title: "Your order is on the way",
+      description:
+        truthDescription ||
+        "Delivery is in progress. Keep this page for the latest status and invoice reference.",
+      isStopped: false,
+      stoppedTitle: "",
+      stoppedDescription: "",
+    };
+  }
+  if (DELIVERED_TRACKING_CODES.has(code)) {
+    return {
+      stepIndex: 3,
+      title: "Your order has been delivered",
+      description:
+        truthDescription ||
+        "The order is complete. You can keep this page as your invoice and delivery record.",
+      isStopped: false,
+      stoppedTitle: "",
+      stoppedDescription: "",
+    };
+  }
+  if (PENDING_TRACKING_CODES.has(code) || !code) {
+    return {
+      stepIndex: 0,
+      title: "Your order has been received",
+      description:
+        truthDescription ||
+        "The store has your order and will confirm processing shortly.",
+      isStopped: false,
+      stoppedTitle: "",
+      stoppedDescription: "",
+    };
+  }
+
   return {
+    stepIndex: 0,
     title: "Your order has been received",
-    description: "The store has your order and will confirm processing shortly.",
+    description: truthDescription,
+    isStopped: STOPPED_TRACKING_CODES.has(code),
+    stoppedTitle: STOPPED_TRACKING_CODES.has(code)
+      ? "This order cannot continue from the current state"
+      : "",
+    stoppedDescription: STOPPED_TRACKING_CODES.has(code)
+      ? "Use the latest contract status above as the source of truth for the next action."
+      : "",
   };
 };
 
@@ -221,13 +342,15 @@ export default function StoreOrderTrackingPage() {
     order?.shippingCost ?? order?.shipping ?? order?.shipping?.cost ?? order?.deliveryFee ?? 0;
   const discount = order?.discount ?? order?.discountAmount ?? order?.discountTotal ?? 0;
   const totalAmount = order?.totalAmount ?? order?.total ?? order?.grandTotal ?? 0;
-  const statusLabel =
-    statusSummary?.label || contract?.orderStatusMeta?.label || String(order?.status || "-");
-  const normalizedStatus = normalizeStatusValue(order?.status);
-  const trackingStepIndex = getTrackingStepIndex(order?.status);
-  const trackingSummary = getTrackingSummary(order?.status);
-  const isCancelled =
-    normalizedStatus === "cancelled" || normalizedStatus === "canceled";
+  const truthStatus = getOrderTruthStatus(order);
+  const trackingPresentation = getTrackingPresentation(order);
+  const statusLabel = truthStatus.label;
+  const trackingStepIndex = trackingPresentation.stepIndex;
+  const trackingSummary = {
+    title: trackingPresentation.title,
+    description: trackingPresentation.description,
+  };
+  const isTrackingStopped = trackingPresentation.isStopped;
   const errorMessage = isInvalidRefResponse
     ? "Use the public invoice reference shown after checkout or in My Orders."
     : error?.response?.data?.message || error?.message || GENERIC_ERROR;
@@ -362,24 +485,30 @@ export default function StoreOrderTrackingPage() {
 
         <div
           className={`rounded-[30px] border px-5 py-6 shadow-[0_18px_34px_rgba(15,23,42,0.07)] sm:px-6 ${
-            isCancelled
+            isTrackingStopped
               ? "border-rose-200 bg-rose-50 text-rose-900"
               : "border-slate-200 bg-white text-slate-900"
           }`}
         >
           <p
             className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${
-              isCancelled ? "text-rose-600" : "text-emerald-600"
+              isTrackingStopped ? "text-rose-600" : "text-emerald-600"
             }`}
           >
             Next Step
           </p>
           <h2 className="mt-3 text-xl font-bold leading-tight">
-            {isCancelled ? "Contact the store for resolution" : "Keep this page for updates"}
+            {isTrackingStopped
+              ? trackingPresentation.stoppedTitle
+              : "Keep this page for updates"}
           </h2>
-          <p className={`mt-3 text-sm leading-6 ${isCancelled ? "text-rose-700" : "text-slate-500"}`}>
-            {isCancelled
-              ? "This invoice remains available, but the order will not move forward unless the store recreates it."
+          <p
+            className={`mt-3 text-sm leading-6 ${
+              isTrackingStopped ? "text-rose-700" : "text-slate-500"
+            }`}
+          >
+            {isTrackingStopped
+              ? trackingPresentation.stoppedDescription
               : "Use the order reference for support, tracking checks, or printing the invoice after delivery."}
           </p>
           <div className="mt-5 space-y-3">
@@ -414,9 +543,9 @@ export default function StoreOrderTrackingPage() {
           </p>
         </div>
 
-        {isCancelled ? (
+        {isTrackingStopped ? (
           <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-800">
-            This order is cancelled, so delivery progress has stopped.
+            {trackingPresentation.stoppedDescription}
           </div>
         ) : (
           <div className="mt-5 grid gap-3 md:grid-cols-4">
@@ -474,31 +603,48 @@ export default function StoreOrderTrackingPage() {
             </p>
           </div>
           <div className="mt-5 grid gap-3 lg:grid-cols-2">
-            {storeSplits.map((split) => (
-              <div
-                key={split.suborderId || split.suborderNumber || split.storeId || split.storeName}
-                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">{split.storeName}</p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {split.suborderNumber || "Store split"} • {formatCurrency(split.totalAmount || 0)}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
+            {storeSplits.map((split) => {
+              const splitPresentation = getSplitPresentation(split);
+              return (
+                <div
+                  key={split.suborderId || split.suborderNumber || split.storeId || split.storeName}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{split.storeName}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {split.suborderNumber || "Store split"} • {formatCurrency(split.totalAmount || 0)}
+                      </p>
+                    </div>
                     <span
-                      className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getStoreSplitStatusClass(
-                        split.fulfillmentStatus
+                      className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getToneBadgeClass(
+                        splitPresentation.summaryTone
                       )}`}
                     >
-                      Fulfillment {split.fulfillmentStatus || "UNFULFILLED"}
+                      {splitPresentation.summaryLabel}
                     </span>
-                    <PaymentStatusBadge status={split.paymentStatus} prefix="Payment" />
+                  </div>
+                  <p className="mt-3 text-sm text-slate-600">{splitPresentation.summaryDescription}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <span
+                      className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getToneBadgeClass(
+                        splitPresentation.fulfillmentTone
+                      )}`}
+                    >
+                      Fulfillment {splitPresentation.fulfillmentLabel}
+                    </span>
+                    <span
+                      className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getToneBadgeClass(
+                        splitPresentation.paymentTone
+                      )}`}
+                    >
+                      Payment {splitPresentation.paymentLabel}
+                    </span>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       ) : null}
@@ -719,7 +865,7 @@ export default function StoreOrderTrackingPage() {
               to={stripeContinuePath}
               className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:w-auto"
             >
-              Continue Stripe Payment
+              {continueStripeAction?.label || "Continue Stripe Payment"}
             </Link>
           ) : null}
         </div>

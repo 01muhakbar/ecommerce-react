@@ -213,7 +213,17 @@ export default function AdminPaymentAuditPage() {
                         {formatCurrency(entry.grandTotal)}
                       </td>
                       <td className="px-4 py-4">
-                        <PaymentStatusBadge status={entry.paymentStatus} prefix="Parent" />
+                        <div className="space-y-1">
+                          <PaymentStatusBadge
+                            status={entry.paymentStatus}
+                            label={entry.paymentStatusMeta?.label}
+                            tone={entry.paymentStatusMeta?.tone}
+                            prefix="Parent"
+                          />
+                          <div className="text-xs text-slate-500">
+                            {entry.paymentStatusMeta?.description || "-"}
+                          </div>
+                        </div>
                       </td>
                       <td className="px-4 py-4 text-xs text-slate-600">
                         <div>Paid: {entry.counts.paidSuborders}</div>

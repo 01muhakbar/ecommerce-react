@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  CheckCheck,
   Eye,
   Filter,
   Pencil,
@@ -9,7 +10,13 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
-import { createStaff, deleteStaff, fetchStaff, updateStaff } from "../../api/adminStaff.ts";
+import {
+  approveStaffAccount,
+  createStaff,
+  deleteStaff,
+  fetchStaff,
+  updateStaff,
+} from "../../api/adminStaff.ts";
 import { useAuth } from "../../auth/useAuth.js";
 import { resolveAssetUrl } from "../../lib/assetUrl.js";
 import AddStaffDrawer from "../../components/admin/staff/AddStaffDrawer.jsx";
@@ -68,9 +75,24 @@ const getAvatarInitial = (staff) => {
   const name = getStaffName(staff);
   return name.charAt(0).toUpperCase() || "S";
 };
+const isSameAccount = (currentUser, staff) => {
+  const currentId = Number(currentUser?.id || 0);
+  const staffId = Number(staff?.id || 0);
+  if (currentId > 0 && staffId > 0) {
+    return currentId === staffId;
+  }
+  return (
+    toText(currentUser?.email).toLowerCase() &&
+    toText(currentUser?.email).toLowerCase() === toText(staff?.email).toLowerCase()
+  );
+};
 const isPrivilegedRole = (role) => {
   const normalized = normalizeRole(role);
   return normalized === "admin" || normalized === "super_admin" || normalized === "superadmin";
+};
+const isSuperAdminRole = (role) => {
+  const normalized = normalizeRole(role);
+  return normalized === "super_admin" || normalized === "superadmin";
 };
 
 function RoleBadge({ role }) {
@@ -111,6 +133,29 @@ function ActiveStatusBadge({ isActive }) {
   );
 }
 
+function AccountStatusBadge({ staff }) {
+  const normalizedStatus = toText(staff?.status).toLowerCase();
+  if (normalizedStatus === "pending_approval") {
+    return (
+      <span className="inline-flex min-h-5 items-center gap-1 rounded-full border border-amber-200/80 bg-amber-50/80 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+        Pending approval
+      </span>
+    );
+  }
+  if (normalizedStatus === "pending_verification") {
+    return (
+      <span className="inline-flex min-h-5 items-center gap-1 rounded-full border border-sky-200/80 bg-sky-50/80 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500" />
+        Pending verification
+      </span>
+    );
+  }
+  return (
+    <ActiveStatusBadge isActive={staff?.isActive !== false} />
+  );
+}
+
 export default function AdminStaffPage() {
   const queryClient = useQueryClient();
   const { user: currentUser } = useAuth();
@@ -127,6 +172,7 @@ export default function AdminStaffPage() {
   const [editDrawerError, setEditDrawerError] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState(null);
   const [pendingPublishedId, setPendingPublishedId] = useState(null);
+  const [pendingApproveId, setPendingApproveId] = useState(null);
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -164,7 +210,7 @@ export default function AdminStaffPage() {
     onSuccess: () => {
       setIsCreateModalOpen(false);
       setCreateDrawerError("");
-      setNotice("Staff created.");
+      setNotice("Account created.");
       queryClient.invalidateQueries({ queryKey: ["admin-staff"] });
     },
     onError: (error) => {
@@ -179,7 +225,7 @@ export default function AdminStaffPage() {
       setEditDrawerError("");
       setIsEditModalOpen(false);
       setEditTarget(null);
-      setNotice("Staff updated.");
+      setNotice("Account updated.");
       queryClient.invalidateQueries({ queryKey: ["admin-staff"] });
     },
     onError: (error) => {
@@ -221,6 +267,25 @@ export default function AdminStaffPage() {
     },
     onSettled: () => {
       setPendingPublishedId(null);
+    },
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: (id) => approveStaffAccount(id),
+    onSuccess: (result) => {
+      setRowError("");
+      setNotice(
+        result?.message ||
+          "Staff account approved. The user can now sign in at /admin/login with the registered email."
+      );
+      queryClient.invalidateQueries({ queryKey: ["admin-staff"] });
+    },
+    onError: (error) => {
+      const message = error?.response?.data?.message ?? error?.message ?? GENERIC_ERROR;
+      setRowError(message);
+    },
+    onSettled: () => {
+      setPendingApproveId(null);
     },
   });
 
@@ -383,21 +448,41 @@ export default function AdminStaffPage() {
     publishMutation.mutate({ id, isPublished: nextValue, previousValue });
   };
 
+  const onApproveStaff = (staff) => {
+    const id = Number(staff?.id);
+    if (!id || pendingApproveId === id) return;
+    setRowError("");
+    setPendingApproveId(id);
+    approveMutation.mutate(id);
+  };
+
   const canDeleteStaff = (staff) => {
     const roleProtected = isPrivilegedRole(staff?.role);
-    const isSelf =
-      currentUser?.email &&
-      toText(currentUser.email).toLowerCase() === toText(staff?.email).toLowerCase();
+    const isSelf = isSameAccount(currentUser, staff);
     return !roleProtected && !isSelf;
   };
+  const getDeleteDisabledReason = (staff) => {
+    if (isSameAccount(currentUser, staff)) {
+      return "You cannot delete your own account from this flow.";
+    }
+    if (isPrivilegedRole(staff?.role)) {
+      return "Cannot delete this account.";
+    }
+    return undefined;
+  };
+  const canApproveStaff = (staff) =>
+    normalizeRole(staff?.role) === "staff" &&
+    toText(staff?.status).toLowerCase() === "pending_approval";
 
   return (
     <div className="space-y-2">
       <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-2 shadow-sm sm:px-5">
         <div className="flex flex-col gap-1.5">
           <div className="space-y-0.5">
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">All Staff</h1>
-            <p className="text-sm text-slate-500">Manage staff accounts and access.</p>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">All Accounts</h1>
+            <p className="text-sm text-slate-500">
+              Create workspace accounts and manage role-based admin or seller access.
+            </p>
           </div>
           <p className="text-[11px] text-slate-500">
             {Number(meta.count || 0)} total
@@ -446,20 +531,26 @@ export default function AdminStaffPage() {
             </button>
             <button type="button" className={headerBtnGreen} onClick={openCreateModal}>
               <Plus className="h-4 w-4" />
-              Add Staff
+              Create Account
             </button>
           </div>
         </div>
       </div>
 
       {notice ? (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
+        <div
+          id="admin-staff-notice"
+          className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700"
+        >
           {notice}
         </div>
       ) : null}
 
       {rowError ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">
+        <div
+          id="admin-staff-row-error"
+          className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700"
+        >
           {rowError}
         </div>
       ) : null}
@@ -479,7 +570,7 @@ export default function AdminStaffPage() {
             onClick={openCreateModal}
             className="mt-2.5 inline-flex h-8 items-center justify-center rounded-lg bg-emerald-600 px-3 text-[11px] font-medium text-white hover:bg-emerald-700"
           >
-            Add Staff
+            Create Account
           </button>
         </div>
       ) : null}
@@ -510,6 +601,7 @@ export default function AdminStaffPage() {
                   const isDeleting = pendingDeleteId === staff?.id;
                   const isPublishing = pendingPublishedId === staff?.id;
                   const isActive = staff?.isActive !== false;
+                  const isApproving = pendingApproveId === staff?.id;
                   return (
                     <tr
                       key={staff?.id || `${getStaffEmail(staff)}-${getStaffName(staff)}`}
@@ -551,7 +643,7 @@ export default function AdminStaffPage() {
                       <td className={`${tableCell} w-[16%]`}>
                         <div className="space-y-1">
                           <div className="flex items-center justify-between gap-2">
-                            <ActiveStatusBadge isActive={isActive} />
+                            <AccountStatusBadge staff={staff} />
                             <button
                               type="button"
                               onClick={() => onTogglePublished(staff)}
@@ -569,12 +661,30 @@ export default function AdminStaffPage() {
                             </button>
                           </div>
                           <div className="text-[10px] text-slate-400">
-                            {isPublishing ? UPDATING : getPublished(staff) ? "Live" : "Hidden"}
+                            {toText(staff?.status).toLowerCase() === "pending_approval"
+                              ? "Waiting for admin approval"
+                              : isPublishing
+                                ? UPDATING
+                                : getPublished(staff)
+                                  ? "Live"
+                                  : "Hidden"}
                           </div>
                         </div>
                       </td>
                       <td className={`${tableCell} w-[8%] text-right`}>
                         <div className="flex items-center justify-end gap-0.5">
+                          {canApproveStaff(staff) ? (
+                            <button
+                              type="button"
+                              onClick={() => onApproveStaff(staff)}
+                              disabled={isApproving}
+                              title="Approve account"
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-emerald-200 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                              aria-label={`Approve ${getStaffName(staff)}`}
+                            >
+                              <CheckCheck className="h-3.5 w-3.5" />
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             onClick={() => openViewModal(staff)}
@@ -595,7 +705,7 @@ export default function AdminStaffPage() {
                             type="button"
                             onClick={() => openDeleteModal(staff)}
                             disabled={!canDelete || isDeleting}
-                            title={!canDelete ? "Cannot delete this account." : undefined}
+                            title={!canDelete ? getDeleteDisabledReason(staff) : undefined}
                             className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-rose-200 text-rose-600 hover:border-rose-300 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
                             aria-label={`Delete ${getStaffName(staff)}`}
                           >
@@ -640,16 +750,20 @@ export default function AdminStaffPage() {
         onSubmit={onSubmitCreate}
         isSubmitting={createMutation.isPending}
         error={createDrawerError}
+        rolesOptions={roleOptions}
+        canManageRoles={isSuperAdminRole(currentUser?.role)}
       />
 
       <EditStaffDrawer
         open={isEditModalOpen}
         onClose={closeEditModal}
         staff={editTarget}
+        currentUser={currentUser}
         rolesOptions={roleOptions}
         onSubmit={onSubmitEdit}
         isSubmitting={updateMutation.isPending}
         error={editDrawerError}
+        canManageRoles={isSuperAdminRole(currentUser?.role)}
       />
 
       {isViewModalOpen ? (
@@ -685,7 +799,11 @@ export default function AdminStaffPage() {
               <p><span className="font-semibold text-slate-700">Role:</span> {formatRoleLabel(viewTarget?.role)}</p>
               <p>
                 <span className="font-semibold text-slate-700">Status:</span>{" "}
-                {viewTarget?.isActive !== false ? "Active" : "Inactive"}
+                {toText(viewTarget?.status).toLowerCase() === "pending_approval"
+                  ? "Pending approval"
+                  : viewTarget?.isActive !== false
+                    ? "Active"
+                    : "Inactive"}
               </p>
               <p>
                 <span className="font-semibold text-slate-700">Joining Date:</span>{" "}

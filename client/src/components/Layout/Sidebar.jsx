@@ -125,8 +125,8 @@ const MENU = [
   },
   {
     section: "Workspace",
-    label: "Our Staff",
-    to: "/admin/our-staff",
+    label: "All Accounts",
+    to: "/admin/all-accounts",
     icon: IconStaff,
     perm: "STAFF_MANAGE",
   },

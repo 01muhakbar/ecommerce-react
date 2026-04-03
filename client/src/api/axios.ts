@@ -35,9 +35,31 @@ api.interceptors.response.use(
     const status = err?.response?.status;
     const url = err?.config?.url || "";
     const isAuthMe = typeof url === "string" && url.includes("/auth/me");
+    const isAuthFormEndpoint =
+      typeof url === "string" &&
+      [
+        "/auth/login",
+        "/auth/admin/login",
+        "/auth/register",
+        "/auth/register/resend-otp",
+        "/auth/register/verify-otp",
+        "/auth/forgot-password",
+        "/auth/reset-password",
+        "/auth/admin/register",
+        "/auth/admin/register/resend-verification",
+        "/auth/admin/verify-email",
+        "/auth/admin/forgot-password",
+        "/auth/admin/reset-password",
+        "/auth/logout",
+        "/auth/admin/logout",
+      ].some((path) => url.includes(path));
     const msg = err?.response?.data || err.message;
-    if (status === 401 && !isAuthMe) {
-      triggerUnauthorized();
+    if (status === 401 && !isAuthMe && !isAuthFormEndpoint) {
+      triggerUnauthorized({
+        status,
+        code: err?.response?.data?.code,
+        message: err?.response?.data?.message,
+      });
     }
     // eslint-disable-next-line no-console
     if (!status || status >= 500) {

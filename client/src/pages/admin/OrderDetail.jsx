@@ -151,6 +151,7 @@ export default function OrderDetail() {
     contract?.statusSummary?.description ||
     contract?.fulfillmentReadiness?.description ||
     "Operational order lifecycle is tracked separately from payment review.";
+  const paymentStatusMeta = order?.paymentStatusMeta || contract?.paymentStatusMeta || null;
 
   const handleCopy = async (value, label) => {
     if (!value || value === "—") return;
@@ -231,7 +232,12 @@ export default function OrderDetail() {
                         meta={contract?.statusSummary || null}
                       />
                       <CheckoutModeBadge mode={order?.checkoutMode} />
-                      <PaymentStatusBadge status={order?.paymentStatus} prefix="Parent Payment" />
+                      <PaymentStatusBadge
+                        status={order?.paymentStatus}
+                        label={paymentStatusMeta?.label}
+                        tone={paymentStatusMeta?.tone}
+                        prefix="Parent Payment"
+                      />
                       <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium">
                         Total {formatMoney(totalAmount)}
                       </span>
@@ -286,7 +292,12 @@ export default function OrderDetail() {
                   <p className="mt-2 text-sm font-semibold text-slate-800">{paymentMethod}</p>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <CheckoutModeBadge mode={order?.checkoutMode} />
-                    <PaymentStatusBadge status={order?.paymentStatus} prefix="Parent Payment" />
+                    <PaymentStatusBadge
+                      status={order?.paymentStatus}
+                      label={paymentStatusMeta?.label}
+                      tone={paymentStatusMeta?.tone}
+                      prefix="Parent Payment"
+                    />
                   </div>
                   <p className="mt-2 text-sm text-slate-500">Invoice: {invoiceRef}</p>
                   <p className="mt-2 text-xs leading-5 text-slate-500">
@@ -422,7 +433,12 @@ export default function OrderDetail() {
                   status={order?.rawStatus || order?.status || "-"}
                   meta={contract?.statusSummary || null}
                 />
-                <PaymentStatusBadge status={order?.paymentStatus} prefix="Parent Payment" />
+                <PaymentStatusBadge
+                  status={order?.paymentStatus}
+                  label={paymentStatusMeta?.label}
+                  tone={paymentStatusMeta?.tone}
+                  prefix="Parent Payment"
+                />
               </div>
               <p className="mt-3 text-sm leading-6 text-slate-500">
                 {statusHelper}

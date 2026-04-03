@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import { Op } from "sequelize";
 import sendEmail from "../utils/email.js";
 import { sequelize, User, UserRegistrationVerification } from "../models/index.js";
+import { AuthRateLimitError, enforceAuthRateLimit } from "./authRateLimit.service.js";
 
 const USER_STATUS_ACTIVE = "active";
 const USER_STATUS_PENDING = "pending_verification";
@@ -21,8 +22,6 @@ const OTP_RESEND_COOLDOWN_MS = Number(
 const OTP_MAX_ATTEMPTS = Number(process.env.CLIENT_REGISTRATION_OTP_MAX_ATTEMPTS || 5);
 const OTP_MAX_RESENDS = Number(process.env.CLIENT_REGISTRATION_OTP_MAX_RESENDS || 5);
 const MIN_SUBMIT_DELAY_MS = Number(process.env.CLIENT_REGISTRATION_MIN_SUBMIT_DELAY_MS || 4000);
-
-const rateLimitBuckets = new Map<string, number[]>();
 
 type RegisterInput = {
   name: string;
@@ -109,36 +108,21 @@ export class ClientRegistrationError extends Error {
   }
 }
 
-function pushRateLimit(key: string, limit: number, windowMs: number) {
-  const now = Date.now();
-  const timestamps = (rateLimitBuckets.get(key) || []).filter((value) => now - value < windowMs);
-  if (timestamps.length >= limit) {
-    const retryAfterMs = Math.max(windowMs - (now - timestamps[0]), 1000);
-    rateLimitBuckets.set(key, timestamps);
-    return {
-      limited: true,
-      retryAfterSeconds: Math.ceil(retryAfterMs / 1000),
-    };
-  }
-  timestamps.push(now);
-  rateLimitBuckets.set(key, timestamps);
-  return {
-    limited: false,
-    retryAfterSeconds: 0,
-  };
-}
-
 function enforceRateLimit(key: string, limit: number, windowMs: number) {
-  const result = pushRateLimit(key, limit, windowMs);
-  if (result.limited) {
-    throw new ClientRegistrationError({
-      status: 429,
-      code: "RATE_LIMITED",
-      message: "Please wait before trying again.",
-      data: {
-        retryAfterSeconds: result.retryAfterSeconds,
-      },
-    });
+  try {
+    enforceAuthRateLimit(key, limit, windowMs);
+  } catch (error) {
+    if (error instanceof AuthRateLimitError) {
+      throw new ClientRegistrationError({
+        status: error.status,
+        code: error.code,
+        message: error.message,
+        data: {
+          retryAfterSeconds: error.retryAfterSeconds,
+        },
+      });
+    }
+    throw error;
   }
 }
 
@@ -286,6 +270,19 @@ async function findRegistrationVerificationByPublicId(publicId: string) {
     where: { publicId },
     include: [{ model: User, as: "user", attributes: ["id", "name", "email", "phoneNumber", "status"] }],
   });
+}
+
+async function hasVerifiedRegistrationRecord(userId: number) {
+  const count = await UserRegistrationVerification.count({
+    where: {
+      userId,
+      status: VERIFICATION_STATUS_VERIFIED,
+      publicId: {
+        [Op.notLike]: "pwdreset_%",
+      },
+    },
+  });
+  return count > 0;
 }
 
 async function findLatestOpenVerificationForUser(userId: number) {
@@ -792,4 +789,23 @@ export async function ensurePendingVerificationForLogin(email: string) {
 
 export function isPendingClientUser(user: any) {
   return normalizeUserStatus(user?.status) === USER_STATUS_PENDING;
+}
+
+export async function ensureClientUserActivationConsistency(user: any) {
+  if (!user) return user;
+
+  const role = String(user?.get?.("role") ?? user?.role ?? "").trim().toLowerCase();
+  const status = normalizeUserStatus(user?.get?.("status") ?? user?.status);
+  const userId = Number(user?.get?.("id") ?? user?.id ?? 0);
+
+  if (!Number.isFinite(userId) || userId <= 0) return user;
+  if (!["customer", "user", "pembeli"].includes(role)) return user;
+  if (status !== "inactive") return user;
+
+  const verified = await hasVerifiedRegistrationRecord(userId);
+  if (!verified) return user;
+
+  await user.update({ status: USER_STATUS_ACTIVE } as any);
+  user.setDataValue?.("status", USER_STATUS_ACTIVE);
+  return user;
 }

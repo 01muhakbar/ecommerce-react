@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import {
   clientRegistrationSchema,
@@ -13,6 +13,15 @@ import {
   resendClientRegistrationOtp,
   verifyClientRegistrationOtp,
 } from "../../api/storeAuth.ts";
+import AuthNotice from "../../components/auth/AuthNotice.jsx";
+import PasswordVisibilityButton from "../../components/auth/PasswordVisibilityButton.jsx";
+import PasswordStrengthIndicator from "../../components/auth/PasswordStrengthIndicator.jsx";
+import { getRetryAfterSeconds } from "../../utils/authRateLimit.js";
+import {
+  PASSWORD_CONFIRM_HELPER,
+  buildCooldownButtonLabel,
+  buildResendCooldownMessage,
+} from "../../utils/authUi.js";
 
 const PENDING_ADD_KEY = "pending_cart_add";
 const PENDING_ADD_CONSUMED_KEY = "pending_cart_add_consumed";
@@ -137,15 +146,6 @@ const resolveVerifyErrorPresentation = (error) => {
   };
 };
 
-const getPasswordHint = (password) => {
-  if (!password) return "Use at least 8 characters with letters and numbers.";
-  if (password.length < 8) return "Password is too short.";
-  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
-    return "Add at least one letter and one number.";
-  }
-  return "Password strength looks good.";
-};
-
 export default function StoreRegisterPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -153,6 +153,16 @@ export default function StoreRegisterPage() {
   const { refreshSession, isAuthenticated } = useAccountAuth();
   const { refreshCart } = useCart();
   const startedAtRef = useRef(Date.now());
+  const statusRef = useRef(null);
+  const fieldRefs = useRef({
+    name: null,
+    email: null,
+    phoneNumber: null,
+    password: null,
+    passwordConfirm: null,
+    otpCode: null,
+    termsAccepted: null,
+  });
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -170,6 +180,8 @@ export default function StoreRegisterPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isResending, setIsResending] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
   const [countdown, setCountdown] = useState(
     Number(readPendingRegistration()?.verification?.resendAvailableInSeconds || 0)
   );
@@ -185,7 +197,6 @@ export default function StoreRegisterPage() {
   ].filter((item) => item.enabled);
 
   const currentStep = pendingRegistration ? "verify" : "register";
-  const passwordHint = useMemo(() => getPasswordHint(form.password), [form.password]);
   const pendingVerification = pendingRegistration?.verification || null;
   const canSubmitOtp = pendingVerification?.canSubmitOtp !== false;
   const deliveryFailed = pendingVerification?.deliveryStatus === "FAILED";
@@ -221,6 +232,19 @@ export default function StoreRegisterPage() {
     }, 1000);
     return () => window.clearTimeout(timer);
   }, [countdown]);
+
+  useEffect(() => {
+    const firstErrorKey = Object.keys(fieldErrors || {}).find((key) =>
+      Array.isArray(fieldErrors?.[key]) && fieldErrors[key].length > 0
+    );
+    if (firstErrorKey && fieldRefs.current[firstErrorKey]) {
+      fieldRefs.current[firstErrorKey].focus();
+      return;
+    }
+    if (statusMessage && statusRef.current) {
+      statusRef.current.focus();
+    }
+  }, [fieldErrors, statusMessage]);
 
   const setField = (key, value) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -402,8 +426,14 @@ export default function StoreRegisterPage() {
       if (pending) {
         setPendingRegistration(pending);
       }
+      const retryAfterSeconds = getRetryAfterSeconds(error);
+      if (retryAfterSeconds > 0) {
+        setCountdown((current) => Math.max(current, retryAfterSeconds));
+      }
       setStatusMessage(
-        error?.response?.data?.message || "We could not send a new code right now."
+        error?.response?.status === 429 && retryAfterSeconds > 0
+          ? buildResendCooldownMessage(retryAfterSeconds)
+          : error?.response?.data?.message || "We could not send a new code right now."
       );
       setStatusTone("error");
     } finally {
@@ -421,15 +451,6 @@ export default function StoreRegisterPage() {
     startedAtRef.current = Date.now();
   };
 
-  const messageToneClasses =
-    statusTone === "success"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-      : statusTone === "warning"
-        ? "border-amber-200 bg-amber-50 text-amber-700"
-        : statusTone === "error"
-          ? "border-rose-200 bg-rose-50 text-rose-700"
-          : "border-slate-200 bg-slate-50 text-slate-600";
-
   return (
     <section className="mx-auto w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <h1 className="text-xl font-semibold text-slate-900">
@@ -437,15 +458,19 @@ export default function StoreRegisterPage() {
       </h1>
       <p className="mt-1 text-sm text-slate-500">
         {currentStep === "verify"
-          ? `Enter the code sent to ${pendingVerification?.destinationMasked || "your email"}.`
-          : "Create a client account with verified contact details before you sign in."}
+          ? `Enter the 6-digit code sent to ${pendingVerification?.destinationMasked || "your email"}.`
+          : "Create your client account. We only activate it after your email is verified."}
       </p>
 
-      {statusMessage ? (
-        <div className={`mt-4 rounded-lg border px-3 py-2 text-sm ${messageToneClasses}`}>
-          {statusMessage}
-        </div>
-      ) : null}
+      <AuthNotice
+        id="store-register-status"
+        tone={statusTone}
+        live={statusTone === "error" ? "assertive" : "polite"}
+        focusRef={statusRef}
+        className="mt-4"
+      >
+        {statusMessage}
+      </AuthNotice>
 
       {currentStep === "register" ? (
         <form onSubmit={handleRegisterSubmit} className="mt-6 space-y-4">
@@ -461,104 +486,172 @@ export default function StoreRegisterPage() {
             />
           </div>
           <div>
-            <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+            <label htmlFor="store-register-name" className="text-xs font-semibold uppercase tracking-widest text-slate-500">
               Full name
             </label>
             <input
+              id="store-register-name"
+              ref={(node) => {
+                fieldRefs.current.name = node;
+              }}
               type="text"
               value={form.name}
               onChange={(event) => setField("name", event.target.value)}
               className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
               placeholder="Your full name"
+              aria-invalid={Boolean(firstFieldError(fieldErrors, "name"))}
+              aria-describedby={firstFieldError(fieldErrors, "name") ? "store-register-name-error" : undefined}
               required
             />
             {firstFieldError(fieldErrors, "name") ? (
-              <p className="mt-2 text-xs text-rose-600">{firstFieldError(fieldErrors, "name")}</p>
+              <p id="store-register-name-error" className="mt-2 text-xs text-rose-600">
+                {firstFieldError(fieldErrors, "name")}
+              </p>
             ) : null}
           </div>
           <div>
-            <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+            <label htmlFor="store-register-email" className="text-xs font-semibold uppercase tracking-widest text-slate-500">
               Email
             </label>
             <input
+              id="store-register-email"
+              ref={(node) => {
+                fieldRefs.current.email = node;
+              }}
               type="email"
               value={form.email}
               onChange={(event) => setField("email", event.target.value)}
               className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
               placeholder="you@email.com"
+              autoComplete="email"
+              aria-invalid={Boolean(firstFieldError(fieldErrors, "email"))}
+              aria-describedby={firstFieldError(fieldErrors, "email") ? "store-register-email-error" : undefined}
               required
             />
             {firstFieldError(fieldErrors, "email") ? (
-              <p className="mt-2 text-xs text-rose-600">{firstFieldError(fieldErrors, "email")}</p>
+              <p id="store-register-email-error" className="mt-2 text-xs text-rose-600">
+                {firstFieldError(fieldErrors, "email")}
+              </p>
             ) : null}
           </div>
           <div>
-            <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+            <label htmlFor="store-register-phone" className="text-xs font-semibold uppercase tracking-widest text-slate-500">
               WhatsApp / phone number
             </label>
             <input
+              id="store-register-phone"
+              ref={(node) => {
+                fieldRefs.current.phoneNumber = node;
+              }}
               type="tel"
               value={form.phoneNumber}
               onChange={(event) => setField("phoneNumber", event.target.value)}
               className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
               placeholder="+62 812 3456 7890"
+              autoComplete="tel"
+              aria-invalid={Boolean(firstFieldError(fieldErrors, "phoneNumber"))}
+              aria-describedby={
+                firstFieldError(fieldErrors, "phoneNumber")
+                  ? "store-register-phone-error"
+                  : "store-register-phone-helper"
+              }
               required
             />
             {firstFieldError(fieldErrors, "phoneNumber") ? (
-              <p className="mt-2 text-xs text-rose-600">
+              <p id="store-register-phone-error" className="mt-2 text-xs text-rose-600">
                 {firstFieldError(fieldErrors, "phoneNumber")}
               </p>
             ) : (
-              <p className="mt-2 text-xs text-slate-500">
+              <p id="store-register-phone-helper" className="mt-2 text-xs text-slate-500">
                 Use an active number for account recovery and future order updates.
               </p>
             )}
           </div>
           <div>
-            <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+            <label htmlFor="store-register-password" className="text-xs font-semibold uppercase tracking-widest text-slate-500">
               Password
             </label>
-            <input
-              type="password"
-              value={form.password}
-              onChange={(event) => setField("password", event.target.value)}
-              className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              placeholder="••••••••"
-              minLength={8}
-              required
-            />
-            <p className="mt-2 text-xs text-slate-500">{passwordHint}</p>
+            <div className="relative mt-2">
+              <input
+                id="store-register-password"
+                ref={(node) => {
+                  fieldRefs.current.password = node;
+                }}
+                type={showPassword ? "text" : "password"}
+                value={form.password}
+                onChange={(event) => setField("password", event.target.value)}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 pr-16 text-sm"
+                placeholder="••••••••"
+                autoComplete="new-password"
+                minLength={8}
+                aria-invalid={Boolean(firstFieldError(fieldErrors, "password"))}
+                aria-describedby={firstFieldError(fieldErrors, "password") ? "store-register-password-error" : undefined}
+                required
+              />
+              <PasswordVisibilityButton
+                visible={showPassword}
+                onToggle={() => setShowPassword((value) => !value)}
+              />
+            </div>
+            <PasswordStrengthIndicator password={form.password} />
             {firstFieldError(fieldErrors, "password") ? (
-              <p className="mt-2 text-xs text-rose-600">
+              <p id="store-register-password-error" className="mt-2 text-xs text-rose-600">
                 {firstFieldError(fieldErrors, "password")}
               </p>
             ) : null}
           </div>
           <div>
-            <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+            <label htmlFor="store-register-password-confirm" className="text-xs font-semibold uppercase tracking-widest text-slate-500">
               Confirm password
             </label>
-            <input
-              type="password"
-              value={form.passwordConfirm}
-              onChange={(event) => setField("passwordConfirm", event.target.value)}
-              className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              placeholder="Repeat your password"
-              minLength={8}
-              required
-            />
+            <div className="relative mt-2">
+              <input
+                id="store-register-password-confirm"
+                ref={(node) => {
+                  fieldRefs.current.passwordConfirm = node;
+                }}
+                type={showPasswordConfirm ? "text" : "password"}
+                value={form.passwordConfirm}
+                onChange={(event) => setField("passwordConfirm", event.target.value)}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 pr-16 text-sm"
+                placeholder="Repeat your password"
+                autoComplete="new-password"
+                minLength={8}
+                aria-invalid={Boolean(firstFieldError(fieldErrors, "passwordConfirm"))}
+                aria-describedby={
+                  firstFieldError(fieldErrors, "passwordConfirm")
+                    ? "store-register-password-confirm-error"
+                    : "store-register-password-confirm-helper"
+                }
+                required
+              />
+              <PasswordVisibilityButton
+                visible={showPasswordConfirm}
+                onToggle={() => setShowPasswordConfirm((value) => !value)}
+                labelShow="Show password confirmation"
+                labelHide="Hide password confirmation"
+              />
+            </div>
             {firstFieldError(fieldErrors, "passwordConfirm") ? (
-              <p className="mt-2 text-xs text-rose-600">
+              <p id="store-register-password-confirm-error" className="mt-2 text-xs text-rose-600">
                 {firstFieldError(fieldErrors, "passwordConfirm")}
               </p>
-            ) : null}
+            ) : (
+              <p id="store-register-password-confirm-helper" className="mt-2 text-xs text-slate-500">
+                {PASSWORD_CONFIRM_HELPER}
+              </p>
+            )}
           </div>
           <label className="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-3 text-sm text-slate-600">
             <input
+              ref={(node) => {
+                fieldRefs.current.termsAccepted = node;
+              }}
               type="checkbox"
               checked={form.termsAccepted}
               onChange={(event) => setField("termsAccepted", event.target.checked)}
               className="mt-1 h-4 w-4 rounded border-slate-300"
+              aria-invalid={Boolean(firstFieldError(fieldErrors, "termsAccepted"))}
               required
             />
             <span>
@@ -620,10 +713,14 @@ export default function StoreRegisterPage() {
             )}
           </div>
           <div>
-            <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+            <label htmlFor="store-register-otp" className="text-xs font-semibold uppercase tracking-widest text-slate-500">
               Verification code
             </label>
             <input
+              id="store-register-otp"
+              ref={(node) => {
+                fieldRefs.current.otpCode = node;
+              }}
               type="text"
               inputMode="numeric"
               pattern="[0-9]*"
@@ -634,12 +731,20 @@ export default function StoreRegisterPage() {
               }
               className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm tracking-[0.35em]"
               placeholder="123456"
+              aria-invalid={Boolean(firstFieldError(fieldErrors, "otpCode"))}
+              aria-describedby={
+                firstFieldError(fieldErrors, "otpCode")
+                  ? "store-register-otp-error"
+                  : "store-register-otp-helper"
+              }
               required
             />
             {firstFieldError(fieldErrors, "otpCode") ? (
-              <p className="mt-2 text-xs text-rose-600">{firstFieldError(fieldErrors, "otpCode")}</p>
+              <p id="store-register-otp-error" className="mt-2 text-xs text-rose-600">
+                {firstFieldError(fieldErrors, "otpCode")}
+              </p>
             ) : (
-              <p className="mt-2 text-xs text-slate-500">
+              <p id="store-register-otp-helper" className="mt-2 text-xs text-slate-500">
                 {deliveryFailed
                   ? "Verification stays locked until a code is delivered successfully."
                   : "We only activate your account after this code is verified."}
@@ -665,9 +770,7 @@ export default function StoreRegisterPage() {
           >
             {isResending
               ? "Sending new code..."
-              : countdown > 0
-                ? `Resend code in ${countdown}s`
-                : "Resend verification code"}
+              : buildCooldownButtonLabel(countdown, "Resend verification code", "Resend code in")}
           </button>
           <button
             type="button"

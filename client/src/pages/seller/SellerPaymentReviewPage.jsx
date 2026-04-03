@@ -7,6 +7,10 @@ import {
   reviewSellerStorePayment,
 } from "../../api/sellerPayments.ts";
 import { formatCurrency } from "../../utils/format.js";
+import {
+  getPaymentStatusLabel,
+  getProofReviewLabel,
+} from "../../components/payments/PaymentReadModelBadges.jsx";
 import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
 import {
   sellerPrimaryButtonClass,
@@ -42,6 +46,9 @@ const PAYMENT_TONES = {
 
 const getStatusTone = (value) =>
   PAYMENT_TONES[String(value || "").trim().toUpperCase()] || "stone";
+
+const resolveBadgeTone = (metaTone, fallbackValue) =>
+  String(metaTone || "").trim() || getStatusTone(fallbackValue);
 
 const formatDateTime = (value) => {
   if (!value) return "-";
@@ -241,13 +248,13 @@ export default function SellerPaymentReviewPage() {
         {items.map((entry) => {
           const payment = entry.payment;
           const proof = payment?.proof;
+          const reviewActionability = payment?.reviewActionability || null;
           const reviewLocked =
-            !actorCanReview ||
-            !payment?.id ||
-            String(payment?.status || "").toUpperCase() !== "PENDING_CONFIRMATION" ||
-            String(proof?.reviewStatus || "").toUpperCase() !== "PENDING";
+            !actorCanReview || !(reviewActionability?.canReview ?? false);
           const isMutating =
             reviewMutation.isPending && reviewMutation.variables?.paymentId === payment?.id;
+          const entryPaymentMeta = payment?.statusMeta || entry.paymentStatusMeta || null;
+          const proofMeta = proof?.reviewMeta || null;
 
           return (
             <SellerWorkspacePanel key={entry.suborderId} className="p-4">
@@ -262,18 +269,29 @@ export default function SellerPaymentReviewPage() {
                         {entry.suborderNumber}
                       </h3>
                       <SellerWorkspaceBadge
-                        label={payment?.status || entry.paymentStatus}
-                        tone={getStatusTone(payment?.status || entry.paymentStatus)}
+                        label={
+                          entryPaymentMeta?.label ||
+                          getPaymentStatusLabel(payment?.status || entry.paymentStatus)
+                        }
+                        tone={resolveBadgeTone(
+                          entryPaymentMeta?.tone,
+                          payment?.status || entry.paymentStatus
+                        )}
                       />
                       {proof?.reviewStatus ? (
                         <SellerWorkspaceBadge
-                          label={`Proof ${proof.reviewStatus}`}
-                          tone={getStatusTone(proof.reviewStatus)}
+                          label={`Proof ${proofMeta?.label || getProofReviewLabel(proof.reviewStatus)}`}
+                          tone={resolveBadgeTone(proofMeta?.tone, proof.reviewStatus)}
                         />
                       ) : null}
                     </div>
                     <p className="mt-2 text-sm text-slate-500">
                       Parent order {entry.orderNumber} • Buyer {entry.buyer.name}
+                    </p>
+                    <p className="mt-2 text-sm text-slate-600">
+                      {entryPaymentMeta?.description ||
+                        reviewActionability?.reason ||
+                        "Review state follows the latest backend payment snapshot for this store split."}
                     </p>
                   </div>
 
@@ -298,6 +316,10 @@ export default function SellerPaymentReviewPage() {
                         <p>
                           <span className="font-semibold text-slate-900">Created:</span>{" "}
                           {formatDateTime(entry.createdAt)}
+                        </p>
+                        <p>
+                          <span className="font-semibold text-slate-900">Status:</span>{" "}
+                          {entryPaymentMeta?.label || getPaymentStatusLabel(payment?.status || entry.paymentStatus)}
                         </p>
                       </div>
                     </div>
@@ -364,8 +386,11 @@ export default function SellerPaymentReviewPage() {
                         </p>
                         <p>
                           <span className="font-semibold text-slate-900">Review Status:</span>{" "}
-                          {proof.reviewStatus}
+                          {proofMeta?.label || proof.reviewStatus}
                         </p>
+                        {proofMeta?.description ? (
+                          <p className="text-slate-600">{proofMeta.description}</p>
+                        ) : null}
                         {proof.note ? (
                           <p>
                             <span className="font-semibold text-slate-900">Buyer Note:</span>{" "}
@@ -455,11 +480,8 @@ export default function SellerPaymentReviewPage() {
 
                         {reviewLocked ? (
                           <p className="mt-3 text-sm text-slate-500">
-                            Review actions are available only while payment is in{" "}
-                            <span className="font-semibold text-slate-900">
-                              PENDING_CONFIRMATION
-                            </span>{" "}
-                            and the latest proof is still pending.
+                            {reviewActionability?.reason ||
+                              "Review actions are available only while payment is awaiting review and the latest proof is still pending."}
                           </p>
                         ) : null}
                       </>

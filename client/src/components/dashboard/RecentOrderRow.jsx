@@ -1,5 +1,6 @@
 import { Eye, Printer } from "lucide-react";
 import { ORDER_STATUS_OPTIONS, toUIStatus } from "../../constants/orderStatus.js";
+import { getOrderContractSummary } from "../../utils/orderContract.ts";
 
 const getStatusBadgeClass = (status) => {
   switch (String(status || "").toLowerCase()) {
@@ -41,7 +42,9 @@ export default function RecentOrderRow({
   onStatusChange,
   onInvoiceAction,
 }) {
+  const statusSummary = getOrderContractSummary(order?.contract);
   const statusValue = toUIStatus(order?.status || "pending");
+  const statusTone = String(statusSummary?.tone || "").trim().toLowerCase();
   const amount =
     order?.totalAmount ?? order?.amount ?? order?.total ?? 0;
   const displayAmount = order?.__displayAmount || String(amount || 0);
@@ -49,8 +52,10 @@ export default function RecentOrderRow({
   const method = order?.method || order?.paymentMethod || "COD";
   const customerName =
     order?.customerName || order?.customer?.name || order?.customer || "Guest";
+  const statusLabel = statusSummary?.label || statusValue;
   const statusNote =
-    statusValue === "pending"
+    statusSummary?.description ||
+    (statusValue === "pending"
       ? "Needs review"
       : statusValue === "processing"
         ? "In progress"
@@ -58,7 +63,19 @@ export default function RecentOrderRow({
           ? "On route"
           : statusValue === "completed"
             ? "Completed"
-            : "Stopped";
+            : "Stopped");
+  const statusClass =
+    statusSummary?.label
+      ? statusTone === "emerald"
+        ? "status-badge status-badge--completed"
+        : statusTone === "sky" || statusTone === "indigo"
+          ? "status-badge status-badge--shipped"
+          : statusTone === "amber"
+            ? "status-badge status-badge--processing"
+            : statusTone === "rose" || statusTone === "orange" || statusTone === "stone"
+              ? "status-badge status-badge--cancelled"
+              : getStatusBadgeClass(statusValue)
+      : getStatusBadgeClass(statusValue);
 
   return (
     <tr>
@@ -83,7 +100,7 @@ export default function RecentOrderRow({
       </td>
       <td>
         <div className="dashboard-recent__status-cell">
-          <span className={getStatusBadgeClass(statusValue)}>{statusValue}</span>
+          <span className={statusClass}>{statusLabel}</span>
           <span className="dashboard-recent__cell-hint">{statusNote}</span>
         </div>
       </td>

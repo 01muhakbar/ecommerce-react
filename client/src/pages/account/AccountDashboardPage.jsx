@@ -18,8 +18,6 @@ import { getCurrentUserStoreApplication } from "../../api/userStoreApplications.
 import { formatCurrency } from "../../utils/format.js";
 import {
   getOrderStatusBadgeClass,
-  getOrderStatusLabel,
-  normalizeOrderStatus,
 } from "../../utils/orderStatus.js";
 import { createSellerWorkspaceRoutes } from "../../utils/sellerWorkspaceRoute.js";
 import {
@@ -27,6 +25,7 @@ import {
   resolvePublicOrderReference,
 } from "../../utils/publicOrderReference.js";
 import { normalizeDashboardSettingCopy } from "../../utils/dashboardSettingCopy.js";
+import { getOrderTruthStatus } from "../../utils/orderTruth.js";
 
 const fetchOrders = async () => {
   const { data } = await api.get("/store/my/orders");
@@ -52,7 +51,8 @@ const getOrderTimestamp = (order) => {
   return Number.isNaN(time) ? 0 : time;
 };
 
-const getPublicOrderRef = (order) => resolvePublicOrderReference(order?.invoiceNo);
+const getPublicOrderRef = (order) =>
+  resolvePublicOrderReference(order?.invoiceNo, order?.ref, order?.invoice, order?.orderRef);
 
 const ONBOARDING_TONE = {
   stone: "bg-slate-100 text-slate-700",
@@ -232,15 +232,11 @@ export default function AccountDashboardPage() {
 
   const orders = data?.data || [];
   const totalOrders = orders.length;
-  const pendingOrders = orders.filter(
-    (order) => normalizeOrderStatus(order.status) === "pending"
-  ).length;
+  const pendingOrders = orders.filter((order) => getOrderTruthStatus(order).bucket === "pending").length;
   const processingOrders = orders.filter(
-    (order) => normalizeOrderStatus(order.status) === "processing"
+    (order) => getOrderTruthStatus(order).bucket === "processing"
   ).length;
-  const completeOrders = orders.filter(
-    (order) => normalizeOrderStatus(order.status) === "complete"
-  ).length;
+  const completeOrders = orders.filter((order) => getOrderTruthStatus(order).bucket === "complete").length;
 
   const statCards = [
     {
@@ -402,7 +398,7 @@ export default function AccountDashboardPage() {
                   {recentOrders.map((order) => {
                     const publicOrderRef = getPublicOrderRef(order);
                     const trackingPath = buildPublicOrderTrackingPath(publicOrderRef);
-                    const statusLabel = getOrderStatusLabel(order.status);
+                    const truthStatus = getOrderTruthStatus(order);
                     return (
                       <tr
                         key={order.id}
@@ -420,10 +416,10 @@ export default function AccountDashboardPage() {
                         <td className="px-4 py-3">
                           <span
                             className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getOrderStatusBadgeClass(
-                              order.status
+                              truthStatus.bucket
                             )}`}
                           >
-                            {statusLabel}
+                            {truthStatus.label}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-slate-600">-</td>

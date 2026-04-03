@@ -2,11 +2,17 @@ import { useEffect, useRef } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useAdminAuth } from "../auth/authDomainHooks.js";
+import {
+  readPendingAuthNotice,
+  resolveUnauthorizedNotice,
+} from "../auth/authSessionNotice.js";
 
 const fetchMe = async () => {
   const res = await fetch("/api/auth/me");
   if (!res.ok) {
-    throw new Error("Failed to fetch me");
+    const error = new Error("Failed to fetch me");
+    error.status = res.status;
+    throw error;
   }
   return res.json();
 };
@@ -49,7 +55,8 @@ export default function AdminGuard() {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/admin/login" replace state={{ from: location }} />;
+    const authNotice = readPendingAuthNotice();
+    return <Navigate to="/admin/login" replace state={{ from: location, authNotice }} />;
   }
 
   if (meQuery.isLoading) {
@@ -61,9 +68,12 @@ export default function AdminGuard() {
   }
 
   if (meQuery.isError) {
-    const status = meQuery.error?.response?.status;
+    const status = Number(meQuery.error?.response?.status || meQuery.error?.status || 0);
     if (status === 401 || status === 403) {
-      return <Navigate to="/admin/login" replace state={{ from: location }} />;
+      const authNotice =
+        readPendingAuthNotice() ||
+        resolveUnauthorizedNotice({ status });
+      return <Navigate to="/admin/login" replace state={{ from: location, authNotice }} />;
     }
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 text-sm text-slate-600">
@@ -79,14 +89,16 @@ export default function AdminGuard() {
   }
 
   if (!me) {
-    return <Navigate to="/admin/login" replace state={{ from: location }} />;
+    const authNotice = readPendingAuthNotice();
+    return <Navigate to="/admin/login" replace state={{ from: location, authNotice }} />;
   }
 
   const role = String(me?.role || "").toLowerCase();
   const isAdmin = ["admin", "super_admin", "superadmin", "staff"].includes(role);
 
   if (!isAdmin) {
-    return <Navigate to="/admin/login" replace state={{ from: location }} />;
+    const authNotice = readPendingAuthNotice();
+    return <Navigate to="/admin/login" replace state={{ from: location, authNotice }} />;
   }
 
   return <Outlet context={{ user: me }} />;

@@ -1,5 +1,20 @@
 import { api } from "./axios";
 
+type StatusMeta = {
+  code?: string;
+  label?: string;
+  tone?: string;
+  description?: string | null;
+  isFinal?: boolean;
+};
+
+type ReviewMeta = {
+  code?: string;
+  label?: string;
+  tone?: string;
+  description?: string | null;
+};
+
 export type SellerReviewProofSummary = {
   id: number;
   proofImageUrl: string;
@@ -10,6 +25,7 @@ export type SellerReviewProofSummary = {
   note?: string | null;
   reviewNote?: string | null;
   reviewStatus: "PENDING" | "APPROVED" | "REJECTED" | string;
+  reviewMeta?: ReviewMeta;
   reviewedByUserId?: number | null;
   reviewedAt?: string | null;
   createdAt?: string | null;
@@ -23,7 +39,9 @@ export type SellerSuborderReviewItem = {
   storeId: number;
   storeName: string;
   paymentStatus: string;
+  paymentStatusMeta?: StatusMeta;
   fulfillmentStatus: string;
+  fulfillmentStatusMeta?: StatusMeta;
   totalAmount: number;
   paidAt?: string | null;
   createdAt?: string | null;
@@ -48,10 +66,16 @@ export type SellerSuborderReviewItem = {
     paymentType: string;
     amount: number;
     status: string;
+    statusMeta?: StatusMeta;
     qrImageUrl?: string | null;
     expiresAt?: string | null;
     paidAt?: string | null;
     proofSubmitted?: boolean;
+    reviewActionability?: {
+      canReview: boolean;
+      label?: string | null;
+      reason?: string | null;
+    };
     proof?: SellerReviewProofSummary | null;
   } | null;
 };

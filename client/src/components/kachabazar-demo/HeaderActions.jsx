@@ -37,7 +37,7 @@ export default function HeaderActions({
 
   const handleToggleNotif = () => {
     if (!isAuthenticated) {
-      navigate("/auth/login");
+      navigate("/user/notifications");
       return;
     }
     setOpenMenu((prev) => (prev === "notif" ? null : "notif"));
@@ -45,7 +45,7 @@ export default function HeaderActions({
 
   const handleToggleAccount = () => {
     if (!isAuthenticated) {
-      navigate("/auth/login");
+      navigate("/user/my-account");
       return;
     }
     setOpenMenu((prev) => (prev === "account" ? null : "account"));

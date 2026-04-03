@@ -1,10 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { useAccountAuth } from "../../auth/authDomainHooks.js";
 import { api } from "../../api/axios.ts";
 import { useCart } from "../../hooks/useCart.ts";
 import * as cartApi from "../../api/cartApi.ts";
 import { clearGuestCart, getGuestCart } from "../../utils/guestCart.ts";
+import AuthNotice from "../../components/auth/AuthNotice.jsx";
+import PasswordVisibilityButton from "../../components/auth/PasswordVisibilityButton.jsx";
+import { getRetryAfterSeconds } from "../../utils/authRateLimit.js";
+import { clearPendingAuthNotice, readPendingAuthNotice } from "../../auth/authSessionNotice.js";
+import {
+  PASSWORD_HIDDEN_HELPER,
+  buildCooldownButtonLabel,
+  buildRetryAfterMessage,
+} from "../../utils/authUi.js";
 
 const PENDING_ADD_KEY = "pending_cart_add";
 const PENDING_ADD_CONSUMED_KEY = "pending_cart_add_consumed";
@@ -18,7 +27,14 @@ export default function StoreLoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const emailRef = useRef(null);
+  const passwordRef = useRef(null);
+  const statusRef = useRef(null);
+  const errorRef = useRef(null);
   const socialLogin = storeSettings?.socialLogin || {};
   const socialButtons = [
     { id: "google", label: "Continue with Google", enabled: Boolean(socialLogin.googleEnabled) },
@@ -36,9 +52,40 @@ export default function StoreLoginPage() {
     }
   }, [isAuthenticated, navigate]);
 
+  useEffect(() => {
+    const nextMessage = String(
+      location.state?.authNotice || location.state?.passwordResetMessage || readPendingAuthNotice() || ""
+    ).trim();
+    if (nextMessage) {
+      setStatusMessage(nextMessage);
+      clearPendingAuthNotice();
+    }
+  }, [location.state]);
+
+  useEffect(() => {
+    if (cooldownSeconds <= 0) return undefined;
+    const timer = window.setTimeout(() => {
+      setCooldownSeconds((value) => Math.max(0, value - 1));
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [cooldownSeconds]);
+
+  useEffect(() => {
+    if (error && errorRef.current) {
+      errorRef.current.focus();
+    }
+  }, [error]);
+
+  useEffect(() => {
+    if (statusMessage && statusRef.current) {
+      statusRef.current.focus();
+    }
+  }, [statusMessage]);
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
+    setStatusMessage("");
     setIsSubmitting(true);
     try {
       const response = await api.post(
@@ -138,8 +185,15 @@ export default function StoreLoginPage() {
         return;
       }
       setError(
-        err?.response?.data?.message || "Login failed. Please check your credentials."
+        err?.response?.status === 429 && getRetryAfterSeconds(err) > 0
+          ? buildRetryAfterMessage(getRetryAfterSeconds(err))
+          : err?.response?.data?.message ||
+              "We couldn't sign you in. Check your email and password and try again."
       );
+      const retryAfterSeconds = getRetryAfterSeconds(err);
+      if (retryAfterSeconds > 0) {
+        setCooldownSeconds(retryAfterSeconds);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -151,42 +205,66 @@ export default function StoreLoginPage() {
       <p className="mt-1 text-sm text-slate-500">Sign in to access your account.</p>
       <form onSubmit={handleSubmit} className="mt-6 space-y-4">
         <div>
-          <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+          <label htmlFor="store-login-email" className="text-xs font-semibold uppercase tracking-widest text-slate-500">
             Email
           </label>
           <input
+            id="store-login-email"
+            ref={emailRef}
             type="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
             placeholder="you@email.com"
+            autoComplete="email"
             required
           />
         </div>
         <div>
-          <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+          <label htmlFor="store-login-password" className="text-xs font-semibold uppercase tracking-widest text-slate-500">
             Password
           </label>
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-            placeholder="••••••••"
-            required
-          />
-        </div>
-        {error && (
-          <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-            {error}
+          <div className="relative mt-2">
+            <input
+              id="store-login-password"
+              ref={passwordRef}
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 pr-16 text-sm"
+              placeholder="••••••••"
+              autoComplete="current-password"
+              aria-describedby="store-login-password-helper"
+              required
+            />
+            <PasswordVisibilityButton
+              visible={showPassword}
+              onToggle={() => setShowPassword((value) => !value)}
+            />
           </div>
-        )}
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <span id="store-login-password-helper" className="text-xs text-slate-500">
+              {PASSWORD_HIDDEN_HELPER}
+            </span>
+            <Link to="/auth/forgot-password" className="text-xs font-semibold text-slate-900 hover:underline">
+              Forgot password?
+            </Link>
+          </div>
+        </div>
+        <AuthNotice id="store-login-status" tone="success" focusRef={statusRef}>
+          {statusMessage}
+        </AuthNotice>
+        <AuthNotice id="store-login-error" tone="error" live="assertive" focusRef={errorRef}>
+          {error}
+        </AuthNotice>
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || cooldownSeconds > 0}
           className="w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
         >
-          {isSubmitting ? "Signing in..." : "Sign in"}
+          {isSubmitting
+            ? "Signing in..."
+            : buildCooldownButtonLabel(cooldownSeconds, "Sign in")}
         </button>
 
         {socialButtons.length > 0 ? (

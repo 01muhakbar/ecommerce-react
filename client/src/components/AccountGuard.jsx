@@ -1,5 +1,9 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAccountAuth } from "../auth/authDomainHooks.js";
+import {
+  ACCOUNT_LOGIN_REQUIRED_NOTICE,
+  buildLoginRedirectState,
+} from "../auth/loginRedirectState.ts";
 
 export default function AccountGuard() {
   const location = useLocation();
@@ -13,7 +17,16 @@ export default function AccountGuard() {
   }
 
   if (!isAuthenticated || !user) {
-    return <Navigate to="/auth/login" replace state={{ from: location }} />;
+    return (
+      <Navigate
+        to="/auth/login"
+        replace
+        state={buildLoginRedirectState({
+          from: location,
+          authNotice: ACCOUNT_LOGIN_REQUIRED_NOTICE,
+        })}
+      />
+    );
   }
 
   return <Outlet context={{ user }} />;

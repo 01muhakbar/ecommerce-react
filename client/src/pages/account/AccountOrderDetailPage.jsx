@@ -125,6 +125,7 @@ export default function AccountOrderDetailPage() {
   const subtotalValue = order.subtotal ?? 0;
   const groupedOrder = groupedQuery.data?.data ?? null;
   const parentPaymentStatus = groupedOrder?.paymentStatus || order.paymentStatus;
+  const parentPaymentMeta = groupedOrder?.paymentStatusMeta || order.paymentStatusMeta || null;
   const paymentEntry = order.paymentEntry || groupedOrder?.paymentEntry || null;
   const statusSummary = getOrderContractSummary(order.contract);
 
@@ -155,7 +156,12 @@ export default function AccountOrderDetailPage() {
           <div className="mt-3 grid gap-2 text-sm text-slate-600 md:grid-cols-2">
             <div>Payment: {order.paymentMethod || "-"}</div>
             <div>
-              <PaymentStatusBadge status={parentPaymentStatus} prefix="Parent" />
+              <PaymentStatusBadge
+                status={parentPaymentStatus}
+                label={parentPaymentMeta?.label}
+                tone={parentPaymentMeta?.tone}
+                prefix="Parent"
+              />
             </div>
             <div>Total: {money(order.totalAmount || 0)}</div>
             <div>Discount: {money(discountValue)}</div>
@@ -186,7 +192,12 @@ export default function AccountOrderDetailPage() {
                 Read-only payment lifecycle by store for this order.
               </p>
             </div>
-            <PaymentStatusBadge status={groupedOrder.paymentStatus} prefix="Parent" />
+            <PaymentStatusBadge
+              status={groupedOrder.paymentStatus}
+              label={groupedOrder.paymentStatusMeta?.label}
+              tone={groupedOrder.paymentStatusMeta?.tone}
+              prefix="Parent"
+            />
           </div>
           {groupedOrder.checkoutMode === "LEGACY" ? (
             <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -205,9 +216,19 @@ export default function AccountOrderDetailPage() {
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className="font-semibold text-slate-900">{group.storeName}</h4>
-                          <PaymentStatusBadge status={group.paymentStatus} prefix="Suborder" />
+                          <PaymentStatusBadge
+                            status={group.paymentStatus}
+                            label={group.paymentStatusMeta?.label}
+                            tone={group.paymentStatusMeta?.tone}
+                            prefix="Suborder"
+                          />
                           {group.payment?.status || group.paymentReadModel ? (
-                            <PaymentStatusBadge status={splitPayment.status} prefix="Payment" />
+                            <PaymentStatusBadge
+                              status={splitPayment.status}
+                              label={splitPayment.statusMeta?.label}
+                              tone={splitPayment.statusMeta?.tone}
+                              prefix="Payment"
+                            />
                           ) : null}
                           {group.payment?.proof?.reviewStatus ? (
                             <ProofReviewBadge
@@ -228,7 +249,7 @@ export default function AccountOrderDetailPage() {
                       </div>
                       <div className="text-right text-sm text-slate-600">
                         <p className="font-semibold text-slate-900">{money(group.totalAmount)}</p>
-                        <p>Fulfillment: {group.fulfillmentStatus}</p>
+                        <p>Fulfillment: {group.fulfillmentStatusMeta?.label || group.fulfillmentStatus}</p>
                       </div>
                     </div>
                     <div className="mt-3 grid gap-3 md:grid-cols-[160px_minmax(0,1fr)]">

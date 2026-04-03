@@ -8,6 +8,11 @@ import { api } from "../api/axios.ts";
 import { onUnauthorized } from "./authEvents.ts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useBuyerCartSessionSync } from "./useBuyerCartSessionSync.js";
+import {
+  DEFAULT_SESSION_EXPIRED_NOTICE,
+  resolveUnauthorizedNotice,
+  storePendingAuthNotice,
+} from "./authSessionNotice.js";
 
 export const AuthContext = createContext(null);
 
@@ -53,7 +58,8 @@ export function AuthProvider({ children }) {
     delete api.defaults.headers.common.Authorization;
   };
 
-  const refreshSession = async () => {
+  const refreshSession = async (options = {}) => {
+    const markExpiredOnUnauthorized = options?.markExpiredOnUnauthorized === true;
     setIsLoading(true);
     try {
       const response = await meRequest();
@@ -63,6 +69,9 @@ export function AuthProvider({ children }) {
         response?.data ??
         (response && response.id ? response : null);
       if (!nextUser) {
+        if (markExpiredOnUnauthorized) {
+          storePendingAuthNotice(DEFAULT_SESSION_EXPIRED_NOTICE);
+        }
         clearSession();
         return;
       }
@@ -76,6 +85,13 @@ export function AuthProvider({ children }) {
     } catch (error) {
       const status = error?.response?.status;
       if (status === 401 || status === 403) {
+        if (markExpiredOnUnauthorized) {
+          storePendingAuthNotice(resolveUnauthorizedNotice({
+            status,
+            code: error?.response?.data?.code,
+            message: error?.response?.data?.message,
+          }));
+        }
         clearSession();
         return;
       }
@@ -118,7 +134,13 @@ export function AuthProvider({ children }) {
       return { ok: true };
     } catch (error) {
       clearSession();
-      return { ok: false, message: "Login failed." };
+      return {
+        ok: false,
+        status: error?.response?.status || null,
+        code: error?.response?.data?.code || "",
+        message: error?.response?.data?.message || "Login failed.",
+        data: error?.response?.data?.data || null,
+      };
     }
   };
 
@@ -143,11 +165,12 @@ export function AuthProvider({ children }) {
     })();
     const shouldProbe = hasToken || readAuthHint();
     if (shouldProbe) {
-      refreshSession();
+      refreshSession({ markExpiredOnUnauthorized: true });
     } else {
       setIsLoading(false);
     }
-    const unsubscribe = onUnauthorized(() => {
+    const unsubscribe = onUnauthorized((payload) => {
+      storePendingAuthNotice(resolveUnauthorizedNotice(payload));
       clearSession();
       resetBuyerCartSessionSync();
     });

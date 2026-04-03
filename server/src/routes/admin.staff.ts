@@ -6,6 +6,10 @@ import { Router } from "express";
 import { Op } from "sequelize";
 import * as models from "../models/index.js";
 import { SELLER_PERMISSION_KEYS } from "../services/seller/permissionMap.js";
+import {
+  AdminPublicAuthError,
+  approveAdminPendingStaffAccount,
+} from "../services/adminPublicAuth.service.js";
 
 const { User } = models as { User?: any };
 const router = Router();
@@ -15,6 +19,8 @@ fs.mkdirSync(uploadDir, { recursive: true });
 
 const MANAGED_ROLES = ["staff", "admin", "super_admin", "seller"] as const;
 const MANAGED_ROLE_SET = new Set<string>(MANAGED_ROLES);
+const STAFF_PASSWORD_POLICY_MESSAGE =
+  "Password must be at least 8 characters and include at least 1 letter and 1 number.";
 const SAFE_SELLER_PERMISSION_KEYS = [
   SELLER_PERMISSION_KEYS.STORE_VIEW,
   SELLER_PERMISSION_KEYS.STORE_EDIT,
@@ -165,6 +171,14 @@ function parseStringArray(value: unknown): string[] {
   return [];
 }
 
+function isCreatePasswordValid(value: string) {
+  return value.length >= 8 && /[A-Za-z]/.test(value) && /\d/.test(value);
+}
+
+function isManagedRole(value: string): value is (typeof MANAGED_ROLES)[number] {
+  return MANAGED_ROLE_SET.has(value);
+}
+
 function normalizeAvatarUrl(value: unknown) {
   const text = String(value ?? "").trim();
   if (!text) return null;
@@ -205,6 +219,7 @@ function resolveSellerAccess(input: {
 }
 
 function toStaffItem(row: any) {
+  const normalizedStatus = String(row.status ?? "").toLowerCase().trim();
   return {
     id: row.id,
     name: row.name,
@@ -214,7 +229,9 @@ function toStaffItem(row: any) {
     role: row.role,
     sellerRoleCode: row.sellerRoleCode ?? row.seller_role_code ?? null,
     permissionKeys: parseStringArray(row.permissionKeys ?? row.permission_keys),
-    isActive: String(row.status ?? "").toLowerCase() !== "inactive",
+    status: normalizedStatus || "active",
+    isActive: normalizedStatus === "active",
+    isPendingApproval: normalizedStatus === "pending_approval",
     isPublished:
       typeof row.isPublished === "boolean"
         ? row.isPublished
@@ -239,13 +256,51 @@ async function ensureEmailAvailable(email: string, excludeId?: number) {
   if (excludeId) where.id = { [Op.ne]: excludeId };
   const existing = await (User as any).findOne({ where });
   if (existing) {
-    throw fail("Email is already used by another staff account.", 409);
+    throw fail("Email is already used by another account.", 409);
+  }
+}
+
+async function ensurePhoneNumberAvailable(phoneNumber?: string | null, excludeId?: number) {
+  const normalizedPhoneNumber = toOptionalText(phoneNumber);
+  if (!normalizedPhoneNumber) return;
+  const where: any = { phoneNumber: normalizedPhoneNumber };
+  if (excludeId) where.id = { [Op.ne]: excludeId };
+  const existing = await (User as any).findOne({ where });
+  if (existing) {
+    throw fail("Contact number is already used by another account.", 409);
   }
 }
 
 function buildAvatarPath(file?: Express.Multer.File) {
   if (!file) return null;
   return `/uploads/staff/${file.filename}`;
+}
+
+function isSelfSuperAdminDemotion(input: {
+  actorId?: unknown;
+  actorRole?: unknown;
+  targetId: number;
+  currentRole: string;
+  nextRole: string;
+}) {
+  const actorId = Number(input.actorId);
+  if (!Number.isFinite(actorId)) return false;
+  const actorRole = normalizeRole(String(input.actorRole ?? ""));
+  if (actorRole !== "super_admin") return false;
+  if (actorId !== input.targetId) return false;
+  return input.currentRole === "super_admin" && input.nextRole !== "super_admin";
+}
+
+function isSelfManagedAccountAction(input: {
+  actorId?: unknown;
+  actorRole?: unknown;
+  targetId: number;
+}) {
+  const actorId = Number(input.actorId);
+  if (!Number.isFinite(actorId)) return false;
+  const actorRole = normalizeRole(String(input.actorRole ?? ""));
+  if (!MANAGED_ROLE_SET.has(actorRole)) return false;
+  return actorId === input.targetId;
 }
 
 function toWhereRole(role: string | null) {
@@ -320,9 +375,9 @@ router.post("/", staffImageUpload, async (req, res) => {
     const email = toOptionalText(req.body.email);
     const phoneNumber = toOptionalText(req.body.phoneNumber);
     const password = toOptionalText(req.body.password);
-    const role = normalizeRole(req.body.role);
     const isActive = parseBooleanField(req.body.isActive);
     const isPublished = parseBooleanField(req.body.isPublished);
+    const role = normalizeRole(req.body.role);
 
     if (!name || !email || !password) {
       throw fail("Name, email, and password are required.");
@@ -330,15 +385,15 @@ router.post("/", staffImageUpload, async (req, res) => {
     if (!/^\S+@\S+\.\S+$/.test(email)) {
       throw fail("Please enter a valid email address.");
     }
-    if (password.length < 6) {
-      throw fail("Password must be at least 6 characters.");
+    if (!isCreatePasswordValid(password)) {
+      throw fail(STAFF_PASSWORD_POLICY_MESSAGE);
     }
-    if (!MANAGED_ROLE_SET.has(role)) {
-      throw fail("Unsupported staff role.");
+    if (!isManagedRole(role)) {
+      throw fail("Unsupported account role.");
     }
 
     await ensureEmailAvailable(email);
-
+    await ensurePhoneNumberAvailable(phoneNumber);
     const sellerAccess = resolveSellerAccess({
       role,
       permissionKeys: req.body.permissionKeys,
@@ -383,6 +438,8 @@ router.patch("/:id", staffImageUpload, async (req, res) => {
     const isActive = parseBooleanField(req.body.isActive);
     const isPublished = parseBooleanField(req.body.isPublished);
     const password = toOptionalText(req.body.password);
+    const currentRole = normalizeRole(String(user.role ?? "staff"));
+    const actorUser = (req as any).user;
 
     if (name) update.name = name;
     if (email) {
@@ -393,15 +450,33 @@ router.patch("/:id", staffImageUpload, async (req, res) => {
       update.email = email;
     }
     if (phoneNumberProvided) {
-      update.phoneNumber = toOptionalText(req.body.phoneNumber);
+      const nextPhoneNumber = toOptionalText(req.body.phoneNumber);
+      await ensurePhoneNumberAvailable(nextPhoneNumber, id);
+      update.phoneNumber = nextPhoneNumber;
     }
     if (password) {
-      if (password.length < 6) {
-        throw fail("Password must be at least 6 characters.");
+      if (!isCreatePasswordValid(password)) {
+        throw fail(STAFF_PASSWORD_POLICY_MESSAGE);
       }
       update.password = await bcrypt.hash(password, 10);
     }
     if (typeof isActive === "boolean") {
+      if (
+        isSelfManagedAccountAction({
+          actorId: actorUser?.id,
+          actorRole: actorUser?.role,
+          targetId: id,
+        }) &&
+        !isActive
+      ) {
+        throw fail(
+          "You cannot deactivate your own account from this account management flow.",
+          409
+        );
+      }
+      if (currentRole === "staff" && String(user.status ?? "").toLowerCase().trim() === "pending_approval") {
+        throw fail("Use the approve action to activate this staff account.", 409);
+      }
       update.status = isActive ? "active" : "inactive";
     }
     if (typeof isPublished === "boolean") {
@@ -411,9 +486,24 @@ router.patch("/:id", staffImageUpload, async (req, res) => {
       update.avatarUrl = buildAvatarPath(req.file);
     }
 
-    const normalizedRole = roleProvided ? normalizeRole(req.body.role) : String(user.role ?? "staff");
-    if (!MANAGED_ROLE_SET.has(normalizedRole)) {
-      throw fail("Unsupported staff role.");
+    const normalizedRole = roleProvided ? normalizeRole(req.body.role) : currentRole;
+    if (!isManagedRole(normalizedRole)) {
+      throw fail("Unsupported account role.");
+    }
+    if (
+      roleProvided &&
+      isSelfSuperAdminDemotion({
+        actorId: actorUser?.id,
+        actorRole: actorUser?.role,
+        targetId: id,
+        currentRole,
+        nextRole: normalizedRole,
+      })
+    ) {
+      throw fail(
+        "You cannot lower your own role from Super Admin in this account management flow.",
+        409
+      );
     }
     if (roleProvided) {
       update.role = normalizedRole;
@@ -445,12 +535,53 @@ router.patch("/:id", staffImageUpload, async (req, res) => {
   }
 });
 
+// POST /api/admin/staff/:id/approve
+router.post("/:id/approve", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const result = await approveAdminPendingStaffAccount({
+      userId: id,
+      actorName: String((req as any).user?.name || "").trim() || null,
+    });
+    return res.json({
+      success: true,
+      message: result.message,
+      data: {
+        approvalEmailSent: result.approvalEmailSent,
+        user: result.user,
+      },
+    });
+  } catch (error) {
+    if (error instanceof AdminPublicAuthError) {
+      return res.status(error.status).json({
+        success: false,
+        code: error.code,
+        message: error.message,
+      });
+    }
+    return sendRouteError(res, error, "Failed to approve staff account.");
+  }
+});
+
 // DELETE /api/admin/staff/:id
 router.delete("/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
     const user = await (User as any).findByPk(id);
     if (!user) return res.status(404).json({ success: false, message: "Staff record not found." });
+    const actorUser = (req as any).user;
+    if (
+      isSelfManagedAccountAction({
+        actorId: actorUser?.id,
+        actorRole: actorUser?.role,
+        targetId: id,
+      })
+    ) {
+      throw fail(
+        "You cannot delete your own account from this account management flow.",
+        409
+      );
+    }
     await user.destroy();
     return res.json({ success: true });
   } catch (error) {

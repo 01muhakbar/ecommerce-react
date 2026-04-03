@@ -1,5 +1,19 @@
 import { api } from "./axios";
 
+type StatusMeta = {
+  code?: string;
+  label?: string;
+  tone?: string;
+  description?: string | null;
+  isFinal?: boolean;
+};
+
+type ReviewMeta = {
+  code?: string;
+  label?: string;
+  tone?: string;
+};
+
 export type AdminPaymentAuditListItem = {
   orderId: number;
   orderNumber: string;
@@ -10,6 +24,7 @@ export type AdminPaymentAuditListItem = {
   totalStores: number;
   grandTotal: number;
   paymentStatus: string;
+  paymentStatusMeta?: StatusMeta;
   createdAt?: string | null;
   counts: {
     paidSuborders: number;
@@ -46,7 +61,9 @@ export type AdminPaymentAuditDetailResponse = {
       invoiceNo: string;
       checkoutMode: string;
       paymentStatus: string;
+      paymentStatusMeta?: StatusMeta;
       orderStatus: string;
+      orderStatusMeta?: StatusMeta;
       paymentMethod?: string | null;
       customerName: string;
       customerPhone?: string | null;
@@ -164,7 +181,9 @@ export type AdminPaymentAuditDetailResponse = {
       totalAmount: number;
       paymentMethod: string;
       paymentStatus: string;
+      paymentStatusMeta?: StatusMeta;
       fulfillmentStatus: string;
+      fulfillmentStatusMeta?: StatusMeta;
       paidAt?: string | null;
       paymentProfile?: {
         id: number;
@@ -195,6 +214,7 @@ export type AdminPaymentAuditDetailResponse = {
         paymentType: string;
         amount: number;
         status: string;
+        statusMeta?: StatusMeta;
         qrImageUrl?: string | null;
         qrPayload?: string | null;
         expiresAt?: string | null;
@@ -210,6 +230,7 @@ export type AdminPaymentAuditDetailResponse = {
           note?: string | null;
           reviewNote?: string | null;
           reviewStatus: string;
+          reviewMeta?: ReviewMeta;
           reviewedByUserId?: number | null;
           reviewedByName?: string | null;
           uploadedByUserId?: number | null;
@@ -220,7 +241,9 @@ export type AdminPaymentAuditDetailResponse = {
         logs?: Array<{
           id: number;
           oldStatus?: string | null;
+          oldStatusMeta?: StatusMeta | null;
           newStatus: string;
+          newStatusMeta?: StatusMeta | null;
           actorType: string;
           actorId?: number | null;
           actorName?: string | null;

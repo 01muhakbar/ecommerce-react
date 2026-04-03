@@ -104,6 +104,7 @@ export default function StoreCheckoutSuccessPage() {
     Boolean(stripeVerification?.paid) ||
     stripeOrderPaid ||
     String(stripeContract?.paymentStatus || "").toUpperCase() === "PAID";
+  const stripeActionLabel = stripeContinueAction?.label || "Continue Stripe Payment";
   const stripeVerificationError =
     verifyStripeQuery.error?.response?.data?.message ||
     verifyStripeQuery.error?.message ||
@@ -224,7 +225,7 @@ export default function StoreCheckoutSuccessPage() {
           </div>
           {!stripeContinueAction?.enabled ? (
             <p className="mt-3 text-center text-sm text-slate-500">
-              Payment is not currently actionable from this screen.
+              We could not confirm the latest payment actionability yet. Open tracking for the newest backend status.
             </p>
           ) : null}
           {retryStripeMutation.isError ? (
@@ -273,7 +274,7 @@ export default function StoreCheckoutSuccessPage() {
           </div>
           {!stripeContinueAction?.enabled ? (
             <p className="mt-3 text-center text-sm text-slate-500">
-              Payment is not currently actionable from this screen.
+              We could not confirm the latest payment actionability yet. Open tracking for the newest backend status.
             </p>
           ) : null}
           {retryStripeMutation.isError ? (
@@ -326,6 +327,7 @@ export default function StoreCheckoutSuccessPage() {
               onClick={handleRetryStripe}
               disabled={retryStripeMutation.isPending}
               busy={retryStripeMutation.isPending}
+              label={stripeActionLabel}
             />
             <Link
               to={trackingPath}
@@ -341,6 +343,47 @@ export default function StoreCheckoutSuccessPage() {
                 "We could not reopen Stripe Checkout."}
             </p>
           ) : null}
+        </div>
+      </section>
+    );
+  }
+
+  if (
+    isStripeFlow &&
+    !stripePaid &&
+    !stripeContinueAction?.enabled &&
+    (stripeCancelled || Boolean(stripeSessionId) || stripeOrderStatusQuery.isSuccess)
+  ) {
+    return (
+      <section className="mx-auto max-w-[1100px] px-3 py-6 sm:px-4 sm:py-8 lg:px-6">
+        <div className={cardClass}>
+          <div className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-amber-600 sm:h-20 sm:w-20">
+            <AlertCircle className="h-8 w-8 sm:h-10 sm:w-10" />
+          </div>
+          <p className="mt-5 text-center text-sm font-semibold uppercase tracking-[0.14em] text-amber-600">
+            {stripeStatusSummary?.label || "Payment unavailable"}
+          </p>
+          <h1 className="mt-2 text-center text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            Stripe payment is not actionable
+          </h1>
+          <p className="mx-auto mt-2 max-w-xl text-center text-sm text-slate-500 sm:text-base">
+            {stripeStatusSummary?.description ||
+              "The backend no longer allows this Stripe payment to continue from the current state."}
+          </p>
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+            <Link
+              to={trackingPath}
+              className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Track Order
+            </Link>
+            <Link
+              to="/account/orders"
+              className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Open My Orders
+            </Link>
+          </div>
         </div>
       </section>
     );

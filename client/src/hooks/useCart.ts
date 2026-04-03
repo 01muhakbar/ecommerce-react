@@ -3,6 +3,10 @@ import { useLocation, useNavigate } from "react-router-dom";
 import * as cartApi from "../api/cartApi.ts";
 import { useCartStore } from "../store/cart.store.ts";
 import {
+  buildLoginRedirectState,
+  CART_LOGIN_REQUIRED_NOTICE,
+} from "../auth/loginRedirectState.ts";
+import {
   addGuestItemSnapshot,
   getGuestCart,
   hasGuestCartStorage,
@@ -325,7 +329,15 @@ export function useCart() {
             snapshot,
             from: fromPath,
           });
-          navigate("/auth/login", { state: { from: fromPath } });
+          navigate(
+            "/auth/login",
+            {
+              state: buildLoginRedirectState({
+                from: fromPath,
+                authNotice: CART_LOGIN_REQUIRED_NOTICE,
+              }),
+            }
+          );
           return;
         }
         setError(err);

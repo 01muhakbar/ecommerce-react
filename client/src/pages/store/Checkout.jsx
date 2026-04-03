@@ -28,6 +28,10 @@ import {
   toUserAddressPayload,
 } from "../../utils/userAddress.ts";
 import { resolvePublicOrderReference } from "../../utils/publicOrderReference.js";
+import {
+  buildLoginRedirectState,
+  CHECKOUT_LOGIN_REQUIRED_NOTICE,
+} from "../../auth/loginRedirectState.ts";
 
 const INPUT_CLASS =
   "mt-2 h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 shadow-[0_1px_1px_rgba(15,23,42,0.03)] focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100";
@@ -663,7 +667,16 @@ export default function CheckoutPage() {
     }
     if (isAuthLoading) return;
     if (user) return;
-    navigate("/auth/login");
+    navigate(
+      "/auth/login",
+      {
+        replace: true,
+        state: buildLoginRedirectState({
+          from: "/checkout",
+          authNotice: CHECKOUT_LOGIN_REQUIRED_NOTICE,
+        }),
+      }
+    );
   }, [hasCheckoutAuthHint, isAuthLoading, navigate, user]);
 
   const hasItems = items.length > 0;
@@ -1227,7 +1240,16 @@ export default function CheckoutPage() {
 
   const handleToggleDefaultShipping = async () => {
     if (!resolveHasAuthHint()) {
-      navigate("/auth/login", { replace: true, state: { from: "/checkout" } });
+      navigate(
+        "/auth/login",
+        {
+          replace: true,
+          state: buildLoginRedirectState({
+            from: "/checkout",
+            authNotice: CHECKOUT_LOGIN_REQUIRED_NOTICE,
+          }),
+        }
+      );
       return;
     }
     if (isAddressLoading) return;
@@ -1248,7 +1270,16 @@ export default function CheckoutPage() {
 
     const hasAuthHint = resolveHasAuthHint();
     if (!hasAuthHint) {
-      navigate("/auth/login", { replace: true, state: { from: "/checkout" } });
+      navigate(
+        "/auth/login",
+        {
+          replace: true,
+          state: buildLoginRedirectState({
+            from: "/checkout",
+            authNotice: CHECKOUT_LOGIN_REQUIRED_NOTICE,
+          }),
+        }
+      );
       return;
     }
 
@@ -1421,7 +1452,16 @@ export default function CheckoutPage() {
           ? data.message.trim()
           : "";
       if (err?.response?.status === 401) {
-        navigate("/auth/login", { replace: true, state: { from: "/checkout" } });
+        navigate(
+          "/auth/login",
+          {
+            replace: true,
+            state: buildLoginRedirectState({
+              from: "/checkout",
+              authNotice: CHECKOUT_LOGIN_REQUIRED_NOTICE,
+            }),
+          }
+        );
         return;
       }
       if (err?.response?.status === 409 && Array.isArray(data?.data?.invalidItems)) {

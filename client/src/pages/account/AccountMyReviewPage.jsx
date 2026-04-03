@@ -11,6 +11,10 @@ import {
 } from "../../api/reviews.service.ts";
 import ReviewModal from "../../components/account/ReviewModal.jsx";
 import { resolveProductImageUrl } from "../../utils/productImage.js";
+import {
+  buildLoginRedirectState,
+  REVIEWS_LOGIN_REQUIRED_NOTICE,
+} from "../../auth/loginRedirectState.ts";
 
 const PAGE_SIZE = 16;
 
@@ -228,7 +232,14 @@ export default function AccountMyReviewPage() {
           {activeError?.response?.status === 401 ? (
             <>
               Please login.{" "}
-              <Link to="/auth/login" className="font-medium text-rose-700 underline">
+              <Link
+                to="/auth/login"
+                state={buildLoginRedirectState({
+                  from: "/user/my-reviews",
+                  authNotice: REVIEWS_LOGIN_REQUIRED_NOTICE,
+                })}
+                className="font-medium text-rose-700 underline"
+              >
                 Go to login
               </Link>
             </>

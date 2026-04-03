@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import jwt from "jsonwebtoken";
+import { resolveAuthenticatedUserFromToken } from "../services/authSession.service.js";
 
 const COOKIE_NAME = process.env.AUTH_COOKIE_NAME || "token";
 
@@ -7,16 +7,25 @@ export const protect = (
   req: Request,
   res: Response,
   next: NextFunction
-): void | Response => {
+): Promise<void | Response> | Response => {
   const token = req.cookies?.[COOKIE_NAME];
   if (!token) return res.sendStatus(401);
-  try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET!) as any;
-    (req as any).user = payload;
-    return next();
-  } catch {
-    return res.sendStatus(401);
-  }
+  return resolveAuthenticatedUserFromToken(token)
+    .then((session) => {
+      if (!session) {
+        return res.sendStatus(401);
+      }
+      (req as any).user = {
+        ...session.payload,
+        id: session.authUser.id,
+        email: session.authUser.email,
+        name: session.authUser.name,
+        role: session.authUser.role,
+        status: session.authUser.status,
+      };
+      return next();
+    })
+    .catch(() => res.sendStatus(401));
 };
 
 export const restrictTo = (...roles: string[]) => {

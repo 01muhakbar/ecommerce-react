@@ -17,6 +17,21 @@ const normalize = (value, fallback = "") =>
     .toUpperCase()
     .trim();
 
+const toLabelText = (value, fallback = "") =>
+  String(value || fallback).trim();
+
+const getToneStyle = (tone) => {
+  const value = String(tone || "").trim().toLowerCase();
+  if (value === "emerald") return BADGE_STYLES.emerald;
+  if (value === "amber") return BADGE_STYLES.amber;
+  if (value === "sky") return BADGE_STYLES.sky;
+  if (value === "rose") return BADGE_STYLES.rose;
+  if (value === "orange") return BADGE_STYLES.orange;
+  if (value === "teal") return BADGE_STYLES.teal;
+  if (value === "stone") return BADGE_STYLES.slateStrong;
+  return BADGE_STYLES.slate;
+};
+
 export const getPaymentStatusTone = (status) => {
   const value = normalize(status);
   if (value === "PAID") return BADGE_STYLES.emerald;
@@ -42,18 +57,48 @@ export const getCheckoutModeTone = (mode) => {
   return BADGE_STYLES.slate;
 };
 
+export const getPaymentStatusLabel = (status) => {
+  const value = normalize(status, "UNPAID");
+  if (value === "PAID") return "Paid";
+  if (value === "PARTIALLY_PAID") return "Partially Paid";
+  if (value === "PENDING_CONFIRMATION") return "Awaiting Review";
+  if (value === "FAILED") return "Failed";
+  if (value === "EXPIRED") return "Expired";
+  if (value === "CANCELLED") return "Cancelled";
+  if (value === "REJECTED") return "Rejected";
+  if (value === "CREATED") return "Created";
+  return "Unpaid";
+};
+
+export const getProofReviewLabel = (status) => {
+  const value = normalize(status, "PENDING");
+  if (value === "APPROVED") return "Approved";
+  if (value === "REJECTED") return "Rejected";
+  return "Pending";
+};
+
 function Badge({ children, className = "" }) {
   return <span className={`${baseClass} ${className}`}>{children}</span>;
 }
 
-export function PaymentStatusBadge({ status, prefix = "" }) {
+export function PaymentStatusBadge({ status, prefix = "", label = "", tone = "" }) {
   const value = normalize(status, "UNPAID");
-  return <Badge className={getPaymentStatusTone(value)}>{prefix ? `${prefix} ${value}` : value}</Badge>;
+  const displayLabel = toLabelText(label, getPaymentStatusLabel(value));
+  return (
+    <Badge className={tone ? getToneStyle(tone) : getPaymentStatusTone(value)}>
+      {prefix ? `${prefix} ${displayLabel}` : displayLabel}
+    </Badge>
+  );
 }
 
-export function ProofReviewBadge({ status, prefix = "" }) {
+export function ProofReviewBadge({ status, prefix = "", label = "" }) {
   const value = normalize(status, "PENDING");
-  return <Badge className={getProofReviewTone(value)}>{prefix ? `${prefix} ${value}` : value}</Badge>;
+  const displayLabel = toLabelText(label, getProofReviewLabel(value));
+  return (
+    <Badge className={getProofReviewTone(value)}>
+      {prefix ? `${prefix} ${displayLabel}` : displayLabel}
+    </Badge>
+  );
 }
 
 export function CheckoutModeBadge({ mode, prefix = "" }) {

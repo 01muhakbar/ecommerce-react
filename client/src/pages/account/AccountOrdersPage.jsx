@@ -17,6 +17,10 @@ import {
   getOrderContractSummary,
   isOrderContractFinal,
 } from "../../utils/orderContract.ts";
+import {
+  buildLoginRedirectState,
+  ORDERS_LOGIN_REQUIRED_NOTICE,
+} from "../../auth/loginRedirectState.ts";
 
 const fetchOrders = async (page) => {
   const { data } = await api.get("/store/my/orders", {
@@ -173,7 +177,14 @@ export default function AccountOrdersPage() {
           {error?.response?.status === 401 ? (
             <>
               Please login.{" "}
-              <Link to="/auth/login" className="font-medium text-rose-700 underline">
+              <Link
+                to="/auth/login"
+                state={buildLoginRedirectState({
+                  from: "/user/my-orders",
+                  authNotice: ORDERS_LOGIN_REQUIRED_NOTICE,
+                })}
+                className="font-medium text-rose-700 underline"
+              >
                 Go to login
               </Link>
             </>
@@ -233,7 +244,12 @@ export default function AccountOrdersPage() {
                             <span className={`h-2 w-2 rounded-full ${statusUI.dot}`} />
                             <span className={`ml-2 ${statusUI.text}`}>{statusUI.label}</span>
                           </span>
-                          <PaymentStatusBadge status={order.paymentStatus} prefix="Parent" />
+                          <PaymentStatusBadge
+                            status={order.paymentStatus}
+                            label={order.paymentStatusMeta?.label}
+                            tone={order.paymentStatusMeta?.tone}
+                            prefix="Parent"
+                          />
                           {paymentEntry?.summaryLabel ? (
                             <p className="text-xs text-slate-500">{paymentEntry.summaryLabel}</p>
                           ) : null}

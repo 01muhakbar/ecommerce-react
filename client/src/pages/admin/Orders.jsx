@@ -503,7 +503,12 @@ export default function Orders() {
                             meta={contract?.statusSummary || null}
                           />
                           <div className="origin-left scale-90 opacity-85">
-                            <PaymentStatusBadge status={order.paymentStatus} prefix="Parent Payment" />
+                            <PaymentStatusBadge
+                              status={order.paymentStatus}
+                              label={order.paymentStatusMeta?.label}
+                              tone={order.paymentStatusMeta?.tone}
+                              prefix="Parent Payment"
+                            />
                           </div>
                           <div className="text-[10px] text-slate-400">
                             {contract?.statusSummary?.description ||

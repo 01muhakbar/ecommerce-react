@@ -1,26 +1,10 @@
 // server/src/middleware/requireAuth.ts
 import type { Request, Response, NextFunction } from "express";
-import jwt from "jsonwebtoken";
+import { resolveAuthenticatedUserFromToken } from "../services/authSession.service.js";
 
 const COOKIE_NAME = process.env.AUTH_COOKIE_NAME || "token";
 
-function normalizeRole(input: unknown) {
-  const raw = String(input ?? "").toLowerCase().trim();
-  if (!raw) return null;
-  const snake = raw.replace(/[^a-z0-9]+/g, "_");
-  if (["super_admin", "super-admin", "super admin", "superadmin"].includes(raw) || snake === "super_admin") {
-    return "super_admin";
-  }
-  if (["admin", "administrator"].includes(raw) || snake === "admin") {
-    return "admin";
-  }
-  if (["staf", "staff"].includes(raw) || snake === "staf" || snake === "staff") {
-    return "staff";
-  }
-  return snake;
-}
-
-export default function requireAuth(req: Request, res: Response, next: NextFunction) {
+export default async function requireAuth(req: Request, res: Response, next: NextFunction) {
   if ((req as any).user) {
     return next();
   }
@@ -31,15 +15,11 @@ export default function requireAuth(req: Request, res: Response, next: NextFunct
   }
 
   try {
-    const payload: any = jwt.verify(token, process.env.JWT_SECRET || "dev-secret");
-    const rawRole = payload.role || payload.userRole || payload["https://example.com/role"];
-    const role = normalizeRole(rawRole);
-    (req as any).user = {
-      id: payload.id ?? payload.userId ?? payload.sub,
-      email: payload.email,
-      name: payload.name,
-      role,
-    };
+    const session = await resolveAuthenticatedUserFromToken(token);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+    (req as any).user = session.authUser;
     return next();
   } catch {
     return res.status(401).json({ success: false, message: "Unauthorized" });

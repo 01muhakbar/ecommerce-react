@@ -23,3 +23,27 @@ export const verifyClientRegistrationOtp = async (payload: {
   });
   return response.data;
 };
+
+export const requestClientPasswordReset = async (payload: {
+  email: string;
+  honeypot?: string;
+  startedAt: number;
+}) => {
+  const response = await api.post("/auth/forgot-password", payload, {
+    withCredentials: true,
+  });
+  return response.data;
+};
+
+export const confirmClientPasswordReset = async (payload: {
+  token: string;
+  password: string;
+  passwordConfirm: string;
+  honeypot?: string;
+  startedAt: number;
+}) => {
+  const response = await api.post("/auth/reset-password", payload, {
+    withCredentials: true,
+  });
+  return response.data;
+};

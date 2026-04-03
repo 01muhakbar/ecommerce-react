@@ -29,27 +29,27 @@ describe("<Sidebar /> role visibility", () => {
     CURRENT_USER = null;
   });
 
-  it("Super Admin melihat 'Our Staff'", () => {
+  it("Super Admin melihat 'All Accounts'", () => {
     CURRENT_USER = { role: "Super Admin", routes: [] };
     renderSidebar();
-    expect(screen.getByText(/Our Staff/i)).toBeInTheDocument();
+    expect(screen.getByText(/All Accounts/i)).toBeInTheDocument();
   });
 
-  it("Admin tidak melihat 'Our Staff' meski punya routes lain", () => {
+  it("Admin tidak melihat 'All Accounts' meski punya routes lain", () => {
     CURRENT_USER = {
       role: "admin",
       routes: ["dashboard", "customers", "settings"],
     };
     renderSidebar();
-    expect(screen.queryByText(/Our Staff/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/All Accounts/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Dashboard/i)).toBeInTheDocument();
   });
 
-  it("Staff tidak melihat 'Our Staff' walau memasukkan key di routes", () => {
+  it("Staff tidak melihat 'All Accounts' walau memasukkan key di routes", () => {
     CURRENT_USER = { role: "staff", routes: ["our-staff", "dashboard"] };
     renderSidebar();
     // tetap tidak tampil karena minRole super admin
-    expect(screen.queryByText(/Our Staff/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/All Accounts/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Dashboard/i)).toBeInTheDocument();
   });
 });

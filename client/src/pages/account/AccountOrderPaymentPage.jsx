@@ -370,16 +370,22 @@ function StorePaymentStepList({ groups }) {
       </div>
       <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {groups.map((group) => {
-          const status = group?.payment?.displayStatus || group?.payment?.status || group?.paymentStatus;
+          const readModel = getGroupedPaymentReadModel(group);
+          const status = readModel.status;
           const progress = getBuyerPaymentProgress(status);
+          const statusLabel = readModel.statusMeta?.label || progress.summary;
           return (
             <div key={`${group.suborderId || group.storeId}`} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-semibold text-slate-900">{group.storeName}</p>
-                  <p className="mt-1 text-xs text-slate-500">{progress.summary}</p>
+                  <p className="mt-1 text-xs text-slate-500">{statusLabel}</p>
                 </div>
-                <PaymentStatusBadge status={status} />
+                <PaymentStatusBadge
+                  status={status}
+                  label={readModel.statusMeta?.label}
+                  tone={readModel.statusMeta?.tone}
+                />
               </div>
             </div>
           );
@@ -711,6 +717,7 @@ function PaymentGroupCard({
   const step = resolveBuyerPaymentStep(currentStatus);
   const progress = getBuyerPaymentProgress(currentStatus);
   const expiryMeta = getExpiryMeta(currentStatus, readModel.expiresAt, now);
+  const currentStatusLabel = readModel.statusMeta?.label || currentStatus;
   const StepIcon = step.Icon;
 
   return (
@@ -719,14 +726,24 @@ function PaymentGroupCard({
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-semibold text-slate-900">{group.storeName}</h2>
-            <PaymentStatusBadge status={group.paymentStatus} prefix="Suborder" />
-            <PaymentStatusBadge status={currentStatus} prefix="Payment" />
+            <PaymentStatusBadge
+              status={group.paymentStatus}
+              label={group.paymentStatusMeta?.label}
+              tone={group.paymentStatusMeta?.tone}
+              prefix="Suborder"
+            />
+            <PaymentStatusBadge
+              status={currentStatus}
+              label={readModel.statusMeta?.label}
+              tone={readModel.statusMeta?.tone}
+              prefix="Payment"
+            />
             {payment?.proof?.reviewStatus ? (
               <ProofReviewBadge status={payment.proof.reviewStatus} prefix="Proof" />
             ) : null}
           </div>
           <p className="mt-1 text-sm text-slate-500">
-            Suborder {group.suborderNumber || "-"} • Fulfillment {group.fulfillmentStatus}
+            Suborder {group.suborderNumber || "-"} • Fulfillment {group.fulfillmentStatusMeta?.label || group.fulfillmentStatus}
           </p>
           {group.warning ? <p className="mt-2 text-sm text-amber-700">{group.warning}</p> : null}
         </div>
@@ -1075,7 +1092,7 @@ function PaymentGroupCard({
           {payment?.id && !canSubmitProof && currentStatus !== "EXPIRED" && currentStatus !== "CANCELLED" ? (
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
               Proof submission is locked because payment status is currently{" "}
-              <span className="font-semibold text-slate-900">{currentStatus}</span>.
+              <span className="font-semibold text-slate-900">{currentStatusLabel}</span>.
             </div>
           ) : null}
         </div>
@@ -1254,7 +1271,12 @@ export default function AccountOrderPaymentPage() {
             </h1>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <CheckoutModeBadge mode={order.checkoutMode} />
-              <PaymentStatusBadge status={order.paymentStatus} prefix="Parent" />
+              <PaymentStatusBadge
+                status={order.paymentStatus}
+                label={order.paymentStatusMeta?.label}
+                tone={order.paymentStatusMeta?.tone}
+                prefix="Parent"
+              />
             </div>
             <p className="mt-4 max-w-xl text-sm leading-6 text-slate-600">
               {order.checkoutMode === "MULTI_STORE"

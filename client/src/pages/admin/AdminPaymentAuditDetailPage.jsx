@@ -16,9 +16,33 @@ const formatDateTime = (value) => {
 };
 
 const renderStatusTransition = (log) => {
-  if (!log?.oldStatus) return log?.newStatus || "-";
-  return `${log.oldStatus} -> ${log.newStatus}`;
+  const oldLabel = log?.oldStatusMeta?.label || log?.oldStatus || null;
+  const nextLabel = log?.newStatusMeta?.label || log?.newStatus || "-";
+  if (!oldLabel) return nextLabel;
+  return `${oldLabel} -> ${nextLabel}`;
 };
+
+const getToneBadgeClass = (tone) => {
+  const value = String(tone || "").trim().toLowerCase();
+  if (value === "amber") return "bg-amber-100 text-amber-700";
+  if (value === "sky") return "bg-sky-100 text-sky-700";
+  if (value === "indigo") return "bg-indigo-100 text-indigo-700";
+  if (value === "emerald") return "bg-emerald-100 text-emerald-700";
+  if (value === "rose") return "bg-rose-100 text-rose-700";
+  if (value === "orange") return "bg-orange-100 text-orange-700";
+  return "bg-slate-100 text-slate-700";
+};
+
+function StatusMetaBadge({ label, tone, prefix = "" }) {
+  const text = String(label || "-").trim() || "-";
+  return (
+    <span
+      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getToneBadgeClass(tone)}`}
+    >
+      {prefix ? `${prefix} ${text}` : text}
+    </span>
+  );
+}
 
 export default function AdminPaymentAuditDetailPage() {
   const { orderId } = useParams();
@@ -73,10 +97,17 @@ export default function AdminPaymentAuditDetailPage() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <PaymentStatusBadge status={parent.paymentStatus} prefix="Parent" />
-          <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-            Order {parent.orderStatus}
-          </span>
+          <PaymentStatusBadge
+            status={parent.paymentStatus}
+            label={parent.paymentStatusMeta?.label}
+            tone={parent.paymentStatusMeta?.tone}
+            prefix="Parent"
+          />
+          <StatusMetaBadge
+            label={parent.orderStatusMeta?.label || parent.orderStatus}
+            tone={parent.orderStatusMeta?.tone}
+            prefix="Order"
+          />
         </div>
       </div>
 
@@ -143,6 +174,10 @@ export default function AdminPaymentAuditDetailPage() {
             <p>Created: {formatDateTime(parent.createdAt)}</p>
             <p>Updated: {formatDateTime(parent.updatedAt)}</p>
           </div>
+          <div className="mt-4 space-y-2 text-sm text-slate-600">
+            <p>{parent.paymentStatusMeta?.description || "Parent payment meta is unavailable."}</p>
+            <p>{parent.orderStatusMeta?.description || "Parent order meta is unavailable."}</p>
+          </div>
           {detail.split.checkoutMode === "LEGACY" ? (
             <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               This order predates split-payment flow. Audit is limited to legacy parent order data.
@@ -161,14 +196,23 @@ export default function AdminPaymentAuditDetailPage() {
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-lg font-semibold text-slate-900">{suborder.suborderNumber}</h2>
-                  <PaymentStatusBadge status={suborder.paymentStatus} prefix="Suborder" />
-                  <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                    {suborder.fulfillmentStatus}
-                  </span>
+                  <PaymentStatusBadge
+                    status={suborder.paymentStatus}
+                    label={suborder.paymentStatusMeta?.label}
+                    tone={suborder.paymentStatusMeta?.tone}
+                    prefix="Suborder"
+                  />
+                  <StatusMetaBadge
+                    label={suborder.fulfillmentStatusMeta?.label || suborder.fulfillmentStatus}
+                    tone={suborder.fulfillmentStatusMeta?.tone}
+                  />
                 </div>
                 <p className="mt-1 text-sm text-slate-500">
                   {suborder.store.name} • Store ID {suborder.store.id || "-"} • Paid{" "}
                   {formatDateTime(suborder.paidAt)}
+                </p>
+                <p className="mt-2 text-sm text-slate-600">
+                  {suborder.paymentStatusMeta?.description || suborder.fulfillmentStatusMeta?.description || "-"}
                 </p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right">
@@ -244,7 +288,12 @@ export default function AdminPaymentAuditDetailPage() {
                           {payment.internalReference}
                         </p>
                       </div>
-                      <PaymentStatusBadge status={payment.status} prefix="Payment" />
+                      <PaymentStatusBadge
+                        status={payment.status}
+                        label={payment.statusMeta?.label}
+                        tone={payment.statusMeta?.tone}
+                        prefix="Payment"
+                      />
                     </div>
                     <div className="mt-3 grid gap-3 md:grid-cols-2 text-sm text-slate-700">
                       <p>Channel: {payment.paymentChannel}</p>
@@ -254,12 +303,16 @@ export default function AdminPaymentAuditDetailPage() {
                       <p>Expires: {formatDateTime(payment.expiresAt)}</p>
                       <p>Proof Submitted: {payment.proofSubmitted ? "Yes" : "No"}</p>
                     </div>
+                    <p className="mt-3 text-sm text-slate-600">
+                      {payment.statusMeta?.description || "-"}
+                    </p>
                     {payment.proof ? (
                       <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <p className="font-semibold text-slate-900">Latest Proof</p>
                           <ProofReviewBadge
                             status={payment.proof.reviewStatus}
+                            label={payment.proof.reviewMeta?.label}
                             prefix="Proof"
                           />
                         </div>
@@ -270,6 +323,7 @@ export default function AdminPaymentAuditDetailPage() {
                           <p>Transfer Time: {formatDateTime(payment.proof.transferTime)}</p>
                           <p>Buyer Note: {payment.proof.note || "-"}</p>
                           <p>Review Note: {payment.proof.reviewNote || "-"}</p>
+                          <p>Review Status: {payment.proof.reviewMeta?.label || payment.proof.reviewStatus}</p>
                           <p>Uploaded By: {payment.proof.uploadedByName || "-"}</p>
                           <p>Reviewed By: {payment.proof.reviewedByName || "-"}</p>
                           <p>Reviewed At: {formatDateTime(payment.proof.reviewedAt)}</p>
@@ -320,6 +374,11 @@ export default function AdminPaymentAuditDetailPage() {
                                 {log.actorName ? ` • ${log.actorName}` : ""}
                                 {log.actorId ? ` • ID ${log.actorId}` : ""}
                               </p>
+                              {log.newStatusMeta?.description ? (
+                                <p className="mt-2 text-sm text-slate-600">
+                                  {log.newStatusMeta.description}
+                                </p>
+                              ) : null}
                               {log.note ? <p className="mt-2 text-sm text-slate-600">{log.note}</p> : null}
                             </div>
                           ))}

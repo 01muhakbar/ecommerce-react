@@ -68,6 +68,54 @@ export const clientRegistrationResendSchema = z.object({
   verificationId: z.string().trim().min(12).max(96),
 });
 
+export const forgotPasswordSchema = z.object({
+  email: z.string().trim().email().max(160),
+  honeypot: z.string().max(0).optional().default(""),
+  startedAt: z.coerce.number().int().positive(),
+});
+
+export const resetPasswordSchema = z
+  .object({
+    token: z.string().trim().min(24).max(255),
+    password: passwordStrengthSchema,
+    passwordConfirm: z.string().min(8).max(72),
+    honeypot: z.string().max(0).optional().default(""),
+    startedAt: z.coerce.number().int().positive(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.password !== value.passwordConfirm) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Password confirmation does not match",
+        path: ["passwordConfirm"],
+      });
+    }
+  });
+
+export const adminStaffSignupSchema = z
+  .object({
+    name: z.string().trim().min(3).max(120),
+    email: z.string().trim().email().max(160),
+    phoneNumber: phoneNumberSchema,
+    password: passwordStrengthSchema,
+    passwordConfirm: z.string().min(8).max(72),
+    honeypot: z.string().max(0).optional().default(""),
+    startedAt: z.coerce.number().int().positive(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.password !== value.passwordConfirm) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Password confirmation does not match",
+        path: ["passwordConfirm"],
+      });
+    }
+  });
+
+export const adminResendVerificationSchema = forgotPasswordSchema;
+export const adminForgotPasswordSchema = forgotPasswordSchema;
+export const adminResetPasswordSchema = resetPasswordSchema;
+
 export const loginAdminSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
@@ -130,6 +178,12 @@ export type RegisterInput = z.infer<typeof registerSchema>;
 export type ClientRegistrationInput = z.infer<typeof clientRegistrationSchema>;
 export type ClientRegistrationVerifyInput = z.infer<typeof clientRegistrationVerifySchema>;
 export type ClientRegistrationResendInput = z.infer<typeof clientRegistrationResendSchema>;
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+export type AdminStaffSignupInput = z.infer<typeof adminStaffSignupSchema>;
+export type AdminResendVerificationInput = z.infer<typeof adminResendVerificationSchema>;
+export type AdminForgotPasswordInput = z.infer<typeof adminForgotPasswordSchema>;
+export type AdminResetPasswordInput = z.infer<typeof adminResetPasswordSchema>;
 export type LoginAdminInput = z.infer<typeof loginAdminSchema>;
 export type ForgotPasswordAdminInput = z.infer<
   typeof forgotPasswordAdminSchema

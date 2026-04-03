@@ -275,7 +275,7 @@ export default function UserNotificationsPopup({
       return;
     }
     if (!isAuthenticated) {
-      navigate("/auth/login");
+      navigate("/user/notifications");
       return;
     }
   };

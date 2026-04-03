@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
-import { ImagePlus, UploadCloud, X } from "lucide-react";
+import { ImagePlus, ShieldCheck, UploadCloud, X } from "lucide-react";
+import PasswordStrengthIndicator from "../../auth/PasswordStrengthIndicator.jsx";
+import PasswordVisibilityButton from "../../auth/PasswordVisibilityButton.jsx";
 import { GENERIC_ERROR } from "../../../constants/uiMessages.js";
+import {
+  PASSWORD_CONFIRM_HELPER,
+  PASSWORD_RULES_HELPER,
+} from "../../../utils/authUi.js";
 import {
   getSellerPreset,
   normalizePermissionKeys,
@@ -9,16 +15,22 @@ import {
   STAFF_IMAGE_UPLOAD_GUIDANCE,
 } from "./staffAccessConfig.js";
 
-const roleOptions = [
-  { value: "staff", label: "Staff" },
-  { value: "admin", label: "Admin" },
-  { value: "super_admin", label: "Super Admin" },
-  { value: "seller", label: "Seller" },
-];
-
 const sectionCardClass = "rounded-2xl border border-slate-200 bg-white p-4 shadow-sm";
 const fieldClass =
   "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none";
+
+const ROLE_OPTIONS = [
+  { value: "super_admin", label: "Super Admin" },
+  { value: "admin", label: "Admin" },
+  { value: "staff", label: "Staff" },
+  { value: "seller", label: "Seller" },
+];
+const ROLE_HELPERS = {
+  super_admin: "Full admin workspace access, including account and settings management.",
+  admin: "Operational admin workspace access without super-admin global control.",
+  staff: "Standard admin workspace access for day-to-day dashboard and order lanes.",
+  seller: "Seller workspace account. This role stays blocked from /admin/login and uses seller access presets below.",
+};
 const defaultSellerPreset = getSellerPreset(SELLER_ROLE_PRESETS[0]?.value);
 
 const initialForm = {
@@ -26,8 +38,10 @@ const initialForm = {
   name: "",
   email: "",
   password: "",
+  passwordConfirm: "",
   phoneNumber: "",
   role: "staff",
+  isActive: true,
   sellerRoleCode: defaultSellerPreset?.value || "CATALOG_MANAGER",
   permissionKeys: defaultSellerPreset?.permissionKeys || [],
 };
@@ -38,33 +52,34 @@ const truncateFileName = (value, maxLength = 36) => {
   return `${text.slice(0, maxLength - 3)}...`;
 };
 
+const isStrongPassword = (value) =>
+  String(value || "").length >= 8 && /[A-Za-z]/.test(value) && /\d/.test(value);
+
 export default function AddStaffDrawer({
   open,
   onClose,
   onSubmit,
   isSubmitting,
   error,
-  defaultRole = "staff",
+  rolesOptions = ROLE_OPTIONS,
+  canManageRoles = true,
 }) {
   const [form, setForm] = useState(initialForm);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState("");
   const [validationError, setValidationError] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [passwordConfirmVisible, setPasswordConfirmVisible] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    const startingRole = defaultRole || "staff";
-    const preset = getSellerPreset(defaultSellerPreset?.value);
-    setForm({
-      ...initialForm,
-      role: startingRole,
-      sellerRoleCode: preset?.value || initialForm.sellerRoleCode,
-      permissionKeys: preset?.permissionKeys || initialForm.permissionKeys,
-    });
+    setForm(initialForm);
     setImageFile(null);
     setImagePreview("");
     setValidationError("");
-  }, [open, defaultRole]);
+    setPasswordVisible(false);
+    setPasswordConfirmVisible(false);
+  }, [open]);
 
   useEffect(() => {
     return () => {
@@ -72,8 +87,21 @@ export default function AddStaffDrawer({
     };
   }, [imagePreview]);
 
-  const isSellerRole = form.role === "seller";
   const submitError = validationError || error || "";
+  const normalizedRoleOptions =
+    rolesOptions.length > 0
+      ? rolesOptions.map((role) =>
+          typeof role === "string"
+            ? {
+                value: role,
+                label: role
+                  .replace(/[_-]+/g, " ")
+                  .replace(/\b\w/g, (part) => part.toUpperCase()),
+              }
+            : role
+        )
+      : ROLE_OPTIONS;
+  const isSellerRole = form.role === "seller";
 
   const setField = (patch) => {
     setValidationError("");
@@ -85,23 +113,6 @@ export default function AddStaffDrawer({
     setField({
       sellerRoleCode: preset.value,
       permissionKeys: [...preset.permissionKeys],
-    });
-  };
-
-  const handleRoleChange = (nextRole) => {
-    if (nextRole === "seller") {
-      const preset = getSellerPreset(form.sellerRoleCode || defaultSellerPreset?.value);
-      setField({
-        role: nextRole,
-        sellerRoleCode: preset.value,
-        permissionKeys: [...preset.permissionKeys],
-      });
-      return;
-    }
-    setField({
-      role: nextRole,
-      sellerRoleCode: defaultSellerPreset?.value || "CATALOG_MANAGER",
-      permissionKeys: [],
     });
   };
 
@@ -133,18 +144,22 @@ export default function AddStaffDrawer({
     const name = form.name.trim();
     const email = form.email.trim();
     const password = form.password;
-    const role = form.role;
+    const passwordConfirm = form.passwordConfirm;
 
-    if (!name || !email || !password || !role) {
-      setValidationError("Name, email, password, and role are required.");
+    if (!name || !email || !password || !passwordConfirm) {
+      setValidationError("Name, email, password, and password confirmation are required.");
       return;
     }
     if (!/^\S+@\S+\.\S+$/.test(email)) {
       setValidationError("Please enter a valid email.");
       return;
     }
-    if (password.length < 6) {
-      setValidationError("Password must be at least 6 characters.");
+    if (!isStrongPassword(password)) {
+      setValidationError(PASSWORD_RULES_HELPER);
+      return;
+    }
+    if (password !== passwordConfirm) {
+      setValidationError("Password confirmation does not match.");
       return;
     }
     if (isSellerRole && form.permissionKeys.length === 0) {
@@ -156,12 +171,12 @@ export default function AddStaffDrawer({
       name,
       email,
       phoneNumber: form.phoneNumber.trim() || null,
-      password,
-      role,
-      image: imageFile,
-      isActive: true,
+      role: form.role,
+      isActive: Boolean(form.isActive),
       sellerRoleCode: isSellerRole ? form.sellerRoleCode : null,
       permissionKeys: isSellerRole ? normalizePermissionKeys(form.permissionKeys) : [],
+      password,
+      image: imageFile,
     });
   };
 
@@ -173,7 +188,7 @@ export default function AddStaffDrawer({
         type="button"
         className="absolute inset-0 bg-slate-900/45"
         onClick={() => !isSubmitting && onClose()}
-        aria-label="Close add staff drawer"
+        aria-label="Close create account drawer"
       />
 
       <aside className="absolute right-0 top-0 flex h-full w-full max-w-[680px] flex-col border-l border-slate-200 bg-white shadow-2xl">
@@ -181,11 +196,13 @@ export default function AddStaffDrawer({
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
-                Admin / Staff / Add
+                Admin / Accounts / Create
               </p>
-              <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">Add Staff</h2>
+              <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
+                Create Account
+              </h2>
               <p className="mt-1 text-sm text-slate-500">
-                Create a staff or seller operator account with the right workspace access.
+                Create a new workspace account and set its role from the allowed admin-managed roles.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -261,7 +278,7 @@ export default function AddStaffDrawer({
                       {imageFile ? truncateFileName(imageFile.name) : "Square avatar preview will appear here."}
                     </p>
                     <p className="text-xs leading-5 text-slate-500">
-                      Saved images will appear in the staff list and edit drawer after submit.
+                      Saved images will appear in the staff list and account detail after submit.
                     </p>
                   </div>
                   <p className="text-xs text-slate-400">
@@ -275,10 +292,14 @@ export default function AddStaffDrawer({
               <h3 className="text-base font-semibold text-slate-900">Basic Info</h3>
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Name
+                  <label
+                    htmlFor="admin-create-staff-name"
+                    className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500"
+                  >
+                    Full Name
                   </label>
                   <input
+                    id="admin-create-staff-name"
                     value={form.name}
                     onChange={(event) => setField({ name: event.target.value })}
                     placeholder="Staff name"
@@ -289,10 +310,14 @@ export default function AddStaffDrawer({
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <label
+                    htmlFor="admin-create-staff-email"
+                    className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500"
+                  >
                     Email
                   </label>
                   <input
+                    id="admin-create-staff-email"
                     type="email"
                     value={form.email}
                     onChange={(event) => setField({ email: event.target.value })}
@@ -304,10 +329,14 @@ export default function AddStaffDrawer({
                 </div>
 
                 <div className="sm:col-span-2">
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <label
+                    htmlFor="admin-create-staff-phone"
+                    className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500"
+                  >
                     Contact Number
                   </label>
                   <input
+                    id="admin-create-staff-phone"
                     value={form.phoneNumber}
                     onChange={(event) => setField({ phoneNumber: event.target.value })}
                     placeholder="+62..."
@@ -319,34 +348,75 @@ export default function AddStaffDrawer({
             </section>
 
             <section className={sectionCardClass}>
-              <h3 className="text-base font-semibold text-slate-900">Role & Permissions</h3>
+              <h3 className="text-base font-semibold text-slate-900">Account Role</h3>
               <div className="mt-4 space-y-4">
-                <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Staff Role
-                  </label>
-                  <select
-                    value={form.role}
-                    onChange={(event) => handleRoleChange(event.target.value)}
-                    className={fieldClass}
-                    disabled={isSubmitting}
-                    required
-                  >
-                    {roleOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                <div className="rounded-2xl border border-sky-200 bg-sky-50/80 p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 inline-flex h-9 w-9 items-center justify-center rounded-full bg-white text-sky-700 shadow-sm">
+                      <ShieldCheck className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0 flex-1 space-y-3">
+                      <div>
+                        <label
+                          htmlFor="admin-create-account-role"
+                          className="text-xs font-semibold uppercase tracking-[0.14em] text-sky-700"
+                        >
+                          Role Selection
+                        </label>
+                        <select
+                          id="admin-create-account-role"
+                          value={form.role}
+                          onChange={(event) => {
+                            const nextRole = event.target.value;
+                            const nextPatch =
+                              nextRole === "seller"
+                                ? {
+                                    role: nextRole,
+                                    sellerRoleCode: defaultSellerPreset?.value || "CATALOG_MANAGER",
+                                    permissionKeys: [...(defaultSellerPreset?.permissionKeys || [])],
+                                  }
+                                : {
+                                    role: nextRole,
+                                    sellerRoleCode: defaultSellerPreset?.value || "CATALOG_MANAGER",
+                                    permissionKeys: [],
+                                  };
+                            setField(nextPatch);
+                          }}
+                          className={`${fieldClass} mt-2`}
+                          disabled={isSubmitting || !canManageRoles}
+                        >
+                          {normalizedRoleOptions.map((role) => (
+                            <option key={role.value} value={role.value}>
+                              {role.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <p className="text-xs leading-5 text-sky-800">
+                        {ROLE_HELPERS[form.role] ||
+                          "Role access follows the backend role policy for this account type."}
+                      </p>
+                    </div>
+                  </div>
                 </div>
+
+                <label className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                  <span>Status Active</span>
+                  <input
+                    type="checkbox"
+                    checked={form.isActive}
+                    onChange={(event) => setField({ isActive: event.target.checked })}
+                    disabled={isSubmitting}
+                  />
+                </label>
 
                 {isSellerRole ? (
                   <div className="space-y-4 rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
                     <div className="space-y-1">
                       <p className="text-sm font-semibold text-amber-900">Seller workspace access</p>
                       <p className="text-xs leading-5 text-amber-800">
-                        Seller accounts stay inside seller workspace lanes. Admin publish, review, global
-                        settings, and staff authority remain admin-only.
+                        Seller accounts use seller workspace access presets only and stay blocked from the
+                        admin login lane.
                       </p>
                     </div>
 
@@ -399,8 +469,8 @@ export default function AddStaffDrawer({
                   </div>
                 ) : (
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-500">
-                    Admin and staff roles keep their existing admin workspace authority. Seller-only
-                    permissions appear only when the Seller role is selected.
+                    Feature-level permissions are not part of this flow yet. Admin workspace access
+                    follows the selected backend role.
                   </div>
                 )}
               </div>
@@ -408,24 +478,69 @@ export default function AddStaffDrawer({
 
             <section className={sectionCardClass}>
               <h3 className="text-base font-semibold text-slate-900">Security</h3>
-              <div className="mt-4">
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  value={form.password}
-                  onChange={(event) => setField({ password: event.target.value })}
-                  placeholder="Minimum 6 characters"
-                  className={fieldClass}
-                  disabled={isSubmitting}
-                  required
-                />
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label
+                    htmlFor="admin-create-staff-password"
+                    className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500"
+                  >
+                    Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="admin-create-staff-password"
+                      type={passwordVisible ? "text" : "password"}
+                      value={form.password}
+                      onChange={(event) => setField({ password: event.target.value })}
+                      placeholder="Set the first password"
+                      className={`${fieldClass} pr-11`}
+                      disabled={isSubmitting}
+                      required
+                    />
+                    <PasswordVisibilityButton
+                      visible={passwordVisible}
+                      onToggle={() => setPasswordVisible((prev) => !prev)}
+                    />
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">{PASSWORD_RULES_HELPER}</p>
+                  <PasswordStrengthIndicator password={form.password} />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="admin-create-staff-password-confirm"
+                    className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500"
+                  >
+                    Confirm Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="admin-create-staff-password-confirm"
+                      type={passwordConfirmVisible ? "text" : "password"}
+                      value={form.passwordConfirm}
+                      onChange={(event) => setField({ passwordConfirm: event.target.value })}
+                      placeholder="Repeat the password"
+                      className={`${fieldClass} pr-11`}
+                      disabled={isSubmitting}
+                      required
+                    />
+                    <PasswordVisibilityButton
+                      visible={passwordConfirmVisible}
+                      onToggle={() => setPasswordConfirmVisible((prev) => !prev)}
+                      labelShow="Show password confirmation"
+                      labelHide="Hide password confirmation"
+                    />
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">{PASSWORD_CONFIRM_HELPER}</p>
+                </div>
               </div>
             </section>
 
             {submitError ? (
-              <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600">
+              <div
+                id="admin-create-staff-error"
+                className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600"
+              >
                 {submitError || GENERIC_ERROR}
               </div>
             ) : null}
@@ -446,7 +561,7 @@ export default function AddStaffDrawer({
                 className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-70"
                 disabled={isSubmitting}
               >
-                {isSubmitting ? "Adding..." : "Add Staff"}
+                {isSubmitting ? "Creating..." : "Create Account"}
               </button>
             </div>
           </footer>

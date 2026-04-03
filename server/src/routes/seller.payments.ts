@@ -17,6 +17,10 @@ import { recalculateParentOrderPaymentStatus } from "../services/orderPaymentAgg
 import { expireOverduePaymentsForOrder } from "../services/paymentExpiry.service.js";
 import { getLatestTimelineRecord } from "../services/paymentReadModel.js";
 import { appendPaymentStatusLog } from "../services/paymentStatusLog.service.js";
+import {
+  buildFulfillmentStatusMeta,
+  buildPaymentStatusMeta,
+} from "../services/orderLifecycleContract.service.js";
 import { SELLER_ROLE_CODES } from "../services/seller/permissionMap.js";
 import {
   listSellerAccessContexts,
@@ -204,6 +208,7 @@ const resolveLegacySellerPaymentReviewAccess = async (input: {
 const normalizeProofSummary = (proofs: any[]) => {
   const latest = getLatestTimelineRecord(proofs);
   if (!latest) return null;
+  const reviewStatus = String(getAttr(latest, "reviewStatus") || "PENDING").toUpperCase();
   return {
     id: toNumber(getAttr(latest, "id")),
     proofImageUrl: String(getAttr(latest, "proofImageUrl") || ""),
@@ -213,11 +218,82 @@ const normalizeProofSummary = (proofs: any[]) => {
     transferTime: getAttr(latest, "transferTime") || null,
     note: getAttr(latest, "note") ? String(getAttr(latest, "note")) : null,
     reviewNote: getAttr(latest, "reviewNote") ? String(getAttr(latest, "reviewNote")) : null,
-    reviewStatus: String(getAttr(latest, "reviewStatus") || "PENDING"),
+    reviewStatus,
+    reviewMeta: {
+      code: reviewStatus,
+      label:
+        reviewStatus === "APPROVED"
+          ? "Approved"
+          : reviewStatus === "REJECTED"
+            ? "Rejected"
+            : "Pending",
+      tone:
+        reviewStatus === "APPROVED"
+          ? "emerald"
+          : reviewStatus === "REJECTED"
+            ? "rose"
+            : "amber",
+      description:
+        reviewStatus === "APPROVED"
+          ? "Seller already approved this proof."
+          : reviewStatus === "REJECTED"
+            ? "Seller already rejected this proof."
+            : "Proof is waiting for seller review.",
+    },
     reviewedByUserId: toNumber(getAttr(latest, "reviewedByUserId"), 0) || null,
     reviewedAt: getAttr(latest, "reviewedAt") || null,
     uploadedByUserId: toNumber(getAttr(latest, "uploadedByUserId"), 0) || null,
     createdAt: getAttr(latest, "createdAt") || null,
+  };
+};
+
+const buildSellerReviewActionability = (payment: any, proof: any) => {
+  const paymentId = toNumber(getAttr(payment, "id"), 0);
+  const paymentStatus = String(getAttr(payment, "status") || "CREATED").toUpperCase();
+  const proofStatus = String(proof?.reviewStatus || "PENDING").toUpperCase();
+
+  if (!paymentId) {
+    return {
+      canReview: false,
+      label: "Unavailable",
+      reason: "Payment record is unavailable for seller review.",
+    };
+  }
+  if (paymentStatus !== "PENDING_CONFIRMATION") {
+    return {
+      canReview: false,
+      label: buildPaymentStatusMeta(paymentStatus).label,
+      reason:
+        paymentStatus === "PAID"
+          ? "This payment is already settled and no longer needs review."
+          : paymentStatus === "REJECTED"
+            ? "This payment already has a rejected outcome."
+            : paymentStatus === "FAILED" || paymentStatus === "EXPIRED" || paymentStatus === "CANCELLED"
+              ? "This payment is already closed and no longer reviewable."
+              : "Payment review is available only while payment is awaiting review.",
+    };
+  }
+  if (!proof) {
+    return {
+      canReview: false,
+      label: "Proof required",
+      reason: "Buyer must submit payment proof before seller review can continue.",
+    };
+  }
+  if (proofStatus !== "PENDING") {
+    return {
+      canReview: false,
+      label: proof?.reviewMeta?.label || "Reviewed",
+      reason:
+        proofStatus === "APPROVED"
+          ? "This proof was already approved."
+          : "This proof was already reviewed and cannot be changed from this lane.",
+    };
+  }
+  return {
+    canReview: true,
+    label: "Ready for review",
+    reason: "Payment is awaiting seller review and the latest proof is still pending.",
   };
 };
 
@@ -335,6 +411,9 @@ const serializeSellerSuborder = (suborder: any) => {
   const payments = Array.isArray(suborder?.payments) ? suborder.payments : [];
   const payment = getLatestTimelineRecord(payments);
   const proof = normalizeProofSummary(payment?.proofs ?? []);
+  const reviewActionability = buildSellerReviewActionability(payment, proof);
+  const paymentStatus = String(getAttr(suborder, "paymentStatus") || "UNPAID");
+  const fulfillmentStatus = String(getAttr(suborder, "fulfillmentStatus") || "UNFULFILLED");
   const buyer = suborder?.order?.customer ?? suborder?.order?.get?.("customer") ?? null;
   return {
     suborderId: toNumber(getAttr(suborder, "id")),
@@ -343,8 +422,10 @@ const serializeSellerSuborder = (suborder: any) => {
     orderNumber: String(getAttr(suborder?.order, "invoiceNo") || ""),
     storeId: toNumber(getAttr(suborder, "storeId")),
     storeName: String(getAttr(suborder?.store, "name") || `Store #${getAttr(suborder, "storeId")}`),
-    paymentStatus: String(getAttr(suborder, "paymentStatus") || "UNPAID"),
-    fulfillmentStatus: String(getAttr(suborder, "fulfillmentStatus") || "UNFULFILLED"),
+    paymentStatus,
+    paymentStatusMeta: buildPaymentStatusMeta(paymentStatus),
+    fulfillmentStatus,
+    fulfillmentStatusMeta: buildFulfillmentStatusMeta(fulfillmentStatus),
     totalAmount: toNumber(getAttr(suborder, "totalAmount")),
     paidAt: getAttr(suborder, "paidAt") || null,
     createdAt: getAttr(suborder, "createdAt") || null,
@@ -374,11 +455,13 @@ const serializeSellerSuborder = (suborder: any) => {
           paymentType: String(getAttr(payment, "paymentType") || "QRIS_STATIC"),
           amount: toNumber(getAttr(payment, "amount")),
           status: String(getAttr(payment, "status") || "CREATED"),
+          statusMeta: buildPaymentStatusMeta(getAttr(payment, "status") || "CREATED"),
           qrImageUrl: getAttr(payment, "qrImageUrl") ? String(getAttr(payment, "qrImageUrl")) : null,
           expiresAt: getAttr(payment, "expiresAt") || null,
           paidAt: getAttr(payment, "paidAt") || null,
           proofSubmitted: Boolean(proof),
           proof,
+          reviewActionability,
         }
       : null,
   };

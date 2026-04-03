@@ -9,6 +9,7 @@ import {
 } from "../../lib/adminApi.js";
 import { ORDER_STATUS_OPTIONS } from "../../constants/orderStatus.js";
 import { formatCurrency } from "../../utils/format.js";
+import { getOrderTruthStatus } from "../../utils/orderTruth.js";
 
 const STATUS_OPTIONS = ORDER_STATUS_OPTIONS;
 
@@ -18,6 +19,8 @@ const STATUS_CLASS = {
   processing: "border-amber-200 bg-amber-50 text-amber-700",
   cancelled: "border-rose-200 bg-rose-50 text-rose-700",
   refunded: "border-violet-200 bg-violet-50 text-violet-700",
+  complete: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  shipping: "border-indigo-200 bg-indigo-50 text-indigo-700",
 };
 
 const fieldClass =
@@ -56,16 +59,16 @@ const formatDate = (value) => {
 
 const toText = (value) => String(value ?? "").trim();
 
-function OrderStatusBadge({ status }) {
-  const key = String(status || "").toLowerCase();
-  const label = key ? key.charAt(0).toUpperCase() + key.slice(1) : "Unknown";
+function OrderStatusBadge({ order }) {
+  const status = getOrderTruthStatus(order);
+  const key = status.bucket;
   return (
     <span
       className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
         STATUS_CLASS[key] || STATUS_CLASS.pending
       }`}
     >
-      {label}
+      {status.label}
     </span>
   );
 }
@@ -267,7 +270,7 @@ export default function AdminCustomerDetailPage() {
                       {formatCurrency(order.totalAmount || order.total || 0)}
                     </td>
                     <td className={tableCell}>
-                      <OrderStatusBadge status={order.status} />
+                      <OrderStatusBadge order={order} />
                     </td>
                     <td className={`${tableCell} text-slate-500`}>{formatDate(order.createdAt)}</td>
                     <td className={`${tableCell} text-right`}>
@@ -361,7 +364,7 @@ export default function AdminCustomerDetailPage() {
                         {formatCurrency(order.totalAmount || order.total || 0)}
                       </td>
                       <td className={tableCell}>
-                        <OrderStatusBadge status={order.status} />
+                        <OrderStatusBadge order={order} />
                       </td>
                       <td className={`${tableCell} text-slate-500`}>{formatDate(order.createdAt)}</td>
                       <td className={`${tableCell} text-right`}>

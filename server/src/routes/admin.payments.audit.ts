@@ -19,6 +19,11 @@ import {
   getLatestTimelineRecord,
   sortTimelineDesc,
 } from "../services/paymentReadModel.js";
+import {
+  buildFulfillmentStatusMeta,
+  buildOrderStatusMeta,
+  buildPaymentStatusMeta,
+} from "../services/orderLifecycleContract.service.js";
 
 const router = Router();
 
@@ -74,6 +79,7 @@ const normalizeProofSummary = (proofs: any[]) => {
   if (!latest) return null;
   const uploadedBy = latest?.uploadedByUser ?? latest?.get?.("uploadedByUser") ?? null;
   const reviewedBy = latest?.reviewedByUser ?? latest?.get?.("reviewedByUser") ?? null;
+  const reviewStatus = toUpper(getAttr(latest, "reviewStatus"), "PENDING");
   return {
     id: toNumber(getAttr(latest, "id")),
     proofImageUrl: String(getAttr(latest, "proofImageUrl") || ""),
@@ -83,7 +89,22 @@ const normalizeProofSummary = (proofs: any[]) => {
     transferTime: getAttr(latest, "transferTime") || null,
     note: getAttr(latest, "note") ? String(getAttr(latest, "note")) : null,
     reviewNote: getAttr(latest, "reviewNote") ? String(getAttr(latest, "reviewNote")) : null,
-    reviewStatus: toUpper(getAttr(latest, "reviewStatus"), "PENDING"),
+    reviewStatus,
+    reviewMeta: {
+      code: reviewStatus,
+      label:
+        reviewStatus === "APPROVED"
+          ? "Approved"
+          : reviewStatus === "REJECTED"
+            ? "Rejected"
+            : "Pending",
+      tone:
+        reviewStatus === "APPROVED"
+          ? "emerald"
+          : reviewStatus === "REJECTED"
+            ? "rose"
+            : "amber",
+    },
     reviewedByUserId: toNumber(getAttr(latest, "reviewedByUserId"), 0) || null,
     reviewedByName: getAttr(reviewedBy, "name") ? String(getAttr(reviewedBy, "name")) : null,
     uploadedByUserId: toNumber(getAttr(latest, "uploadedByUserId"), 0) || null,
@@ -103,10 +124,14 @@ const normalizePaymentStatusLogs = (logs: any[]) => {
     })
     .map((log: any) => {
       const actorUser = log?.actorUser ?? log?.get?.("actorUser") ?? null;
+      const oldStatus = getAttr(log, "oldStatus") ? String(getAttr(log, "oldStatus")) : null;
+      const newStatus = toUpper(getAttr(log, "newStatus"), "");
       return {
         id: toNumber(getAttr(log, "id")),
-        oldStatus: getAttr(log, "oldStatus") ? String(getAttr(log, "oldStatus")) : null,
-        newStatus: toUpper(getAttr(log, "newStatus"), ""),
+        oldStatus,
+        oldStatusMeta: oldStatus ? buildPaymentStatusMeta(oldStatus) : null,
+        newStatus,
+        newStatusMeta: newStatus ? buildPaymentStatusMeta(newStatus) : null,
         actorType: toUpper(getAttr(log, "actorType"), "SYSTEM"),
         actorId: toNumber(getAttr(log, "actorId"), 0) || null,
         actorName: getAttr(actorUser, "name") ? String(getAttr(actorUser, "name")) : null,
@@ -458,6 +483,7 @@ const summarizeAuditRow = (order: any) => {
     totalStores: uniqueStoreIds.length,
     grandTotal: toNumber(getAttr(order, "totalAmount")),
     paymentStatus,
+    paymentStatusMeta: buildPaymentStatusMeta(paymentStatus),
     createdAt: getAttr(order, "createdAt") || null,
     counts: {
       paidSuborders,
@@ -480,7 +506,9 @@ const serializeAuditDetail = (order: any) => {
       invoiceNo: String(getAttr(order, "invoiceNo") || ""),
       checkoutMode: split.checkoutMode,
       paymentStatus: split.paymentStatus,
+      paymentStatusMeta: buildPaymentStatusMeta(split.paymentStatus),
       orderStatus: String(getAttr(order, "status") || "pending"),
+      orderStatusMeta: buildOrderStatusMeta(getAttr(order, "status") || "pending"),
       paymentMethod: getAttr(order, "paymentMethod")
         ? String(getAttr(order, "paymentMethod"))
         : null,
@@ -529,7 +557,11 @@ const serializeAuditDetail = (order: any) => {
         totalAmount: toNumber(getAttr(suborder, "totalAmount")),
         paymentMethod: String(getAttr(suborder, "paymentMethod") || "QRIS"),
         paymentStatus: String(getAttr(suborder, "paymentStatus") || "UNPAID"),
+        paymentStatusMeta: buildPaymentStatusMeta(getAttr(suborder, "paymentStatus") || "UNPAID"),
         fulfillmentStatus: String(getAttr(suborder, "fulfillmentStatus") || "UNFULFILLED"),
+        fulfillmentStatusMeta: buildFulfillmentStatusMeta(
+          getAttr(suborder, "fulfillmentStatus") || "UNFULFILLED"
+        ),
         paidAt: getAttr(suborder, "paidAt") || null,
         paymentProfile: getAttr(suborder?.paymentProfile, "id")
           ? {
@@ -574,6 +606,7 @@ const serializeAuditDetail = (order: any) => {
           paymentType: String(getAttr(payment, "paymentType") || "QRIS_STATIC"),
           amount: toNumber(getAttr(payment, "amount")),
           status: String(getAttr(payment, "status") || "CREATED"),
+          statusMeta: buildPaymentStatusMeta(getAttr(payment, "status") || "CREATED"),
           qrImageUrl: getAttr(payment, "qrImageUrl")
             ? String(getAttr(payment, "qrImageUrl"))
             : null,

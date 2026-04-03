@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
-import { ImagePlus, UploadCloud, X } from "lucide-react";
+import { ImagePlus, LockKeyhole, ShieldCheck, UploadCloud, X } from "lucide-react";
+import PasswordStrengthIndicator from "../../auth/PasswordStrengthIndicator.jsx";
+import PasswordVisibilityButton from "../../auth/PasswordVisibilityButton.jsx";
 import { GENERIC_ERROR } from "../../../constants/uiMessages.js";
 import { resolveAssetUrl } from "../../../lib/assetUrl.js";
+import {
+  PASSWORD_CONFIRM_HELPER,
+  PASSWORD_RULES_HELPER,
+} from "../../../utils/authUi.js";
 import {
   getSellerPreset,
   normalizePermissionKeys,
@@ -48,6 +54,7 @@ const initialForm = {
   name: "",
   email: "",
   password: "",
+  passwordConfirm: "",
   phoneNumber: "",
   role: "staff",
   isActive: true,
@@ -55,6 +62,9 @@ const initialForm = {
   permissionKeys: defaultSellerPreset?.permissionKeys || [],
   avatarUrl: "",
 };
+
+const isStrongPassword = (value) =>
+  String(value || "").length >= 8 && /[A-Za-z]/.test(value) && /\d/.test(value);
 
 export default function EditStaffDrawer({
   open,
@@ -64,11 +74,15 @@ export default function EditStaffDrawer({
   error,
   staff,
   rolesOptions = [],
+  canManageRoles = true,
+  currentUser = null,
 }) {
   const [form, setForm] = useState(initialForm);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState("");
   const [validationError, setValidationError] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [passwordConfirmVisible, setPasswordConfirmVisible] = useState(false);
 
   useEffect(() => {
     if (!open || !staff) return;
@@ -79,6 +93,7 @@ export default function EditStaffDrawer({
       name: toText(staff.name),
       email: toText(staff.email),
       password: "",
+      passwordConfirm: "",
       phoneNumber: toText(staff.phoneNumber ?? staff.phone),
       role: normalizedRole,
       isActive: staff.isActive !== false,
@@ -92,6 +107,8 @@ export default function EditStaffDrawer({
     setImageFile(null);
     setImagePreview("");
     setValidationError("");
+    setPasswordVisible(false);
+    setPasswordConfirmVisible(false);
   }, [open, staff]);
 
   useEffect(() => {
@@ -101,20 +118,30 @@ export default function EditStaffDrawer({
   }, [imagePreview]);
 
   const isSellerRole = form.role === "seller";
+  const isPendingApproval = toText(staff?.status).toLowerCase() === "pending_approval";
+  const isEditingOwnAccount =
+    Number(currentUser?.id || 0) > 0 &&
+    Number(staff?.id || 0) > 0 &&
+    Number(currentUser?.id) === Number(staff?.id);
+  const isOwnManagedAccount =
+    isEditingOwnAccount &&
+    ["staff", "admin", "super_admin", "superadmin"].includes(toRoleValue(currentUser?.role));
+  const isOwnSuperAdminAccount =
+    isEditingOwnAccount &&
+    toRoleValue(currentUser?.role) === "super_admin" &&
+    toRoleValue(staff?.role) === "super_admin";
   const submitError = validationError || error || "";
-
   const normalizedRoleOptions =
     rolesOptions.length > 0
       ? rolesOptions.map((role) => ({ value: toRoleValue(role), label: formatRoleLabel(role) }))
       : fallbackRoleOptions;
-
-  const mergedRoleOptions = [
-    ...normalizedRoleOptions,
-    ...fallbackRoleOptions.filter(
-      (fallback) =>
-        !normalizedRoleOptions.some((role) => toRoleValue(role.value) === toRoleValue(fallback.value))
-    ),
-  ];
+  const currentRoleOption =
+    normalizedRoleOptions.find((role) => toRoleValue(role.value) === toRoleValue(form.role)) ||
+    fallbackRoleOptions.find((role) => toRoleValue(role.value) === toRoleValue(form.role)) || {
+      value: form.role,
+      label: formatRoleLabel(form.role),
+    };
+  const roleSelectDisabled = isSubmitting || !canManageRoles || isOwnSuperAdminAccount;
 
   const setField = (patch) => {
     setValidationError("");
@@ -126,23 +153,6 @@ export default function EditStaffDrawer({
     setField({
       sellerRoleCode: preset.value,
       permissionKeys: [...preset.permissionKeys],
-    });
-  };
-
-  const handleRoleChange = (nextRole) => {
-    if (nextRole === "seller") {
-      const preset = getSellerPreset(form.sellerRoleCode || defaultSellerPreset?.value);
-      setField({
-        role: nextRole,
-        sellerRoleCode: preset.value,
-        permissionKeys: [...preset.permissionKeys],
-      });
-      return;
-    }
-    setField({
-      role: nextRole,
-      sellerRoleCode: defaultSellerPreset?.value || "CATALOG_MANAGER",
-      permissionKeys: [],
     });
   };
 
@@ -174,18 +184,22 @@ export default function EditStaffDrawer({
     const name = form.name.trim();
     const email = form.email.trim();
     const password = form.password.trim();
-    const role = toRoleValue(form.role);
+    const passwordConfirm = form.passwordConfirm.trim();
 
-    if (!name || !email || !role) {
-      setValidationError("Name, email, and role are required.");
+    if (!name || !email) {
+      setValidationError("Name and email are required.");
       return;
     }
     if (!/^\S+@\S+\.\S+$/.test(email)) {
       setValidationError("Please enter a valid email.");
       return;
     }
-    if (password && password.length < 6) {
-      setValidationError("Password must be at least 6 characters.");
+    if (password && !isStrongPassword(password)) {
+      setValidationError(PASSWORD_RULES_HELPER);
+      return;
+    }
+    if (password && password !== passwordConfirm) {
+      setValidationError("Password confirmation does not match.");
       return;
     }
     if (isSellerRole && form.permissionKeys.length === 0) {
@@ -197,7 +211,7 @@ export default function EditStaffDrawer({
       name,
       email,
       phoneNumber: form.phoneNumber.trim() || null,
-      role,
+      role: form.role,
       isActive: Boolean(form.isActive),
       image: imageFile,
       sellerRoleCode: isSellerRole ? form.sellerRoleCode : null,
@@ -214,7 +228,7 @@ export default function EditStaffDrawer({
         type="button"
         className="absolute inset-0 bg-slate-900/45"
         onClick={() => !isSubmitting && onClose()}
-        aria-label="Close update staff drawer"
+        aria-label="Close update account drawer"
       />
 
       <aside className="absolute right-0 top-0 flex h-full w-full max-w-[680px] flex-col border-l border-slate-200 bg-white shadow-2xl">
@@ -222,11 +236,13 @@ export default function EditStaffDrawer({
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
-                Admin / Staff / Edit
+                Admin / Accounts / Edit
               </p>
-              <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">Update Staff</h2>
+              <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
+                Update Account
+              </h2>
               <p className="mt-1 text-sm text-slate-500">
-                Update profile image, role access, and current account status.
+                Update profile image, contact data, role, access status, and password for this workspace account.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -328,6 +344,7 @@ export default function EditStaffDrawer({
                     Name
                   </label>
                   <input
+                    id="admin-edit-staff-name"
                     value={form.name}
                     onChange={(event) => setField({ name: event.target.value })}
                     placeholder="Staff name"
@@ -342,6 +359,7 @@ export default function EditStaffDrawer({
                     Email
                   </label>
                   <input
+                    id="admin-edit-staff-email"
                     type="email"
                     value={form.email}
                     onChange={(event) => setField({ email: event.target.value })}
@@ -357,6 +375,7 @@ export default function EditStaffDrawer({
                     Contact Number
                   </label>
                   <input
+                    id="admin-edit-staff-phone"
                     value={form.phoneNumber}
                     onChange={(event) => setField({ phoneNumber: event.target.value })}
                     placeholder="+62..."
@@ -368,25 +387,57 @@ export default function EditStaffDrawer({
             </section>
 
             <section className={sectionCardClass}>
-              <h3 className="text-base font-semibold text-slate-900">Role & Permissions</h3>
+              <h3 className="text-base font-semibold text-slate-900">Role & Access</h3>
               <div className="mt-4 space-y-4">
-                <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Staff Role
-                  </label>
-                  <select
-                    value={form.role}
-                    onChange={(event) => handleRoleChange(event.target.value)}
-                    className={fieldClass}
-                    disabled={isSubmitting}
-                    required
-                  >
-                    {mergedRoleOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                <div className="rounded-2xl border border-sky-200 bg-sky-50/80 p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 inline-flex h-9 w-9 items-center justify-center rounded-full bg-white text-sky-700 shadow-sm">
+                      <ShieldCheck className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0 flex-1 space-y-3">
+                      <div>
+                        <label
+                          htmlFor="admin-edit-account-role"
+                          className="text-xs font-semibold uppercase tracking-[0.14em] text-sky-700"
+                        >
+                          Account Role
+                        </label>
+                        <select
+                          id="admin-edit-account-role"
+                          value={form.role}
+                          onChange={(event) => {
+                            const nextRole = toRoleValue(event.target.value) || "staff";
+                            const nextPreset = getSellerPreset(defaultSellerPreset?.value);
+                            setField({
+                              role: nextRole,
+                              sellerRoleCode: nextRole === "seller"
+                                ? nextPreset?.value || "CATALOG_MANAGER"
+                                : nextPreset?.value || "CATALOG_MANAGER",
+                              permissionKeys:
+                                nextRole === "seller"
+                                  ? [...(nextPreset?.permissionKeys || [])]
+                                  : [],
+                            });
+                          }}
+                          className={`${fieldClass} mt-2`}
+                          disabled={roleSelectDisabled}
+                        >
+                          {normalizedRoleOptions.map((role) => (
+                            <option key={role.value} value={role.value}>
+                              {role.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <p className="text-xs leading-5 text-sky-800">
+                        {isOwnSuperAdminAccount
+                          ? "Your own Super Admin account cannot be lowered from this flow. Use another Super Admin account if a role transfer is intentionally required."
+                          : form.role === "seller"
+                          ? "Seller accounts stay outside /admin/login and use seller workspace access presets below."
+                          : `This account currently uses the ${currentRoleOption.label} workspace role. Feature-level menu permissions are not part of this flow.`}
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 <label className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
@@ -395,9 +446,19 @@ export default function EditStaffDrawer({
                     type="checkbox"
                     checked={form.isActive}
                     onChange={(event) => setField({ isActive: event.target.checked })}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || isPendingApproval || isOwnManagedAccount}
                   />
                 </label>
+                {isPendingApproval ? (
+                  <p className="text-xs text-amber-700">
+                    This staff account is waiting for approval. Use the approve action from All Accounts to activate sign-in access.
+                  </p>
+                ) : null}
+                {isOwnManagedAccount ? (
+                  <p className="text-xs text-amber-700">
+                    Your own account cannot be deactivated from this flow because it would immediately remove your workspace access.
+                  </p>
+                ) : null}
 
                 {isSellerRole ? (
                   <div className="space-y-4 rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
@@ -405,7 +466,8 @@ export default function EditStaffDrawer({
                       <p className="text-sm font-semibold text-amber-900">Seller workspace access</p>
                       <p className="text-xs leading-5 text-amber-800">
                         Seller accounts stay limited to seller workspace lanes. Admin review, publish,
-                        categories, staff, and global settings remain outside seller authority.
+                        categories, staff, and global settings remain outside seller authority, and
+                        seller accounts still cannot sign in at /admin/login.
                       </p>
                     </div>
 
@@ -458,8 +520,8 @@ export default function EditStaffDrawer({
                   </div>
                 ) : (
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-500">
-                    Admin and staff roles keep their existing admin workspace authority. Seller-only
-                    permissions appear only when the Seller role is selected.
+                    Access rules follow the selected backend role. Seller-only presets appear only when
+                    the account role is set to Seller.
                   </div>
                 )}
               </div>
@@ -467,23 +529,71 @@ export default function EditStaffDrawer({
 
             <section className={sectionCardClass}>
               <h3 className="text-base font-semibold text-slate-900">Security</h3>
-              <div className="mt-4">
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Password (optional)
-                </label>
-                <input
-                  type="password"
-                  value={form.password}
-                  onChange={(event) => setField({ password: event.target.value })}
-                  placeholder="Leave blank to keep current password"
-                  className={fieldClass}
-                  disabled={isSubmitting}
-                />
+              <div className="mt-4 space-y-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">
+                  <div className="flex items-start gap-2">
+                    <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+                    <p>
+                      Leave the password fields blank to keep the current password. If you set a new
+                      password here, the account must follow the same minimum rule as the create flow.
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    New Password (optional)
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="admin-edit-staff-password"
+                      type={passwordVisible ? "text" : "password"}
+                      value={form.password}
+                      onChange={(event) => setField({ password: event.target.value })}
+                      placeholder="Leave blank to keep current password"
+                      className={`${fieldClass} pr-11`}
+                      disabled={isSubmitting}
+                    />
+                    <PasswordVisibilityButton
+                      visible={passwordVisible}
+                      onToggle={() => setPasswordVisible((prev) => !prev)}
+                    />
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">{PASSWORD_RULES_HELPER}</p>
+                  <PasswordStrengthIndicator password={form.password} />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Confirm New Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="admin-edit-staff-password-confirm"
+                      type={passwordConfirmVisible ? "text" : "password"}
+                      value={form.passwordConfirm}
+                      onChange={(event) => setField({ passwordConfirm: event.target.value })}
+                      placeholder="Repeat the new password"
+                      className={`${fieldClass} pr-11`}
+                      disabled={isSubmitting}
+                    />
+                    <PasswordVisibilityButton
+                      visible={passwordConfirmVisible}
+                      onToggle={() => setPasswordConfirmVisible((prev) => !prev)}
+                      labelShow="Show password confirmation"
+                      labelHide="Hide password confirmation"
+                    />
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">{PASSWORD_CONFIRM_HELPER}</p>
+                </div>
               </div>
             </section>
 
             {submitError ? (
-              <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600">
+              <div
+                id="admin-edit-staff-error"
+                className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600"
+              >
                 {submitError || GENERIC_ERROR}
               </div>
             ) : null}
@@ -504,7 +614,7 @@ export default function EditStaffDrawer({
                 className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-70"
                 disabled={isSubmitting}
               >
-                {isSubmitting ? "Updating..." : "Update Staff"}
+                {isSubmitting ? "Updating..." : "Save Account Changes"}
               </button>
             </div>
           </footer>

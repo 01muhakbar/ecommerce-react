@@ -8,6 +8,8 @@ import StoreCartPage from "./pages/store/StoreCartPage.jsx";
 import CheckoutPage from "./pages/store/Checkout.jsx";
 import StoreLoginPage from "./pages/store/StoreLoginPage.jsx";
 import StoreRegisterPage from "./pages/store/StoreRegisterPage.jsx";
+import StoreForgotPasswordPage from "./pages/store/StoreForgotPasswordPage.jsx";
+import StoreResetPasswordPage from "./pages/store/StoreResetPasswordPage.jsx";
 import StoreCheckoutSuccessPage from "./pages/store/StoreCheckoutSuccessPage.jsx";
 import StoreOrderTrackingPage from "./pages/store/StoreOrderTrackingPage.jsx";
 import StoreSearchPage from "./pages/store/StoreSearchPage.jsx";
@@ -23,6 +25,11 @@ import KachaBazarDemoHomePage from "./pages/store/KachaBazarDemoHomePage.jsx";
 import AdminGuard from "./components/AdminGuard.jsx";
 import AdminLayout from "./components/layouts/AdminLayout.jsx";
 import AdminLoginPage from "./pages/admin/AdminLoginPage.jsx";
+import AdminCreateAccountPage from "./pages/admin/AdminCreateAccountPage.jsx";
+import AdminVerifyAccountPage from "./pages/admin/AdminVerifyAccountPage.jsx";
+import AdminForgotPasswordPage from "./pages/admin/AdminForgotPasswordPage.jsx";
+import AdminResetPasswordPage from "./pages/admin/AdminResetPasswordPage.jsx";
+import AdminResendVerificationPage from "./pages/admin/AdminResendVerificationPage.jsx";
 import RequirePerm from "./components/guards/RequirePerm.jsx";
 const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
 const AdminProductsPage = lazy(() => import("./pages/admin/Products.jsx"));
@@ -247,6 +254,8 @@ export default function App() {
             <Route path="contact" element={<Navigate to="/contact-us" replace />} />
             <Route path="auth/login" element={<StoreLoginPage />} />
             <Route path="auth/register" element={<StoreRegisterPage />} />
+            <Route path="auth/forgot-password" element={<StoreForgotPasswordPage />} />
+            <Route path="auth/reset-password" element={<StoreResetPasswordPage />} />
             <Route path="my-orders" element={<Navigate to="/user/my-orders" replace />} />
 
             <Route path="user" element={<AccountGuard />}>
@@ -294,6 +303,11 @@ export default function App() {
           </Route>
 
           <Route path="/admin/login" element={<AdminLoginPage />} />
+          <Route path="/admin/create-account" element={<AdminCreateAccountPage />} />
+          <Route path="/admin/verify-account" element={<AdminVerifyAccountPage />} />
+          <Route path="/admin/resend-verification" element={<AdminResendVerificationPage />} />
+          <Route path="/admin/forgot-password" element={<AdminForgotPasswordPage />} />
+          <Route path="/admin/reset-password" element={<AdminResetPasswordPage />} />
           <Route path="/admin/forbidden" element={<AdminForbiddenPage />} />
           <Route
             path="/seller/stores/:storeSlug/profile"
@@ -485,7 +499,7 @@ export default function App() {
                 }
               />
               <Route
-                path="our-staff"
+                path="all-accounts"
                 element={
                   <RequirePerm perm="STAFF_MANAGE">
                     <AdminStaffPage />
@@ -496,7 +510,15 @@ export default function App() {
                 path="staff"
                 element={
                   <RequirePerm perm="STAFF_MANAGE">
-                    <Navigate to="/admin/our-staff" replace />
+                    <Navigate to="/admin/all-accounts" replace />
+                  </RequirePerm>
+                }
+              />
+              <Route
+                path="our-staff"
+                element={
+                  <RequirePerm perm="STAFF_MANAGE">
+                    <Navigate to="/admin/all-accounts" replace />
                   </RequirePerm>
                 }
               />
