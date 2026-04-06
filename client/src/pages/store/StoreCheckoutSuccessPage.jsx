@@ -14,6 +14,7 @@ import {
 } from "../../utils/publicOrderReference.js";
 import {
   getOrderContractAction,
+  getOrderContractMeta,
   getOrderContractSummary,
 } from "../../utils/orderContract.ts";
 
@@ -54,10 +55,10 @@ export default function StoreCheckoutSuccessPage() {
   const stripeSessionId = String(params.get("session_id") || "").trim();
   const stripeCancelled = params.get("cancelled") === "1";
   const isStripeFlow = paymentMethod === "STRIPE";
-  const stripeOrderStatusQuery = useQuery({
-    queryKey: ["store", "checkout-success", "stripe-order", orderRef],
+  const orderSnapshotQuery = useQuery({
+    queryKey: ["store", "checkout-success", "order", orderRef],
     queryFn: () => fetchStoreOrder(orderRef),
-    enabled: hasOrderRef && isStripeFlow && (stripeCancelled || !stripeSessionId),
+    enabled: hasOrderRef && (!isStripeFlow || stripeCancelled || !stripeSessionId),
     retry: false,
   });
 
@@ -91,27 +92,45 @@ export default function StoreCheckoutSuccessPage() {
   };
 
   const stripeVerification = verifyStripeQuery.data?.data || null;
-  const stripeOrderSnapshot = stripeOrderStatusQuery.data?.data || null;
+  const orderSnapshot = orderSnapshotQuery.data?.data || null;
+  const stripeOrderSnapshot = isStripeFlow ? orderSnapshot : null;
   const stripeContract = stripeVerification?.contract || stripeOrderSnapshot?.contract || null;
   const stripeStatusSummary = getOrderContractSummary(stripeContract);
-  const stripeOrderPaid =
-    String(stripeOrderSnapshot?.paymentStatus || "").toUpperCase().trim() === "PAID";
+  const stripePaymentMeta =
+    getOrderContractMeta(stripeContract, "paymentStatusMeta") ||
+    stripeOrderSnapshot?.paymentStatusMeta ||
+    null;
+  const stripeOrderPaid = String(stripePaymentMeta?.code || stripeOrderSnapshot?.paymentStatus || "")
+    .toUpperCase()
+    .trim() === "PAID";
   const stripeContinueAction = getOrderContractAction(
     stripeContract,
     "CONTINUE_STRIPE_PAYMENT"
   );
   const stripePaid =
     Boolean(stripeVerification?.paid) ||
-    stripeOrderPaid ||
-    String(stripeContract?.paymentStatus || "").toUpperCase() === "PAID";
+    stripeOrderPaid;
+  const orderStatusSummary = getOrderContractSummary(orderSnapshot?.contract);
+  const orderPaymentEntry = orderSnapshot?.paymentEntry || null;
+  const orderContinueAction = getOrderContractAction(orderSnapshot?.contract, "CONTINUE_PAYMENT");
+  const nonStripePaymentPath =
+    orderPaymentEntry?.visible && orderPaymentEntry?.targetPath
+      ? orderPaymentEntry.targetPath
+      : orderContinueAction?.enabled && orderContinueAction?.targetPath
+        ? orderContinueAction.targetPath
+        : null;
+  const nonStripeStatusLabel = orderStatusSummary?.label || "Order Created";
+  const nonStripeStatusDescription =
+    orderStatusSummary?.description ||
+    "Your order reference is ready. Continue with the latest backend-approved next step from your account.";
   const stripeActionLabel = stripeContinueAction?.label || "Continue Stripe Payment";
   const stripeVerificationError =
     verifyStripeQuery.error?.response?.data?.message ||
     verifyStripeQuery.error?.message ||
     "We could not verify your Stripe payment yet.";
   const stripeOrderStatusError =
-    stripeOrderStatusQuery.error?.response?.data?.message ||
-    stripeOrderStatusQuery.error?.message ||
+    orderSnapshotQuery.error?.response?.data?.message ||
+    orderSnapshotQuery.error?.message ||
     "We could not load the latest order payment status yet.";
 
   if (!hasOrderRef) {
@@ -170,7 +189,7 @@ export default function StoreCheckoutSuccessPage() {
     );
   }
 
-  if (isStripeFlow && !stripeSessionId && stripeOrderStatusQuery.isLoading) {
+  if (isStripeFlow && !stripeSessionId && orderSnapshotQuery.isLoading) {
     return (
       <section className="mx-auto max-w-[1100px] px-3 py-6 sm:px-4 sm:py-8 lg:px-6">
         <div className={cardClass}>
@@ -185,6 +204,27 @@ export default function StoreCheckoutSuccessPage() {
           </h1>
           <p className="mx-auto mt-2 max-w-xl text-center text-sm text-slate-500 sm:text-base">
             The backend is checking whether Stripe already finalized this order through webhook sync.
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  if (!isStripeFlow && orderSnapshotQuery.isLoading) {
+    return (
+      <section className="mx-auto max-w-[1100px] px-3 py-6 sm:px-4 sm:py-8 lg:px-6">
+        <div className={cardClass}>
+          <div className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-full bg-sky-100 text-sky-600 sm:h-20 sm:w-20">
+            <CheckCircle2 className="h-8 w-8 sm:h-10 sm:w-10" />
+          </div>
+          <p className="mt-5 text-center text-sm font-semibold uppercase tracking-[0.14em] text-sky-600">
+            Checking Order Status
+          </p>
+          <h1 className="mt-2 text-center text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            Confirming the latest checkout state
+          </h1>
+          <p className="mx-auto mt-2 max-w-xl text-center text-sm text-slate-500 sm:text-base">
+            The backend is loading the newest order contract before we show the next action.
           </p>
         </div>
       </section>
@@ -240,7 +280,7 @@ export default function StoreCheckoutSuccessPage() {
     );
   }
 
-  if (isStripeFlow && !stripeSessionId && stripeOrderStatusQuery.isError) {
+  if (isStripeFlow && !stripeSessionId && orderSnapshotQuery.isError) {
     return (
       <section className="mx-auto max-w-[1100px] px-3 py-6 sm:px-4 sm:py-8 lg:px-6">
         <div className={cardClass}>
@@ -293,7 +333,7 @@ export default function StoreCheckoutSuccessPage() {
     isStripeFlow &&
     !stripePaid &&
     stripeContinueAction?.enabled &&
-    (stripeCancelled || Boolean(stripeSessionId) || stripeOrderStatusQuery.isSuccess)
+    (stripeCancelled || Boolean(stripeSessionId) || orderSnapshotQuery.isSuccess)
   ) {
     const description = stripeCancelled
       ? "You returned before completing payment. The order still exists and you can reopen Stripe Checkout."
@@ -352,7 +392,7 @@ export default function StoreCheckoutSuccessPage() {
     isStripeFlow &&
     !stripePaid &&
     !stripeContinueAction?.enabled &&
-    (stripeCancelled || Boolean(stripeSessionId) || stripeOrderStatusQuery.isSuccess)
+    (stripeCancelled || Boolean(stripeSessionId) || orderSnapshotQuery.isSuccess)
   ) {
     return (
       <section className="mx-auto max-w-[1100px] px-3 py-6 sm:px-4 sm:py-8 lg:px-6">
@@ -399,16 +439,20 @@ export default function StoreCheckoutSuccessPage() {
           <p className="mt-5 text-sm font-semibold uppercase tracking-[0.14em] text-emerald-600">
             {isStripeFlow
               ? stripeStatusSummary?.label || "Payment Confirmed"
-              : "Order Created"}
+              : nonStripeStatusLabel}
           </p>
           <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            {isStripeFlow ? "Stripe payment completed" : "Continue Payment From Your Account"}
+            {isStripeFlow
+              ? "Stripe payment completed"
+              : nonStripePaymentPath
+                ? "Continue Payment From Your Account"
+                : "Order status updated"}
           </h1>
           <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500 sm:text-base">
             {isStripeFlow
               ? stripeStatusSummary?.description ||
                 "Your Stripe session has been verified by the backend and the order is now marked as paid."
-              : "Your order reference is ready. If this checkout uses per-store QRIS payment, payment can still be pending until you complete transfer and proof review from your account."}
+              : nonStripeStatusDescription}
           </p>
 
           <div className="mt-7 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 sm:p-5">
@@ -431,12 +475,21 @@ export default function StoreCheckoutSuccessPage() {
               >
                 Track Order
               </Link>
-              <Link
-                to="/account/orders"
-                className="inline-flex h-11 w-full items-center justify-center rounded-full border border-emerald-200 px-5 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
-              >
-                Open My Orders
-              </Link>
+              {nonStripePaymentPath ? (
+                <Link
+                  to={nonStripePaymentPath}
+                  className="inline-flex h-11 w-full items-center justify-center rounded-full border border-emerald-200 px-5 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
+                >
+                  {orderPaymentEntry?.label || orderContinueAction?.label || "Continue Payment"}
+                </Link>
+              ) : (
+                <Link
+                  to="/account/orders"
+                  className="inline-flex h-11 w-full items-center justify-center rounded-full border border-emerald-200 px-5 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
+                >
+                  Open My Orders
+                </Link>
+              )}
               <Link
                 to="/"
                 className="inline-flex h-11 w-full items-center justify-center rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"

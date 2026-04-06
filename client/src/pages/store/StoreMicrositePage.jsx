@@ -484,6 +484,9 @@ export default function StoreMicrositePage() {
   const isOperationallyReady = publicOperationalReadiness
     ? Boolean(publicOperationalReadiness.isReady)
     : true;
+  const isStoreOperationallyGated = Boolean(
+    publicOperationalReadiness && !publicOperationalReadiness.isReady
+  );
   const shellIdentity = useMemo(() => {
     if (!publicOperationalReadiness) return identity;
     return {
@@ -745,12 +748,12 @@ export default function StoreMicrositePage() {
     return <MicrositeSkeleton />;
   }
 
-  if (isNotFound) {
+  if (isNotFound || isStoreOperationallyGated) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
         <UiEmptyState
           title="Store not found."
-          description={`We could not find an active store for "${safeSlug}".`}
+          description={`We could not find an eligible public store for "${safeSlug}".`}
           actions={
             <Link
               to="/"

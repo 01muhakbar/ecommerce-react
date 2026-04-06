@@ -85,6 +85,11 @@ export default function StoreMicrositeProductDetailPage() {
     () => normalizePublicStoreIdentity(storeQuery.data),
     [storeQuery.data]
   );
+  const publicOperationalReadiness =
+    storeQuery.data?.data?.summary?.operationalReadiness || null;
+  const isStoreOperationallyGated = Boolean(
+    publicOperationalReadiness && !publicOperationalReadiness.isReady
+  );
   const product = productQuery.data?.data ?? null;
   const productImageSrc = resolveAssetUrl(product?.imageUrl);
   const isStoreNotFound = storeQuery.error?.response?.status === 404;
@@ -117,12 +122,12 @@ export default function StoreMicrositeProductDetailPage() {
     return <MicrositeProductDetailSkeleton />;
   }
 
-  if (isStoreNotFound) {
+  if (isStoreNotFound || isStoreOperationallyGated) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
         <UiEmptyState
           title="Store not found."
-          description={`We could not find an active store for slug "${safeSlug}".`}
+          description={`We could not find an eligible public store for slug "${safeSlug}".`}
           actions={
             <Link
               to="/"

@@ -660,7 +660,7 @@ export default function StoreOrderTrackingPage() {
                 <span>Status:</span>
                 <span
                     className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getToneBadgeClass(
-                    statusSummary?.tone
+                    truthStatus.tone || statusSummary?.tone
                   )}`}
                 >
                   {statusLabel}

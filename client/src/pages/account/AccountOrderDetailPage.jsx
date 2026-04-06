@@ -16,6 +16,7 @@ import {
   getGroupedPaymentReadModel,
   isGroupedPaymentFinal,
 } from "../../utils/groupedPaymentReadModel.ts";
+import { getOrderTruthStatus } from "../../utils/orderTruth.js";
 
 const fetchOrder = async (orderId) => {
   const { data } = await api.get(`/store/orders/my/${orderId}`);
@@ -127,7 +128,16 @@ export default function AccountOrderDetailPage() {
   const parentPaymentStatus = groupedOrder?.paymentStatus || order.paymentStatus;
   const parentPaymentMeta = groupedOrder?.paymentStatusMeta || order.paymentStatusMeta || null;
   const paymentEntry = order.paymentEntry || groupedOrder?.paymentEntry || null;
-  const statusSummary = getOrderContractSummary(order.contract);
+  const statusSummary = getOrderContractSummary(order.contract || groupedOrder?.contract);
+  const truthStatus = getOrderTruthStatus(
+    order?.contract
+      ? order
+      : groupedOrder?.contract
+        ? { ...order, contract: groupedOrder.contract }
+        : order
+  );
+  const statusLabel = truthStatus.label || statusSummary?.label || order.status;
+  const statusTone = truthStatus.tone || statusSummary?.tone || order.status;
 
   return (
     <div className="space-y-6">
@@ -144,10 +154,10 @@ export default function AccountOrderDetailPage() {
         </div>
         <span
           className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${statusStyles(
-            statusSummary?.tone || order.status
+            statusTone
           )}`}
         >
-          {statusSummary?.label || order.status}
+          {statusLabel}
         </span>
       </div>
 

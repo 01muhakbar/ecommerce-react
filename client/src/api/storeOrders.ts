@@ -17,6 +17,36 @@ export const fetchStoreOrder = async (ref: string) => {
       paymentStatus?: string | null;
       totalAmount: number;
       paymentMethod?: string | null;
+      paymentEntry?: {
+        visible?: boolean;
+        label?: string | null;
+        targetPath?: string | null;
+        summaryStatus?: string;
+        summaryLabel?: string | null;
+      };
+      contract?: {
+        statusSummary?: {
+          code?: string;
+          label?: string;
+          tone?: string;
+          description?: string;
+          isFinal?: boolean;
+        };
+        paymentStatusMeta?: {
+          code?: string;
+          label?: string;
+          tone?: string;
+          description?: string;
+          isFinal?: boolean;
+        };
+        availableActions?: Array<{
+          code?: string;
+          label?: string;
+          enabled?: boolean;
+          reason?: string | null;
+          targetPath?: string | null;
+        }>;
+      };
       subtotal?: number;
       discount?: number;
       tax?: number;

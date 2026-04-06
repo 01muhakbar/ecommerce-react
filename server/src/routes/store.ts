@@ -826,34 +826,8 @@ router.get(
         (where as any).storeId = Number((store as any).id);
       }
 
-      const product = await Product.findOne({
-        where: buildPublicProductWhere(where),
-        attributes: [
-          "id",
-          "name",
-          "slug",
-          "sku",
-          "price",
-          "salePrice",
-          "stock",
-          "description",
-          "storeId",
-          "categoryId",
-          "status",
-          "isPublished",
-          "preOrder",
-          "preorderDays",
-          "weight",
-          "condition",
-          "variations",
-          "promoImagePath",
-          "imagePaths",
-          "tags",
-          "updatedAt",
-        ],
-        include: [
-          { model: Category, as: "category", attributes: ["id", "name", "code"] },
-          {
+      const productStoreInclude = storeSlug
+        ? {
             model: Store,
             as: "store",
             attributes: [
@@ -882,7 +856,50 @@ router.get(
                 required: false,
               },
             ],
-          },
+          }
+        : buildPublicOperationalStoreInclude({
+            attributes: [
+              "id",
+              "name",
+              "slug",
+              "status",
+              "description",
+              "logoUrl",
+              "phone",
+              "email",
+              "whatsapp",
+              "createdAt",
+            ],
+          });
+
+      const product = await Product.findOne({
+        where: buildPublicProductWhere(where),
+        attributes: [
+          "id",
+          "name",
+          "slug",
+          "sku",
+          "price",
+          "salePrice",
+          "stock",
+          "description",
+          "storeId",
+          "categoryId",
+          "status",
+          "isPublished",
+          "preOrder",
+          "preorderDays",
+          "weight",
+          "condition",
+          "variations",
+          "promoImagePath",
+          "imagePaths",
+          "tags",
+          "updatedAt",
+        ],
+        include: [
+          { model: Category, as: "category", attributes: ["id", "name", "code"] },
+          productStoreInclude,
         ],
       });
       if (process.env.NODE_ENV !== "production" && !isNumeric) {
@@ -1619,9 +1636,14 @@ router.get(
         ),
         fulfillmentStatuses: storeSplits.map((split) => split.fulfillmentStatus),
       });
+      const paymentEntry = buildBuyerPaymentEntryWithTargetPath(
+        Number(order.id),
+        storeSplits.map((split) => split.payment?.displayStatus || split.paymentStatus)
+      );
 
       return res.json({
         data: {
+          id: Number(order.id),
           ref: invoiceNo || String(order.id),
           invoiceNo,
           checkoutMode:
@@ -1664,6 +1686,7 @@ router.get(
           grandTotal: amounts.total,
           couponCode: (order as any).couponCode ?? null,
           paymentMethod,
+          paymentEntry,
           createdAt,
           shippingDetails,
           customerName,

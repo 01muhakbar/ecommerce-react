@@ -443,7 +443,11 @@ export default function AdminProductsPage() {
   const getPublished = (product) => {
     const override = publishedOverrides[product.id];
     if (typeof override === "boolean") return override;
-    return Boolean(product.published ?? true);
+    if (typeof product?.published === "boolean") return product.published;
+    if (typeof product?.visibility?.isPublished === "boolean") {
+      return product.visibility.isPublished;
+    }
+    return false;
   };
 
   const allVisibleSelected =
