@@ -449,6 +449,43 @@ export const fetchAdminCouponMeta = async () => {
   return data;
 };
 
+export const exportAdminCoupons = async (params = {}) => {
+  const query = new URLSearchParams(
+    Object.entries({
+      q: params?.q || undefined,
+      scopeType: params?.scopeType || undefined,
+    }).filter(([, value]) => value !== undefined && value !== null && value !== "")
+  ).toString();
+  const endpoint = query ? `/api/admin/coupons/export?${query}` : "/api/admin/coupons/export";
+  const response = await fetch(endpoint, { credentials: "include" });
+
+  if (!response.ok) {
+    const fallback = `Failed to export coupons (${response.status}).`;
+    try {
+      const payload = await response.json();
+      throw new Error(payload?.message || fallback);
+    } catch {
+      throw new Error(fallback);
+    }
+  }
+
+  return response;
+};
+
+export const importAdminCoupons = async (file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await adminApi.post("/admin/coupons/import", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+};
+
+export const bulkAdminCoupons = async (action, ids) => {
+  const { data } = await adminApi.post("/admin/coupons/bulk", { action, ids });
+  return data;
+};
+
 export const fetchAdminAttributes = async () => {
   const { data } = await adminApi.get("/admin/attributes");
   return data;

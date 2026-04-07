@@ -19,6 +19,28 @@ const formatDateTime = (value) => {
   return date.toLocaleString();
 };
 
+const getToneBadgeClass = (tone) => {
+  const value = String(tone || "").trim().toLowerCase();
+  if (value === "amber") return "bg-amber-100 text-amber-700";
+  if (value === "sky") return "bg-sky-100 text-sky-700";
+  if (value === "indigo") return "bg-indigo-100 text-indigo-700";
+  if (value === "emerald") return "bg-emerald-100 text-emerald-700";
+  if (value === "rose") return "bg-rose-100 text-rose-700";
+  if (value === "orange") return "bg-orange-100 text-orange-700";
+  return "bg-slate-100 text-slate-700";
+};
+
+function StatusMetaBadge({ label, tone, prefix = "" }) {
+  const text = String(label || "-").trim() || "-";
+  return (
+    <span
+      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getToneBadgeClass(tone)}`}
+    >
+      {prefix ? `${prefix} ${text}` : text}
+    </span>
+  );
+}
+
 export default function AdminPaymentAuditPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchInput, setSearchInput] = useState(searchParams.get("search") || "");
@@ -187,7 +209,7 @@ export default function AdminPaymentAuditPage() {
                     <th className="px-4 py-3">Mode</th>
                     <th className="px-4 py-3">Stores</th>
                     <th className="px-4 py-3">Grand Total</th>
-                    <th className="px-4 py-3">Parent Status</th>
+                    <th className="px-4 py-3">Parent State</th>
                     <th className="px-4 py-3">Counts</th>
                     <th className="px-4 py-3">Created</th>
                     <th className="px-4 py-3 text-right">Action</th>
@@ -214,6 +236,11 @@ export default function AdminPaymentAuditPage() {
                       </td>
                       <td className="px-4 py-4">
                         <div className="space-y-1">
+                          <StatusMetaBadge
+                            label={entry.orderStatusMeta?.label || entry.orderStatus}
+                            tone={entry.orderStatusMeta?.tone}
+                            prefix="Order"
+                          />
                           <PaymentStatusBadge
                             status={entry.paymentStatus}
                             label={entry.paymentStatusMeta?.label}
@@ -221,7 +248,9 @@ export default function AdminPaymentAuditPage() {
                             prefix="Parent"
                           />
                           <div className="text-xs text-slate-500">
-                            {entry.paymentStatusMeta?.description || "-"}
+                            {entry.orderStatusMeta?.description ||
+                              entry.paymentStatusMeta?.description ||
+                              "-"}
                           </div>
                         </div>
                       </td>

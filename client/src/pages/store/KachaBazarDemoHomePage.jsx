@@ -4,7 +4,9 @@ import { Link } from "react-router-dom";
 import { useCategories, useProducts } from "../../storefront.jsx";
 import { fetchStoreCoupons } from "../../api/public/storeCoupons.ts";
 import { getStoreCustomization } from "../../api/public/storeCustomizationPublic.ts";
+import { getStorePublicIdentity } from "../../api/public/storePublicIdentity.ts";
 import { formatCurrency } from "../../utils/format.js";
+import { resolveAssetUrl } from "../../lib/assetUrl.js";
 import CouponPanel from "../../components/kachabazar-demo/CouponPanel.jsx";
 import FeatureStrip from "../../components/kachabazar-demo/FeatureStrip.jsx";
 import FeaturedCategoriesSection from "../../components/kachabazar-demo/FeaturedCategoriesSection.jsx";
@@ -171,6 +173,31 @@ const normalizeCouponCodes = (value, fallback = []) => {
     .map((item) => String(item ?? "").trim())
     .filter(Boolean);
   return normalized.length > 0 ? normalized : fallback;
+};
+
+const formatCouponDate = (value) => {
+  if (!value || !Number.isFinite(Date.parse(value))) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(value));
+};
+
+const getCouponStatusMeta = (coupon) => {
+  const fallbackLabel = String(coupon?.status?.label || "Active").trim() || "Active";
+  const fallbackTone = String(coupon?.status?.tone || "emerald").trim() || "emerald";
+  const expiresAt = coupon?.expiresAt;
+  if (expiresAt && Number.isFinite(Date.parse(expiresAt)) && Date.parse(expiresAt) <= Date.now()) {
+    return {
+      label: "Expired",
+      tone: "rose",
+    };
+  }
+  return {
+    label: fallbackLabel,
+    tone: fallbackTone,
+  };
 };
 
 const normalizeHomeSectionConfig = (raw) => {
@@ -456,7 +483,7 @@ export default function KachaBazarDemoHomePage() {
     isError: isCategoriesError,
     error: categoriesError,
     refetch: refetchCategories,
-  } = useCategories();
+  } = useCategories({ parentsOnly: true });
   const {
     data: productsData,
     isLoading,
@@ -491,9 +518,6 @@ export default function KachaBazarDemoHomePage() {
 
   const [activeSlide, setActiveSlide] = useState(0);
   const [copiedCode, setCopiedCode] = useState("");
-  const [coupons, setCoupons] = useState([]);
-  const [couponError, setCouponError] = useState("");
-  const [isCouponsLoading, setIsCouponsLoading] = useState(true);
   const mainSlider = useMemo(
     () => normalizeMainSlider(homeCustomizationQuery.data?.customization?.home?.mainSlider),
     [homeCustomizationQuery.data]
@@ -502,6 +526,25 @@ export default function KachaBazarDemoHomePage() {
     () => normalizeHomeSectionConfig(homeCustomizationQuery.data?.customization?.home),
     [homeCustomizationQuery.data]
   );
+  const storeIdentityQuery = useQuery({
+    queryKey: ["store-public-identity", "primary"],
+    queryFn: getStorePublicIdentity,
+    staleTime: 60_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+  const publicStore = storeIdentityQuery.data?.data || null;
+  const publicStoreSlug = toText(publicStore?.slug).toLowerCase();
+  const publicStoreName = toText(publicStore?.name);
+  const couponsQuery = useQuery({
+    queryKey: ["store-coupons", "home-widget", publicStoreSlug || "primary"],
+    queryFn: () =>
+      fetchStoreCoupons(publicStoreSlug ? { storeSlug: publicStoreSlug } : undefined),
+    enabled: !storeIdentityQuery.isLoading,
+    staleTime: 30_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
 
   useEffect(() => {
     if (activeSlide >= mainSlider.slides.length) {
@@ -509,65 +552,69 @@ export default function KachaBazarDemoHomePage() {
     }
   }, [activeSlide, mainSlider.slides.length]);
 
-  useEffect(() => {
-    let mounted = true;
-    const loadCoupons = async () => {
-      if (mounted) {
-        setIsCouponsLoading(true);
-        setCouponError("");
-      }
-      try {
-        const response = await fetchStoreCoupons();
-        if (!mounted) return;
-        setCoupons(Array.isArray(response.data) ? response.data : []);
-      } catch (err) {
-        if (!mounted) return;
-        setCoupons([]);
-        setCouponError("Failed to load coupons from the store API.");
-      } finally {
-        if (mounted) {
-          setIsCouponsLoading(false);
-        }
-      }
-    };
-    loadCoupons();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
   const popularProducts = rawProducts;
+  const coupons = Array.isArray(couponsQuery.data?.data) ? couponsQuery.data.data : [];
+  const couponError =
+    couponsQuery.error?.response?.data?.message ||
+    couponsQuery.error?.message ||
+    (couponsQuery.isError ? "Failed to load coupons from the store API." : "");
+  const isCouponsLoading = couponsQuery.isLoading || storeIdentityQuery.isLoading;
   const couponList = useMemo(() => {
-    const activeCodes = new Set(
+    const prioritizedCodes = new Set(
       (homeSections.discountCouponBox.activeCouponCodes || []).map((code) =>
         String(code).trim().toLowerCase()
       )
     );
-    const filteredCoupons =
-      activeCodes.size > 0
-        ? coupons.filter((coupon) => activeCodes.has(String(coupon?.code || "").trim().toLowerCase()))
-        : coupons;
-
-    return filteredCoupons.map((coupon) => ({
-      id: coupon.id,
-      code: coupon.code,
-      discountLabel:
-        coupon.discountType === "percent"
-          ? `${coupon.amount}% Off`
-          : `${formatCurrency(Number(coupon.amount || 0))} Off`,
-      title:
-        coupon.discountType === "percent"
-          ? `Save up to ${coupon.amount}% on selected items`
-          : `Flat savings of ${formatCurrency(Number(coupon.amount || 0))}`,
-      countdown: "00 : 00 : 00 : 00",
-      status:
-        coupon.expiresAt && Number.isFinite(Date.parse(coupon.expiresAt))
-          ? Date.parse(coupon.expiresAt) > Date.now()
-            ? "Active"
-            : "Inactive"
-          : "Active",
-    }));
-  }, [coupons, homeSections.discountCouponBox.activeCouponCodes]);
+    return coupons
+      .map((coupon, index) => {
+        const code = toText(coupon?.code).toUpperCase();
+        const status = getCouponStatusMeta(coupon);
+        const minSpend = Number(coupon?.minSpend || 0);
+        const expiresAtLabel = formatCouponDate(coupon?.expiresAt);
+        const startsAtLabel = formatCouponDate(coupon?.startsAt);
+        return {
+          id: coupon?.id ?? `${code}-${index}`,
+          code,
+          bannerImageUrl: resolveAssetUrl(coupon?.bannerImageUrl || ""),
+          scopeType: coupon?.scopeType === "STORE" ? "STORE" : "PLATFORM",
+          storeName: toText(coupon?.store?.name) || publicStoreName,
+          storeSlug:
+            toText(coupon?.store?.slug).toLowerCase() ||
+            (coupon?.scopeType === "STORE" ? publicStoreSlug : ""),
+          scopeLabel: coupon?.scopeLabel || (coupon?.scopeType === "STORE" ? "Store coupon" : "Platform coupon"),
+          discountLabel:
+            coupon?.discountType === "percent"
+              ? `${Number(coupon?.amount || 0)}% Off`
+              : `${formatCurrency(Number(coupon?.amount || 0))} Off`,
+          title:
+            coupon?.discountType === "percent"
+              ? `Save ${Number(coupon?.amount || 0)}% on eligible checkout totals`
+              : `Save ${formatCurrency(Number(coupon?.amount || 0))} on eligible checkout totals`,
+          minimumOrderLabel:
+            minSpend > 0 ? formatCurrency(minSpend) : "No minimum order",
+          validityLabel: expiresAtLabel
+            ? expiresAtLabel
+            : startsAtLabel
+              ? `Started ${startsAtLabel}`
+              : "No expiry limit",
+          expiresAt: coupon?.expiresAt || null,
+          applicabilityNote:
+            toText(coupon?.applicabilityNote) ||
+            (coupon?.scopeType === "STORE"
+              ? "Redeemable only inside this store."
+              : "Valid for orders from all eligible stores."),
+          statusLabel: status.label,
+          statusTone: status.tone,
+          prioritized: prioritizedCodes.has(code.toLowerCase()),
+          originalIndex: index,
+        };
+      })
+      .sort((left, right) => {
+        if (left.prioritized !== right.prioritized) return left.prioritized ? -1 : 1;
+        if (left.scopeType !== right.scopeType) return left.scopeType === "STORE" ? -1 : 1;
+        return left.originalIndex - right.originalIndex;
+      });
+  }, [coupons, homeSections.discountCouponBox.activeCouponCodes, publicStoreName, publicStoreSlug]);
 
   const safeProducts = useMemo(
     () =>
@@ -647,7 +694,7 @@ export default function KachaBazarDemoHomePage() {
           <div
             className={`grid grid-cols-1 gap-4 ${
               showDiscountCouponBox
-                ? "lg:grid-cols-[minmax(0,1fr)_272px] lg:items-start lg:gap-7 xl:grid-cols-[minmax(0,1fr)_284px] xl:gap-8"
+                ? "lg:grid-cols-[minmax(0,1fr)_456px] lg:items-start lg:gap-6 xl:grid-cols-[minmax(0,1fr)_476px] xl:gap-7"
                 : ""
             }`}
           >
@@ -660,12 +707,13 @@ export default function KachaBazarDemoHomePage() {
               />
             </div>
             {showDiscountCouponBox ? (
-              <div className="lg:pt-2">
+              <div className="lg:pt-1">
                 <CouponPanel
                   title={homeSections.discountCouponBox.title}
                   couponList={couponList}
                   isLoading={isCouponsLoading}
                   couponError={couponError}
+                  storeName={publicStoreName}
                   copiedCode={copiedCode}
                   onCopy={handleCopyCoupon}
                 />

@@ -95,9 +95,27 @@ export type StoreCoupon = {
   discountType: "percent" | "fixed";
   amount: number;
   minSpend: number;
+  bannerImageUrl?: string | null;
   scopeType?: "PLATFORM" | "STORE";
+  storeId?: number | null;
+  store?: {
+    id: number;
+    name: string;
+    slug?: string | null;
+    status?: string | null;
+  } | null;
+  scopeLabel?: string;
+  applicabilityNote?: string | null;
+  status?: {
+    code: string;
+    label: string;
+    tone: string;
+  } | null;
+  isPubliclyRedeemable?: boolean;
   startsAt?: string | null;
   expiresAt?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 };
 
 export type StoreCouponQuoteResponse = {
@@ -162,6 +180,18 @@ export type StoreCheckoutPreviewGroup = {
   paymentAvailable: boolean;
   paymentMethod: "QRIS" | null;
   paymentProfileStatus: "ACTIVE" | "PENDING" | "REJECTED" | "INACTIVE" | "MISSING" | string;
+  paymentProfileStatusMeta?: {
+    code: string;
+    label: string;
+    tone?: string;
+    description?: string | null;
+  } | null;
+  paymentAvailabilityMeta?: {
+    code: string;
+    label: string;
+    reason?: string | null;
+    isAvailable: boolean;
+  } | null;
   merchantName?: string | null;
   accountName?: string | null;
   qrisImageUrl?: string | null;

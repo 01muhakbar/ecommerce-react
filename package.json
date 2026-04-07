@@ -28,6 +28,7 @@
     "qa:mvf:order-payment": "pnpm --filter server smoke:order-payment",
     "qa:mvf:store-readiness": "pnpm --filter server smoke:store-readiness",
     "qa:mvf:visibility:frontend": "tsx ./tools/qa/mvf-visibility-frontend.ts",
+    "qa:e2e:truth": "tsx ./tools/qa/e2e-truth-smoke.ts",
     "qa:auth:frontend": "tsx ./tools/qa/auth-frontend-smoke.ts",
     "qa:admin:public-auth": "tsx ./tools/qa/admin-public-auth-frontend-smoke.ts",
     "qa:admin:public-auth:live": "tsx ./tools/qa/admin-public-auth-live-subset.ts",

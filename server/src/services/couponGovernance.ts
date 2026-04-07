@@ -21,6 +21,14 @@ const toIso = (value: any): string | null => {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 };
 
+export const normalizeCouponAssetUrl = (value: any): string | null => {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  if (/^https?:\/\//i.test(text) || text.startsWith("/uploads/")) return text;
+  if (text.startsWith("uploads/")) return `/${text}`;
+  return null;
+};
+
 export const normalizeCouponScopeType = (value: any): CouponScopeType => {
   const normalized = String(value || "").trim().toUpperCase();
   return normalized === "STORE" ? "STORE" : "PLATFORM";
@@ -105,6 +113,13 @@ export const serializePublicCouponSnapshot = (coupon: any) => {
   const plain = getPlain(coupon);
   const scope = serializePublicCouponScope(plain);
   const timeWindow = getCouponTimeWindow(plain);
+  const store = serializeCouponStoreSummary(plain);
+  const applicabilityNote =
+    scope.scopeType === "STORE"
+      ? store?.name
+        ? `Valid only for ${store.name}.`
+        : "Valid only for its linked store."
+      : "Valid for eligible storefront orders.";
   return {
     id: toFiniteNumber(plain?.id ?? null),
     code: String(plain?.code || "").trim().toUpperCase(),
@@ -112,7 +127,20 @@ export const serializePublicCouponSnapshot = (coupon: any) => {
     amount: toFiniteNumber(plain?.amount) ?? 0,
     minSpend: toFiniteNumber(plain?.minSpend) ?? 0,
     scopeType: scope.scopeType,
+    storeId: scope.storeId,
+    store,
+    bannerImageUrl: normalizeCouponAssetUrl(plain?.bannerImageUrl ?? plain?.banner_image_url ?? null),
+    scopeLabel: scope.scopeType === "STORE" ? "Store coupon" : "Platform coupon",
+    applicabilityNote,
+    status: {
+      code: "ACTIVE",
+      label: "Active",
+      tone: "emerald",
+    },
+    isPubliclyRedeemable: true,
     startsAt: timeWindow.startsAt,
     expiresAt: timeWindow.expiresAt,
+    createdAt: toIso(plain?.createdAt ?? null),
+    updatedAt: toIso(plain?.updatedAt ?? null),
   };
 };

@@ -13,27 +13,47 @@ import {
 
 const getImageSrc = (product) => resolveProductImageUrl(product);
 
-const fetchProducts = async ({ q, search, category, page, limit }) => {
+const fetchProducts = async ({
+  q,
+  search,
+  category,
+  minPrice,
+  maxPrice,
+  minRating,
+  sort,
+  page,
+  limit,
+}) => {
   const keyword = search ?? q;
   return fetchStoreProducts({
     search: keyword || undefined,
     category,
+    minPrice,
+    maxPrice,
+    minRating,
+    sort,
     page,
     limit,
   });
 };
 
-export const useCategories = () =>
-  useQuery({
-    queryKey: ["storefront", "categories"],
-    queryFn: fetchStoreCategories,
+export const useCategories = (options = {}) => {
+  const parentsOnly = options?.parentsOnly === true;
+  return useQuery({
+    queryKey: ["storefront", "categories", parentsOnly ? "parents-only" : "all"],
+    queryFn: () => fetchStoreCategories({ parentsOnly }),
     staleTime: 1000 * 60 * 5,
   });
+};
 
 export const useProducts = ({
   q,
   search,
   category,
+  minPrice,
+  maxPrice,
+  minRating,
+  sort,
   page,
   limit,
   enabled = true,
@@ -45,10 +65,25 @@ export const useProducts = ({
       "products",
       search || q || "",
       category || "",
+      minPrice || "",
+      maxPrice || "",
+      minRating || "",
+      sort || "",
       page || 1,
       limit || 12,
     ],
-    queryFn: () => fetchProducts({ q, search, category, page, limit }),
+    queryFn: () =>
+      fetchProducts({
+        q,
+        search,
+        category,
+        minPrice,
+        maxPrice,
+        minRating,
+        sort,
+        page,
+        limit,
+      }),
     placeholderData: keepPreviousData ? prevData : undefined,
     enabled,
     staleTime: 1000 * 30,

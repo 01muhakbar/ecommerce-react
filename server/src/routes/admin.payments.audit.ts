@@ -482,6 +482,8 @@ const summarizeAuditRow = (order: any) => {
     buyerEmail: getAttr(customer, "email") ? String(getAttr(customer, "email")) : null,
     totalStores: uniqueStoreIds.length,
     grandTotal: toNumber(getAttr(order, "totalAmount")),
+    orderStatus: String(getAttr(order, "status") || "pending"),
+    orderStatusMeta: buildOrderStatusMeta(getAttr(order, "status") || "pending"),
     paymentStatus,
     paymentStatusMeta: buildPaymentStatusMeta(paymentStatus),
     createdAt: getAttr(order, "createdAt") || null,

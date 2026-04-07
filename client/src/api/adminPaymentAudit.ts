@@ -23,6 +23,8 @@ export type AdminPaymentAuditListItem = {
   buyerEmail?: string | null;
   totalStores: number;
   grandTotal: number;
+  orderStatus: string;
+  orderStatusMeta?: StatusMeta;
   paymentStatus: string;
   paymentStatusMeta?: StatusMeta;
   createdAt?: string | null;

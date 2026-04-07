@@ -531,6 +531,82 @@ function resolveInvalidCheckoutItemMessage(item) {
   }
 }
 
+function getCheckoutPaymentProfileStatusLabel(group) {
+  return (
+    group?.paymentProfileStatusMeta?.label ||
+    String(group?.paymentProfileStatus || "").trim() ||
+    "Unavailable"
+  );
+}
+
+function getCheckoutPaymentProfileStatusSource(group) {
+  return group?.paymentProfileStatusMeta?.label ? "meta" : "fallback";
+}
+
+function getCheckoutGroupPaymentBadgeLabel(group) {
+  return (
+    group?.paymentAvailabilityMeta?.label ||
+    (group?.paymentAvailable ? "Payment Ready" : "Payment Blocked")
+  );
+}
+
+function getCheckoutGroupPaymentBadgeSource(group) {
+  return group?.paymentAvailabilityMeta?.label ? "meta" : "fallback";
+}
+
+function getCheckoutGroupBlockedReason(group) {
+  const metaReason = String(group?.paymentAvailabilityMeta?.reason || "").trim();
+  if (metaReason) return metaReason;
+  const warning = String(group?.warning || "").trim();
+  if (warning) return warning;
+  return "This store is not ready for checkout yet.";
+}
+
+function getCheckoutGroupBlockedReasonSource(group) {
+  const metaReason = String(group?.paymentAvailabilityMeta?.reason || "").trim();
+  if (metaReason) return "meta";
+  const warning = String(group?.warning || "").trim();
+  if (warning) return "warning";
+  return "fallback";
+}
+
+function getCheckoutGroupBuyerGuidance(group) {
+  if (group?.paymentAvailable) {
+    return "QRIS details stay hidden on checkout. After Place an Order, open the payment page for this store to scan the QR code, copy the exact amount, and submit proof.";
+  }
+
+  return `${getCheckoutGroupBlockedReason(
+    group
+  )} This store stays blocked from checkout until backend payment readiness becomes active again.`;
+}
+
+function getCheckoutPaymentBlockerMessage(groups) {
+  const blockedGroups = Array.isArray(groups)
+    ? groups.filter((group) => !group?.paymentAvailable)
+    : [];
+  if (blockedGroups.length === 0) return null;
+
+  if (blockedGroups.length === 1) {
+    const group = blockedGroups[0];
+    return `${group?.storeName || "This store"} cannot accept checkout yet. ${getCheckoutGroupBlockedReason(
+      group
+    )}`;
+  }
+
+  const blockedSummary = blockedGroups
+    .map(
+      (group) =>
+        `${group?.storeName || `Store ${group?.storeId}`}: ${getCheckoutGroupBlockedReason(group)}`
+    )
+    .join(" ");
+
+  return `Checkout is blocked until every store has an active backend payment setup. ${blockedSummary}`;
+}
+
+function getCheckoutPreviewGroupTestId(group, part) {
+  return `checkout-preview-group-${part}-${group?.storeId ?? "unknown"}`;
+}
+
 function resolveCheckoutSubmitErrorMessage(data, fallbackMessage) {
   const serverMessage =
     typeof fallbackMessage === "string" && fallbackMessage.trim()
@@ -840,6 +916,9 @@ export default function CheckoutPage() {
   const total = Math.max(0, baseGrandTotal - discountValue);
   const previewHasPaymentBlocker = checkoutPreviewGroups.some(
     (group) => !group.paymentAvailable
+  );
+  const previewPaymentBlockerMessage = getCheckoutPaymentBlockerMessage(
+    checkoutPreviewGroups
   );
   const couponBlocksSubmission =
     checkoutMode === "MULTI_STORE" && Boolean(appliedCouponMeta?.code);
@@ -1983,9 +2062,12 @@ export default function CheckoutPage() {
                 {!checkoutPreviewQuery.isLoading && !checkoutPreviewQuery.isError ? (
                   <>
                     {previewHasPaymentBlocker ? (
-                      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                        Some stores do not have an active QRIS payment profile yet. Fix store
-                        payment readiness before submitting this order.
+                      <div
+                        data-testid="checkout-preview-blocker-message"
+                        className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+                      >
+                        {previewPaymentBlockerMessage ||
+                          "Some stores are still blocked by backend payment readiness, so this order cannot be submitted yet."}
                       </div>
                     ) : null}
                     {checkoutPreviewInvalidItems.length > 0 ? (
@@ -2028,6 +2110,7 @@ export default function CheckoutPage() {
                       {checkoutPreviewGroups.map((group) => (
                         <article
                           key={group.storeId}
+                          data-testid={getCheckoutPreviewGroupTestId(group, "container")}
                           className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4"
                         >
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -2037,13 +2120,18 @@ export default function CheckoutPage() {
                                   {group.storeName}
                                 </h3>
                                 <span
+                                  data-testid={getCheckoutPreviewGroupTestId(
+                                    group,
+                                    "payment-availability"
+                                  )}
+                                  data-checkout-source={getCheckoutGroupPaymentBadgeSource(group)}
                                   className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${
                                     group.paymentAvailable
                                       ? "bg-emerald-100 text-emerald-700"
                                       : "bg-amber-100 text-amber-700"
                                   }`}
                                 >
-                                  {group.paymentAvailable ? "QRIS Ready" : "QRIS Not Ready"}
+                                  {getCheckoutGroupPaymentBadgeLabel(group)}
                                 </span>
                               </div>
                               <p className="mt-1 text-xs text-slate-500">
@@ -2052,17 +2140,25 @@ export default function CheckoutPage() {
                                   : `Store ID ${group.storeId}`}
                               </p>
                             </div>
-                            <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-                              Payment Profile:{" "}
+                            <div
+                              data-testid={getCheckoutPreviewGroupTestId(group, "payment-profile")}
+                              data-checkout-source={getCheckoutPaymentProfileStatusSource(group)}
+                              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600"
+                            >
+                              Payment Snapshot:{" "}
                               <span className="font-semibold text-slate-900">
-                                {group.paymentProfileStatus}
+                                {getCheckoutPaymentProfileStatusLabel(group)}
                               </span>
                             </div>
                           </div>
 
-                          {group.warning ? (
-                            <p className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
-                              {group.warning}
+                          {!group.paymentAvailable && getCheckoutGroupBlockedReason(group) ? (
+                            <p
+                              data-testid={getCheckoutPreviewGroupTestId(group, "blocked-reason")}
+                              data-checkout-source={getCheckoutGroupBlockedReasonSource(group)}
+                              className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800"
+                            >
+                              {getCheckoutGroupBlockedReason(group)}
                             </p>
                           ) : null}
                           {group.paymentInstruction ? (
@@ -2328,7 +2424,7 @@ export default function CheckoutPage() {
                                   : "bg-amber-100 text-amber-700"
                               }`}
                             >
-                              {group.paymentAvailable ? "QRIS Ready" : "QRIS Blocked"}
+                              {getCheckoutGroupPaymentBadgeLabel(group)}
                             </span>
                           </div>
                           <p className="mt-1 text-xs text-slate-500">
@@ -2342,7 +2438,7 @@ export default function CheckoutPage() {
                           </p>
                           <p>
                             <span className="font-semibold text-slate-900">Snapshot:</span>{" "}
-                            {group.paymentProfileStatus}
+                            {getCheckoutPaymentProfileStatusLabel(group)}
                           </p>
                           <p>
                             <span className="font-semibold text-slate-900">Merchant:</span>{" "}
@@ -2354,9 +2450,9 @@ export default function CheckoutPage() {
                           </p>
                         </div>
                       </div>
-                          {group.warning ? (
+                          {!group.paymentAvailable && getCheckoutGroupBlockedReason(group) ? (
                         <div className="mt-3 rounded-2xl border border-amber-200 bg-white px-3 py-2 text-xs leading-5 text-amber-800">
-                          {group.warning}
+                          {getCheckoutGroupBlockedReason(group)}
                         </div>
                       ) : null}
                       <div className="mt-4 space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
@@ -2365,9 +2461,7 @@ export default function CheckoutPage() {
                               Buyer Guidance
                             </p>
                             <p className="mt-1 text-sm text-slate-700">
-                              {group.paymentAvailable
-                                ? "QRIS details stay hidden on checkout. After Place an Order, open the payment page for this store to scan the QR code, copy the exact amount, and submit proof."
-                                : "This store does not have an active approved QRIS setup yet, so the order cannot be submitted."}
+                              {getCheckoutGroupBuyerGuidance(group)}
                             </p>
                           </div>
                           <div className="grid gap-3 sm:grid-cols-3">
@@ -2561,10 +2655,17 @@ export default function CheckoutPage() {
                   {checkoutPreviewInvalidMessages.map((item) => (
                     <div
                       key={`${item.productId}-${item.reason}`}
+                      data-testid={`checkout-invalid-item-${item.productId}`}
+                      data-checkout-reason={item.reason}
                       className="rounded-2xl border border-amber-200 bg-white/80 px-3 py-3"
                     >
                       <p className="text-sm font-semibold text-slate-900">{item.productName}</p>
-                      <p className="mt-1 text-xs leading-5 text-amber-800">{item.message}</p>
+                      <p
+                        data-testid={`checkout-invalid-item-message-${item.productId}`}
+                        className="mt-1 text-xs leading-5 text-amber-800"
+                      >
+                        {item.message}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -2735,6 +2836,7 @@ export default function CheckoutPage() {
 
             <button
               type="submit"
+              data-testid="checkout-submit-cta"
               disabled={
                 isSubmitting ||
                 isRemoteSyncing ||
@@ -2758,7 +2860,10 @@ export default function CheckoutPage() {
               </span>
             </button>
             {isPreviewBlockingSubmission ? (
-              <p className="mt-3 text-center text-xs leading-5 text-amber-600">
+              <p
+                data-testid="checkout-submit-blocker-message"
+                className="mt-3 text-center text-xs leading-5 text-amber-600"
+              >
                 {previewBlocksPricingActions
                   ? "Checkout preview must finish syncing with the latest backend totals before you can place this order."
                   : "Resolve the blocked store groups or invalid items above before placing this order."}

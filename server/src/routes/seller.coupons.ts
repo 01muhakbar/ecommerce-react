@@ -5,6 +5,7 @@ import { Coupon, Store } from "../models/index.js";
 import { parseLocaleNumber } from "../services/coupon.service.js";
 import {
   getCouponTimeWindow,
+  normalizeCouponAssetUrl,
   serializeCouponStoreSummary,
 } from "../services/sharedContracts/couponGovernance.js";
 
@@ -116,6 +117,9 @@ const serializeSellerCoupon = (coupon: any, sellerAccess: any) => {
     amount: Number(plain?.amount || 0),
     minSpend: Number(plain?.minSpend || 0),
     active: Boolean(plain?.active),
+    bannerImageUrl: normalizeCouponAssetUrl(
+      plain?.bannerImageUrl ?? plain?.banner_image_url ?? null
+    ),
     scopeType: "STORE",
     storeId: Number(plain?.storeId || store?.id || 0) || null,
     startsAt: status.startsAt,

@@ -54,7 +54,7 @@ const deriveSubLinks = (category, products) => {
 };
 
 const renderCategoryVisual = (category) => {
-  const rawVisual = String(category?.image || category?.icon || "").trim();
+  const rawVisual = String(category?.icon || category?.image || "").trim();
   if (!rawVisual) {
     return (
       <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-sm font-bold text-emerald-600 transition group-hover:bg-emerald-100 group-hover:text-emerald-700">
@@ -82,7 +82,9 @@ const renderCategoryVisual = (category) => {
 
 function CategoryCell({ category, subLinks }) {
   const slug = String(category?.slug || category?.code || category?.id || "");
-  const categoryHref = slug ? `/category/${encodeURIComponent(slug)}` : "/category";
+  const categoryHref = slug
+    ? `/search?category=${encodeURIComponent(slug)}&page=1`
+    : "/search?page=1";
   const links = subLinks.length > 0 ? subLinks : ["Featured picks", "Daily deals", "Top items"];
 
   return (
@@ -99,7 +101,7 @@ function CategoryCell({ category, subLinks }) {
         {links.map((tag) => (
           <li key={`${slug}-${tag}`}>
             <Link
-              to={`/search?category=${encodeURIComponent(slug)}&q=${encodeURIComponent(tag)}`}
+              to={`/search?category=${encodeURIComponent(slug)}&page=1&q=${encodeURIComponent(tag)}`}
               className="inline-flex items-center gap-1.5 text-xs text-slate-500 transition hover:text-emerald-600"
             >
               <span className="text-[11px] text-slate-400 transition group-hover:text-emerald-500">

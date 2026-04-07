@@ -64,6 +64,13 @@ const normalizeStoreSlug = (value: any) =>
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "");
+const parseBool = (value: any): boolean | undefined => {
+  if (value === undefined || value === null || value === "") return undefined;
+  const normalized = String(value).trim().toLowerCase();
+  if (normalized === "true" || normalized === "1") return true;
+  if (normalized === "false" || normalized === "0") return false;
+  return undefined;
+};
 const normalizeStripeSessionId = (value: any) => String(value || "").trim();
 const getAuthUserId = (req: Request, res: Response) => {
   const user = (req as any).user;
@@ -587,13 +594,31 @@ const toProductListItem = (product: any) => {
   };
 };
 
-const buildPublicProductWhere = (extraWhere: Record<string, any> = {}) => ({
-  status: "active",
-  isPublished: { [Op.in]: [1, true] },
-  sellerSubmissionStatus: "none",
-  storeId: { [Op.not]: null },
-  ...extraWhere,
-});
+const buildPublicProductWhere = (extraWhere: Record<string, any> = {}) => {
+  const extraWhereAny = extraWhere as any;
+  const extraAnd = Array.isArray(extraWhereAny?.[Op.and]) ? extraWhereAny[Op.and] : [];
+
+  // Keep storefront search honest by excluding orphaned products and known smoke/QA fixtures.
+  return {
+    status: "active",
+    isPublished: { [Op.in]: [1, true] },
+    sellerSubmissionStatus: "none",
+    storeId: { [Op.not]: null },
+    categoryId: { [Op.not]: null },
+    ...extraWhere,
+    [Op.and]: [
+      { name: { [Op.notLike]: "QA %" } },
+      { slug: { [Op.notLike]: "qa-%" } },
+      { name: { [Op.notLike]: "seller-notif-%" } },
+      { slug: { [Op.notLike]: "seller-notif-%" } },
+      { name: { [Op.notLike]: "notif-%" } },
+      { slug: { [Op.notLike]: "notif-%" } },
+      { name: { [Op.notLike]: "MSQ Status Log %" } },
+      { slug: { [Op.notLike]: "msq-status-log-%" } },
+      ...extraAnd,
+    ],
+  };
+};
 
 const toText = (value: any, fallback = "") => {
   const normalized = String(value ?? "").trim();
@@ -603,10 +628,16 @@ const toText = (value: any, fallback = "") => {
 // GET /api/store/categories
 router.get(
   "/categories",
-  async (_req: Request, res: Response, next: NextFunction) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const parentsOnly = parseBool(req.query.parentsOnly);
+      const where: Record<string, any> = { published: true };
+      if (parentsOnly === true) {
+        where.parent_id = { [Op.is]: null };
+      }
+
       const categories = await Category.findAll({
-        where: { published: true },
+        where,
         order: [["createdAt", "DESC"]],
       });
 
@@ -643,6 +674,7 @@ router.get(
             slug,
             code: safeCode || slug,
             image: imageRaw ? String(imageRaw).trim() : null,
+            icon: imageRaw ? String(imageRaw).trim() : null,
             parentId,
             parent_id: parentId,
             published: Boolean(publishedRaw),
@@ -672,32 +704,90 @@ router.get(
       const limit = pageSize;
       const search = String(req.query.search || "").trim();
       const categoryParam = String(req.query.category || "").trim();
+      const minPriceParam = Number(req.query.minPrice);
+      const maxPriceParam = Number(req.query.maxPrice);
+      const minRatingParam = Number(req.query.minRating);
+      const sortParam = String(req.query.sort || "featured").trim().toLowerCase();
       const storeSlug = normalizeStoreSlug(req.query.storeSlug);
+      const hasMinPrice = Number.isFinite(minPriceParam) && minPriceParam >= 0;
+      const hasMaxPrice = Number.isFinite(maxPriceParam) && maxPriceParam >= 0;
+      const hasMinRating = Number.isFinite(minRatingParam) && minRatingParam > 0;
+      const effectivePriceExpr = sequelize.literal(
+        "(CASE WHEN Product.sale_price IS NOT NULL AND Product.sale_price > 0 AND Product.sale_price < Product.price THEN Product.sale_price ELSE Product.price END)"
+      );
+      const ratingExpr = sequelize.literal(
+        "(SELECT COALESCE(ROUND(AVG(pr.rating), 1), 0) FROM product_reviews pr WHERE pr.product_id = Product.id)"
+      );
 
       const where: any = buildPublicProductWhere();
       if (search) {
         where.name = { [Op.like]: `%${search}%` };
       }
 
+      if (hasMinPrice || hasMaxPrice) {
+        if (hasMinPrice && hasMaxPrice) {
+          where[Op.and] = [
+            ...(Array.isArray(where[Op.and]) ? where[Op.and] : []),
+            sequelize.where(effectivePriceExpr, {
+              [Op.between]: [
+                Math.min(minPriceParam, maxPriceParam),
+                Math.max(minPriceParam, maxPriceParam),
+              ],
+            }),
+          ];
+        } else if (hasMinPrice) {
+          where[Op.and] = [
+            ...(Array.isArray(where[Op.and]) ? where[Op.and] : []),
+            sequelize.where(effectivePriceExpr, { [Op.gte]: minPriceParam }),
+          ];
+        } else if (hasMaxPrice) {
+          where[Op.and] = [
+            ...(Array.isArray(where[Op.and]) ? where[Op.and] : []),
+            sequelize.where(effectivePriceExpr, { [Op.lte]: maxPriceParam }),
+          ];
+        }
+      }
+
+      if (hasMinRating) {
+        where[Op.and] = [
+          ...(Array.isArray(where[Op.and]) ? where[Op.and] : []),
+          sequelize.where(ratingExpr, { [Op.gte]: Math.min(5, minRatingParam) }),
+        ];
+      }
+
       if (categoryParam) {
         const categoryId = Number(categoryParam);
+        let category: any = null;
         if (Number.isFinite(categoryId)) {
-          where.categoryId = categoryId;
+          category = await Category.findByPk(categoryId);
         } else {
-          const category = await Category.findOne({
+          category = await Category.findOne({
             where: {
               published: true,
               [Op.or]: [{ code: categoryParam }, { name: categoryParam }],
             },
           });
-          if (!category) {
-            return res.json({
-              data: [],
-              meta: { page, limit, total: 0 },
-            });
-          }
-          where.categoryId = category.id;
         }
+        if (!category) {
+          return res.json({
+            data: [],
+            meta: { page, limit, total: 0, totalPages: 1 },
+          });
+        }
+        const childCategories = await Category.findAll({
+          where: {
+            published: true,
+            parentId: category.id,
+          } as any,
+          attributes: ["id"],
+        });
+        const categoryIds = [
+          Number(category.id),
+          ...childCategories
+            .map((child: any) => Number(child.id))
+            .filter((id) => Number.isFinite(id) && id > 0),
+        ];
+        where.categoryId = { [Op.in]: [...new Set(categoryIds)] };
       }
 
       if (storeSlug) {
@@ -736,6 +826,16 @@ router.get(
       }
 
       const offset = (page - 1) * limit;
+      const order =
+        sortParam === "price_asc"
+          ? [[effectivePriceExpr, "ASC"] as any, ["createdAt", "DESC"] as any]
+          : sortParam === "price_desc"
+            ? [[effectivePriceExpr, "DESC"] as any, ["createdAt", "DESC"] as any]
+            : sortParam === "highest_rated"
+              ? [[ratingExpr, "DESC"] as any, ["createdAt", "DESC"] as any]
+              : sortParam === "newest"
+                ? [["createdAt", "DESC"] as any]
+                : [["createdAt", "DESC"] as any];
 
       const { rows, count } = await Product.findAndCountAll({
         where,
@@ -772,7 +872,7 @@ router.get(
             attributes: ["id", "status"],
           }),
         ],
-        order: [["createdAt", "DESC"]],
+        order,
         limit,
         offset,
       });

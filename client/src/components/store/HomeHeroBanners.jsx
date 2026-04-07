@@ -85,7 +85,7 @@ export default function HomeHeroBanners({
     if (safeSlides.length <= 1) return;
     setActiveSlide?.((slideIndex + 1) % safeSlides.length);
   };
-  const ctaClassName = `inline-flex h-10 w-fit items-center rounded-full bg-emerald-600 px-6 text-[13px] font-semibold text-white shadow-[0_10px_20px_-14px_rgba(5,150,105,0.85)] transition hover:bg-emerald-700 sm:h-11 sm:px-7 sm:text-[14px] lg:h-12 lg:px-8 lg:text-[15px] ${
+  const ctaClassName = `inline-flex min-h-10 w-fit max-w-[260px] items-center justify-center rounded-full bg-emerald-600 px-5 py-2.5 text-center text-[13px] font-semibold leading-tight whitespace-normal break-words text-white shadow-[0_10px_20px_-14px_rgba(5,150,105,0.85)] transition hover:bg-emerald-700 sm:min-h-11 sm:max-w-[300px] sm:px-6 sm:text-[14px] lg:min-h-[50px] lg:max-w-[360px] lg:px-7 lg:text-[14px] ${
     hasDescription ? "mt-4 sm:mt-5 lg:mt-5" : "mt-3 sm:mt-4 lg:mt-4"
   }`;
 
@@ -116,7 +116,7 @@ export default function HomeHeroBanners({
             className={`absolute right-0 top-0 h-full object-cover ${
               hasCustomImage
                 ? `w-full ${customImagePositionClass}`
-                : "w-[56%] sm:w-[53%] lg:w-[50%]"
+                : "w-[56%] sm:w-[53%] lg:w-[46%] xl:w-[44%]"
             }`}
           />
         ) : null}
@@ -151,12 +151,12 @@ export default function HomeHeroBanners({
           </>
         ) : null}
 
-        <div className="relative z-10 flex h-full max-w-[68%] flex-col justify-center pb-11 pl-14 pr-5 pt-6 sm:max-w-[58%] sm:pb-13 sm:pl-16 sm:pr-8 sm:pt-8 lg:max-w-[48%] lg:pb-14 lg:pl-[4.75rem] lg:pr-10 lg:pt-10 xl:max-w-[46%]">
-          <h1 className="max-w-[11ch] text-[22px] font-extrabold leading-[0.98] tracking-[-0.03em] text-slate-900 sm:text-[30px] lg:text-[46px] xl:text-[50px]">
+        <div className="relative z-10 flex h-full max-w-[72%] flex-col justify-center pb-11 pl-10 pr-5 pt-6 sm:max-w-[62%] sm:pb-13 sm:pl-12 sm:pr-8 sm:pt-8 lg:max-w-[60%] lg:pb-14 lg:pl-[4.25rem] lg:pr-10 lg:pt-10 xl:max-w-[58%]">
+          <h1 className="max-w-[20ch] overflow-hidden text-[clamp(1.75rem,2.85vw,3.1rem)] font-extrabold leading-[1.02] tracking-[-0.035em] text-slate-900 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3]">
             {displaySlide.title}
           </h1>
           {heroSubtitle ? (
-            <p className="mt-3 max-w-[37ch] text-[12px] leading-[1.6] text-slate-600 sm:text-[13px] sm:leading-6 lg:mt-3.5 lg:max-w-[34ch] lg:text-[18px] lg:leading-[1.55]">
+            <p className="mt-3 max-w-[42ch] overflow-hidden text-[13px] leading-[1.65] text-slate-600 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] sm:max-w-[42ch] sm:text-[14px] sm:leading-6 lg:mt-3.5 lg:max-w-[40ch] lg:text-[clamp(0.96rem,1.08vw,1.08rem)] lg:leading-[1.58]">
               {heroSubtitle}
             </p>
           ) : null}

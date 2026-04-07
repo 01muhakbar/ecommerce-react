@@ -15,8 +15,16 @@ export type {
   StorefrontProductSellerInfo,
 } from "./store.types.ts";
 
-export const fetchStoreCategories = async () => {
-  const { data } = await api.get<{ data: StoreCategory[] }>("/store/categories");
+export const fetchStoreCategories = async (params?: { parentsOnly?: boolean }) => {
+  const query =
+    params?.parentsOnly === true
+      ? {
+          parentsOnly: true,
+        }
+      : undefined;
+  const { data } = await api.get<{ data: StoreCategory[] }>("/store/categories", {
+    params: query,
+  });
   return normalizeStorefrontCategoriesResponse(data);
 };
 
@@ -25,6 +33,10 @@ export const fetchStoreProducts = async (params?: {
   q?: string;
   category?: string | number;
   storeSlug?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  minRating?: number;
+  sort?: string;
   page?: number;
   limit?: number;
 }) => {
@@ -32,6 +44,10 @@ export const fetchStoreProducts = async (params?: {
     search: params?.search ?? params?.q,
     category: params?.category,
     storeSlug: params?.storeSlug,
+    minPrice: params?.minPrice,
+    maxPrice: params?.maxPrice,
+    minRating: params?.minRating,
+    sort: params?.sort,
     page: params?.page,
     limit: params?.limit,
   };

@@ -48,6 +48,10 @@ import {
   STORE_PAYMENT_PROFILE_CHECKOUT_ATTRIBUTES,
 } from "../services/sharedContracts/storePaymentProfileCompat.js";
 import { buildPublicStoreOperationalReadiness } from "../services/sharedContracts/publicStoreIdentity.js";
+import {
+  buildStorePaymentProfileActivityMeta,
+  buildStorePaymentProfileVerificationMeta,
+} from "../services/sharedContracts/storePaymentProfileState.js";
 import { getDefaultAddressByUser } from "../services/userAddress.service.js";
 
 const router = Router();
@@ -109,6 +113,102 @@ const SHIPPING_REQUIRED_FIELDS = [
 ] as const;
 
 const SHIPPING_PER_STORE_FALLBACK = 0;
+
+const buildMissingCheckoutPaymentProfileStatusMeta = () => ({
+  code: "MISSING",
+  label: "Not configured",
+  tone: "neutral",
+  description: "No store payment profile snapshot is configured for this store yet.",
+});
+
+const buildCheckoutPaymentProfileStatusMeta = (paymentProfile: any) => {
+  if (!paymentProfile) return buildMissingCheckoutPaymentProfileStatusMeta();
+
+  const verificationMeta = buildStorePaymentProfileVerificationMeta(
+    String(paymentProfile?.verificationStatus || "PENDING").toUpperCase()
+  );
+
+  return {
+    code: String(verificationMeta.code || "PENDING").toUpperCase(),
+    label: String(verificationMeta.label || "Pending review"),
+    tone: String(verificationMeta.tone || "warning"),
+    description: String(verificationMeta.description || "").trim() || null,
+  };
+};
+
+const buildCheckoutPaymentAvailabilityMeta = (paymentProfile: any) => {
+  const profileStatusMeta = buildCheckoutPaymentProfileStatusMeta(paymentProfile);
+  const activityMeta = paymentProfile
+    ? buildStorePaymentProfileActivityMeta(Boolean(paymentProfile?.isActive))
+    : null;
+  const isAvailable =
+    Boolean(paymentProfile?.isActive) &&
+    String(paymentProfile?.verificationStatus || "").toUpperCase() === "ACTIVE";
+
+  if (isAvailable) {
+    return {
+      code: "AVAILABLE",
+      label: "Payment ready",
+      reason:
+        "This store has an active approved payment setup and can accept checkout.",
+      isAvailable: true,
+    };
+  }
+
+  if (!paymentProfile) {
+    return {
+      code: "NOT_CONFIGURED",
+      label: "Payment setup missing",
+      reason:
+        "No store payment profile snapshot is configured yet for this store.",
+      isAvailable: false,
+    };
+  }
+
+  const verificationCode = String(profileStatusMeta.code || "").toUpperCase();
+  const isActive = Boolean(paymentProfile?.isActive);
+
+  if (verificationCode === "REJECTED") {
+    return {
+      code: "REJECTED",
+      label: "Payment setup rejected",
+      reason:
+        "The latest store payment setup was rejected and must be revised before checkout can continue.",
+      isAvailable: false,
+    };
+  }
+
+  if (verificationCode === "ACTIVE" && !isActive) {
+    return {
+      code: "INACTIVE",
+      label: "Payment setup inactive",
+      reason:
+        activityMeta?.description ||
+        "The store payment setup exists, but it is not active for checkout yet.",
+      isAvailable: false,
+    };
+  }
+
+  if (verificationCode === "INACTIVE" || !isActive) {
+    return {
+      code: "INACTIVE",
+      label: "Payment setup inactive",
+      reason:
+        activityMeta?.description ||
+        "The store payment setup exists, but it is not active for checkout yet.",
+      isAvailable: false,
+    };
+  }
+
+  return {
+    code: "PENDING_REVIEW",
+    label: "Payment review pending",
+    reason:
+      profileStatusMeta.description ||
+      "The store payment setup exists, but admin review has not approved it yet.",
+    isAvailable: false,
+  };
+};
 const PAYMENT_EXPIRY_MINUTES = 240;
 
 type ShippingDetailsSnapshot = z.infer<typeof shippingDetailsSchema>;
@@ -401,6 +501,8 @@ const serializePreviewGroup = (group: any) => ({
   paymentAvailable: group.paymentAvailable,
   paymentMethod: group.paymentMethod,
   paymentProfileStatus: group.paymentProfileStatus,
+  paymentProfileStatusMeta: group.paymentProfileStatusMeta || null,
+  paymentAvailabilityMeta: group.paymentAvailabilityMeta || null,
   merchantName: group.merchantName,
   accountName: group.accountName,
   qrisImageUrl: group.qrisImageUrl,
@@ -496,6 +598,8 @@ const prepareCartGroups = (cartItems: any[]) => {
     const paymentProfileStatus = paymentProfile
       ? String(paymentProfile.verificationStatus || "PENDING").toUpperCase()
       : "MISSING";
+    const paymentProfileStatusMeta = buildCheckoutPaymentProfileStatusMeta(paymentProfile);
+    const paymentAvailabilityMeta = buildCheckoutPaymentAvailabilityMeta(paymentProfile);
 
     if (!groupsMap.has(storeId)) {
       groupsMap.set(storeId, {
@@ -510,6 +614,8 @@ const prepareCartGroups = (cartItems: any[]) => {
         paymentAvailable,
         paymentMethod: paymentAvailable ? "QRIS" : null,
         paymentProfileStatus,
+        paymentProfileStatusMeta,
+        paymentAvailabilityMeta,
         merchantName: paymentProfile?.merchantName ? String(paymentProfile.merchantName) : null,
         accountName: paymentProfile?.accountName ? String(paymentProfile.accountName) : null,
         qrisImageUrl: paymentProfile?.qrisImageUrl ? String(paymentProfile.qrisImageUrl) : null,
@@ -517,11 +623,7 @@ const prepareCartGroups = (cartItems: any[]) => {
         paymentInstruction: paymentProfile?.instructionText
           ? String(paymentProfile.instructionText)
           : null,
-        warning: paymentAvailable
-          ? null
-          : paymentProfile
-            ? "Store payment profile is not active yet."
-            : "Store payment profile is not configured.",
+        warning: paymentAvailable ? null : paymentAvailabilityMeta.reason,
         items: [],
       });
     }
@@ -552,10 +654,13 @@ const prepareCartGroups = (cartItems: any[]) => {
     if (!group.paymentAvailable) {
       group.paymentMethod = null;
       group.paymentProfileStatus = paymentProfileStatus;
+      group.paymentProfileStatusMeta = paymentProfileStatusMeta;
+      group.paymentAvailabilityMeta = paymentAvailabilityMeta;
       group.merchantName = paymentProfile?.merchantName ? String(paymentProfile.merchantName) : null;
       group.accountName = paymentProfile?.accountName ? String(paymentProfile.accountName) : null;
       group.qrisImageUrl = paymentProfile?.qrisImageUrl ? String(paymentProfile.qrisImageUrl) : null;
       group.qrisPayload = paymentProfile?.qrisPayload ? String(paymentProfile.qrisPayload) : null;
+      group.warning = paymentAvailabilityMeta.reason;
     }
   }
 

@@ -12,12 +12,16 @@ import {
   Upload,
 } from "lucide-react";
 import {
+  bulkAdminCoupons,
   createAdminCoupon,
   deleteAdminCoupon,
+  exportAdminCoupons,
   fetchAdminCouponMeta,
   fetchAdminCoupons,
+  importAdminCoupons,
   updateAdminCoupon,
 } from "../../lib/adminApi.js";
+import { resolveAssetUrl } from "../../lib/assetUrl.js";
 import { formatCurrency } from "../../utils/format.js";
 import AddCouponDrawer from "../../components/admin/coupons/AddCouponDrawer.jsx";
 import DeleteCouponModal from "../../components/admin/coupons/DeleteCouponModal.jsx";
@@ -120,7 +124,13 @@ const resolveStatus = (coupon, published) => {
   const isExpiredByDate = parsedEnd && !Number.isNaN(parsedEnd.getTime())
     ? parsedEnd.getTime() < Date.now()
     : false;
-  const isExpired = isExpiredByDate || !published;
+
+  if (!published) {
+    return {
+      label: "Deactive",
+      tone: "deactive",
+    };
+  }
 
   if (isScheduled && published) {
     return {
@@ -129,7 +139,7 @@ const resolveStatus = (coupon, published) => {
     };
   }
 
-  if (isExpired) {
+  if (isExpiredByDate) {
     return {
       label: "Expired",
       tone: "expired",
@@ -144,15 +154,25 @@ const resolveStatus = (coupon, published) => {
 
 function CouponStatusBadge({ status }) {
   const tone =
-    status?.tone === "expired" ? "expired" : status?.tone === "scheduled" ? "scheduled" : "active";
+    status?.tone === "expired"
+      ? "expired"
+      : status?.tone === "scheduled"
+        ? "scheduled"
+        : status?.tone === "deactive"
+          ? "deactive"
+          : "active";
   const styles =
-    tone === "expired"
+    tone === "expired" || tone === "deactive"
       ? "border-rose-200 bg-rose-50 text-rose-700"
       : tone === "scheduled"
         ? "border-amber-200 bg-amber-50 text-amber-700"
         : "border-emerald-200 bg-emerald-50 text-emerald-700";
   const dotClass =
-    tone === "expired" ? "bg-rose-500" : tone === "scheduled" ? "bg-amber-500" : "bg-emerald-500";
+    tone === "expired" || tone === "deactive"
+      ? "bg-rose-500"
+      : tone === "scheduled"
+        ? "bg-amber-500"
+        : "bg-emerald-500";
 
   return (
     <span
@@ -182,6 +202,7 @@ function CouponDiscountTypeBadge({ coupon }) {
 export default function AdminCouponsPage() {
   const qc = useQueryClient();
   const bulkMenuRef = useRef(null);
+  const importInputRef = useRef(null);
 
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
@@ -256,6 +277,42 @@ export default function AdminCouponsPage() {
     },
   });
 
+  const importMutation = useMutation({
+    mutationFn: importAdminCoupons,
+    onSuccess: async (result) => {
+      await qc.invalidateQueries({ queryKey: ["admin-coupons"] });
+      const summary = result?.data || result || {};
+      const created = Number(summary.created || 0);
+      const updated = Number(summary.updated || 0);
+      const failed = Number(summary.failed || 0);
+      showNotice(
+        `Coupon import complete. ${created} created, ${updated} updated, ${failed} failed.`,
+        failed > 0 ? "error" : "success"
+      );
+    },
+    onError: (error) => {
+      showNotice(error?.response?.data?.message || "Failed to import coupons.", "error");
+    },
+  });
+
+  const bulkMutation = useMutation({
+    mutationFn: ({ action, ids }) => bulkAdminCoupons(action, ids),
+    onSuccess: async (_result, variables) => {
+      await qc.invalidateQueries({ queryKey: ["admin-coupons"] });
+      setSelectedIds(new Set());
+      const actionLabel =
+        variables.action === "activate"
+          ? "activated"
+          : variables.action === "deactivate"
+            ? "deactivated"
+            : "updated";
+      showNotice(`${variables.ids.length} coupon(s) ${actionLabel}.`);
+    },
+    onError: (error) => {
+      showNotice(error?.response?.data?.message || "Failed to run bulk coupon action.", "error");
+    },
+  });
+
   const toggleMutation = useMutation({
     mutationFn: ({ id, active }) => updateAdminCoupon(id, { active }),
     onSuccess: () => {
@@ -281,6 +338,7 @@ export default function AdminCouponsPage() {
   );
   const activeFilterCount = appliedSearch ? 1 : 0;
   const isDeletePending = deleteMutation.isPending || bulkDeleteMutation.isPending;
+  const isBulkPending = bulkMutation.isPending;
   const isCreateBusy = Boolean(createMutation.isPending || createMutation.isLoading);
   const isUpdateBusy = Boolean(updateMutation.isPending || updateMutation.isLoading);
 
@@ -376,6 +434,40 @@ export default function AdminCouponsPage() {
     setSelectedIds(new Set());
     setBulkMenuOpen(false);
     showNotice("Coupon filters reset.");
+  };
+
+  const handleExport = async () => {
+    try {
+      const response = await exportAdminCoupons({ q: appliedSearch || undefined });
+      const blob = await response.blob();
+      const fallbackName = `coupons-export-${new Date().toISOString().slice(0, 10)}.json`;
+      const disposition = response.headers.get("content-disposition") || "";
+      const match = disposition.match(/filename=\"?([^\";]+)\"?/i);
+      const fileName = match?.[1] || fallbackName;
+      const objectUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(objectUrl);
+      showNotice("Coupon export ready.");
+    } catch (error) {
+      showNotice(error?.message || "Failed to export coupons.", "error");
+    }
+  };
+
+  const triggerImportPicker = () => {
+    if (importMutation.isPending) return;
+    importInputRef.current?.click();
+  };
+
+  const handleImportFile = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    importMutation.mutate(file);
   };
 
   const closeDeleteModal = () => {
@@ -490,7 +582,10 @@ export default function AdminCouponsPage() {
       handleDeleteSelected();
       return;
     }
-    showNotice("Bulk action is UI-only for coupons.");
+    bulkMutation.mutate({
+      action,
+      ids: Array.from(selectedIds),
+    });
   };
 
   const handleTogglePublished = (coupon) => {
@@ -595,7 +690,7 @@ export default function AdminCouponsPage() {
             <button
               type="button"
               className={headerBtnSoft}
-              onClick={() => showNotice("Export is UI-only.")}
+              onClick={handleExport}
             >
               <Download className="h-4 w-4" />
               Export
@@ -603,17 +698,25 @@ export default function AdminCouponsPage() {
             <button
               type="button"
               className={headerBtnSoft}
-              onClick={() => showNotice("Import is UI-only.")}
+              onClick={triggerImportPicker}
+              disabled={importMutation.isPending}
             >
               <Upload className="h-4 w-4" />
               Import
             </button>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept="application/json,.json"
+              onChange={handleImportFile}
+              className="hidden"
+            />
 
             <div ref={bulkMenuRef} className="relative">
               <button
                 type="button"
                 className={selectedIds.size > 0 ? headerBtnAmber : headerBtnSoft}
-                disabled={selectedIds.size === 0 || isDeletePending}
+                disabled={selectedIds.size === 0 || isDeletePending || isBulkPending}
                 onClick={() => setBulkMenuOpen((prev) => !prev)}
               >
                 Bulk
@@ -623,17 +726,24 @@ export default function AdminCouponsPage() {
                 <div className="absolute right-0 z-20 mt-1.5 w-44 overflow-hidden rounded-lg border border-amber-200 bg-white shadow-lg">
                   <button
                     type="button"
+                    onClick={() => handleBulkAction("activate")}
+                    className="block w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-amber-50"
+                  >
+                    Activate Selected
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleBulkAction("deactivate")}
+                    className="block w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-amber-50"
+                  >
+                    Deactivate Selected
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => handleBulkAction("delete")}
                     className="block w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-amber-50"
                   >
                     Delete Selected
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleBulkAction("placeholder")}
-                    className="block w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-amber-50"
-                  >
-                    Other Action (UI)
                   </button>
                 </div>
               ) : null}
@@ -655,7 +765,9 @@ export default function AdminCouponsPage() {
               <Plus className="h-4 w-4" />
               Add Coupon
             </button>
-            {couponsQuery.isFetching ? <span className="text-[10px] text-slate-400">{UPDATING}</span> : null}
+            {couponsQuery.isFetching || importMutation.isPending || isBulkPending ? (
+              <span className="text-[10px] text-slate-400">{UPDATING}</span>
+            ) : null}
           </div>
         </div>
       </div>
@@ -734,6 +846,7 @@ export default function AdminCouponsPage() {
                   const id = Number(coupon?.id);
                   const campaignName = resolveCampaignName(coupon);
                   const initial = campaignName.charAt(0).toUpperCase() || "C";
+                  const bannerSrc = resolveAssetUrl(coupon?.bannerImageUrl || "");
                   const published = resolvePublished(coupon, publishedOverrides);
                   const status = resolveStatus(coupon, published);
                   const startDate = resolveStartDate(coupon);
@@ -756,9 +869,23 @@ export default function AdminCouponsPage() {
 
                       <td className={`${tableCell} w-[36%]`}>
                         <div className="flex items-center gap-3">
-                          <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-semibold text-emerald-700">
-                            {initial}
-                          </span>
+                          {bannerSrc ? (
+                            <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                              <img
+                                src={bannerSrc}
+                                alt={`${coupon.code || campaignName} banner`}
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                              />
+                              <span className="absolute bottom-1 left-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/90 text-[10px] font-semibold text-emerald-700 shadow-sm ring-1 ring-slate-200">
+                                {initial}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-semibold text-emerald-700">
+                              {initial}
+                            </span>
+                          )}
                           <div className="min-w-0 max-w-[220px]">
                             <p className="truncate text-sm font-semibold text-slate-900">{coupon.code || "-"}</p>
                             <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-slate-400">
@@ -766,6 +893,11 @@ export default function AdminCouponsPage() {
                               <span className="text-slate-300">•</span>
                               <span className="truncate">{scope.ownership}</span>
                             </div>
+                            {bannerSrc ? (
+                              <div className="mt-1 text-[10px] font-medium text-emerald-600">
+                                Banner linked
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       </td>
@@ -813,7 +945,7 @@ export default function AdminCouponsPage() {
                               onClick={() => handleTogglePublished(coupon)}
                               disabled={togglingIds.has(id)}
                               className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition ${
-                                published ? "bg-emerald-500" : "bg-slate-300"
+                                published ? "bg-emerald-500" : "bg-rose-500"
                               } disabled:cursor-not-allowed disabled:opacity-60`}
                               aria-label={`Toggle publish for ${campaignName}`}
                             >
@@ -828,8 +960,8 @@ export default function AdminCouponsPage() {
                             {togglingIds.has(id)
                               ? UPDATING
                               : published
-                                ? "Live"
-                                : "Hidden"}
+                                ? "Active"
+                                : "Deactive"}
                           </div>
                         </div>
                       </td>

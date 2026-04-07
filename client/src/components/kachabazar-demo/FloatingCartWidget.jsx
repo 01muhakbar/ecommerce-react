@@ -10,16 +10,15 @@ export default function FloatingCartWidget({ totalQty, subtotalDisplay }) {
       type="button"
       onClick={handleOpenDrawer}
       aria-label="Open shopping cart"
-      className="fixed right-4 top-[42%] z-30 hidden w-[92px] -translate-y-1/2 overflow-hidden rounded-[18px] border border-slate-200 bg-white text-slate-900 shadow-[0_20px_45px_rgba(15,23,42,0.16)] transition hover:-translate-y-[calc(50%+2px)] hover:shadow-[0_24px_50px_rgba(15,23,42,0.2)] sm:flex"
+      className="fixed right-3 top-1/2 z-30 hidden w-[98px] -translate-y-1/2 flex-col items-center rounded-[18px] border border-slate-200 bg-white px-2.5 pb-3.5 pt-3.5 text-slate-900 shadow-[0_18px_40px_rgba(15,23,42,0.15)] transition hover:-translate-y-[calc(50%+2px)] hover:shadow-[0_22px_46px_rgba(15,23,42,0.18)] sm:flex"
     >
-      <div className="flex flex-col items-center gap-1.5 px-3 py-3">
-        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-          <ShoppingCart className="h-4 w-4" />
-        </span>
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Items</div>
-        <div className="text-sm font-bold leading-none text-slate-900">{totalQty}</div>
+      <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-emerald-100 bg-emerald-50 text-emerald-600">
+        <ShoppingCart className="h-4.5 w-4.5" />
+      </span>
+      <div className="mt-3 text-[11px] font-semibold leading-none text-slate-500">
+        {totalQty} Items
       </div>
-      <div className="w-full bg-emerald-600 px-2 py-2 text-center text-[11px] font-bold text-white">
+      <div className="mt-3 w-[118px] rounded-[13px] bg-emerald-500 px-3 py-2 text-center text-[15px] font-bold leading-none text-white shadow-[0_10px_20px_rgba(5,150,105,0.24)]">
         {subtotalDisplay}
       </div>
     </button>

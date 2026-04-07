@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Filter, Search, SearchX, SlidersHorizontal, X } from "lucide-react";
+import {
+  ChevronRight,
+  Filter,
+  Grid2X2,
+  List,
+  SearchX,
+  SlidersHorizontal,
+  Star,
+  X,
+} from "lucide-react";
 import { Pagination, useCategories, useProducts } from "../../storefront.jsx";
 import SearchProductCard from "../../components/store/SearchProductCard.jsx";
 import {
@@ -9,43 +18,89 @@ import {
   UiSkeleton,
   UiUpdatingBadge,
 } from "../../components/primitives/state/index.js";
-import {
-  GENERIC_ERROR,
-  UPDATING,
-} from "../../constants/uiMessages.js";
+import { GENERIC_ERROR, UPDATING } from "../../constants/uiMessages.js";
+
+const SORT_OPTIONS = [
+  { value: "featured", label: "Featured" },
+  { value: "price_asc", label: "Price: Low to High" },
+  { value: "price_desc", label: "Price: High to Low" },
+  { value: "highest_rated", label: "Highest Rated" },
+  { value: "newest", label: "Newest" },
+];
+
+const RATING_OPTIONS = [4, 3, 2, 1];
+
+const toPositiveNumber = (value) => {
+  if (value === null || value === undefined || String(value).trim() === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+};
+
+function RatingOption({ value, checked, onChange }) {
+  return (
+    <label className="flex cursor-pointer items-center gap-3 rounded-xl px-1 py-1 text-sm text-slate-600 transition hover:text-emerald-700">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={() => onChange(checked ? "" : String(value))}
+        className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+      />
+      <span className="inline-flex items-center gap-1 text-amber-400">
+        {Array.from({ length: 5 }).map((_, index) => (
+          <Star
+            key={`${value}-${index}`}
+            className={`h-3.5 w-3.5 ${
+              index < value ? "fill-current text-amber-400" : "text-slate-200"
+            }`}
+          />
+        ))}
+      </span>
+      <span className="text-slate-500">& up</span>
+    </label>
+  );
+}
+
+function SidebarSection({ title, children }) {
+  return (
+    <section className="space-y-4 border-b border-slate-200 pb-5 last:border-b-0 last:pb-0">
+      <div className="flex items-center justify-between">
+        <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+      </div>
+      {children}
+    </section>
+  );
+}
 
 export default function StoreSearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [queryDraft, setQueryDraft] = useState("");
-  const [category, setCategory] = useState("");
-  const [categoryDraft, setCategoryDraft] = useState("");
-  const [sort, setSort] = useState("default");
+  const [minPriceDraft, setMinPriceDraft] = useState("");
+  const [maxPriceDraft, setMaxPriceDraft] = useState("");
+  const [viewMode, setViewMode] = useState("grid");
+
   const page = Math.max(1, Number(searchParams.get("page") || 1));
   const limit = Math.max(1, Number(searchParams.get("limit") || 12));
+  const query = String(
+    searchParams.get("q") ?? searchParams.get("query") ?? searchParams.get("search") ?? ""
+  ).trim();
+  const category = String(searchParams.get("category") || "").trim();
+  const sort = String(searchParams.get("sort") || "featured").trim();
+  const minPrice = toPositiveNumber(searchParams.get("minPrice"));
+  const maxPrice = toPositiveNumber(searchParams.get("maxPrice"));
+  const minRating = toPositiveNumber(searchParams.get("minRating"));
 
   const {
     data: categoriesData,
     isLoading: categoriesLoading,
     isError: categoriesError,
-  } = useCategories();
+    error: categoriesErrorObj,
+  } = useCategories({ parentsOnly: true });
   const categories = categoriesData?.data?.items ?? [];
 
   useEffect(() => {
-    const nextQuery =
-      searchParams.get("q") ?? searchParams.get("query") ?? searchParams.get("search") ?? "";
-    const nextCategory = searchParams.get("category") ?? "";
-    const nextSort = searchParams.get("sort") ?? "default";
-    setQuery(nextQuery);
-    setQueryDraft(nextQuery);
-    setCategory(nextCategory);
-    setCategoryDraft(nextCategory);
-    setSort(nextSort);
-  }, [searchParams]);
-
-  const activeQuery = query.trim();
-  const shouldFetchProducts = Boolean(activeQuery || category);
+    setMinPriceDraft(minPrice != null ? String(minPrice) : "");
+    setMaxPriceDraft(maxPrice != null ? String(maxPrice) : "");
+  }, [minPrice, maxPrice]);
 
   const {
     data: productsData,
@@ -55,274 +110,378 @@ export default function StoreSearchPage() {
     error: productsErrorObj,
     refetch: refetchProducts,
   } = useProducts({
-    q: activeQuery || undefined,
+    q: query || undefined,
     category: category || undefined,
+    minPrice: minPrice ?? undefined,
+    maxPrice: maxPrice ?? undefined,
+    minRating: minRating ?? undefined,
+    sort,
     page,
     limit,
-    enabled: shouldFetchProducts,
-    keepPreviousData: false,
+    enabled: true,
+    keepPreviousData: true,
   });
 
-  const normalizedProducts = productsData?.data?.items ?? [];
+  const products = productsData?.data?.items ?? [];
   const meta = productsData?.meta;
+  const totalCount = Number(meta?.total ?? products.length);
+  const safeTotalCount = Number.isFinite(totalCount) ? totalCount : products.length;
+  const isInitialLoading = productsLoading && !productsData;
+  const isRefetching = productsFetching && !isInitialLoading;
+  const hasProducts = products.length > 0;
+  const isErrorState = productsError && !hasProducts;
+  const showInlineError = productsError && hasProducts;
+  const isEmpty = !isInitialLoading && !productsError && !hasProducts;
+  const errorMessage =
+    productsErrorObj?.response?.data?.message ||
+    productsErrorObj?.message ||
+    GENERIC_ERROR;
+  const categoriesErrorMessage =
+    categoriesErrorObj?.response?.data?.message ||
+    categoriesErrorObj?.message ||
+    "Category list unavailable right now.";
+
+  const selectedCategory = categories.find((item) => {
+    const slug = String(item?.slug || item?.code || "").trim();
+    const code = String(item?.code || item?.slug || "").trim();
+    return category && (category === slug || category === code);
+  });
+
+  const activeFilterCount = [
+    Boolean(query),
+    Boolean(category),
+    minPrice != null,
+    maxPrice != null,
+    minRating != null && minRating > 0,
+    sort !== "featured",
+  ].filter(Boolean).length;
+
+  const displayStart = safeTotalCount > 0 ? (page - 1) * limit + 1 : 0;
+  const displayEnd =
+    safeTotalCount > 0 ? Math.min(safeTotalCount, displayStart + products.length - 1) : 0;
 
   const updateParams = (next) => {
     const params = new URLSearchParams(searchParams);
-    if (next.search !== undefined) {
-      if (next.search) {
-        params.set("q", next.search);
+
+    const assign = (key, value) => {
+      if (value === undefined) return;
+      if (value === null || value === "" || value === false) {
+        params.delete(key);
       } else {
-        params.delete("q");
+        params.set(key, String(value));
       }
+    };
+
+    if (next.search !== undefined) {
+      assign("q", next.search);
       params.delete("query");
       params.delete("search");
     }
-    if (next.category !== undefined) {
-      if (next.category) {
-        params.set("category", next.category);
+
+    assign("category", next.category);
+    assign("minPrice", next.minPrice);
+    assign("maxPrice", next.maxPrice);
+    assign("minRating", next.minRating);
+
+    if (next.sort !== undefined) {
+      if (!next.sort || next.sort === "featured") {
+        params.delete("sort");
       } else {
-        params.delete("category");
+        params.set("sort", String(next.sort));
       }
     }
+
     if (next.page !== undefined) {
       params.set("page", String(next.page));
     }
+
     if (next.limit !== undefined) {
       params.set("limit", String(next.limit));
     }
-    if (next.sort !== undefined) {
-      if (next.sort && next.sort !== "default") {
-        params.set("sort", next.sort);
-      } else {
-        params.delete("sort");
-      }
-    }
+
     setSearchParams(params, { replace: true });
   };
 
-  const handleApplyFilters = (event) => {
-    event.preventDefault();
+  const handleCategorySelect = (value) => {
     updateParams({
-      search: queryDraft.trim(),
-      category: categoryDraft,
+      category: value || "",
       page: 1,
     });
     setIsFilterOpen(false);
   };
 
   const handleSortChange = (event) => {
-    const selectedValue = event.target.value;
-    const value = selectedValue === "__placeholder" ? "default" : selectedValue;
-    setSort(value);
+    updateParams({
+      sort: event.target.value,
+      page: 1,
+    });
   };
 
-  const clearFilters = () => {
-    setQueryDraft("");
-    setCategoryDraft("");
-    setSort("default");
-    updateParams({ search: "", category: "", sort: "default", page: 1 });
+  const handleRatingChange = (value) => {
+    updateParams({
+      minRating: value || "",
+      page: 1,
+    });
     setIsFilterOpen(false);
   };
 
-  const sortedProducts = useMemo(() => normalizedProducts, [normalizedProducts]);
+  const applyPriceRange = () => {
+    const nextMin = toPositiveNumber(minPriceDraft);
+    const nextMax = toPositiveNumber(maxPriceDraft);
+    updateParams({
+      minPrice: nextMin ?? "",
+      maxPrice: nextMax ?? "",
+      page: 1,
+    });
+  };
 
-  const hasProducts = sortedProducts.length > 0;
-  const isInitialLoading = shouldFetchProducts && productsLoading && !productsData;
-  const isRefetching = shouldFetchProducts && productsFetching && !isInitialLoading;
-  const isErrorState = shouldFetchProducts && productsError && !hasProducts;
-  const showInlineError = shouldFetchProducts && productsError && hasProducts;
-  const isEmpty =
-    shouldFetchProducts && !isInitialLoading && !isRefetching && !productsError && !hasProducts;
-  const isPromptState = !shouldFetchProducts;
+  const clearAllFilters = () => {
+    setMinPriceDraft("");
+    setMaxPriceDraft("");
+    updateParams({
+      search: "",
+      category: "",
+      minPrice: "",
+      maxPrice: "",
+      minRating: "",
+      sort: "featured",
+      page: 1,
+    });
+    setIsFilterOpen(false);
+  };
 
-  const errorMessage = useMemo(() => {
-    const fromResponse = productsErrorObj?.response?.data?.message;
-    if (typeof fromResponse === "string" && fromResponse.trim()) {
-      return fromResponse.trim();
-    }
-    const fromError = productsErrorObj?.message;
-    if (typeof fromError === "string" && fromError.trim()) {
-      return fromError.trim();
-    }
-    return GENERIC_ERROR;
-  }, [productsErrorObj]);
-
-  const totalCount = Number(
-    shouldFetchProducts
-      ? meta?.total ??
-          meta?.totalCount ??
-          meta?.count ??
-          productsData?.data?.total ??
-          normalizedProducts.length
-      : 0
+  const categoryChips = useMemo(
+    () => [{ id: "all", name: "All", slug: "" }, ...categories],
+    [categories]
   );
-  const safeTotalCount = Number.isFinite(totalCount) ? totalCount : normalizedProducts.length;
-  const metaPage = Number(meta?.page);
-  const metaLimit = Number(meta?.limit);
-  const hasPagedMeta =
-    Number.isFinite(metaPage) && metaPage > 0 && Number.isFinite(metaLimit) && metaLimit > 0;
-  const currentItemsCount = sortedProducts.length;
-  const displayStart =
-    safeTotalCount > 0
-      ? hasPagedMeta
-        ? (metaPage - 1) * metaLimit + 1
-        : 1
-      : 0;
-  const displayEnd =
-    safeTotalCount > 0
-      ? hasPagedMeta
-        ? Math.min(safeTotalCount, Math.max(displayStart, displayStart + currentItemsCount - 1))
-        : currentItemsCount
-      : 0;
-
-  const hasActiveFilter = Boolean(query.trim() || category);
-  const activeCategoryLabel = categories.find((item) => {
-    const code = String(item?.code || item?.slug || "").trim();
-    const slug = String(item?.slug || "").trim();
-    return category && (category === code || category === slug);
-  })?.name;
 
   const filterPanel = (
-    <form
-      onSubmit={handleApplyFilters}
-      className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
-    >
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-          Search
-        </p>
-        <div className="relative mt-2">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            type="search"
-            value={queryDraft}
-            onChange={(event) => setQueryDraft(event.target.value)}
-            placeholder="Search products..."
-            className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-800 focus:border-emerald-500 focus:outline-none"
-          />
+    <div className="space-y-6 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+        <div className="space-y-1">
+          <h2 className="text-xl font-semibold uppercase tracking-[0.06em] text-slate-900">
+            Filters
+          </h2>
+          <p className="text-xs text-slate-500">
+            {activeFilterCount > 0 ? `${activeFilterCount} active filter${activeFilterCount > 1 ? "s" : ""}` : "Browse by category, price, and rating."}
+          </p>
         </div>
-      </div>
-
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-          Category
-        </p>
-        <select
-          value={categoryDraft}
-          onChange={(event) => setCategoryDraft(event.target.value)}
-          disabled={categoriesLoading}
-          className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-emerald-500 focus:outline-none disabled:opacity-60"
-        >
-          <option value="">{categoriesLoading ? "Loading categories..." : "All categories"}</option>
-          {categories.map((item) => {
-            const value = String(item?.code || item?.slug || item?.id || "");
-            return (
-              <option key={value} value={value}>
-                {item?.name || value}
-              </option>
-            );
-          })}
-        </select>
-        {categoriesError ? (
-          <p className="mt-2 text-xs text-rose-600">Category list unavailable right now.</p>
+        {activeFilterCount > 0 ? (
+          <button
+            type="button"
+            onClick={clearAllFilters}
+            className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+          >
+            Clear All Filters
+          </button>
         ) : null}
       </div>
 
-      <div className="grid grid-cols-2 gap-2 pt-1">
-        <button
-          type="submit"
-          className="inline-flex h-10 items-center justify-center rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
-        >
-          Apply
-        </button>
-        <button
-          type="button"
-          onClick={clearFilters}
-          className="inline-flex h-10 items-center justify-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:border-slate-300"
-        >
-          Reset
-        </button>
-      </div>
-    </form>
+      <SidebarSection title="Categories">
+        {categoriesLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div
+                key={`category-skeleton-${index}`}
+                className="h-9 animate-pulse rounded-xl bg-slate-100"
+              />
+            ))}
+          </div>
+        ) : categoriesError ? (
+          <p className="text-sm text-rose-600">{categoriesErrorMessage}</p>
+        ) : (
+          <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+            {categories.map((item) => {
+              const value = String(item?.slug || item?.code || item?.id || "");
+              const isActive = category === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => handleCategorySelect(isActive ? "" : value)}
+                  className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition ${
+                    isActive
+                      ? "bg-emerald-50 font-semibold text-emerald-700"
+                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                  }`}
+                >
+                  <span className="line-clamp-1">{item?.name || value}</span>
+                  {isActive ? <span className="text-xs">Selected</span> : null}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </SidebarSection>
+
+      <SidebarSection title="Price Range">
+        <div className="grid grid-cols-[minmax(0,1fr)_18px_minmax(0,1fr)] items-center gap-2">
+          <input
+            type="number"
+            min="0"
+            value={minPriceDraft}
+            onChange={(event) => setMinPriceDraft(event.target.value)}
+            onBlur={applyPriceRange}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                applyPriceRange();
+              }
+            }}
+            placeholder="0"
+            className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-800 focus:border-emerald-500 focus:bg-white focus:outline-none"
+          />
+          <span className="text-center text-sm text-slate-400">to</span>
+          <input
+            type="number"
+            min="0"
+            value={maxPriceDraft}
+            onChange={(event) => setMaxPriceDraft(event.target.value)}
+            onBlur={applyPriceRange}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                applyPriceRange();
+              }
+            }}
+            placeholder="1000"
+            className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-800 focus:border-emerald-500 focus:bg-white focus:outline-none"
+          />
+        </div>
+      </SidebarSection>
+
+      <SidebarSection title="Rating">
+        <div className="space-y-1">
+          {RATING_OPTIONS.map((value) => (
+            <RatingOption
+              key={`rating-${value}`}
+              value={value}
+              checked={Number(minRating || 0) === value}
+              onChange={handleRatingChange}
+            />
+          ))}
+        </div>
+      </SidebarSection>
+
+      <button
+        type="button"
+        onClick={clearAllFilters}
+        className="inline-flex h-11 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+      >
+        Clear All Filters
+      </button>
+    </div>
   );
 
   return (
-    <div className="space-y-4 px-3 pb-28 sm:px-4 sm:pb-10 lg:px-6 xl:px-8">
-      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-600">
-              Store Search
-            </p>
-            <h1 className="text-xl font-semibold leading-tight text-slate-900 sm:text-2xl">
-              {activeQuery ? `Search results for "${activeQuery}"` : "Find products quickly"}
-            </h1>
+    <div className="space-y-6 px-4 pb-24 pt-4 sm:px-5 lg:px-6 xl:px-8">
+      <section className="rounded-[30px] border border-slate-200 bg-white px-5 py-6 shadow-sm sm:px-7 sm:py-8">
+        <div className="space-y-3">
+          <h1 className="text-4xl font-semibold tracking-tight text-slate-900">All Products</h1>
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <Link to="/" className="hover:text-emerald-600">
+              Home
+            </Link>
+            <ChevronRight className="h-4 w-4 text-slate-300" />
+            <span className="font-medium text-slate-900">Search</span>
+          </div>
+          {query ? (
             <p className="text-sm text-slate-500">
-              {isPromptState ? (
-                "Type a keyword or choose a category to start searching."
-              ) : (
-                <>
-                  Found <span className="font-semibold text-slate-800">{safeTotalCount}</span>{" "}
-                  items
-                  {activeCategoryLabel ? ` in ${activeCategoryLabel}` : ""}
-                </>
-              )}
+              Current keyword: <span className="font-semibold text-slate-700">{query}</span>
             </p>
-          </div>
-          <div className="flex w-full items-center gap-2 sm:w-auto">
-            <button
-              type="button"
-              onClick={() => setIsFilterOpen(true)}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:border-slate-300 lg:hidden"
-            >
-              <Filter className="h-4 w-4" />
-              Filter
-            </button>
-            {isRefetching ? <UiUpdatingBadge label={UPDATING} /> : null}
-          </div>
+          ) : null}
         </div>
+      </section>
 
-        {hasActiveFilter ? (
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            {activeQuery ? (
-              <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-                Query: {activeQuery}
-              </span>
-            ) : null}
-            {activeCategoryLabel ? (
-              <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
-                Category: {activeCategoryLabel}
-              </span>
-            ) : null}
+      <section className="flex flex-nowrap items-center gap-3 overflow-x-auto pb-1">
+        {categoryChips.map((item) => {
+          const value = String(item?.slug || item?.code || item?.id || "");
+          const isActive = (!value && !category) || category === value;
+          return (
             <button
+              key={`chip-${value || "all"}`}
               type="button"
-              onClick={clearFilters}
-              className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:border-slate-300"
+              onClick={() => handleCategorySelect(value)}
+              className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
+                isActive
+                  ? "border-emerald-500 bg-emerald-500 text-white shadow-sm"
+                  : "border-emerald-200 bg-white text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50"
+              }`}
             >
-              Clear filters
+              <span>{item?.name || "All"}</span>
             </button>
-          </div>
-        ) : null}
-      </div>
+          );
+        })}
+      </section>
 
-      <div className="lg:grid lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start lg:gap-5">
-        <aside className="hidden lg:sticky lg:top-24 lg:block">
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 px-1 text-sm font-semibold text-slate-700">
-              <SlidersHorizontal className="h-4 w-4 text-slate-500" />
-              Filters
-            </div>
-            {filterPanel}
-          </div>
-        </aside>
+      <section className="lg:grid lg:grid-cols-[288px_minmax(0,1fr)] lg:items-start lg:gap-6">
+        <aside className="hidden lg:sticky lg:top-24 lg:block">{filterPanel}</aside>
 
         <div className="space-y-5">
-          {isPromptState ? (
-            <UiEmptyState
-              title="Start your search"
-              description="Type product keywords and click Apply to see matching results."
-            />
-          ) : null}
+          <div className="rounded-[28px] border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="inline-flex items-center rounded-2xl border border-slate-200 bg-slate-50 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("grid")}
+                    className={`inline-flex h-10 w-10 items-center justify-center rounded-xl transition ${
+                      viewMode === "grid"
+                        ? "bg-emerald-50 text-emerald-600"
+                        : "text-slate-400 hover:bg-white hover:text-slate-600"
+                    }`}
+                    aria-label="Grid view"
+                    aria-pressed={viewMode === "grid"}
+                  >
+                    <Grid2X2 className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("list")}
+                    className={`inline-flex h-10 w-10 items-center justify-center rounded-xl transition ${
+                      viewMode === "list"
+                        ? "bg-emerald-50 text-emerald-600"
+                        : "text-slate-400 hover:bg-white hover:text-slate-600"
+                    }`}
+                    aria-label="List view"
+                    aria-pressed={viewMode === "list"}
+                  >
+                    <List className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="text-sm text-slate-500">
+                  <span className="font-semibold text-slate-900">{safeTotalCount}</span> results
+                </div>
+                {isRefetching ? <UiUpdatingBadge label={UPDATING} /> : null}
+                <button
+                  type="button"
+                  onClick={() => setIsFilterOpen(true)}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:border-slate-300 lg:hidden"
+                >
+                  <Filter className="h-4 w-4" />
+                  Filters
+                </button>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <label htmlFor="search-sort" className="text-sm text-slate-500">
+                  Sort by:
+                </label>
+                <select
+                  id="search-sort"
+                  value={sort}
+                  onChange={handleSortChange}
+                  className="h-12 min-w-[210px] rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-900 focus:border-emerald-500 focus:outline-none"
+                >
+                  {SORT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
 
           {isInitialLoading ? <UiSkeleton variant="grid" /> : null}
 
@@ -334,68 +493,31 @@ export default function StoreSearchPage() {
             />
           ) : null}
 
-          {shouldFetchProducts && !isInitialLoading && !isErrorState ? (
-            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:px-5 sm:py-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-900">Search results</h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Showing {displayStart}-{displayEnd} of {safeTotalCount} results
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {isRefetching ? <UiUpdatingBadge label={UPDATING} /> : null}
-                  <select
-                    id="search-sort"
-                    value={sort}
-                    onChange={handleSortChange}
-                    className="h-10 min-w-[208px] rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none"
-                  >
-                    <option value="default">Default sorting</option>
-                    <option value="latest">Sort by latest</option>
-                    <option value="price_asc">Sort by price: low to high</option>
-                    <option value="price_desc">Sort by price: high to low</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
           {isEmpty ? (
-            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center shadow-sm sm:px-6">
-              <div className="mx-auto max-w-md space-y-4">
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-                  <SearchX className="h-6 w-6" />
+            <div className="rounded-[28px] border border-slate-200 bg-white px-6 py-14 text-center shadow-sm">
+              <div className="mx-auto max-w-xl space-y-4">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                  <SearchX className="h-7 w-7" />
                 </div>
-                <h3 className="text-xl font-semibold text-slate-900">No products found</h3>
-                <p className="text-sm leading-6 text-slate-500 sm:text-base">
-                  {activeQuery
-                    ? `No results for "${activeQuery}". Try a different keyword or remove filters.`
-                    : "Try a different keyword or remove filters to discover products."}
+                <h2 className="text-3xl font-semibold text-slate-900">No products found</h2>
+                <p className="text-base leading-7 text-slate-500">
+                  Try adjusting your search or filter to find what you're looking for.
                 </p>
-                <div className="flex flex-col items-center justify-center gap-2 pt-1 sm:flex-row">
-                  <button
-                    type="button"
-                    onClick={() => clearFilters()}
-                    className="inline-flex h-10 items-center justify-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:border-slate-300"
-                  >
-                    Reset Search
-                  </button>
-                  <Link
-                    to="/"
-                    className="inline-flex h-10 items-center justify-center rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
-                  >
-                    Back to Home
-                  </Link>
-                </div>
+                <button
+                  type="button"
+                  onClick={clearAllFilters}
+                  className="inline-flex h-11 items-center justify-center rounded-2xl bg-emerald-600 px-6 text-sm font-semibold text-white hover:bg-emerald-700"
+                >
+                  Clear Filters
+                </button>
               </div>
             </div>
           ) : null}
 
-          {!isPromptState && !isInitialLoading && !isErrorState && !isEmpty ? (
+          {!isInitialLoading && !isErrorState && hasProducts ? (
             <div className="space-y-6">
               {showInlineError ? (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 sm:text-sm">
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
                   Could not refresh results. Showing previous data.
                   <button
                     type="button"
@@ -406,28 +528,54 @@ export default function StoreSearchPage() {
                   </button>
                 </div>
               ) : null}
-              <div className="grid grid-cols-2 gap-3.5 sm:gap-4 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-                {sortedProducts.map((product, index) => (
-                  <SearchProductCard
-                    key={
-                      product?.id ??
-                      product?.slug ??
-                      `${product?.name || product?.title || "product"}-${index}`
-                    }
-                    product={product}
-                  />
-                ))}
+
+              <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <h2 className="text-xl font-semibold text-slate-900">Search results</h2>
+                    <p className="text-sm text-slate-500">
+                      Showing {displayStart}-{displayEnd} of {safeTotalCount} products
+                      {selectedCategory ? (
+                        <>
+                          {" "}
+                          in <span className="font-semibold text-slate-700">{selectedCategory.name}</span>
+                        </>
+                      ) : null}
+                    </p>
+                  </div>
+                </div>
+
+                <div
+                  className={`grid gap-3.5 sm:gap-4 ${
+                    viewMode === "list"
+                      ? "grid-cols-1"
+                      : "grid-cols-2 md:grid-cols-3 xl:grid-cols-4"
+                  }`}
+                >
+                  {products.map((product, index) => (
+                    <SearchProductCard
+                      key={
+                        product?.id ??
+                        product?.slug ??
+                        `${product?.name || product?.title || "product"}-${index}`
+                      }
+                      product={product}
+                      variant={viewMode}
+                    />
+                  ))}
+                </div>
               </div>
+
               <Pagination
                 page={meta?.page ?? page}
-                total={meta?.total ?? sortedProducts.length}
+                total={meta?.total ?? products.length}
                 limit={meta?.limit ?? limit}
                 onPageChange={(nextPage) => updateParams({ page: nextPage })}
               />
             </div>
           ) : null}
         </div>
-      </div>
+      </section>
 
       {isFilterOpen ? (
         <div className="fixed inset-0 z-50 lg:hidden">
@@ -437,11 +585,11 @@ export default function StoreSearchPage() {
             className="absolute inset-0 bg-slate-900/40"
             aria-label="Close filter panel"
           />
-          <div className="absolute right-0 top-0 h-full w-full max-w-sm bg-white p-4 shadow-2xl">
+          <div className="absolute left-0 top-0 h-full w-full max-w-sm overflow-y-auto bg-white p-4 shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
                 <SlidersHorizontal className="h-4 w-4 text-slate-500" />
-                Filter Products
+                Filters
               </div>
               <button
                 type="button"

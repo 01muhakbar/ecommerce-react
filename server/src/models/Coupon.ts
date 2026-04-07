@@ -9,6 +9,7 @@ interface CouponAttributes {
   amount: number;
   minSpend: number;
   active: boolean;
+  bannerImageUrl?: string | null;
   scopeType: CouponScopeType;
   storeId?: number | null;
   startsAt?: Date | null;
@@ -28,6 +29,7 @@ export class Coupon extends Model<CouponAttributes, CouponCreationAttributes> im
   declare amount: number;
   declare minSpend: number;
   declare active: boolean;
+  declare bannerImageUrl: string | null;
   declare scopeType: CouponScopeType;
   declare storeId: number | null;
   declare startsAt: Date | null;
@@ -71,6 +73,11 @@ export class Coupon extends Model<CouponAttributes, CouponCreationAttributes> im
         active: {
           type: DataTypes.BOOLEAN,
           defaultValue: true,
+        },
+        bannerImageUrl: {
+          type: DataTypes.STRING(255),
+          allowNull: true,
+          field: "banner_image_url",
         },
         scopeType: {
           type: DataTypes.ENUM("PLATFORM", "STORE"),

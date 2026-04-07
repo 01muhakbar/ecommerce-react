@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ImagePlus, UploadCloud, X } from "lucide-react";
+import { uploadAdminImage } from "../../../lib/adminApi.js";
+import { resolveAssetUrl } from "../../../lib/assetUrl.js";
 import { GENERIC_ERROR } from "../../../constants/uiMessages.js";
 
 const initialForm = {
@@ -14,11 +16,18 @@ const initialForm = {
   amount: "",
   minSpend: "",
   active: true,
+  bannerImageUrl: "",
 };
 
 const toNumber = (value) => {
   const numeric = Number(String(value ?? "").replace(/[^\d.]/g, ""));
   return Number.isFinite(numeric) ? numeric : 0;
+};
+
+const revokeObjectUrl = (value) => {
+  if (typeof value === "string" && value.startsWith("blob:")) {
+    URL.revokeObjectURL(value);
+  }
 };
 
 const sectionCardClass = "rounded-2xl border border-slate-200 bg-white p-4 shadow-sm";
@@ -51,21 +60,25 @@ export default function AddCouponDrawer({
   storeOptions = [],
 }) {
   const [form, setForm] = useState(initialForm);
-  const [bannerFile, setBannerFile] = useState(null);
+  const [bannerFileName, setBannerFileName] = useState("");
   const [bannerPreview, setBannerPreview] = useState("");
+  const [bannerUploading, setBannerUploading] = useState(false);
+  const [bannerUploadError, setBannerUploadError] = useState("");
   const [validationError, setValidationError] = useState("");
 
   useEffect(() => {
-    if (!open) return;
+    revokeObjectUrl(bannerPreview);
     setForm(initialForm);
-    setBannerFile(null);
+    setBannerFileName("");
     setBannerPreview("");
+    setBannerUploading(false);
+    setBannerUploadError("");
     setValidationError("");
   }, [open]);
 
   useEffect(() => {
     return () => {
-      if (bannerPreview) URL.revokeObjectURL(bannerPreview);
+      revokeObjectUrl(bannerPreview);
     };
   }, [bannerPreview]);
 
@@ -89,12 +102,44 @@ export default function AddCouponDrawer({
     setForm((prev) => ({ ...prev, ...patch }));
   };
 
-  const handleFileChange = (event) => {
+  const handleFileChange = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (bannerPreview) URL.revokeObjectURL(bannerPreview);
-    setBannerFile(file);
-    setBannerPreview(URL.createObjectURL(file));
+    revokeObjectUrl(bannerPreview);
+    const localPreviewUrl = URL.createObjectURL(file);
+    setValidationError("");
+    setBannerUploadError("");
+    setBannerFileName(file.name);
+    setBannerPreview(localPreviewUrl);
+    setField({ bannerImageUrl: "" });
+    setBannerUploading(true);
+    try {
+      const uploaded = await uploadAdminImage(file);
+      const uploadedUrl = String(uploaded?.url || "").trim();
+      if (!uploadedUrl) {
+        throw new Error("Upload response did not include an image URL.");
+      }
+      revokeObjectUrl(localPreviewUrl);
+      setBannerPreview("");
+      setField({ bannerImageUrl: uploadedUrl });
+    } catch (uploadError) {
+      setBannerUploadError(
+        uploadError?.response?.data?.message ||
+          uploadError?.message ||
+          "Failed to upload banner image."
+      );
+    } finally {
+      setBannerUploading(false);
+      event.target.value = "";
+    }
+  };
+
+  const handleRemoveBanner = () => {
+    revokeObjectUrl(bannerPreview);
+    setBannerFileName("");
+    setBannerPreview("");
+    setBannerUploadError("");
+    setField({ bannerImageUrl: "" });
   };
 
   const handleSubmit = (event) => {
@@ -109,6 +154,14 @@ export default function AddCouponDrawer({
 
     if (!campaignName) {
       setValidationError("Campaign Name is required.");
+      return;
+    }
+    if (bannerUploading) {
+      setValidationError("Wait for the banner image upload to finish before saving.");
+      return;
+    }
+    if (bannerPreview && !form.bannerImageUrl) {
+      setValidationError("Banner upload failed. Re-upload the image before saving this coupon.");
       return;
     }
     if (!code) {
@@ -152,11 +205,13 @@ export default function AddCouponDrawer({
       minSpend,
       active: Boolean(form.active),
       expiresAt: hasEndDate ? new Date(`${form.endDate}T23:59:59`).toISOString() : null,
-      bannerName: bannerFile?.name || null,
+      bannerImageUrl: form.bannerImageUrl || null,
     });
   };
 
   if (!open) return null;
+
+  const bannerPreviewSrc = bannerPreview || resolveAssetUrl(form.bannerImageUrl);
 
   return (
     <div className="fixed inset-0 z-50">
@@ -474,25 +529,52 @@ export default function AddCouponDrawer({
             <section className={sectionCardClass}>
               <h3 className="text-base font-semibold text-slate-900">Banner Image</h3>
               <p className="mt-1 text-xs text-slate-500">
-                Upload campaign banner for promotional presentation.
+                Upload a campaign banner and save its shared media URL to this coupon.
               </p>
               <div className="mt-4">
                 <label className="block cursor-pointer rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 transition hover:border-emerald-400 hover:bg-emerald-50/40">
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/png,image/jpeg,image/webp"
                     className="hidden"
                     onChange={handleFileChange}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || bannerUploading}
                   />
-                  {bannerPreview ? (
+                  {bannerPreviewSrc ? (
                     <div className="space-y-3">
-                      <img
-                        src={bannerPreview}
-                        alt="Coupon banner preview"
-                        className="h-28 w-full rounded-xl object-cover"
-                      />
-                      <p className="text-xs text-slate-500">{bannerFile?.name}</p>
+                      <div className="relative w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100/80 aspect-[16/5] sm:aspect-[16/4]">
+                        <img
+                          src={bannerPreviewSrc}
+                          alt="Coupon banner preview"
+                          className="absolute inset-0 h-full w-full object-contain"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-medium text-slate-600">
+                            {bannerFileName || "Uploaded coupon banner"}
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            {bannerUploading
+                              ? "Uploading banner image..."
+                              : form.bannerImageUrl
+                                ? "Banner uploaded and ready to save."
+                                : "Upload did not finish. Select the image again before saving."}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            handleRemoveBanner();
+                          }}
+                          className="inline-flex h-8 items-center justify-center rounded-full border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:bg-white"
+                          disabled={isSubmitting || bannerUploading}
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div className="flex items-center gap-3 text-sm text-slate-600">
@@ -500,14 +582,23 @@ export default function AddCouponDrawer({
                         <ImagePlus className="h-5 w-5" />
                       </span>
                       <div>
-                        <p className="font-medium">Upload banner image (UI only)</p>
-                        <p className="text-xs text-slate-500">PNG/JPG, local preview only</p>
+                        <p className="font-medium">
+                          {bannerUploading ? "Uploading banner image..." : "Upload banner image"}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          PNG/JPG/WebP, stored in shared admin uploads.
+                        </p>
                       </div>
                       <UploadCloud className="ml-auto h-5 w-5 text-slate-400" />
                     </div>
                   )}
                 </label>
               </div>
+              {bannerUploadError ? (
+                <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                  {bannerUploadError}
+                </div>
+              ) : null}
             </section>
 
             {submitError ? (

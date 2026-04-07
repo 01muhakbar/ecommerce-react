@@ -59,6 +59,14 @@ router.get("/", async (req, res, next) => {
     };
     const coupons = await Coupon.findAll({
       where,
+      include: [
+        {
+          model: Store,
+          as: "store",
+          attributes: ["id", "name", "slug", "status"],
+          required: false,
+        },
+      ],
       order: [["createdAt", "DESC"]],
     });
 
