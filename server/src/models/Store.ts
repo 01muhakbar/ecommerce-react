@@ -22,6 +22,7 @@ export interface StoreAttributes {
   province?: string | null;
   postalCode?: string | null;
   country?: string | null;
+  shippingSetup?: Record<string, any> | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -46,6 +47,7 @@ type StoreCreationAttributes = Optional<
   | "province"
   | "postalCode"
   | "country"
+  | "shippingSetup"
 >;
 
 export class Store
@@ -73,6 +75,7 @@ export class Store
   declare province: string | null;
   declare postalCode: string | null;
   declare country: string | null;
+  declare shippingSetup: Record<string, any> | null;
   declare readonly createdAt: Date;
   declare readonly updatedAt: Date;
 
@@ -104,6 +107,10 @@ export class Store
     Store.hasMany(models.Payment, {
       foreignKey: { name: "storeId", field: "store_id" },
       as: "payments",
+    });
+    Store.hasMany(models.Shipment, {
+      foreignKey: { name: "storeId", field: "store_id" },
+      as: "shipments",
     });
     Store.hasMany(models.Product, {
       foreignKey: { name: "storeId", field: "store_id" },
@@ -223,6 +230,11 @@ export class Store
         country: {
           type: DataTypes.STRING(120),
           allowNull: true,
+        },
+        shippingSetup: {
+          type: DataTypes.JSON,
+          allowNull: true,
+          field: "shipping_setup",
         },
         createdAt: {
           type: DataTypes.DATE,

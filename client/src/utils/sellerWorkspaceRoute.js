@@ -44,6 +44,7 @@ export const replaceSellerWorkspaceStorePath = (pathname, storeSlug) =>
 export const createSellerWorkspaceRoutes = (storeSlug) => ({
   home: () => buildSellerWorkspacePath(storeSlug),
   storeProfile: () => buildSellerWorkspacePath(storeSlug, "/store-profile"),
+  shippingSetup: () => `${buildSellerWorkspacePath(storeSlug, "/store-profile")}#shipping-setup`,
   profile: () => buildSellerWorkspacePath(storeSlug, "/store-profile"),
   catalog: () => buildSellerWorkspacePath(storeSlug, "/catalog/products"),
   productCreate: () => buildSellerWorkspacePath(storeSlug, "/catalog/products/new"),

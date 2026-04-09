@@ -7,15 +7,25 @@ import { recalculateParentOrderFulfillmentStatus } from "../services/orderPaymen
 import { expireOverduePaymentsForOrder } from "../services/paymentExpiry.service.js";
 import { getLatestTimelineRecord } from "../services/paymentReadModel.js";
 import { buildSellerSuborderContract } from "../services/orderLifecycleContract.service.js";
+import { buildSuborderShippingReadModel } from "../services/orderShippingReadModel.service.js";
+import { applySellerShipmentFulfillment } from "../services/shipmentMutation.service.js";
+import { buildStoreShippingSetupReadiness } from "../services/sellerShippingSetup.service.js";
+import {
+  isMultistoreShipmentMvpEnabled,
+  isMultistoreShipmentMutationEnabled,
+} from "../services/featureFlags.service.js";
 import {
   Order,
   Payment,
   PaymentProof,
+  Shipment,
   sequelize,
+  Store,
   StoreAuditLog,
   StorePaymentProfile,
   Suborder,
   SuborderItem,
+  TrackingEvent,
   User,
 } from "../models/index.js";
 
@@ -531,14 +541,14 @@ const buildFulfillmentGovernance = (
     availableActions,
     mutationBlockedReason: actorHasManagePermission
       ? isFinal
-        ? "This suborder is already in a final fulfillment state for phase 1."
+        ? "This suborder is already in a final fulfillment state."
         : options?.blockerMessage
           ? options.blockerMessage
         : availableActions.length > 0
-          ? "Phase 1 seller fulfillment allows only the next forward transition for this suborder."
+          ? "Seller fulfillment allows only the next forward transition for this suborder."
           : currentStatus
             ? "No forward fulfillment transition is available from the current suborder status."
-            : "Phase 1 seller fulfillment is active for suborder-scoped transitions only."
+            : "Seller fulfillment is active for suborder-scoped transitions only."
       : "This actor can view seller orders, but fulfillment mutations require ORDER_FULFILLMENT_MANAGE.",
     sellerCandidateActions: [...SELLER_FULFILLMENT_CANDIDATE_ACTIONS],
     readOnlyActions: [...SELLER_FULFILLMENT_READ_ONLY_ACTIONS],
@@ -570,6 +580,25 @@ const recordSellerFulfillmentAudit = async (payload: {
   });
 
 const listInclude = [
+  {
+    model: Store,
+    as: "store",
+    attributes: [
+      "id",
+      "name",
+      "slug",
+      "phone",
+      "whatsapp",
+      "addressLine1",
+      "addressLine2",
+      "city",
+      "province",
+      "postalCode",
+      "country",
+      "shippingSetup",
+    ],
+    required: false,
+  },
   {
     model: Order,
     as: "order",
@@ -639,6 +668,48 @@ const listInclude = [
       },
     ],
   },
+  {
+    model: Shipment,
+    as: "shipment",
+    attributes: [
+      "id",
+      "orderId",
+      "suborderId",
+      "storeId",
+      "sellerUserId",
+      "status",
+      "courierCode",
+      "courierService",
+      "trackingNumber",
+      "estimatedDelivery",
+      "shippingFee",
+      "shippingAddressSnapshot",
+      "shippingRateSnapshot",
+      "createdAt",
+      "updatedAt",
+    ],
+    required: false,
+    include: [
+      {
+        model: TrackingEvent,
+        as: "trackingEvents",
+        attributes: [
+          "id",
+          "shipmentId",
+          "eventType",
+          "eventLabel",
+          "eventDescription",
+          "occurredAt",
+          "source",
+          "actorType",
+          "actorId",
+          "metadata",
+          "createdAt",
+        ],
+        required: false,
+      },
+    ],
+  },
 ];
 
 const detailInclude = [
@@ -658,6 +729,48 @@ const detailInclude = [
       "verificationStatus",
     ],
     required: false,
+  },
+  {
+    model: Shipment,
+    as: "shipment",
+    attributes: [
+      "id",
+      "orderId",
+      "suborderId",
+      "storeId",
+      "sellerUserId",
+      "status",
+      "courierCode",
+      "courierService",
+      "trackingNumber",
+      "estimatedDelivery",
+      "shippingFee",
+      "shippingAddressSnapshot",
+      "shippingRateSnapshot",
+      "createdAt",
+      "updatedAt",
+    ],
+    required: false,
+    include: [
+      {
+        model: TrackingEvent,
+        as: "trackingEvents",
+        attributes: [
+          "id",
+          "shipmentId",
+          "eventType",
+          "eventLabel",
+          "eventDescription",
+          "occurredAt",
+          "source",
+          "actorType",
+          "actorId",
+          "metadata",
+          "createdAt",
+        ],
+        required: false,
+      },
+    ],
   },
 ];
 
@@ -690,6 +803,11 @@ const serializeListItem = (suborder: any, sellerAccess: any = null) => {
       blockerMessage: fulfillmentBlocker?.message,
     }),
   };
+  const store = suborder?.store ?? suborder?.get?.("store") ?? null;
+  const storeShippingSetup = buildStoreShippingSetupReadiness(store);
+  const shippingReadModel = buildSuborderShippingReadModel(suborder, {
+    enforceStoreShippingSetup: true,
+  });
   const contract = buildSellerSuborderContract({
     orderStatus: fulfillmentStatus,
     paymentStatus,
@@ -738,6 +856,23 @@ const serializeListItem = (suborder: any, sellerAccess: any = null) => {
       email: getAttr(buyer, "email") ? String(getAttr(buyer, "email")) : null,
       phone: getAttr(order, "customerPhone") ? String(getAttr(order, "customerPhone")) : null,
     },
+    shipmentCount: shippingReadModel.shipmentCount,
+    shippingStatus: shippingReadModel.shippingStatus,
+    shippingStatusMeta: shippingReadModel.shippingStatusMeta,
+    latestTrackingEvent: shippingReadModel.latestTrackingEvent,
+    hasActiveShipment: shippingReadModel.hasActiveShipment,
+    hasTrackingNumber: shippingReadModel.hasTrackingNumber,
+    usedLegacyFallback: shippingReadModel.usedLegacyFallback,
+    hasPersistedShipment: shippingReadModel.hasPersistedShipment,
+    compatibilityFulfillmentStatus: shippingReadModel.compatibilityFulfillmentStatus,
+    compatibilityFulfillmentStatusMeta: shippingReadModel.compatibilityFulfillmentStatusMeta,
+    storedFulfillmentStatus: shippingReadModel.storedFulfillmentStatus,
+    storedFulfillmentStatusMeta: shippingReadModel.storedFulfillmentStatusMeta,
+    compatibilityMatchesStorage: shippingReadModel.compatibilityMatchesStorage,
+    trackingEventCount: shippingReadModel.trackingEventCount,
+    missingTrackingTimeline: shippingReadModel.missingTrackingTimeline,
+    incompleteTrackingData: shippingReadModel.incompleteTrackingData,
+    shipments: shippingReadModel.shipments,
     paymentSummary: latestPayment
       ? {
           id: toNumber(getAttr(latestPayment, "id")),
@@ -784,6 +919,11 @@ const serializeDetail = (suborder: any, sellerAccess: any = null) => {
       blockerMessage: fulfillmentBlocker?.message,
     }),
   };
+  const store = suborder?.store ?? suborder?.get?.("store") ?? null;
+  const storeShippingSetup = buildStoreShippingSetupReadiness(store);
+  const shippingReadModel = buildSuborderShippingReadModel(suborder, {
+    enforceStoreShippingSetup: true,
+  });
   const contract = buildSellerSuborderContract({
     orderStatus: fulfillmentStatus,
     paymentStatus,
@@ -823,6 +963,29 @@ const serializeDetail = (suborder: any, sellerAccess: any = null) => {
       phone: getAttr(order, "customerPhone") ? String(getAttr(order, "customerPhone")) : null,
     },
     shipping: buildShippingSummary(order),
+    shippingSetup: storeShippingSetup.shippingSetup,
+    shippingSetupStatus: storeShippingSetup.shippingSetupStatus,
+    shippingSetupMeta: storeShippingSetup.shippingSetupMeta,
+    isShippingReady: storeShippingSetup.isShippingReady,
+    missingShippingFields: storeShippingSetup.missingShippingFields,
+    shippingSetupSummary: storeShippingSetup.shippingSetupSummary,
+    shipmentCount: shippingReadModel.shipmentCount,
+    shippingStatus: shippingReadModel.shippingStatus,
+    shippingStatusMeta: shippingReadModel.shippingStatusMeta,
+    latestTrackingEvent: shippingReadModel.latestTrackingEvent,
+    hasActiveShipment: shippingReadModel.hasActiveShipment,
+    hasTrackingNumber: shippingReadModel.hasTrackingNumber,
+    usedLegacyFallback: shippingReadModel.usedLegacyFallback,
+    hasPersistedShipment: shippingReadModel.hasPersistedShipment,
+    compatibilityFulfillmentStatus: shippingReadModel.compatibilityFulfillmentStatus,
+    compatibilityFulfillmentStatusMeta: shippingReadModel.compatibilityFulfillmentStatusMeta,
+    storedFulfillmentStatus: shippingReadModel.storedFulfillmentStatus,
+    storedFulfillmentStatusMeta: shippingReadModel.storedFulfillmentStatusMeta,
+    compatibilityMatchesStorage: shippingReadModel.compatibilityMatchesStorage,
+    trackingEventCount: shippingReadModel.trackingEventCount,
+    missingTrackingTimeline: shippingReadModel.missingTrackingTimeline,
+    incompleteTrackingData: shippingReadModel.incompleteTrackingData,
+    shipments: shippingReadModel.shipments,
     paymentStatus,
     paymentStatusMeta: serializePaymentStatusMeta(paymentStatus),
     fulfillmentStatus,
@@ -909,40 +1072,71 @@ router.get(
       }
 
       const loadResult = () =>
-        Suborder.findAndCountAll({
-          where,
-          attributes: [
-            "id",
-            "orderId",
-            "suborderNumber",
-            "storeId",
-            "subtotalAmount",
-            "shippingAmount",
-            "serviceFeeAmount",
-            "totalAmount",
-            "paymentStatus",
-            "fulfillmentStatus",
-            "paidAt",
-            "createdAt",
-          ],
-          include: listInclude,
-          order: [["createdAt", "DESC"]],
-          limit,
-          offset,
-          distinct: true,
-          subQuery: false,
-        });
+        Promise.all([
+          Store.findByPk(storeId, {
+            attributes: [
+              "id",
+              "name",
+              "slug",
+              "status",
+              "phone",
+              "whatsapp",
+              "addressLine1",
+              "addressLine2",
+              "city",
+              "province",
+              "postalCode",
+              "country",
+              "shippingSetup",
+            ],
+          }),
+          Suborder.findAndCountAll({
+            where,
+            attributes: [
+              "id",
+              "orderId",
+              "suborderNumber",
+              "storeId",
+              "subtotalAmount",
+              "shippingAmount",
+              "serviceFeeAmount",
+              "totalAmount",
+              "paymentStatus",
+              "fulfillmentStatus",
+              "paidAt",
+              "createdAt",
+            ],
+            include: listInclude,
+            order: [["createdAt", "DESC"]],
+            limit,
+            offset,
+            distinct: true,
+            subQuery: false,
+          }),
+        ]);
 
-      let result = await loadResult();
+      let [store, result] = await loadResult();
       const expired = await expireOverduePaymentsForSerializedOrders(result.rows);
       if (expired) {
-        result = await loadResult();
+        [store, result] = await loadResult();
       }
+      const storeShippingSetup = buildStoreShippingSetupReadiness(store);
 
       return res.json({
         success: true,
         data: {
           items: result.rows.map((suborder) => serializeListItem(suborder, req.sellerAccess)),
+          storeShippingSetup: {
+            shippingSetupStatus: storeShippingSetup.shippingSetupStatus,
+            shippingSetupMeta: storeShippingSetup.shippingSetupMeta,
+            isShippingReady: storeShippingSetup.isShippingReady,
+            missingShippingFields: storeShippingSetup.missingShippingFields,
+            missingShippingFieldsCount: Array.isArray(
+              storeShippingSetup.missingShippingFields
+            )
+              ? storeShippingSetup.missingShippingFields.length
+              : 0,
+          },
           governance: {
             fulfillment: buildFulfillmentGovernance(req.sellerAccess),
           },
@@ -1048,6 +1242,9 @@ router.patch(
       const suborderId = Number(req.params.suborderId);
       const actorUserId = Number(req.user?.id || 0) || null;
       const actionCode = toUpper(req.body?.action);
+      const courierCode = String(req.body?.courierCode || "").trim() || null;
+      const courierService = String(req.body?.courierService || "").trim() || null;
+      const trackingNumber = String(req.body?.trackingNumber || "").trim() || null;
       const actionDefinition =
         FULFILLMENT_ACTIONS[actionCode as keyof typeof FULFILLMENT_ACTIONS] ?? null;
 
@@ -1118,6 +1315,19 @@ router.patch(
         });
       }
 
+      if (
+        isMultistoreShipmentMvpEnabled() &&
+        !isMultistoreShipmentMutationEnabled()
+      ) {
+        await tx.rollback();
+        tx = null;
+        return res.status(409).json({
+          success: false,
+          code: "SHIPMENT_MUTATION_DISABLED",
+          message: "Shipment mutation is disabled for the current rollout.",
+        });
+      }
+
       const currentFulfillmentStatus = normalizeFulfillmentStatus(
         getAttr(suborder, "fulfillmentStatus")
       );
@@ -1176,9 +1386,25 @@ router.patch(
         });
       }
 
-      await (suborder as any).update({
-        fulfillmentStatus: actionDefinition.nextStatus,
-      }, { transaction: tx });
+      const shipmentSync = await applySellerShipmentFulfillment({
+        suborder,
+        actionCode: actionDefinition.code,
+        actorUserId,
+        transaction: tx,
+        payload: {
+          courierCode,
+          courierService,
+          trackingNumber,
+        },
+      });
+
+      await (suborder as any).update(
+        {
+          fulfillmentStatus:
+            shipmentSync.compatibilityFulfillmentStatus || actionDefinition.nextStatus,
+        },
+        { transaction: tx }
+      );
 
       const parentOrderSync = await recalculateParentOrderFulfillmentStatus(
         toNumber(getAttr(suborder, "orderId"), 0),
@@ -1287,6 +1513,10 @@ router.patch(
                 source: "SUBORDER_FULFILLMENT_AGGREGATION",
               }
             : null,
+          shipmentSync: {
+            usedLegacyFallback: Boolean(shipmentSync.usedLegacyFallback),
+            shipmentId: toNumber(getAttr(shipmentSync.shipment, "id"), 0) || null,
+          },
           auditLogId: toNumber(getAttr(auditLog, "id"), 0) || null,
           suborder: serializeDetail(refreshed, req.sellerAccess),
         },
@@ -1300,6 +1530,16 @@ router.patch(
         }
       }
       console.error("[seller/orders:fulfillment] error", error);
+      const code = String((error as any)?.code || "").toUpperCase();
+      const statusCode = Number((error as any)?.statusCode || 0) || 500;
+      if (code) {
+        return res.status(statusCode).json({
+          success: false,
+          code,
+          message:
+            (error as any)?.message || "Failed to update seller fulfillment status.",
+        });
+      }
       return res.status(500).json({
         success: false,
         message: "Failed to update seller fulfillment status.",

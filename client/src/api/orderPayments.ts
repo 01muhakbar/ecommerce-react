@@ -90,6 +90,63 @@ export type GroupedPaymentReadModel = {
   isActionable?: boolean;
 };
 
+export type ShipmentTrackingEvent = {
+  eventId?: number | null;
+  status?: string | null;
+  statusMeta?: GroupedPaymentReadModel["statusMeta"];
+  note?: string | null;
+  happenedAt?: string | null;
+};
+
+export type ShipmentSummary = {
+  shipmentId?: number | null;
+  suborderId?: number | null;
+  suborderNumber?: string | null;
+  storeId?: number | null;
+  storeName?: string | null;
+  storeSlug?: string | null;
+  shipmentStatus: string;
+  shipmentStatusMeta?: GroupedPaymentReadModel["statusMeta"];
+  courierCode?: string | null;
+  courierService?: string | null;
+  trackingNumber?: string | null;
+  estimatedDelivery?: string | null;
+  shippingFee?: number;
+  shipmentItems: Array<{
+    id?: number | null;
+    productId?: number | null;
+    productName: string;
+    qty: number;
+    price: number;
+    lineTotal: number;
+  }>;
+  trackingEvents: ShipmentTrackingEvent[];
+  latestTrackingEvent?: ShipmentTrackingEvent | null;
+  hasTrackingNumber?: boolean;
+  hasActiveShipment?: boolean;
+  usedLegacyFallback?: boolean;
+  persistenceState?: "LEGACY_FALLBACK" | "PERSISTED" | string | null;
+  compatibilityFulfillmentStatus?: string | null;
+  compatibilityFulfillmentStatusMeta?: GroupedPaymentReadModel["statusMeta"];
+  storedFulfillmentStatus?: string | null;
+  storedFulfillmentStatusMeta?: GroupedPaymentReadModel["statusMeta"];
+  compatibilityMatchesStorage?: boolean | null;
+  trackingEventCount?: number;
+  missingTrackingTimeline?: boolean;
+  incompleteTrackingData?: boolean;
+  canUploadTracking?: boolean;
+  canMarkPacked?: boolean;
+  canMarkShipped?: boolean;
+  canCancelShipment?: boolean;
+  canConfirmDelivery?: boolean;
+  availableShippingActions?: Array<{
+    code?: string;
+    label?: string;
+    enabled?: boolean;
+    reason?: string | null;
+  }>;
+};
+
 export type GroupedOrderPaymentResponse = {
   success: boolean;
   data: {
@@ -102,6 +159,43 @@ export type GroupedOrderPaymentResponse = {
     paymentMethod?: string | null;
     createdAt?: string | null;
     paymentStatusMeta?: GroupedPaymentReadModel["settlementStatusMeta"];
+    shipmentCount?: number;
+    shippingStatus?: string;
+    shippingStatusMeta?: GroupedPaymentReadModel["statusMeta"];
+    latestTrackingEvent?: ShipmentTrackingEvent | null;
+    hasActiveShipment?: boolean;
+    hasTrackingNumber?: boolean;
+    usedLegacyFallback?: boolean;
+    shipmentAuditMeta?: {
+      totalSuborders?: number;
+      persistedShipmentCount?: number;
+      legacyFallbackSuborderCount?: number;
+      compatibilityMismatchCount?: number;
+      missingTrackingTimelineCount?: number;
+      incompleteTrackingDataCount?: number;
+      usedLegacyFallback?: boolean;
+      persistedCoverage?: string;
+    } | null;
+    suborderShipmentSummary?: Array<{
+      suborderId?: number | null;
+      shipmentCount?: number;
+      shippingStatus?: string | null;
+      shippingStatusMeta?: GroupedPaymentReadModel["statusMeta"];
+      latestTrackingEvent?: ShipmentTrackingEvent | null;
+      hasActiveShipment?: boolean;
+      hasTrackingNumber?: boolean;
+      usedLegacyFallback?: boolean;
+      hasPersistedShipment?: boolean;
+      compatibilityFulfillmentStatus?: string | null;
+      compatibilityFulfillmentStatusMeta?: GroupedPaymentReadModel["statusMeta"];
+      storedFulfillmentStatus?: string | null;
+      storedFulfillmentStatusMeta?: GroupedPaymentReadModel["statusMeta"];
+      compatibilityMatchesStorage?: boolean | null;
+      trackingEventCount?: number;
+      missingTrackingTimeline?: boolean;
+      incompleteTrackingData?: boolean;
+    }>;
+    shipments?: ShipmentSummary[];
     paymentEntry?: {
       visible?: boolean;
       label?: string | null;
@@ -139,6 +233,23 @@ export type GroupedOrderPaymentResponse = {
       paymentStatusMeta?: GroupedPaymentReadModel["settlementStatusMeta"];
       paymentReadModel?: GroupedPaymentReadModel;
       fulfillmentStatus: string;
+      shipmentCount?: number;
+      shippingStatus?: string;
+      shippingStatusMeta?: GroupedPaymentReadModel["statusMeta"];
+      latestTrackingEvent?: ShipmentTrackingEvent | null;
+      hasActiveShipment?: boolean;
+      hasTrackingNumber?: boolean;
+      usedLegacyFallback?: boolean;
+      hasPersistedShipment?: boolean;
+      compatibilityFulfillmentStatus?: string | null;
+      compatibilityFulfillmentStatusMeta?: GroupedPaymentReadModel["statusMeta"];
+      storedFulfillmentStatus?: string | null;
+      storedFulfillmentStatusMeta?: GroupedPaymentReadModel["statusMeta"];
+      compatibilityMatchesStorage?: boolean | null;
+      trackingEventCount?: number;
+      missingTrackingTimeline?: boolean;
+      incompleteTrackingData?: boolean;
+      shipments?: ShipmentSummary[];
       paymentProfileStatus: string;
       paymentAvailable: boolean;
       paymentInstruction?: string | null;

@@ -484,6 +484,7 @@ export default function KachaBazarDemoHomePage() {
     error: categoriesError,
     refetch: refetchCategories,
   } = useCategories({ parentsOnly: true });
+  const { data: allCategoriesData } = useCategories({ parentsOnly: false });
   const {
     data: productsData,
     isLoading,
@@ -491,6 +492,7 @@ export default function KachaBazarDemoHomePage() {
     refetch: refetchProducts,
   } = useProducts({ page: 1, limit: 30 });
   const categories = categoriesData?.data?.items ?? [];
+  const allCategories = allCategoriesData?.data?.items ?? categories;
   const hasCategories = categories.length > 0;
   const showCategoriesLoading = isCategoriesLoading && !categoriesData;
   const showCategoriesError = isCategoriesError && !hasCategories;
@@ -507,13 +509,13 @@ export default function KachaBazarDemoHomePage() {
   });
   const categoriesById = useMemo(() => {
     const map = new Map();
-    (categories || []).forEach((category) => {
+    (allCategories || []).forEach((category) => {
       if (category?.id != null) {
         map.set(Number(category.id), category);
       }
     });
     return map;
-  }, [categories]);
+  }, [allCategories]);
   const rawProducts = productsData?.data?.items ?? [];
 
   const [activeSlide, setActiveSlide] = useState(0);
@@ -792,7 +794,7 @@ export default function KachaBazarDemoHomePage() {
             description={homeSections.featuredCategories.description}
             maxCategories={homeSections.featuredCategories.productsLimit}
             categories={categories}
-            products={safeProducts}
+            allCategories={allCategories}
           />
         ) : null}
         {showPopularProducts ? (

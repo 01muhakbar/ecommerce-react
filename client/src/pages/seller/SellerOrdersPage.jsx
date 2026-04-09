@@ -226,6 +226,9 @@ export default function SellerOrdersPage() {
   const items = Array.isArray(ordersQuery.data?.items) ? ordersQuery.data.items : [];
   const pagination = ordersQuery.data?.pagination ?? { page: 1, limit: 10, total: 0 };
   const fulfillmentGovernance = ordersQuery.data?.governance?.fulfillment ?? null;
+  const storeShippingSetup = ordersQuery.data?.storeShippingSetup ?? null;
+  const storeShippingSetupStatus = storeShippingSetup?.shippingSetupStatus ?? null;
+  const storeShippingSetupMeta = storeShippingSetup?.shippingSetupMeta ?? null;
   const totalPages = Math.max(1, Math.ceil(Number(pagination.total || 0) / Number(pagination.limit || 10)));
 
   const activeFilters = useMemo(
@@ -314,6 +317,13 @@ export default function SellerOrdersPage() {
         title="Seller suborder overview"
         description="This module only shows suborders belonging to the current store. Seller fulfillment is the primary operational status here, while parent order lifecycle stays a global reference."
         actions={[
+          storeShippingSetupStatus ? (
+            <SellerWorkspaceBadge
+              key="shipping-setup"
+              label={`Shipping ${storeShippingSetupStatus.label || "Unavailable"}`}
+              tone={storeShippingSetupStatus.tone || "stone"}
+            />
+          ) : null,
           <SellerWorkspaceBadge
             key="mode"
             label={fulfillmentGovernance?.actorHasManagePermission ? "Mutation open" : "Read only"}
@@ -390,6 +400,45 @@ export default function SellerOrdersPage() {
             </label>
           </div>
       </SellerWorkspaceFilterBar>
+
+      {storeShippingSetupStatus ? (
+        <SellerWorkspacePanel className="p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                Store Shipping Setup
+              </p>
+              <h3 className="mt-2 text-lg font-semibold text-slate-900">
+                {storeShippingSetupStatus.label || "Unavailable"}
+              </h3>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+                {storeShippingSetupMeta?.message ||
+                  storeShippingSetupStatus.description ||
+                  "Seller shipping setup readiness is unavailable for this store."}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <InfoPill
+                label="Ready"
+                value={storeShippingSetup?.isShippingReady ? "Yes" : "No"}
+              />
+              <InfoPill
+                label="Missing"
+                value={String(storeShippingSetup?.missingShippingFieldsCount || 0)}
+              />
+            </div>
+          </div>
+          {!storeShippingSetup?.isShippingReady ? (
+            <SellerWorkspaceNotice
+              type={storeShippingSetupStatus.code === "DISABLED" ? "info" : "warning"}
+              className="mt-4"
+            >
+              Shipment actions can remain blocked until this store shipping setup is ready. Review
+              the existing <Link to={workspaceRoutes.shippingSetup()} className="font-semibold underline"> Shipping Setup</Link> lane.
+            </SellerWorkspaceNotice>
+          ) : null}
+        </SellerWorkspacePanel>
+      ) : null}
 
       {feedback ? (
         <SellerWorkspaceNotice type={feedback.type === "success" ? "success" : "error"}>

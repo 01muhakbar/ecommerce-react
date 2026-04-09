@@ -420,6 +420,7 @@ export default function SellerWorkspaceHome() {
   const readinessChecklist = Array.isArray(readiness?.checklist) ? readiness.checklist : [];
   const readinessNextStep = readiness?.nextStep;
   const storeProfileChecklist = readinessChecklist.find((item) => item.key === "store_profile");
+  const shippingSetupChecklist = readinessChecklist.find((item) => item.key === "shipping_setup");
   const paymentChecklist = readinessChecklist.find((item) => item.key === "payment_profile");
   const productChecklist = readinessChecklist.find((item) => item.key === "products");
   const paymentReadiness = summary?.paymentProfileReadiness;
@@ -715,6 +716,11 @@ export default function SellerWorkspaceHome() {
               label="Store Profile"
               value={storeProfileChecklist?.status?.label || "-"}
               hint={storeProfileChecklist?.status?.description || "-"}
+            />
+            <SellerWorkspaceDetailItem
+              label="Shipping Setup"
+              value={shippingSetupChecklist?.status?.label || "-"}
+              hint={shippingSetupChecklist?.status?.description || "-"}
             />
             <SellerWorkspaceDetailItem
               label="Payment Profile"

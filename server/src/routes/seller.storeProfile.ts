@@ -5,6 +5,7 @@ import {
   READ_ONLY_STORE_PROFILE_FIELDS,
   SELLER_EDITABLE_STORE_PROFILE_FIELDS,
   STORE_PROFILE_ATTRIBUTES,
+  getStoreProfileAttr,
   sellerStoreProfilePatchSchema,
   serializeStoreProfileSnapshot,
 } from "../services/sharedContracts/storeProfileGovernance.js";
@@ -99,21 +100,6 @@ const patchSellerStoreProfileResponse = async (req: any, res: any) => {
       });
     }
 
-    const updatePayload = Object.fromEntries(
-      Object.entries(parsed.data).filter(
-        ([key, value]) =>
-          value !== undefined &&
-          (SELLER_EDITABLE_STORE_PROFILE_FIELDS as readonly string[]).includes(key)
-      )
-    );
-
-    if (Object.keys(updatePayload).length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "No allowed store profile fields were provided.",
-      });
-    }
-
     const store = await Store.findByPk(storeId, {
       attributes: [...STORE_PROFILE_ATTRIBUTES],
       include: [
@@ -134,6 +120,28 @@ const patchSellerStoreProfileResponse = async (req: any, res: any) => {
       return res.status(404).json({
         success: false,
         message: "Store not found.",
+      });
+    }
+
+    const updatePayload = Object.fromEntries(
+      Object.entries(parsed.data).filter(
+        ([key, value]) =>
+          value !== undefined &&
+          (SELLER_EDITABLE_STORE_PROFILE_FIELDS as readonly string[]).includes(key)
+      )
+    );
+
+    if (parsed.data.shippingSetup !== undefined) {
+      updatePayload.shippingSetup = {
+        ...(getStoreProfileAttr(store, "shippingSetup") || {}),
+        ...parsed.data.shippingSetup,
+      };
+    }
+
+    if (Object.keys(updatePayload).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No allowed store profile fields were provided.",
       });
     }
 

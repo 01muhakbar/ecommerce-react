@@ -8,6 +8,17 @@ export type SellerWorkspaceContext = {
     status: string;
     logoUrl?: string | null;
     imageUrl?: string | null;
+    shippingSetupStatus?: SellerStatusMeta | null;
+    shippingSetupMeta?: {
+      severity: string;
+      message: string | null;
+      hints: string[];
+    } | null;
+    isShippingReady?: boolean;
+    missingShippingFields?: Array<{
+      key: string;
+      label: string;
+    }>;
   };
   access: {
     accessMode: "OWNER_BRIDGE" | "MEMBER";
@@ -379,6 +390,59 @@ const normalizeChecklistItem = (value: any): SellerWorkspaceChecklistItem | null
   };
 };
 
+const normalizeShippingSetupMeta = (value: any) => {
+  if (!value || typeof value !== "object") return null;
+  return {
+    severity: textOrFallback(value.severity, "info"),
+    message: textOrNull(value.message),
+    hints: Array.isArray(value.hints)
+      ? value.hints
+          .map((entry: unknown) => textOrNull(entry))
+          .filter((entry: string | null): entry is string => Boolean(entry))
+      : [],
+  };
+};
+
+const normalizeSellerWorkspaceContext = (payload: any): SellerWorkspaceContext | null => {
+  if (!payload || typeof payload !== "object") return null;
+
+  return {
+    store: {
+      id: numberOrZero(payload?.store?.id),
+      name: textOrFallback(payload?.store?.name, "Seller Workspace"),
+      slug: textOrFallback(payload?.store?.slug, "store"),
+      status: textOrFallback(payload?.store?.status, "ACTIVE"),
+      logoUrl: textOrNull(payload?.store?.logoUrl),
+      imageUrl: textOrNull(payload?.store?.imageUrl),
+      shippingSetupStatus: normalizeStatusMeta(payload?.store?.shippingSetupStatus, "Unavailable"),
+      shippingSetupMeta: normalizeShippingSetupMeta(payload?.store?.shippingSetupMeta),
+      isShippingReady: Boolean(payload?.store?.isShippingReady),
+      missingShippingFields: Array.isArray(payload?.store?.missingShippingFields)
+        ? payload.store.missingShippingFields
+            .map((entry: any) => ({
+              key: textOrFallback(entry?.key),
+              label: textOrFallback(entry?.label, "Unknown field"),
+            }))
+            .filter((entry: { key: string }) => Boolean(entry.key))
+        : [],
+    },
+    access: {
+      accessMode: textOrFallback(payload?.access?.accessMode, "MEMBER") as
+        | "OWNER_BRIDGE"
+        | "MEMBER",
+      roleCode: textOrFallback(payload?.access?.roleCode),
+      permissionKeys: Array.isArray(payload?.access?.permissionKeys)
+        ? payload.access.permissionKeys
+            .map((entry: unknown) => textOrNull(entry))
+            .filter((entry: string | null): entry is string => Boolean(entry))
+        : [],
+      membershipStatus: textOrFallback(payload?.access?.membershipStatus),
+      isOwner: Boolean(payload?.access?.isOwner),
+      memberId: numberOrZero(payload?.access?.memberId) || null,
+    },
+  };
+};
+
 const normalizeWorkspaceReadiness = (payload: any): SellerWorkspaceReadiness | null => {
   if (!payload || typeof payload !== "object") return null;
 
@@ -716,14 +780,14 @@ const normalizeAnalyticsSummary = (payload: any): SellerAnalyticsSummary | null 
 
 export const getSellerWorkspaceContext = async (storeId: number | string) => {
   const { data } = await api.get(`/seller/stores/${storeId}/context`);
-  return (data?.data ?? null) as SellerWorkspaceContext | null;
+  return normalizeSellerWorkspaceContext(data?.data ?? null);
 };
 
 export const getSellerWorkspaceContextBySlug = async (storeSlug: string) => {
   const { data } = await api.get(
     `/seller/stores/slug/${encodeURIComponent(String(storeSlug || "").trim())}/context`
   );
-  return (data?.data ?? null) as SellerWorkspaceContext | null;
+  return normalizeSellerWorkspaceContext(data?.data ?? null);
 };
 
 export const listSellerWorkspaceStores = async () => {

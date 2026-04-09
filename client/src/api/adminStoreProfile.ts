@@ -35,18 +35,58 @@ const normalizeFieldMatrix = (value: unknown) =>
         .filter((entry) => entry.key)
     : [];
 
-const normalizeStoreProfileSnapshot = (payload: any) => {
-  if (!payload) return null;
-
-  const completeness = payload?.completeness || {};
-  const missingFields = Array.isArray(completeness?.missingFields)
-    ? completeness.missingFields
+const normalizeMissingFields = (value: unknown) =>
+  Array.isArray(value)
+    ? value
         .map((entry: any) => ({
           key: textOrFallback(entry?.key),
           label: textOrFallback(entry?.label, "Unknown field"),
         }))
-        .filter((entry: any) => entry.key)
+        .filter((entry) => entry.key)
     : [];
+
+const normalizeShippingSetupStatus = (value: unknown) => {
+  const source = value && typeof value === "object" ? (value as Record<string, any>) : {};
+  return {
+    code: textOrFallback(source.code, "UNKNOWN"),
+    label: textOrFallback(source.label, "Unavailable"),
+    tone: textOrFallback(source.tone, "neutral"),
+    description: textOrNull(source.description),
+  };
+};
+
+const normalizeShippingSetupMeta = (value: unknown) => {
+  const source = value && typeof value === "object" ? (value as Record<string, any>) : {};
+  return {
+    severity: textOrFallback(source.severity, "info"),
+    message: textOrNull(source.message),
+    hints: toStringList(source.hints),
+    usesStoreProfileFallback: Boolean(source.usesStoreProfileFallback),
+    fallbackFields: normalizeMissingFields(source.fallbackFields),
+    sourceOfTruth: textOrNull(source.sourceOfTruth),
+    operationalBoundary: textOrNull(source.operationalBoundary),
+  };
+};
+
+const normalizeShippingSetupSummary = (value: unknown) => {
+  const source = value && typeof value === "object" ? (value as Record<string, any>) : {};
+  return {
+    shippingEnabled:
+      typeof source.shippingEnabled === "boolean" ? source.shippingEnabled : true,
+    originContactName: textOrNull(source.originContactName),
+    originPhone: textOrNull(source.originPhone),
+    originAddressLine: textOrNull(source.originAddressLine),
+    pickupNotes: textOrNull(source.pickupNotes),
+    usesStoreProfileFallback: Boolean(source.usesStoreProfileFallback),
+    fallbackFields: normalizeMissingFields(source.fallbackFields),
+  };
+};
+
+const normalizeStoreProfileSnapshot = (payload: any) => {
+  if (!payload) return null;
+
+  const completeness = payload?.completeness || {};
+  const missingFields = normalizeMissingFields(completeness?.missingFields);
 
   return {
     id: Number(payload?.id || 0),
@@ -108,6 +148,11 @@ const normalizeStoreProfileSnapshot = (payload: any) => {
       description: textOrNull(completeness?.description),
       missingFields,
     },
+    shippingSetupStatus: normalizeShippingSetupStatus(payload?.shippingSetupStatus),
+    shippingSetupMeta: normalizeShippingSetupMeta(payload?.shippingSetupMeta),
+    isShippingReady: Boolean(payload?.isShippingReady),
+    missingShippingFields: normalizeMissingFields(payload?.missingShippingFields),
+    shippingSetupSummary: normalizeShippingSetupSummary(payload?.shippingSetupSummary),
     createdAt: payload?.createdAt || null,
     updatedAt: payload?.updatedAt || null,
   };

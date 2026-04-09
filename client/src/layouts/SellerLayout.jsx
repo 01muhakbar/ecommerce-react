@@ -23,6 +23,7 @@ import {
   Search,
   ShoppingBag,
   Store,
+  Truck,
   UserRound,
   Users,
 } from "lucide-react";
@@ -472,9 +473,14 @@ function SellerSidebar({
   const sellerRoutes = createSellerWorkspaceRoutes(storeSlug);
   const location = useLocation();
   const pathname = location.pathname;
+  const shippingSetupStatus = sellerContext?.store?.shippingSetupStatus || null;
+  const shippingSetupMeta = sellerContext?.store?.shippingSetupMeta || null;
 
+  const normalizeActivePath = (to) => String(to || "").split("#")[0].split("?")[0];
   const isPathActive = (to) =>
-    pathname === to || (to !== sellerRoutes.home() && pathname.startsWith(`${to}/`));
+    pathname === normalizeActivePath(to) ||
+    (normalizeActivePath(to) !== sellerRoutes.home() &&
+      pathname.startsWith(`${normalizeActivePath(to)}/`));
 
   const navSections = [
     {
@@ -493,6 +499,20 @@ function SellerSidebar({
           Icon: Store,
           enabled: hasPermission("STORE_VIEW"),
           implemented: true,
+        },
+        {
+          label: "Shipping Setup",
+          to: sellerRoutes.shippingSetup(),
+          Icon: Truck,
+          enabled: hasPermission("STORE_VIEW"),
+          implemented: true,
+          meta: shippingSetupMeta?.message || "Origin & readiness",
+          badge: shippingSetupStatus
+            ? {
+                label: shippingSetupStatus.label || "Unavailable",
+                tone: shippingSetupStatus.tone || "stone",
+              }
+            : null,
         },
       ],
     },
@@ -643,6 +663,12 @@ function SellerSidebar({
                 label={sellerContext?.store?.status || "ACTIVE"}
                 tone="emerald"
               />
+              {shippingSetupStatus ? (
+                <SellerWorkspaceBadge
+                  label={`Shipping ${shippingSetupStatus.label || "Unavailable"}`}
+                  tone={shippingSetupStatus.tone || "stone"}
+                />
+              ) : null}
             </div>
           </div>
         )}
@@ -851,9 +877,17 @@ function SellerSidebar({
                                         ? "!text-slate-100"
                                         : "text-slate-700"
                                   )}
-                                >
-                                  {item.label}
-                                </span>
+                                  >
+                                    {item.label}
+                                  </span>
+                                  {item.badge ? (
+                                    <span className="mt-1 block">
+                                      <SellerWorkspaceBadge
+                                        label={item.badge.label}
+                                        tone={item.badge.tone}
+                                      />
+                                    </span>
+                                  ) : null}
                                 {item.meta ? (
                                   <span
                                     className={joinClassNames(

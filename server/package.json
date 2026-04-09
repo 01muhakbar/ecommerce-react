@@ -28,6 +28,7 @@
     "smoke:orders": "node scripts/smoke-orders-admin.mjs",
     "smoke:product-visibility": "tsx src/scripts/smokeProductVisibility.ts",
     "smoke:order-payment": "tsx src/scripts/smokeOrderPayment.ts",
+    "smoke:shipment-regression": "tsx src/scripts/smokeShipmentRegression.ts",
     "smoke:auth-forgot-password": "tsx src/scripts/smokeForgotPassword.ts",
     "smoke:admin-public-auth": "tsx src/scripts/smokeAdminPublicAuth.ts",
     "smoke:auth-rate-limit": "tsx src/scripts/smokeAuthRateLimit.ts",

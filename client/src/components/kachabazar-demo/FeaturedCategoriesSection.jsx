@@ -1,56 +1,42 @@
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 
-const STOP_WORDS = new Set([
-  "fresh",
-  "organic",
-  "premium",
-  "plain",
-  "original",
-  "mixed",
-  "extra",
-  "virgin",
-  "for",
-  "with",
-]);
+const toText = (value) => String(value ?? "").trim();
 
-const tokenize = (text) =>
-  String(text || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]+/g, " ")
-    .split(/\s+/)
-    .map((token) => token.trim())
-    .filter(
-      (token) =>
-        token &&
-        token.length >= 3 &&
-        !STOP_WORDS.has(token) &&
-        !/^\d+$/.test(token)
-    );
+const buildCategoryHref = (value) => {
+  const slug = toText(value);
+  return slug ? `/search?category=${encodeURIComponent(slug)}&page=1` : "/search?page=1";
+};
 
-const titleize = (word) =>
-  word ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase() : "";
+const buildSubLinksByParent = (allCategories = []) => {
+  const map = new Map();
 
-const deriveSubLinks = (category, products) => {
-  const categoryKey = String(category?.slug || category?.code || "").toLowerCase();
-  const pool = (products || []).filter((product) => {
-    const productCategory = String(
-      product?.category?.slug || product?.category?.code || product?.category?.name || ""
-    ).toLowerCase();
-    return productCategory.includes(categoryKey) || categoryKey.includes(productCategory);
-  });
-  if (pool.length === 0) return [];
+  allCategories.forEach((category, index) => {
+    const parentId = category?.parentId ?? category?.parent_id ?? null;
+    if (parentId === null || parentId === undefined || toText(parentId) === "") return;
 
-  const freq = new Map();
-  for (const product of pool) {
-    for (const token of tokenize(product?.name || product?.title)) {
-      freq.set(token, (freq.get(token) || 0) + 1);
+    const label = toText(category?.name || category?.title || category?.label);
+    if (!label) return;
+
+    const slug =
+      toText(category?.slug || category?.code || category?.id) ||
+      `category-${index + 1}`;
+    const parentKey = toText(parentId);
+    const next = map.get(parentKey) || [];
+
+    if (next.some((item) => item.slug === slug || item.label.toLowerCase() === label.toLowerCase())) {
+      return;
     }
-  }
 
-  return [...freq.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
-    .map(([word]) => titleize(word));
+    next.push({
+      slug,
+      label,
+      href: buildCategoryHref(slug),
+    });
+    map.set(parentKey, next);
+  });
+
+  return map;
 };
 
 const renderCategoryVisual = (category) => {
@@ -82,10 +68,9 @@ const renderCategoryVisual = (category) => {
 
 function CategoryCell({ category, subLinks }) {
   const slug = String(category?.slug || category?.code || category?.id || "");
-  const categoryHref = slug
-    ? `/search?category=${encodeURIComponent(slug)}&page=1`
-    : "/search?page=1";
-  const links = subLinks.length > 0 ? subLinks : ["Featured picks", "Daily deals", "Top items"];
+  const categoryHref = buildCategoryHref(slug);
+  const links =
+    subLinks.length > 0 ? subLinks : [{ label: "Browse category", href: categoryHref, slug }];
 
   return (
     <article className="group border-b border-r border-slate-200 bg-white px-4 py-4 transition hover:bg-slate-50/80 sm:px-5">
@@ -98,16 +83,16 @@ function CategoryCell({ category, subLinks }) {
         </div>
       </Link>
       <ul className="mt-3 space-y-1.5">
-        {links.map((tag) => (
-          <li key={`${slug}-${tag}`}>
+        {links.map((link) => (
+          <li key={`${slug}-${link.slug || link.href || link.label}`}>
             <Link
-              to={`/search?category=${encodeURIComponent(slug)}&page=1&q=${encodeURIComponent(tag)}`}
+              to={link.href || categoryHref}
               className="inline-flex items-center gap-1.5 text-xs text-slate-500 transition hover:text-emerald-600"
             >
               <span className="text-[11px] text-slate-400 transition group-hover:text-emerald-500">
                 &gt;
               </span>
-              <span className="line-clamp-1">{tag}</span>
+              <span className="line-clamp-1">{link.label}</span>
             </Link>
           </li>
         ))}
@@ -121,11 +106,15 @@ export default function FeaturedCategoriesSection({
   description = "Choose your necessary products from this feature categories.",
   maxCategories = 12,
   categories = [],
-  products = [],
+  allCategories = [],
 }) {
   const safeCategories = Array.isArray(categories)
     ? categories.slice(0, Math.max(1, Number(maxCategories) || 12))
     : [];
+  const subLinksByParent = useMemo(
+    () => buildSubLinksByParent(Array.isArray(allCategories) ? allCategories : []),
+    [allCategories]
+  );
 
   return (
     <section className="space-y-6 rounded-3xl bg-slate-100 px-3 py-8 sm:px-5">
@@ -147,7 +136,7 @@ export default function FeaturedCategoriesSection({
               <CategoryCell
                 key={String(category?.id || category?.slug || category?.code)}
                 category={category}
-                subLinks={deriveSubLinks(category, products)}
+                subLinks={subLinksByParent.get(toText(category?.id))?.slice(0, 3) || []}
               />
             ))}
           </div>

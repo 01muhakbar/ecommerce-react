@@ -41,7 +41,8 @@ const formatDate = (value) => {
 const getOrderDateValue = (order) =>
   order?.createdAt || order?.created_at || order?.orderTime || null;
 
-const getPublicOrderRef = (order) => resolvePublicOrderReference(order?.invoiceNo);
+const getPublicOrderRef = (order) =>
+  resolvePublicOrderReference(order?.invoiceNo, order?.ref, order?.invoice, order?.orderRef);
 
 const shouldPollAccountOrders = (orders) =>
   Array.isArray(orders) &&

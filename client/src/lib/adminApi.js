@@ -1,5 +1,6 @@
 import axios from "axios";
 import { toUIStatus } from "../constants/orderStatus.js";
+import { normalizeShipmentList, normalizeTrackingEvent } from "../utils/shipmentReadModel.ts";
 
 const adminApi = axios.create({
   baseURL: "/api",
@@ -259,6 +260,50 @@ const normalizeOrdersMeta = (payload, params = {}) => {
   return { page, limit, total, totalPages };
 };
 
+const normalizeShipmentAuditMeta = (value) => {
+  if (!value || typeof value !== "object") return null;
+  return {
+    totalSuborders: Number(value.totalSuborders || 0),
+    persistedShipmentCount: Number(value.persistedShipmentCount || 0),
+    legacyFallbackSuborderCount: Number(value.legacyFallbackSuborderCount || 0),
+    compatibilityMismatchCount: Number(value.compatibilityMismatchCount || 0),
+    missingTrackingTimelineCount: Number(value.missingTrackingTimelineCount || 0),
+    incompleteTrackingDataCount: Number(value.incompleteTrackingDataCount || 0),
+    usedLegacyFallback: Boolean(value.usedLegacyFallback),
+    persistedCoverage: value.persistedCoverage || "NO_SUBORDERS",
+  };
+};
+
+const normalizeSuborderShipmentSummary = (value) =>
+  Array.isArray(value)
+      ? value.map((entry) => ({
+        suborderId: Number(entry?.suborderId || 0) || null,
+        suborderNumber: entry?.suborderNumber || null,
+        storeId: Number(entry?.storeId || 0) || null,
+        storeName: entry?.storeName || null,
+        storeSlug: entry?.storeSlug || null,
+        shipmentCount: Number(entry?.shipmentCount || 0),
+        shippingStatus: entry?.shippingStatus || null,
+        shippingStatusMeta: entry?.shippingStatusMeta || null,
+        latestTrackingEvent: normalizeTrackingEvent(entry?.latestTrackingEvent),
+        hasActiveShipment: Boolean(entry?.hasActiveShipment),
+        hasTrackingNumber: Boolean(entry?.hasTrackingNumber),
+        usedLegacyFallback: Boolean(entry?.usedLegacyFallback),
+        hasPersistedShipment: Boolean(entry?.hasPersistedShipment),
+        compatibilityFulfillmentStatus: entry?.compatibilityFulfillmentStatus || null,
+        compatibilityFulfillmentStatusMeta: entry?.compatibilityFulfillmentStatusMeta || null,
+        storedFulfillmentStatus: entry?.storedFulfillmentStatus || null,
+        storedFulfillmentStatusMeta: entry?.storedFulfillmentStatusMeta || null,
+        compatibilityMatchesStorage:
+          typeof entry?.compatibilityMatchesStorage === "boolean"
+            ? entry.compatibilityMatchesStorage
+            : null,
+        trackingEventCount: Number(entry?.trackingEventCount || 0),
+        missingTrackingTimeline: Boolean(entry?.missingTrackingTimeline),
+        incompleteTrackingData: Boolean(entry?.incompleteTrackingData),
+      }))
+    : [];
+
 const normalizeOrdersList = (payload, params = {}) => {
   const items = Array.isArray(payload?.data?.items)
     ? payload.data.items
@@ -313,6 +358,16 @@ const normalizeAdminOrderDetail = (raw) => {
     customerAddress: raw.customerAddress || null,
     customerNotes: raw.customerNotes || null,
     method: raw.method || raw.paymentMethod || "COD",
+    shipmentCount: Number(raw.shipmentCount || 0),
+    shippingStatus: raw.shippingStatus || null,
+    shippingStatusMeta: raw.shippingStatusMeta || null,
+    latestTrackingEvent: normalizeTrackingEvent(raw.latestTrackingEvent),
+    hasActiveShipment: Boolean(raw.hasActiveShipment),
+    hasTrackingNumber: Boolean(raw.hasTrackingNumber),
+    usedLegacyFallback: Boolean(raw.usedLegacyFallback),
+    shipmentAuditMeta: normalizeShipmentAuditMeta(raw.shipmentAuditMeta),
+    suborderShipmentSummary: normalizeSuborderShipmentSummary(raw.suborderShipmentSummary),
+    shipments: normalizeShipmentList(raw.shipments),
     contract: raw.contract || null,
     items: (raw.items || []).map((it) => ({
       id: it.id,

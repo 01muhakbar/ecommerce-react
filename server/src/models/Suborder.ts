@@ -109,6 +109,10 @@ export class Suborder
       foreignKey: { name: "suborderId", field: "suborder_id" },
       as: "payments",
     });
+    Suborder.hasOne(models.Shipment, {
+      foreignKey: { name: "suborderId", field: "suborder_id" },
+      as: "shipment",
+    });
   }
 
   static initModel(sequelize: Sequelize) {

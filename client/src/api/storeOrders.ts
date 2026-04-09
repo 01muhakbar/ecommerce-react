@@ -15,6 +15,58 @@ export const fetchStoreOrder = async (ref: string) => {
       invoiceNo?: string | null;
       status: string;
       paymentStatus?: string | null;
+      shipmentCount?: number;
+      shippingStatus?: string | null;
+      shippingStatusMeta?: {
+        code?: string;
+        label?: string;
+        tone?: string;
+        description?: string | null;
+        isFinal?: boolean;
+      } | null;
+      latestTrackingEvent?: {
+        eventId?: number | null;
+        status?: string | null;
+        note?: string | null;
+        happenedAt?: string | null;
+      } | null;
+      hasActiveShipment?: boolean;
+      hasTrackingNumber?: boolean;
+      shipments?: Array<{
+        shipmentId?: number | null;
+        suborderId?: number | null;
+        suborderNumber?: string | null;
+        storeId?: number | null;
+        storeName?: string | null;
+        storeSlug?: string | null;
+        shipmentStatus?: string | null;
+        shipmentStatusMeta?: {
+          code?: string;
+          label?: string;
+          tone?: string;
+          description?: string | null;
+          isFinal?: boolean;
+        } | null;
+        courierCode?: string | null;
+        courierService?: string | null;
+        trackingNumber?: string | null;
+        estimatedDelivery?: string | null;
+        shippingFee?: number;
+        shipmentItems?: Array<{
+          id?: number | null;
+          productId?: number | null;
+          productName?: string;
+          qty?: number;
+          price?: number;
+          lineTotal?: number;
+        }>;
+        trackingEvents?: Array<{
+          eventId?: number | null;
+          status?: string | null;
+          note?: string | null;
+          happenedAt?: string | null;
+        }>;
+      }>;
       totalAmount: number;
       paymentMethod?: string | null;
       paymentEntry?: {
@@ -64,6 +116,33 @@ export const fetchStoreOrder = async (ref: string) => {
         quantity: number;
         price: number;
         lineTotal: number;
+      }>;
+      storeSplits?: Array<{
+        suborderId?: number | null;
+        suborderNumber?: string | null;
+        storeId?: number | null;
+        storeName?: string | null;
+        storeSlug?: string | null;
+        totalAmount?: number;
+        paymentStatus?: string | null;
+        fulfillmentStatus?: string | null;
+        shipmentCount?: number;
+        shippingStatus?: string | null;
+        shippingStatusMeta?: {
+          code?: string;
+          label?: string;
+          tone?: string;
+          description?: string | null;
+        } | null;
+        latestTrackingEvent?: {
+          eventId?: number | null;
+          status?: string | null;
+          note?: string | null;
+          happenedAt?: string | null;
+        } | null;
+        hasActiveShipment?: boolean;
+        hasTrackingNumber?: boolean;
+        shipments?: Array<Record<string, any>>;
       }>;
     };
   }>(`/store/orders/${encodeURIComponent(ref)}`);

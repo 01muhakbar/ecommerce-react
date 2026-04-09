@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CreditCard, PackageSearch, Truck } from "lucide-react";
@@ -21,6 +21,10 @@ import {
   getOrderContractMeta,
   getOrderContractSummary,
 } from "../../utils/orderContract.ts";
+import {
+  ENABLE_MULTISTORE_SHIPMENT_MVP,
+  ENABLE_MULTISTORE_SHIPMENT_MUTATION,
+} from "../../config/featureFlags.js";
 
 const PAYMENT_STATUS_TONE = {
   UNPAID: "stone",
@@ -117,6 +121,11 @@ export default function SellerOrderDetailPage() {
   const { sellerContext, workspaceStoreId: storeId, workspaceRoutes } =
     useSellerWorkspaceRoute();
   const [feedback, setFeedback] = useState(null);
+  const [trackingForm, setTrackingForm] = useState({
+    courierCode: "",
+    courierService: "",
+    trackingNumber: "",
+  });
   const hasOrderPermission = sellerContext?.access?.permissionKeys?.includes("ORDER_VIEW");
   const numericSuborderId = Number(suborderId);
   const hasValidSuborderId = Number.isInteger(numericSuborderId) && numericSuborderId > 0;
@@ -129,7 +138,7 @@ export default function SellerOrderDetailPage() {
   });
 
   const fulfillmentMutation = useMutation({
-    mutationFn: (action) => updateSellerSuborderFulfillment(storeId, suborderId, { action }),
+    mutationFn: (payload) => updateSellerSuborderFulfillment(storeId, suborderId, payload),
     onMutate: () => {
       setFeedback(null);
     },
@@ -150,6 +159,10 @@ export default function SellerOrderDetailPage() {
           ? "This fulfillment step is not valid for the current suborder state."
           : code === "SUBORDER_PAYMENT_NOT_SETTLED"
             ? "This store split must be paid before seller fulfillment can move forward."
+            : code === "SHIPMENT_MUTATION_DISABLED"
+              ? "Shipment mutation is disabled in the current rollout."
+              : code === "TRACKING_NUMBER_REQUIRED"
+                ? "Tracking number is required before the shipment can be marked as shipped."
             : code === "PARENT_ORDER_CANCELLED"
               ? "Parent order is cancelled, so seller fulfillment can no longer move forward."
           : code === "FULFILLMENT_STATUS_ALREADY_SET"
@@ -179,6 +192,47 @@ export default function SellerOrderDetailPage() {
       Back to orders
     </Link>
   );
+
+  const detail = detailQuery.data;
+  const fulfillmentGovernance = detail?.governance?.fulfillment ?? null;
+  const sellerStatusMeta = getSellerStatusMeta(detail);
+  const sellerPaymentMeta = getSellerPaymentMeta(detail);
+  const parentOrderMeta = getParentOrderMeta(detail);
+  const parentPaymentMeta = getParentPaymentMeta(detail);
+  const primaryShipment =
+    ENABLE_MULTISTORE_SHIPMENT_MVP && Array.isArray(detail?.shipments) && detail.shipments.length > 0
+      ? detail.shipments[0]
+      : null;
+  const hasPersistedShipment = Boolean(primaryShipment?.shipmentId);
+  const shipmentActions = Array.isArray(primaryShipment?.availableShippingActions)
+    ? primaryShipment.availableShippingActions
+    : [];
+  const enabledShipmentActions = new Set(
+    shipmentActions.filter((action) => action?.enabled).map((action) => action.code)
+  );
+  const trackingMutationEnabled =
+    hasPersistedShipment && ENABLE_MULTISTORE_SHIPMENT_MUTATION;
+  const shipmentActionBlockedReason =
+    (!ENABLE_MULTISTORE_SHIPMENT_MUTATION
+      ? "Shipment mutation is disabled in the current rollout."
+      : shipmentActions.find((action) => action?.enabled === false && action?.reason)?.reason) ||
+    primaryShipment?.shipmentStatusMeta?.description ||
+    fulfillmentGovernance?.mutationBlockedReason ||
+    "Shipment mutation is currently unavailable.";
+
+  useEffect(() => {
+    if (!primaryShipment) return;
+    setTrackingForm({
+      courierCode: primaryShipment.courierCode || "",
+      courierService: primaryShipment.courierService || "",
+      trackingNumber: primaryShipment.trackingNumber || "",
+    });
+  }, [
+    primaryShipment?.shipmentId,
+    primaryShipment?.courierCode,
+    primaryShipment?.courierService,
+    primaryShipment?.trackingNumber,
+  ]);
 
   if (!hasOrderPermission) {
     return (
@@ -227,13 +281,6 @@ export default function SellerOrderDetailPage() {
       />
     );
   }
-
-  const detail = detailQuery.data;
-  const fulfillmentGovernance = detail?.governance?.fulfillment ?? null;
-  const sellerStatusMeta = getSellerStatusMeta(detail);
-  const sellerPaymentMeta = getSellerPaymentMeta(detail);
-  const parentOrderMeta = getParentOrderMeta(detail);
-  const parentPaymentMeta = getParentPaymentMeta(detail);
 
   if (!detail) {
     return (
@@ -290,10 +337,133 @@ export default function SellerOrderDetailPage() {
       >
         <p className="text-sm leading-5 text-slate-500">
           {fulfillmentGovernance?.actorHasManagePermission
-            ? "Seller fulfillment phase 1 is active for direct forward transitions only. Parent order and payment lifecycle remain on separate governance lanes."
-            : "Seller fulfillment stays read-only here for this actor. Parent order and payment lifecycle remain on separate governance lanes."}
+            ? "Seller shipment operations now follow persisted shipment truth for this store split. Parent order and payment lifecycle remain on separate governance lanes."
+            : "Seller shipment stays read-only here for this actor. Parent order and payment lifecycle remain on separate governance lanes."}
         </p>
       </SellerWorkspaceSectionHeader>
+
+      {detail.shippingSetupStatus && !detail.isShippingReady ? (
+        <SellerWorkspaceNotice
+          type={detail.shippingSetupStatus.code === "DISABLED" ? "info" : "warning"}
+        >
+          {detail.shippingSetupMeta?.message ||
+            detail.shippingSetupStatus.description ||
+            "Store shipping setup is not ready yet."}
+        </SellerWorkspaceNotice>
+      ) : null}
+
+      {ENABLE_MULTISTORE_SHIPMENT_MVP &&
+      Array.isArray(detail.shipments) &&
+      detail.shipments.length > 0 ? (
+        <SellerWorkspaceSectionCard
+          title="Shipment Summary"
+          hint="Persisted shipment truth for this store split. Seller actions only appear when backend actionability allows them."
+          Icon={PackageSearch}
+        >
+          <div className="grid gap-3">
+            {detail.shipments.map((shipment) => (
+              <div
+                key={shipment.shipmentId || `shipment-${shipment.suborderId || shipment.storeId || shipment.storeName}`}
+                className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-slate-900">
+                      {shipment.storeName || detail.suborderNumber}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {shipment.suborderNumber || detail.suborderNumber}
+                    </p>
+                  </div>
+                  <StatusChip
+                    value={shipment.shipmentStatus}
+                    label={shipment.shipmentStatusMeta?.label || shipment.shipmentStatus}
+                    map={{
+                      WAITING_PAYMENT: "amber",
+                      READY_TO_FULFILL: "sky",
+                      PROCESSING: "sky",
+                      PACKED: "sky",
+                      SHIPPED: "indigo",
+                      IN_TRANSIT: "indigo",
+                      OUT_FOR_DELIVERY: "indigo",
+                      DELIVERED: "emerald",
+                      FAILED_DELIVERY: "rose",
+                      RETURNED: "stone",
+                      CANCELLED: "stone",
+                    }}
+                  />
+                </div>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <SellerWorkspaceDetailItem
+                    label="Source"
+                    value={shipment.usedLegacyFallback ? "Legacy fallback" : "Persisted shipment"}
+                  />
+                  <SellerWorkspaceDetailItem
+                    label="Tracking"
+                    value={shipment.trackingNumber || "Not assigned yet"}
+                  />
+                  <SellerWorkspaceDetailItem
+                    label="Courier"
+                    value={shipment.courierService || shipment.courierCode || "Pending assignment"}
+                  />
+                  <SellerWorkspaceDetailItem
+                    label="Shipping Fee"
+                    value={formatMoney(shipment.shippingFee || 0)}
+                  />
+                  <SellerWorkspaceDetailItem
+                    label="Shipment Items"
+                    value={String(shipment.shipmentItems.length)}
+                  />
+                </div>
+                <p className="mt-3 text-sm leading-6 text-slate-500">
+                  {shipment.shipmentStatusMeta?.description ||
+                    "Shipment truth is available for this store split."}
+                </p>
+                {shipment.compatibilityMatchesStorage === false ? (
+                  <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                    Shipment truth is ahead of compatibility storage for this suborder and should be audited.
+                  </div>
+                ) : null}
+                {shipment.incompleteTrackingData ? (
+                  <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Courier or tracking detail is incomplete for the current shipment stage.
+                  </div>
+                ) : null}
+                {!detail.isShippingReady && detail.shippingSetupSummary ? (
+                  <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Seller shipping setup is not ready for this store. Review Store Profile before continuing shipment operations.
+                  </div>
+                ) : null}
+                {Array.isArray(shipment.trackingEvents) && shipment.trackingEvents.length > 0 ? (
+                  <div className="mt-4 space-y-2 rounded-2xl border border-slate-200 bg-white p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      Tracking Timeline
+                    </p>
+                    {shipment.trackingEvents.map((event) => (
+                      <div
+                        key={event.eventId || `${event.status}-${event.happenedAt || "event"}`}
+                        className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-slate-900">
+                            {event.statusMeta?.label || event.status || "Update"}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {formatDate(event.happenedAt)}
+                          </p>
+                        </div>
+                        <p className="mt-1 text-sm text-slate-600">
+                          {event.note || event.statusMeta?.description || "Shipment updated."}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </SellerWorkspaceSectionCard>
+      ) : null}
 
       <section className="grid gap-3.5 lg:grid-cols-3">
         <SellerWorkspaceSectionCard title="Buyer" hint="Seller-scoped buyer snapshot" Icon={PackageSearch}>
@@ -489,8 +659,10 @@ export default function SellerOrderDetailPage() {
             <SellerWorkspaceNotice
               type={fulfillmentGovernance?.actorHasManagePermission ? "info" : "warning"}
             >
-              {fulfillmentGovernance?.mutationBlockedReason ||
-                "Seller fulfillment mutations are still closed in the current workspace phase."}
+              {hasPersistedShipment
+                ? shipmentActionBlockedReason
+                : fulfillmentGovernance?.mutationBlockedReason ||
+                  "Seller fulfillment mutations are still closed in the current workspace phase."}
             </SellerWorkspaceNotice>
 
             <div className="mt-3.5 flex flex-wrap gap-2">
@@ -525,13 +697,111 @@ export default function SellerOrderDetailPage() {
               />
             </div>
 
-            {fulfillmentGovernance?.availableActions?.length > 0 ? (
+            {hasPersistedShipment ? (
+              <div className="mt-4 space-y-3">
+                {trackingMutationEnabled && enabledShipmentActions.has("MARK_PROCESSING") ? (
+                  <button
+                    type="button"
+                    onClick={() => fulfillmentMutation.mutate({ action: "MARK_PROCESSING" })}
+                    disabled={fulfillmentMutation.isPending}
+                    className={sellerSecondaryButtonClass}
+                  >
+                    {fulfillmentMutation.isPending ? "Saving..." : "Mark packed"}
+                  </button>
+                ) : null}
+
+                {trackingMutationEnabled && enabledShipmentActions.has("MARK_SHIPPED") ? (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
+                    <p className="text-sm font-semibold text-slate-900">Courier and Tracking</p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Dispatch this shipment only after courier and tracking details are ready.
+                    </p>
+                    <div className="mt-3 grid gap-3 md:grid-cols-3">
+                      <label className="grid gap-1.5 text-sm text-slate-600">
+                        <span>Courier code</span>
+                        <input
+                          value={trackingForm.courierCode}
+                          onChange={(event) =>
+                            setTrackingForm((current) => ({
+                              ...current,
+                              courierCode: event.target.value,
+                            }))
+                          }
+                          className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                          placeholder="jne"
+                        />
+                      </label>
+                      <label className="grid gap-1.5 text-sm text-slate-600">
+                        <span>Courier service</span>
+                        <input
+                          value={trackingForm.courierService}
+                          onChange={(event) =>
+                            setTrackingForm((current) => ({
+                              ...current,
+                              courierService: event.target.value,
+                            }))
+                          }
+                          className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                          placeholder="REG"
+                        />
+                      </label>
+                      <label className="grid gap-1.5 text-sm text-slate-600">
+                        <span>Tracking number</span>
+                        <input
+                          value={trackingForm.trackingNumber}
+                          onChange={(event) =>
+                            setTrackingForm((current) => ({
+                              ...current,
+                              trackingNumber: event.target.value,
+                            }))
+                          }
+                          className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                          placeholder="Input shipment tracking number"
+                        />
+                      </label>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        fulfillmentMutation.mutate({
+                          action: "MARK_SHIPPED",
+                          courierCode: trackingForm.courierCode,
+                          courierService: trackingForm.courierService,
+                          trackingNumber: trackingForm.trackingNumber,
+                        })
+                      }
+                      disabled={fulfillmentMutation.isPending}
+                      className={`mt-3 ${sellerPrimaryButtonClass}`}
+                    >
+                      {fulfillmentMutation.isPending ? "Saving..." : "Mark shipped"}
+                    </button>
+                  </div>
+                ) : null}
+
+                {trackingMutationEnabled && enabledShipmentActions.has("MARK_DELIVERED") ? (
+                  <button
+                    type="button"
+                    onClick={() => fulfillmentMutation.mutate({ action: "MARK_DELIVERED" })}
+                    disabled={fulfillmentMutation.isPending}
+                    className={sellerPrimaryButtonClass}
+                  >
+                    {fulfillmentMutation.isPending ? "Saving..." : "Confirm delivered"}
+                  </button>
+                ) : null}
+
+                {!trackingMutationEnabled || shipmentActions.every((action) => !action?.enabled) ? (
+                  <p className="text-sm leading-5 text-slate-600">
+                    {shipmentActionBlockedReason}
+                  </p>
+                ) : null}
+              </div>
+            ) : fulfillmentGovernance?.availableActions?.length > 0 ? (
               <div className="mt-4 grid gap-2">
                 {fulfillmentGovernance.availableActions.map((action) => (
                   <button
                     key={action.code}
                     type="button"
-                    onClick={() => fulfillmentMutation.mutate(action.code)}
+                    onClick={() => fulfillmentMutation.mutate({ action: action.code })}
                     disabled={fulfillmentMutation.isPending}
                     className={
                       action.nextStatus === "DELIVERED"

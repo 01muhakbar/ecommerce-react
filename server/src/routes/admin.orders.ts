@@ -6,7 +6,11 @@ import { User } from "../models/User.js";
 import { OrderItem } from "../models/OrderItem.js";
 import { Product } from "../models/Product.js";
 import { Payment } from "../models/Payment.js";
+import { Shipment } from "../models/Shipment.js";
+import { Store } from "../models/Store.js";
 import { Suborder } from "../models/Suborder.js";
+import { SuborderItem } from "../models/SuborderItem.js";
+import { TrackingEvent } from "../models/TrackingEvent.js";
 import { createUserOrderStatusUpdatedNotification } from "../services/notification.service.js";
 import {
   inspectParentOrderFinalizationEligibility,
@@ -19,6 +23,7 @@ import {
   buildAdminOrderContract,
   buildPaymentStatusMeta,
 } from "../services/orderLifecycleContract.service.js";
+import { buildOrderShippingReadModel } from "../services/orderShippingReadModel.service.js";
 
 const router = Router();
 type UiOrderStatus = "pending" | "processing" | "shipping" | "complete" | "cancelled";
@@ -606,6 +611,83 @@ const orderDetailInclude: any[] = [
       },
     ],
   },
+  {
+    model: Suborder,
+    as: "suborders",
+    attributes: [
+      "id",
+      "suborderNumber",
+      "storeId",
+      "shippingAmount",
+      "paymentStatus",
+      "fulfillmentStatus",
+    ],
+    required: false,
+    include: [
+      {
+        model: Store,
+        as: "store",
+        attributes: ["id", "name", "slug"],
+        required: false,
+      },
+      {
+        model: SuborderItem,
+        as: "items",
+        attributes: ["id", "qty", "priceSnapshot", "totalPrice", ["product_id", "productId"]],
+        required: false,
+        include: [
+          {
+            model: Product,
+            as: "product",
+            attributes: ["id", "name"],
+            required: false,
+          },
+        ],
+      },
+      {
+        model: Shipment,
+        as: "shipment",
+        attributes: [
+          "id",
+          "orderId",
+          "suborderId",
+          "storeId",
+          "sellerUserId",
+          "status",
+          "courierCode",
+          "courierService",
+          "trackingNumber",
+          "estimatedDelivery",
+          "shippingFee",
+          "shippingAddressSnapshot",
+          "shippingRateSnapshot",
+          "createdAt",
+          "updatedAt",
+        ],
+        required: false,
+        include: [
+          {
+            model: TrackingEvent,
+            as: "trackingEvents",
+            attributes: [
+              "id",
+              "shipmentId",
+              "eventType",
+              "eventLabel",
+              "eventDescription",
+              "occurredAt",
+              "source",
+              "actorType",
+              "actorId",
+              "metadata",
+              "createdAt",
+            ],
+            required: false,
+          },
+        ],
+      },
+    ],
+  },
 ];
 
 const toOrderDetailPayload = (orderItem: any) => {
@@ -627,6 +709,8 @@ const toOrderDetailPayload = (orderItem: any) => {
   }));
 
   const customer = (orderItem as any).customer ?? null;
+  const suborders = Array.isArray((orderItem as any).suborders) ? (orderItem as any).suborders : [];
+  const shippingReadModel = buildOrderShippingReadModel(suborders);
 
   const computedSubtotal = items.reduce((sum: number, item: any) => {
     return sum + Number(item.lineTotal || 0);
@@ -674,6 +758,16 @@ const toOrderDetailPayload = (orderItem: any) => {
     customerNotes: getAttr(orderItem, "customerNotes") ?? null,
     paymentMethod: getAttr(orderItem, "paymentMethod") ?? "COD",
     method: getAttr(orderItem, "paymentMethod") ?? "COD",
+    shipmentCount: shippingReadModel.shipmentCount,
+    shippingStatus: shippingReadModel.shippingStatus,
+    shippingStatusMeta: shippingReadModel.shippingStatusMeta,
+    latestTrackingEvent: shippingReadModel.latestTrackingEvent,
+    hasActiveShipment: shippingReadModel.hasActiveShipment,
+    hasTrackingNumber: shippingReadModel.hasTrackingNumber,
+    usedLegacyFallback: shippingReadModel.usedLegacyFallback,
+    shipmentAuditMeta: shippingReadModel.shipmentAuditMeta,
+    suborderShipmentSummary: shippingReadModel.suborderShipmentSummary,
+    shipments: shippingReadModel.shipments,
     items,
   };
 };

@@ -15,9 +15,18 @@ import {
   getAdminOrderTransitionErrorMeta,
   toAdminOrderActionValue,
 } from "./orderLifecyclePresentation.js";
+import { ENABLE_MULTISTORE_SHIPMENT_MVP } from "../../config/featureFlags.js";
 
 const labelize = (value) =>
   value ? value.charAt(0).toUpperCase() + value.slice(1) : "";
+
+const formatCoverageLabel = (value) => {
+  const code = String(value || "").trim().toUpperCase();
+  if (code === "ALL_PERSISTED") return "All shipments persisted";
+  if (code === "PARTIAL_PERSISTED") return "Partial persisted coverage";
+  if (code === "LEGACY_ONLY") return "Legacy fallback only";
+  return "No shipment scope";
+};
 
 export default function OrderDetail() {
   const { invoiceNo } = useParams();
@@ -152,6 +161,25 @@ export default function OrderDetail() {
     contract?.fulfillmentReadiness?.description ||
     "Operational order lifecycle is tracked separately from payment review.";
   const paymentStatusMeta = order?.paymentStatusMeta || contract?.paymentStatusMeta || null;
+  const shipmentAuditMeta = order?.shipmentAuditMeta || null;
+  const suborderShipmentSummary = Array.isArray(order?.suborderShipmentSummary)
+    ? order.suborderShipmentSummary
+    : [];
+  const auditCoverageLabel = formatCoverageLabel(shipmentAuditMeta?.persistedCoverage);
+  const auditIssues = [
+    shipmentAuditMeta?.usedLegacyFallback
+      ? `${shipmentAuditMeta.legacyFallbackSuborderCount || 0} suborder still uses legacy fallback`
+      : null,
+    Number(shipmentAuditMeta?.compatibilityMismatchCount || 0) > 0
+      ? `${shipmentAuditMeta.compatibilityMismatchCount} compatibility mismatch detected`
+      : null,
+    Number(shipmentAuditMeta?.missingTrackingTimelineCount || 0) > 0
+      ? `${shipmentAuditMeta.missingTrackingTimelineCount} shipment misses expected timeline`
+      : null,
+    Number(shipmentAuditMeta?.incompleteTrackingDataCount || 0) > 0
+      ? `${shipmentAuditMeta.incompleteTrackingDataCount} shipment has incomplete courier or tracking data`
+      : null,
+  ].filter(Boolean);
 
   const handleCopy = async (value, label) => {
     if (!value || value === "—") return;
@@ -313,6 +341,59 @@ export default function OrderDetail() {
                   ) : null}
                 </article>
 
+                {ENABLE_MULTISTORE_SHIPMENT_MVP ? (
+                  <article className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      Shipping
+                    </p>
+                    <div className="mt-2 space-y-2 text-sm text-slate-700">
+                      <p>
+                        Summary:{" "}
+                        <span className="font-semibold text-slate-900">
+                          {order?.shippingStatusMeta?.label || order?.shippingStatus || "Legacy fallback"}
+                        </span>
+                      </p>
+                      <p>
+                        Shipments:{" "}
+                        <span className="font-semibold text-slate-900">
+                          {Number(order?.shipmentCount || 0)}
+                        </span>
+                      </p>
+                      <p>
+                        Tracking:{" "}
+                        <span className="font-semibold text-slate-900">
+                          {order?.hasTrackingNumber ? "Available" : "Not assigned yet"}
+                        </span>
+                      </p>
+                      <p>
+                        Coverage:{" "}
+                        <span className="font-semibold text-slate-900">{auditCoverageLabel}</span>
+                      </p>
+                      <p>
+                        Source:{" "}
+                        <span className="font-semibold text-slate-900">
+                          {order?.usedLegacyFallback ? "Mixed persisted + legacy fallback" : "Persisted shipment truth"}
+                        </span>
+                      </p>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                      {order?.shippingStatusMeta?.description ||
+                        "Shipment truth is available for audit in read-only mode."}
+                    </p>
+                    {auditIssues.length > 0 ? (
+                      <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-800">
+                        {auditIssues.map((issue) => (
+                          <p key={issue}>{issue}</p>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-xs text-emerald-700">
+                        Shipment compatibility storage stays aligned with persisted shipping truth for this order.
+                      </div>
+                    )}
+                  </article>
+                ) : null}
+
                 <article className="rounded-2xl border border-slate-200 bg-white p-4">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                     Order Summary
@@ -361,6 +442,186 @@ export default function OrderDetail() {
                   Notes
                 </p>
                 <p className="mt-2 text-sm leading-6 text-slate-700">{orderNote}</p>
+              </section>
+            ) : null}
+
+            {ENABLE_MULTISTORE_SHIPMENT_MVP &&
+            Array.isArray(order?.shipments) &&
+            order.shipments.length > 0 ? (
+              <section className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      Shipment Audit
+                    </p>
+                    <h2 className="mt-1 text-lg font-semibold text-slate-900">
+                      Persisted shipment truth
+                    </h2>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+                    {order.shipments.length} shipment{order.shipments.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+                {suborderShipmentSummary.length > 0 ? (
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    {suborderShipmentSummary.map((summary) => (
+                      <article
+                        key={`suborder-shipment-summary-${summary.suborderId || summary.suborderNumber || summary.storeId}`}
+                        className="rounded-2xl border border-slate-200 bg-white p-4"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-slate-900">
+                              {summary.storeName || summary.suborderNumber || "Store split"}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {summary.suborderNumber || "Suborder"} • {summary.shipmentCount || 0} shipment
+                              {Number(summary.shipmentCount || 0) === 1 ? "" : "s"}
+                            </p>
+                          </div>
+                          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                            {summary.shippingStatusMeta?.label || summary.shippingStatus || "Unknown"}
+                          </span>
+                        </div>
+                        <div className="mt-3 grid gap-2 text-xs text-slate-600">
+                          <p>
+                            Source:{" "}
+                            <span className="font-semibold text-slate-900">
+                              {summary.usedLegacyFallback ? "Legacy fallback" : "Persisted shipment"}
+                            </span>
+                          </p>
+                          <p>
+                            Compatibility storage:{" "}
+                            <span className="font-semibold text-slate-900">
+                              {summary.storedFulfillmentStatusMeta?.label ||
+                                summary.storedFulfillmentStatus ||
+                                "-"}
+                            </span>
+                          </p>
+                          <p>
+                            Canonical compatibility:{" "}
+                            <span className="font-semibold text-slate-900">
+                              {summary.compatibilityFulfillmentStatusMeta?.label ||
+                                summary.compatibilityFulfillmentStatus ||
+                                "-"}
+                            </span>
+                          </p>
+                          <p>
+                            Latest event:{" "}
+                            <span className="font-semibold text-slate-900">
+                              {summary.latestTrackingEvent?.statusMeta?.label ||
+                                summary.latestTrackingEvent?.status ||
+                                "No timeline yet"}
+                            </span>
+                          </p>
+                        </div>
+                        <div
+                          className={`mt-3 rounded-xl px-3 py-2 text-xs ${
+                            summary.compatibilityMatchesStorage === false
+                              ? "border border-rose-200 bg-rose-50 text-rose-700"
+                              : "border border-slate-200 bg-slate-50 text-slate-600"
+                          }`}
+                        >
+                          {summary.compatibilityMatchesStorage === false
+                            ? "Compatibility storage drift detected between shipment truth and stored fulfillment status."
+                            : summary.usedLegacyFallback
+                              ? "This suborder still reads shipping truth from legacy fallback."
+                              : "Shipment truth and compatibility storage are aligned for this suborder."}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="mt-4 grid gap-3">
+                  {order.shipments.map((shipment) => (
+                    <article
+                      key={shipment.shipmentId || `shipment-${shipment.suborderId || shipment.storeId || shipment.storeName}`}
+                      className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-slate-900">
+                            {shipment.storeName || shipment.suborderNumber || "Shipment"}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {shipment.suborderNumber || "-"} • Tracking {shipment.trackingNumber || "Pending"}
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-700">
+                          {shipment.shipmentStatusMeta?.label || shipment.shipmentStatus}
+                        </span>
+                      </div>
+                      <div className="mt-3 grid gap-2 text-xs text-slate-600 md:grid-cols-2">
+                        <p>
+                          Source:{" "}
+                          <span className="font-semibold text-slate-900">
+                            {shipment.usedLegacyFallback ? "Legacy fallback" : "Persisted shipment"}
+                          </span>
+                        </p>
+                        <p>
+                          Courier:{" "}
+                          <span className="font-semibold text-slate-900">
+                            {shipment.courierService || shipment.courierCode || "Pending"}
+                          </span>
+                        </p>
+                        <p>
+                          Compatibility storage:{" "}
+                          <span className="font-semibold text-slate-900">
+                            {shipment.storedFulfillmentStatusMeta?.label ||
+                              shipment.storedFulfillmentStatus ||
+                              "-"}
+                          </span>
+                        </p>
+                        <p>
+                          Timeline events:{" "}
+                          <span className="font-semibold text-slate-900">
+                            {shipment.trackingEventCount || shipment.trackingEvents?.length || 0}
+                          </span>
+                        </p>
+                      </div>
+                      <p className="mt-3 text-sm text-slate-600">
+                        {shipment.shipmentStatusMeta?.description || "Shipment timeline is available below."}
+                      </p>
+                      {shipment.compatibilityMatchesStorage === false ? (
+                        <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                          Compatibility storage drift detected for this shipment.
+                        </div>
+                      ) : null}
+                      {shipment.incompleteTrackingData ? (
+                        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                          Shipment status requires courier or tracking detail follow-up.
+                        </div>
+                      ) : null}
+                      {shipment.missingTrackingTimeline ? (
+                        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                          Shipment status looks operational but tracking timeline is still empty.
+                        </div>
+                      ) : null}
+                      {Array.isArray(shipment.trackingEvents) && shipment.trackingEvents.length > 0 ? (
+                        <div className="mt-4 space-y-2">
+                          {shipment.trackingEvents.map((event) => (
+                            <div
+                              key={event.eventId || `${event.status}-${event.happenedAt || "event"}`}
+                              className="rounded-xl border border-slate-200 bg-white px-3 py-2"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <p className="text-sm font-semibold text-slate-900">
+                                  {event.statusMeta?.label || event.status || "Update"}
+                                </p>
+                                <p className="text-xs text-slate-500">
+                                  {formatDateTime(event.happenedAt)}
+                                </p>
+                              </div>
+                              <p className="mt-1 text-sm text-slate-600">
+                                {event.note || event.statusMeta?.description || "Shipment updated."}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
               </section>
             ) : null}
 

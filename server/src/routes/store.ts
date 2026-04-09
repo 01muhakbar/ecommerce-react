@@ -13,8 +13,11 @@ import {
   Payment,
   Product,
   ProductReview,
+  Shipment,
   Store,
   Suborder,
+  SuborderItem,
+  TrackingEvent,
   User,
   sequelize,
 } from "../models/index.js";
@@ -51,6 +54,7 @@ import {
   buildPaymentStatusMeta,
   buildSellerSuborderContract,
 } from "../services/orderLifecycleContract.service.js";
+import { buildOrderShippingReadModel } from "../services/orderShippingReadModel.service.js";
 import { getDefaultAddressByUser } from "../services/userAddress.service.js";
 import { protect } from "../middleware/authMiddleware.js";
 import { STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES } from "../services/sharedContracts/storePaymentProfileCompat.js";
@@ -599,12 +603,12 @@ const buildPublicProductWhere = (extraWhere: Record<string, any> = {}) => {
   const extraAnd = Array.isArray(extraWhereAny?.[Op.and]) ? extraWhereAny[Op.and] : [];
 
   // Keep storefront search honest by excluding orphaned products and known smoke/QA fixtures.
+  // Public product visibility follows publish/status/review/store gates, not category assignment.
   return {
     status: "active",
     isPublished: { [Op.in]: [1, true] },
     sellerSubmissionStatus: "none",
     storeId: { [Op.not]: null },
-    categoryId: { [Op.not]: null },
     ...extraWhere,
     [Op.and]: [
       { name: { [Op.notLike]: "QA %" } },
@@ -1339,6 +1343,77 @@ router.get(
         attributes: ["id", "paymentStatus", "fulfillmentStatus", "expiresAt"],
         include: [
           {
+            model: Store,
+            as: "store",
+            attributes: ["id", "name", "slug"],
+            required: false,
+          },
+          {
+            model: SuborderItem,
+            as: "items",
+            attributes: [
+              "id",
+              "productId",
+              "storeId",
+              "productNameSnapshot",
+              "skuSnapshot",
+              "priceSnapshot",
+              "qty",
+              "totalPrice",
+            ],
+            required: false,
+            include: [
+              {
+                model: Product,
+                as: "product",
+                attributes: ["id", "name", "slug"],
+                required: false,
+              },
+            ],
+          },
+          {
+            model: Shipment,
+            as: "shipment",
+            attributes: [
+              "id",
+              "orderId",
+              "suborderId",
+              "storeId",
+              "sellerUserId",
+              "status",
+              "courierCode",
+              "courierService",
+              "trackingNumber",
+              "estimatedDelivery",
+              "shippingFee",
+              "shippingAddressSnapshot",
+              "shippingRateSnapshot",
+              "createdAt",
+              "updatedAt",
+            ],
+            required: false,
+            include: [
+              {
+                model: TrackingEvent,
+                as: "trackingEvents",
+                attributes: [
+                  "id",
+                  "shipmentId",
+                  "eventType",
+                  "eventLabel",
+                  "eventDescription",
+                  "occurredAt",
+                  "source",
+                  "actorType",
+                  "actorId",
+                  "metadata",
+                  "createdAt",
+                ],
+                required: false,
+              },
+            ],
+          },
+          {
             model: Payment,
             as: "payments",
             attributes: ["id", "status", "expiresAt", "updatedAt"],
@@ -1360,6 +1435,7 @@ router.get(
         (sum: number, item: any) => sum + Number(item.lineTotal || 0),
         0
       );
+      const shippingReadModel = buildOrderShippingReadModel(paymentGroups);
       const amounts = resolveOrderAmountSnapshot(order, subtotal);
       const tax = 0;
       const contract = buildBuyerOrderContractPayload({
@@ -1403,6 +1479,16 @@ router.get(
           grandTotal: amounts.total,
           couponCode: (order as any).couponCode ?? null,
           paymentMethod: order.paymentMethod ?? "COD",
+          shipmentCount: shippingReadModel.shipmentCount,
+          shippingStatus: shippingReadModel.shippingStatus,
+          shippingStatusMeta: shippingReadModel.shippingStatusMeta,
+          latestTrackingEvent: shippingReadModel.latestTrackingEvent,
+          hasActiveShipment: shippingReadModel.hasActiveShipment,
+          hasTrackingNumber: shippingReadModel.hasTrackingNumber,
+          usedLegacyFallback: shippingReadModel.usedLegacyFallback,
+          shipmentAuditMeta: shippingReadModel.shipmentAuditMeta,
+          suborderShipmentSummary: shippingReadModel.suborderShipmentSummary,
+          shipments: shippingReadModel.shipments,
           paymentEntry: paymentEntryWithPath,
           contract,
           createdAt: order.createdAt,
@@ -1547,6 +1633,7 @@ router.get(
               "id",
               "suborderNumber",
               "storeId",
+              "shippingAmount",
               "totalAmount",
               "paymentStatus",
               "fulfillmentStatus",
@@ -1558,6 +1645,71 @@ router.get(
                 as: "store",
                 attributes: ["id", "name", "slug"],
                 required: false,
+              },
+              {
+                model: SuborderItem,
+                as: "items",
+                attributes: [
+                  "id",
+                  "productId",
+                  "storeId",
+                  "productNameSnapshot",
+                  "skuSnapshot",
+                  "priceSnapshot",
+                  "qty",
+                  "totalPrice",
+                ],
+                required: false,
+                include: [
+                  {
+                    model: Product,
+                    as: "product",
+                    attributes: ["id", "name", "slug"],
+                    required: false,
+                  },
+                ],
+              },
+              {
+                model: Shipment,
+                as: "shipment",
+                attributes: [
+                  "id",
+                  "orderId",
+                  "suborderId",
+                  "storeId",
+                  "sellerUserId",
+                  "status",
+                  "courierCode",
+                  "courierService",
+                  "trackingNumber",
+                  "estimatedDelivery",
+                  "shippingFee",
+                  "shippingAddressSnapshot",
+                  "shippingRateSnapshot",
+                  "createdAt",
+                  "updatedAt",
+                ],
+                required: false,
+                include: [
+                  {
+                    model: TrackingEvent,
+                    as: "trackingEvents",
+                    attributes: [
+                      "id",
+                      "shipmentId",
+                      "eventType",
+                      "eventLabel",
+                      "eventDescription",
+                      "occurredAt",
+                      "source",
+                      "actorType",
+                      "actorId",
+                      "metadata",
+                      "createdAt",
+                    ],
+                    required: false,
+                  },
+                ],
               },
               {
                 model: Payment,
@@ -1657,6 +1809,9 @@ router.get(
       );
       const amounts = resolveOrderAmountSnapshot(order, subtotal);
       const tax = 0;
+      const shippingReadModel = buildOrderShippingReadModel(
+        Array.isArray((order as any).suborders) ? (order as any).suborders : []
+      );
       const storeSplits = Array.isArray((order as any).suborders)
         ? [...((order as any).suborders as any[])].map((suborder: any) => {
             const store =
@@ -1679,6 +1834,8 @@ router.get(
               hasPaymentRecord: Boolean(payment),
             });
             const displayStatus = paymentReadModel.status;
+            const shippingSummary =
+              shippingReadModel.suborders.get(Number(getAttr(suborder, "id") || 0)) ?? null;
             return {
               suborderId: Number(getAttr(suborder, "id") || 0),
               suborderNumber: String(getAttr(suborder, "suborderNumber") || ""),
@@ -1691,6 +1848,34 @@ router.get(
               paymentReadModel,
               fulfillmentStatus,
               fulfillmentStatusMeta: buildFulfillmentStatusMeta(fulfillmentStatus),
+              shipmentCount: shippingSummary?.shipmentCount ?? 0,
+              shippingStatus:
+                shippingSummary?.shippingStatus ?? fulfillmentStatus,
+              shippingStatusMeta:
+                shippingSummary?.shippingStatusMeta ?? buildFulfillmentStatusMeta(fulfillmentStatus),
+              latestTrackingEvent: shippingSummary?.latestTrackingEvent ?? null,
+              hasActiveShipment: Boolean(shippingSummary?.hasActiveShipment),
+              hasTrackingNumber: Boolean(shippingSummary?.hasTrackingNumber),
+              usedLegacyFallback: Boolean(shippingSummary?.usedLegacyFallback),
+              hasPersistedShipment: Boolean(shippingSummary?.hasPersistedShipment),
+              compatibilityFulfillmentStatus:
+                shippingSummary?.compatibilityFulfillmentStatus ?? fulfillmentStatus,
+              compatibilityFulfillmentStatusMeta:
+                shippingSummary?.compatibilityFulfillmentStatusMeta ??
+                buildFulfillmentStatusMeta(fulfillmentStatus),
+              storedFulfillmentStatus:
+                shippingSummary?.storedFulfillmentStatus ?? fulfillmentStatus,
+              storedFulfillmentStatusMeta:
+                shippingSummary?.storedFulfillmentStatusMeta ??
+                buildFulfillmentStatusMeta(fulfillmentStatus),
+              compatibilityMatchesStorage:
+                typeof shippingSummary?.compatibilityMatchesStorage === "boolean"
+                  ? shippingSummary.compatibilityMatchesStorage
+                  : true,
+              trackingEventCount: Number(shippingSummary?.trackingEventCount || 0),
+              missingTrackingTimeline: Boolean(shippingSummary?.missingTrackingTimeline),
+              incompleteTrackingData: Boolean(shippingSummary?.incompleteTrackingData),
+              shipments: Array.isArray(shippingSummary?.shipments) ? shippingSummary.shipments : [],
               payment: payment
                 ? {
                     id: Number(getAttr(payment, "id") || 0) || null,
@@ -1784,6 +1969,16 @@ router.get(
           serviceFeeAmount: amounts.serviceFee,
           total: amounts.total,
           grandTotal: amounts.total,
+          shipmentCount: shippingReadModel.shipmentCount,
+          shippingStatus: shippingReadModel.shippingStatus,
+          shippingStatusMeta: shippingReadModel.shippingStatusMeta,
+          latestTrackingEvent: shippingReadModel.latestTrackingEvent,
+          hasActiveShipment: shippingReadModel.hasActiveShipment,
+          hasTrackingNumber: shippingReadModel.hasTrackingNumber,
+          usedLegacyFallback: shippingReadModel.usedLegacyFallback,
+          shipmentAuditMeta: shippingReadModel.shipmentAuditMeta,
+          suborderShipmentSummary: shippingReadModel.suborderShipmentSummary,
+          shipments: shippingReadModel.shipments,
           couponCode: (order as any).couponCode ?? null,
           paymentMethod,
           paymentEntry,

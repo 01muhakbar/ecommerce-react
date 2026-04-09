@@ -11,10 +11,12 @@ import {
   Payment,
   PaymentProof,
   Product,
+  Shipment,
   Store,
   StorePaymentProfile,
   Suborder,
   SuborderItem,
+  TrackingEvent,
   sequelize,
 } from "../models/index.js";
 import {
@@ -38,6 +40,11 @@ import {
   buildPaymentStatusMeta,
   buildSellerSuborderContract,
 } from "../services/orderLifecycleContract.service.js";
+import {
+  buildOrderShippingReadModel,
+  buildShipmentStatusMeta,
+} from "../services/orderShippingReadModel.service.js";
+import { createCheckoutShipmentForSuborder } from "../services/shipmentPersistence.service.js";
 import {
   getLatestTimelineRecord,
   sortTimelineDesc,
@@ -451,7 +458,7 @@ const loadCheckoutStoreSnapshots = async (storeIds: number[], transaction?: any)
 
   const stores = await Store.findAll({
     where: { id: { [Op.in]: normalizedIds } } as any,
-    attributes: ["id", "activeStorePaymentProfileId", "name", "slug", "status"],
+    attributes: ["id", "ownerUserId", "activeStorePaymentProfileId", "name", "slug", "status"],
     include: [
       {
         model: StorePaymentProfile,
@@ -893,6 +900,48 @@ const loadOrderWithSplitRelations = async (lookup: string | number, transaction?
             ],
           },
           {
+            model: Shipment,
+            as: "shipment",
+            attributes: [
+              "id",
+              "orderId",
+              "suborderId",
+              "storeId",
+              "sellerUserId",
+              "status",
+              "courierCode",
+              "courierService",
+              "trackingNumber",
+              "estimatedDelivery",
+              "shippingFee",
+              "shippingAddressSnapshot",
+              "shippingRateSnapshot",
+              "createdAt",
+              "updatedAt",
+            ],
+            required: false,
+            include: [
+              {
+                model: TrackingEvent,
+                as: "trackingEvents",
+                attributes: [
+                  "id",
+                  "shipmentId",
+                  "eventType",
+                  "eventLabel",
+                  "eventDescription",
+                  "occurredAt",
+                  "source",
+                  "actorType",
+                  "actorId",
+                  "metadata",
+                  "createdAt",
+                ],
+                required: false,
+              },
+            ],
+          },
+          {
             model: Payment,
             as: "payments",
             attributes: [
@@ -946,6 +995,7 @@ const loadOrderWithSplitRelations = async (lookup: string | number, transaction?
 const serializeSplitOrder = (order: any) => {
   const suborders = Array.isArray((order as any)?.suborders) ? (order as any).suborders : [];
   const legacyItems = Array.isArray((order as any)?.items) ? (order as any).items : [];
+  const shippingReadModel = buildOrderShippingReadModel(suborders);
   const checkoutMode =
     String(getAttr(order, "checkoutMode") || "").toUpperCase() ||
     (suborders.length > 1 ? "MULTI_STORE" : suborders.length === 1 ? "SINGLE_STORE" : "LEGACY");
@@ -989,6 +1039,25 @@ const serializeSplitOrder = (order: any) => {
       orderStatus,
       paymentMethod: getAttr(order, "paymentMethod") ? String(getAttr(order, "paymentMethod")) : null,
       createdAt: getAttr(order, "createdAt") || null,
+      shipmentCount: 0,
+      shippingStatus: "WAITING_PAYMENT",
+      shippingStatusMeta: buildShipmentStatusMeta("WAITING_PAYMENT"),
+      latestTrackingEvent: null,
+      hasActiveShipment: false,
+      hasTrackingNumber: false,
+      usedLegacyFallback: true,
+      shipmentAuditMeta: {
+        totalSuborders: 0,
+        persistedShipmentCount: 0,
+        legacyFallbackSuborderCount: 0,
+        compatibilityMismatchCount: 0,
+        missingTrackingTimelineCount: 0,
+        incompleteTrackingDataCount: 0,
+        usedLegacyFallback: true,
+        persistedCoverage: "NO_SUBORDERS",
+      },
+      suborderShipmentSummary: [],
+      shipments: [],
       summary,
       contract,
       groups: [
@@ -1011,6 +1080,13 @@ const serializeSplitOrder = (order: any) => {
           warning: "This order was created before multi-store payment split was enabled.",
           paymentStatusMeta: buildPaymentStatusMeta(paymentStatus),
           fulfillmentStatusMeta: buildFulfillmentStatusMeta(orderStatus),
+          shipmentCount: 0,
+          shippingStatus: "WAITING_PAYMENT",
+          shippingStatusMeta: buildShipmentStatusMeta("WAITING_PAYMENT"),
+          latestTrackingEvent: null,
+          hasActiveShipment: false,
+          hasTrackingNumber: false,
+          shipments: [],
           items: legacyItems.map((item: any) => ({
             id: toNumber(getAttr(item, "id")),
             productId: toNumber(getAttr(item, "productId")),
@@ -1052,6 +1128,8 @@ const serializeSplitOrder = (order: any) => {
     const displayStatus = paymentReadModel.status;
     const proofActionability = paymentReadModel.proofActionability;
     const cancelability = paymentReadModel.cancelability;
+    const shippingSummary =
+      shippingReadModel.suborders.get(toNumber(getAttr(suborder, "id"))) ?? null;
 
     return {
       suborderId: toNumber(getAttr(suborder, "id")),
@@ -1085,6 +1163,36 @@ const serializeSplitOrder = (order: any) => {
       accountName: getAttr(suborder?.paymentProfile, "accountName")
         ? String(getAttr(suborder?.paymentProfile, "accountName"))
         : null,
+       shipmentCount: shippingSummary?.shipmentCount ?? 0,
+       shippingStatus:
+         shippingSummary?.shippingStatus ??
+         String(getAttr(suborder, "fulfillmentStatus") || "UNFULFILLED").toUpperCase(),
+      shippingStatusMeta:
+        shippingSummary?.shippingStatusMeta ??
+        buildFulfillmentStatusMeta(getAttr(suborder, "fulfillmentStatus") || "UNFULFILLED"),
+       latestTrackingEvent: shippingSummary?.latestTrackingEvent ?? null,
+       hasActiveShipment: Boolean(shippingSummary?.hasActiveShipment),
+       hasTrackingNumber: Boolean(shippingSummary?.hasTrackingNumber),
+       usedLegacyFallback: Boolean(shippingSummary?.usedLegacyFallback),
+       hasPersistedShipment: Boolean(shippingSummary?.hasPersistedShipment),
+       compatibilityFulfillmentStatus:
+         shippingSummary?.compatibilityFulfillmentStatus ?? fulfillmentStatus,
+       compatibilityFulfillmentStatusMeta:
+         shippingSummary?.compatibilityFulfillmentStatusMeta ??
+         buildFulfillmentStatusMeta(fulfillmentStatus),
+       storedFulfillmentStatus:
+         shippingSummary?.storedFulfillmentStatus ?? fulfillmentStatus,
+       storedFulfillmentStatusMeta:
+         shippingSummary?.storedFulfillmentStatusMeta ??
+         buildFulfillmentStatusMeta(fulfillmentStatus),
+       compatibilityMatchesStorage:
+         typeof shippingSummary?.compatibilityMatchesStorage === "boolean"
+           ? shippingSummary.compatibilityMatchesStorage
+           : true,
+       trackingEventCount: Number(shippingSummary?.trackingEventCount || 0),
+       missingTrackingTimeline: Boolean(shippingSummary?.missingTrackingTimeline),
+       incompleteTrackingData: Boolean(shippingSummary?.incompleteTrackingData),
+       shipments: Array.isArray(shippingSummary?.shipments) ? shippingSummary.shipments : [],
       items: items.map((item: any) => ({
         id: toNumber(getAttr(item, "id")),
         productId: toNumber(getAttr(item, "productId")),
@@ -1174,6 +1282,16 @@ const serializeSplitOrder = (order: any) => {
     orderStatus,
     paymentMethod: getAttr(order, "paymentMethod") ? String(getAttr(order, "paymentMethod")) : null,
     createdAt: getAttr(order, "createdAt") || null,
+    shipmentCount: shippingReadModel.shipmentCount,
+    shippingStatus: shippingReadModel.shippingStatus,
+    shippingStatusMeta: shippingReadModel.shippingStatusMeta,
+    latestTrackingEvent: shippingReadModel.latestTrackingEvent,
+    hasActiveShipment: shippingReadModel.hasActiveShipment,
+    hasTrackingNumber: shippingReadModel.hasTrackingNumber,
+    usedLegacyFallback: shippingReadModel.usedLegacyFallback,
+    shipmentAuditMeta: shippingReadModel.shipmentAuditMeta,
+    suborderShipmentSummary: shippingReadModel.suborderShipmentSummary,
+    shipments: shippingReadModel.shipments,
     summary,
     contract,
     paymentEntry,
@@ -1588,6 +1706,14 @@ router.post("/create-multi-store", async (req, res) => {
           })) as any,
           { transaction: tx }
         );
+
+        await createCheckoutShipmentForSuborder({
+          transaction: tx,
+          order: parentOrder,
+          suborder,
+          group,
+          shippingDetails,
+        });
 
         const payment = await Payment.create(
           {

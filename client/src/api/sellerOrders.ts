@@ -1,4 +1,5 @@
 import { api } from "./axios.ts";
+import { normalizeShipmentList, normalizeTrackingEvent } from "../utils/shipmentReadModel.ts";
 
 const ORDER_STATUSES = new Set([
   "pending",
@@ -331,6 +332,91 @@ const normalizeScope = (scope: unknown, fallbackStoreId: unknown, fallbackLabel:
   };
 };
 
+const normalizeMissingFieldList = (value: unknown) =>
+  Array.isArray(value)
+    ? value
+        .map((entry) => ({
+          key: normalizeText((entry as any)?.key),
+          label: normalizeText((entry as any)?.label) || "Unknown field",
+        }))
+        .filter((entry) => entry.key)
+    : [];
+
+const normalizeShippingSetupStatus = (value: unknown) => {
+  const source = asObject(value);
+  if (!source) return null;
+  return {
+    code: normalizeText(source.code).toUpperCase() || null,
+    label: normalizeText(source.label) || null,
+    tone: normalizeText(source.tone) || "stone",
+    description: normalizeText(source.description) || null,
+  };
+};
+
+const normalizeShippingSetupMeta = (value: unknown) => {
+  const source = asObject(value);
+  if (!source) return null;
+  return {
+    severity: normalizeText(source.severity) || "info",
+    message: normalizeText(source.message) || null,
+    hints: normalizeStringArray(source.hints),
+    usesStoreProfileFallback: Boolean(source.usesStoreProfileFallback),
+    fallbackFields: normalizeMissingFieldList(source.fallbackFields),
+    sourceOfTruth: normalizeText(source.sourceOfTruth) || null,
+    operationalBoundary: normalizeText(source.operationalBoundary) || null,
+  };
+};
+
+const normalizeShippingSetupValues = (value: unknown) => {
+  const source = asObject(value);
+  if (!source) return null;
+  return {
+    shippingEnabled:
+      typeof source.shippingEnabled === "boolean" ? source.shippingEnabled : true,
+    explicitShippingEnabled:
+      typeof source.explicitShippingEnabled === "boolean"
+        ? source.explicitShippingEnabled
+        : null,
+    originContactName: normalizeText(source.originContactName) || null,
+    originPhone: normalizeText(source.originPhone) || null,
+    originAddressLine1: normalizeText(source.originAddressLine1) || null,
+    originAddressLine2: normalizeText(source.originAddressLine2) || null,
+    originDistrict: normalizeText(source.originDistrict) || null,
+    originCity: normalizeText(source.originCity) || null,
+    originProvince: normalizeText(source.originProvince) || null,
+    originPostalCode: normalizeText(source.originPostalCode) || null,
+    originCountry: normalizeText(source.originCountry) || null,
+    pickupNotes: normalizeText(source.pickupNotes) || null,
+  };
+};
+
+const normalizeShippingSetupSummary = (value: unknown) => {
+  const source = asObject(value);
+  if (!source) return null;
+  return {
+    shippingEnabled:
+      typeof source.shippingEnabled === "boolean" ? source.shippingEnabled : true,
+    originContactName: normalizeText(source.originContactName) || null,
+    originPhone: normalizeText(source.originPhone) || null,
+    originAddressLine: normalizeText(source.originAddressLine) || null,
+    pickupNotes: normalizeText(source.pickupNotes) || null,
+    usesStoreProfileFallback: Boolean(source.usesStoreProfileFallback),
+    fallbackFields: normalizeMissingFieldList(source.fallbackFields),
+  };
+};
+
+const normalizeStoreShippingSetupSummary = (value: unknown) => {
+  const source = asObject(value);
+  if (!source) return null;
+  return {
+    shippingSetupStatus: normalizeShippingSetupStatus(source.shippingSetupStatus),
+    shippingSetupMeta: normalizeShippingSetupMeta(source.shippingSetupMeta),
+    isShippingReady: Boolean(source.isShippingReady),
+    missingShippingFields: normalizeMissingFieldList(source.missingShippingFields),
+    missingShippingFieldsCount: asNumber(source.missingShippingFieldsCount, 0),
+  };
+};
+
 const normalizeListItem = (item: any) => {
   const source = asObject(item);
   if (!source) return null;
@@ -393,6 +479,29 @@ const normalizeListItem = (item: any) => {
     ),
     governance: normalizeFulfillmentGovernance(source.governance),
     paymentSummary: normalizePaymentSummary(source.paymentSummary),
+    shipmentCount: asNumber(source.shipmentCount, 0),
+    shippingStatus: normalizeText(source.shippingStatus).toUpperCase() || null,
+    shippingStatusMeta: normalizeStatusMeta(source.shippingStatusMeta),
+    latestTrackingEvent: normalizeTrackingEvent(source.latestTrackingEvent),
+    hasActiveShipment: Boolean(source.hasActiveShipment),
+    hasTrackingNumber: Boolean(source.hasTrackingNumber),
+    usedLegacyFallback: Boolean(source.usedLegacyFallback),
+    hasPersistedShipment: Boolean(source.hasPersistedShipment),
+    compatibilityFulfillmentStatus:
+      normalizeText(source.compatibilityFulfillmentStatus).toUpperCase() || null,
+    compatibilityFulfillmentStatusMeta: normalizeStatusMeta(
+      source.compatibilityFulfillmentStatusMeta
+    ),
+    storedFulfillmentStatus: normalizeText(source.storedFulfillmentStatus).toUpperCase() || null,
+    storedFulfillmentStatusMeta: normalizeStatusMeta(source.storedFulfillmentStatusMeta),
+    compatibilityMatchesStorage:
+      typeof source.compatibilityMatchesStorage === "boolean"
+        ? source.compatibilityMatchesStorage
+        : null,
+    trackingEventCount: asNumber(source.trackingEventCount, 0),
+    missingTrackingTimeline: Boolean(source.missingTrackingTimeline),
+    incompleteTrackingData: Boolean(source.incompleteTrackingData),
+    shipments: normalizeShipmentList(source.shipments),
     contract,
   };
 };
@@ -440,6 +549,12 @@ const normalizeDetail = (detail: any) => {
       addressLine: normalizeText(source.shipping?.addressLine) || null,
       markAs: normalizeText(source.shipping?.markAs) || null,
     },
+    shippingSetup: normalizeShippingSetupValues(source.shippingSetup),
+    shippingSetupStatus: normalizeShippingSetupStatus(source.shippingSetupStatus),
+    shippingSetupMeta: normalizeShippingSetupMeta(source.shippingSetupMeta),
+    isShippingReady: Boolean(source.isShippingReady),
+    missingShippingFields: normalizeMissingFieldList(source.missingShippingFields),
+    shippingSetupSummary: normalizeShippingSetupSummary(source.shippingSetupSummary),
     paymentStatus,
     paymentStatusMeta:
       normalizeStatusMeta(source.paymentStatusMeta) ?? normalizeStatusMeta(contract?.paymentStatusMeta),
@@ -447,6 +562,29 @@ const normalizeDetail = (detail: any) => {
     fulfillmentStatusMeta:
       normalizeStatusMeta(source.fulfillmentStatusMeta) ??
       normalizeStatusMeta(contract?.orderStatusMeta),
+    shipmentCount: asNumber(source.shipmentCount, 0),
+    shippingStatus: normalizeText(source.shippingStatus).toUpperCase() || null,
+    shippingStatusMeta: normalizeStatusMeta(source.shippingStatusMeta),
+    latestTrackingEvent: normalizeTrackingEvent(source.latestTrackingEvent),
+    hasActiveShipment: Boolean(source.hasActiveShipment),
+    hasTrackingNumber: Boolean(source.hasTrackingNumber),
+    usedLegacyFallback: Boolean(source.usedLegacyFallback),
+    hasPersistedShipment: Boolean(source.hasPersistedShipment),
+    compatibilityFulfillmentStatus:
+      normalizeText(source.compatibilityFulfillmentStatus).toUpperCase() || null,
+    compatibilityFulfillmentStatusMeta: normalizeStatusMeta(
+      source.compatibilityFulfillmentStatusMeta
+    ),
+    storedFulfillmentStatus: normalizeText(source.storedFulfillmentStatus).toUpperCase() || null,
+    storedFulfillmentStatusMeta: normalizeStatusMeta(source.storedFulfillmentStatusMeta),
+    compatibilityMatchesStorage:
+      typeof source.compatibilityMatchesStorage === "boolean"
+        ? source.compatibilityMatchesStorage
+        : null,
+    trackingEventCount: asNumber(source.trackingEventCount, 0),
+    missingTrackingTimeline: Boolean(source.missingTrackingTimeline),
+    incompleteTrackingData: Boolean(source.incompleteTrackingData),
+    shipments: normalizeShipmentList(source.shipments),
     totals: {
       subtotalAmount: readModel.sellerScope.subtotalAmount,
       shippingAmount: readModel.sellerScope.shippingAmount,
@@ -504,6 +642,7 @@ export const getSellerSuborders = async (
     items: Array.isArray(payload.items)
       ? payload.items.map(normalizeListItem).filter(Boolean)
       : [],
+    storeShippingSetup: normalizeStoreShippingSetupSummary(payload.storeShippingSetup),
     governance: normalizeFulfillmentGovernance(payload.governance),
     pagination: {
       page: asNumber(payload.pagination?.page, asNumber(params.page, 1)),
@@ -524,7 +663,12 @@ export const getSellerSuborderDetail = async (
 export const updateSellerSuborderFulfillment = async (
   storeId: number | string,
   suborderId: number | string,
-  payload: { action: "MARK_PROCESSING" | "MARK_SHIPPED" | "MARK_DELIVERED" }
+  payload: {
+    action: "MARK_PROCESSING" | "MARK_SHIPPED" | "MARK_DELIVERED";
+    courierCode?: string | null;
+    courierService?: string | null;
+    trackingNumber?: string | null;
+  }
 ) => {
   const { data } = await api.patch(
     `/seller/stores/${storeId}/suborders/${suborderId}/fulfillment`,

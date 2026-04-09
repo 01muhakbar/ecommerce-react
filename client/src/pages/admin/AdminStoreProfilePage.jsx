@@ -352,6 +352,57 @@ export default function AdminStoreProfilePage() {
                       </div>
                     ) : null}
 
+                    <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                        Shipping Setup
+                      </p>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <StatusPill
+                          label={store?.shippingSetupStatus?.label || "Unavailable"}
+                          tone={
+                            store?.shippingSetupStatus?.code === "READY"
+                              ? "SUCCESS"
+                              : store?.shippingSetupStatus?.code === "DISABLED"
+                                ? "NEUTRAL"
+                                : "WARNING"
+                          }
+                        />
+                        <StatusPill
+                          label={store?.isShippingReady ? "Shipping ready" : "Needs shipping setup"}
+                          tone={store?.isShippingReady ? "SUCCESS" : "WARNING"}
+                        />
+                      </div>
+                      <p className="mt-3 text-sm text-slate-700">
+                        {store?.shippingSetupMeta?.message ||
+                          store?.shippingSetupStatus?.description ||
+                          "Shipping setup readiness is unavailable for this store."}
+                      </p>
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        <div className="rounded-lg border border-white/60 bg-white/70 px-3 py-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                            Origin Contact
+                          </p>
+                          <p className="mt-1 text-sm text-slate-900">
+                            {store?.shippingSetupSummary?.originContactName || "-"}
+                          </p>
+                        </div>
+                        <div className="rounded-lg border border-white/60 bg-white/70 px-3 py-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                            Origin Address
+                          </p>
+                          <p className="mt-1 text-sm text-slate-900">
+                            {store?.shippingSetupSummary?.originAddressLine || "-"}
+                          </p>
+                        </div>
+                      </div>
+                      {store?.missingShippingFields?.length ? (
+                        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800">
+                          Missing shipping fields:{" "}
+                          {store.missingShippingFields.map((field) => field.label).join(", ")}.
+                        </div>
+                      ) : null}
+                    </div>
+
                     <GovernanceBlock
                       title="Admin-Owned Governance Matrix"
                       toneClass="border-amber-200 bg-amber-50"

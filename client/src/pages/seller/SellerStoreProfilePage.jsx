@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Globe, ImageIcon, MapPin, Save, ShieldCheck, Store } from "lucide-react";
 import {
   getSellerStoreProfile,
@@ -46,6 +46,17 @@ const createFormState = (profile) => ({
   province: profile?.province || "",
   postalCode: profile?.postalCode || "",
   country: profile?.country || "",
+  shippingEnabled: profile?.shippingSetup?.shippingEnabled !== false,
+  originContactName: profile?.shippingSetup?.originContactName || "",
+  originPhone: profile?.shippingSetup?.originPhone || "",
+  originAddressLine1: profile?.shippingSetup?.originAddressLine1 || "",
+  originAddressLine2: profile?.shippingSetup?.originAddressLine2 || "",
+  originDistrict: profile?.shippingSetup?.originDistrict || "",
+  originCity: profile?.shippingSetup?.originCity || "",
+  originProvince: profile?.shippingSetup?.originProvince || "",
+  originPostalCode: profile?.shippingSetup?.originPostalCode || "",
+  originCountry: profile?.shippingSetup?.originCountry || "",
+  pickupNotes: profile?.shippingSetup?.pickupNotes || "",
 });
 
 const formatFieldName = (value) =>
@@ -116,6 +127,7 @@ function InputField({ label, hint, multiline = false, disabled = false, ...props
 }
 
 export default function SellerStoreProfilePage() {
+  const location = useLocation();
   const queryClient = useQueryClient();
   const logoInputRef = useRef(null);
   const {
@@ -144,6 +156,17 @@ export default function SellerStoreProfilePage() {
     }
   }, [profileQuery.data]);
 
+  useEffect(() => {
+    if (location.hash !== "#shipping-setup") return;
+    const timer = window.setTimeout(() => {
+      const section = document.getElementById("shipping-setup");
+      if (section) {
+        section.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [location.hash, profileQuery.data]);
+
   const effectiveCanEdit = Boolean(profileQuery.data?.governance?.canEdit ?? fallbackCanEdit);
 
   useEffect(() => {
@@ -157,7 +180,7 @@ export default function SellerStoreProfilePage() {
     onSuccess: async (data) => {
       setStatus({
         type: "success",
-        message: "Store profile updated successfully.",
+      message: "Store profile updated successfully.",
       });
       setIsEditing(false);
       setForm(createFormState(data));
@@ -251,14 +274,55 @@ export default function SellerStoreProfilePage() {
       province: emptyToNull(form.province),
       postalCode: emptyToNull(form.postalCode),
       country: emptyToNull(form.country),
+      shippingSetup: {
+        shippingEnabled: Boolean(form.shippingEnabled),
+        originContactName: emptyToNull(form.originContactName),
+        originPhone: emptyToNull(form.originPhone),
+        originAddressLine1: emptyToNull(form.originAddressLine1),
+        originAddressLine2: emptyToNull(form.originAddressLine2),
+        originDistrict: emptyToNull(form.originDistrict),
+        originCity: emptyToNull(form.originCity),
+        originProvince: emptyToNull(form.originProvince),
+        originPostalCode: emptyToNull(form.originPostalCode),
+        originCountry: emptyToNull(form.originCountry),
+        pickupNotes: emptyToNull(form.pickupNotes),
+      },
     };
     const filteredPayload = Object.fromEntries(
-      Object.entries(nextPayload).filter(([key]) => editableFieldSet.has(key))
+      Object.entries(nextPayload).filter(
+        ([key]) => key === "shippingSetup" || editableFieldSet.has(key)
+      )
     );
     await mutation.mutateAsync(filteredPayload);
   };
 
   const profile = profileQuery.data;
+  const shippingSetupStatus = profile?.shippingSetupStatus || {
+    code: "UNKNOWN",
+    label: "Unavailable",
+    tone: "stone",
+    description:
+      "Shipping setup readiness is unavailable right now. Backend seller store profile remains the source of truth.",
+  };
+  const shippingSetupMeta = profile?.shippingSetupMeta || {
+    severity: "info",
+    message: "Shipping setup hints are unavailable right now.",
+    hints: [],
+    usesStoreProfileFallback: false,
+    fallbackFields: [],
+  };
+  const shippingMissingFields = Array.isArray(profile?.missingShippingFields)
+    ? profile.missingShippingFields
+    : [];
+  const shippingSetupSummary = profile?.shippingSetupSummary || {
+    shippingEnabled: true,
+    originContactName: null,
+    originPhone: null,
+    originAddressLine: null,
+    pickupNotes: null,
+    usesStoreProfileFallback: false,
+    fallbackFields: [],
+  };
   const operationalReadiness = useMemo(
     () =>
       profile?.operationalReadiness || {
@@ -372,6 +436,11 @@ export default function SellerStoreProfilePage() {
             tone={operationalReadiness.tone}
           />,
           <SellerWorkspaceBadge
+            key="shipping-setup"
+            label={shippingSetupStatus.label}
+            tone={shippingSetupStatus.tone}
+          />,
+          <SellerWorkspaceBadge
             key="mode"
             label={effectiveCanEdit ? (isEditing ? "Editing" : "Editable") : "Read-only"}
             tone={effectiveCanEdit ? "sky" : "stone"}
@@ -451,6 +520,18 @@ export default function SellerStoreProfilePage() {
               </div>
             </SellerWorkspaceNotice>
           ) : null}
+          <SellerWorkspaceNotice
+            type={
+              shippingSetupStatus.code === "READY"
+                ? "success"
+                : shippingSetupStatus.code === "DISABLED"
+                  ? "info"
+                  : "warning"
+            }
+            className="mt-4"
+          >
+            {shippingSetupMeta.message || shippingSetupStatus.description}
+          </SellerWorkspaceNotice>
         </SellerWorkspaceSectionCard>
       </section>
 
@@ -480,6 +561,76 @@ export default function SellerStoreProfilePage() {
               <SellerWorkspaceDetailItem label="Postal Code" value={profile.postalCode} />
               <SellerWorkspaceDetailItem label="Country" value={profile.country} />
             </div>
+          </SellerWorkspaceSectionCard>
+
+          <SellerWorkspaceSectionCard
+            title="Shipping Setup"
+            hint="Store-scoped origin defaults for shipment operations."
+            Icon={MapPin}
+          >
+            <SellerWorkspaceNotice
+              type={
+                shippingSetupStatus.code === "READY"
+                  ? "success"
+                  : shippingSetupStatus.code === "DISABLED"
+                    ? "info"
+                    : "warning"
+              }
+            >
+              {shippingSetupStatus.description}
+            </SellerWorkspaceNotice>
+
+            <div className="mt-4 grid gap-3">
+              <SellerWorkspaceDetailItem
+                label="Status"
+                value={shippingSetupStatus.label}
+                hint={shippingSetupMeta.sourceOfTruth || "Backend shipping setup readiness remains canonical."}
+              />
+              <SellerWorkspaceDetailItem
+                label="Shipping Enabled"
+                value={shippingSetupSummary.shippingEnabled ? "Enabled" : "Disabled"}
+                hint="Seller can disable shipping setup here without changing payment or order truth."
+              />
+              <SellerWorkspaceDetailItem
+                label="Origin Contact"
+                value={shippingSetupSummary.originContactName || "-"}
+              />
+              <SellerWorkspaceDetailItem
+                label="Origin Phone"
+                value={shippingSetupSummary.originPhone || "-"}
+              />
+              <SellerWorkspaceDetailItem
+                label="Origin Address"
+                value={shippingSetupSummary.originAddressLine || "-"}
+              />
+              <SellerWorkspaceDetailItem
+                label="Pickup Notes"
+                value={shippingSetupSummary.pickupNotes || "-"}
+              />
+            </div>
+
+            {shippingMissingFields.length ? (
+              <SellerWorkspaceNotice type="warning" className="mt-4">
+                Missing shipping fields: {shippingMissingFields.map((field) => field.label).join(", ")}
+              </SellerWorkspaceNotice>
+            ) : null}
+
+            {shippingSetupMeta.usesStoreProfileFallback ? (
+              <SellerWorkspaceNotice type="info" className="mt-4">
+                Shipping setup is currently reusing store profile fallback fields:{" "}
+                {shippingSetupMeta.fallbackFields.map((field) => field.label).join(", ") || "-"}.
+              </SellerWorkspaceNotice>
+            ) : null}
+
+            {shippingSetupMeta.hints?.length ? (
+              <SellerWorkspaceNotice type="info" className="mt-4">
+                <div className="space-y-2">
+                  {shippingSetupMeta.hints.map((hint) => (
+                    <p key={hint}>{hint}</p>
+                  ))}
+                </div>
+              </SellerWorkspaceNotice>
+            ) : null}
           </SellerWorkspaceSectionCard>
 
           <SellerWorkspaceSectionCard
@@ -856,6 +1007,121 @@ export default function SellerStoreProfilePage() {
                 </div>
               </section>
             ))}
+
+            <section
+              id="shipping-setup"
+              className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5 scroll-mt-24"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <h4 className="text-sm font-semibold text-slate-900">Shipping Setup</h4>
+                <SellerWorkspaceBadge
+                  label={form.shippingEnabled ? "Enabled" : "Disabled"}
+                  tone={form.shippingEnabled ? "sky" : "stone"}
+                />
+              </div>
+              <div className="mt-3.5 grid gap-3.5 md:grid-cols-2">
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                    Shipping Mode
+                  </span>
+                  <select
+                    className={`${sellerFieldClass} mt-2 ${!isEditing || mutation.isPending ? sellerDisabledFieldClass : ""}`}
+                    value={form.shippingEnabled ? "enabled" : "disabled"}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        shippingEnabled: event.target.value === "enabled",
+                      }))
+                    }
+                    disabled={!isEditing || mutation.isPending}
+                  >
+                    <option value="enabled">Enabled</option>
+                    <option value="disabled">Disabled</option>
+                  </select>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    Seller shipping setup only prepares store-scoped origin defaults. It does not replace buyer shipping truth.
+                  </p>
+                </label>
+                <InputField
+                  label="Origin Contact Name"
+                  hint="Defaults to store name when left empty in the backend summary."
+                  value={form.originContactName}
+                  onChange={handleChange("originContactName")}
+                  readOnly={!isEditing || mutation.isPending}
+                  disabled={!isEditing || mutation.isPending}
+                />
+                <InputField
+                  label="Origin Phone"
+                  hint="Defaults to store phone or WhatsApp when available."
+                  value={form.originPhone}
+                  onChange={handleChange("originPhone")}
+                  readOnly={!isEditing || mutation.isPending}
+                  disabled={!isEditing || mutation.isPending}
+                />
+                <InputField
+                  label="Origin Address Line 1"
+                  hint="Primary pickup or sender origin address."
+                  value={form.originAddressLine1}
+                  onChange={handleChange("originAddressLine1")}
+                  readOnly={!isEditing || mutation.isPending}
+                  disabled={!isEditing || mutation.isPending}
+                />
+                <InputField
+                  label="Origin Address Line 2"
+                  value={form.originAddressLine2}
+                  onChange={handleChange("originAddressLine2")}
+                  readOnly={!isEditing || mutation.isPending}
+                  disabled={!isEditing || mutation.isPending}
+                />
+                <InputField
+                  label="Origin District"
+                  value={form.originDistrict}
+                  onChange={handleChange("originDistrict")}
+                  readOnly={!isEditing || mutation.isPending}
+                  disabled={!isEditing || mutation.isPending}
+                />
+                <InputField
+                  label="Origin City"
+                  value={form.originCity}
+                  onChange={handleChange("originCity")}
+                  readOnly={!isEditing || mutation.isPending}
+                  disabled={!isEditing || mutation.isPending}
+                />
+                <InputField
+                  label="Origin Province"
+                  value={form.originProvince}
+                  onChange={handleChange("originProvince")}
+                  readOnly={!isEditing || mutation.isPending}
+                  disabled={!isEditing || mutation.isPending}
+                />
+                <InputField
+                  label="Origin Postal Code"
+                  value={form.originPostalCode}
+                  onChange={handleChange("originPostalCode")}
+                  readOnly={!isEditing || mutation.isPending}
+                  disabled={!isEditing || mutation.isPending}
+                />
+                <InputField
+                  label="Origin Country"
+                  value={form.originCountry}
+                  onChange={handleChange("originCountry")}
+                  readOnly={!isEditing || mutation.isPending}
+                  disabled={!isEditing || mutation.isPending}
+                />
+                <div className="md:col-span-2">
+                  <InputField
+                    label="Pickup Notes"
+                    hint="Optional note for pickup instructions or landmark."
+                    multiline
+                    rows={3}
+                    value={form.pickupNotes}
+                    onChange={handleChange("pickupNotes")}
+                    readOnly={!isEditing || mutation.isPending}
+                    disabled={!isEditing || mutation.isPending}
+                  />
+                </div>
+              </div>
+            </section>
           </form>
         </SellerWorkspaceSectionCard>
       </section>

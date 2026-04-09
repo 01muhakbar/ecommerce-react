@@ -9,7 +9,9 @@ import { Op } from "sequelize";
 import { config as loadEnv } from "dotenv";
 
 const APP_HOST = "127.0.0.1";
-const API_PORT = 3001;
+const API_PORT = Number(
+  process.env.E2E_TRUTH_API_PORT || process.env.SHIPMENT_QA_API_PORT || 3001
+);
 const DEFAULT_PASSWORD = "mvf-smoke-123";
 const DEFAULT_PASSWORD_HASH = "$2b$10$BlVCXo.I/DrWMs53W064U.NoNdPrHgxb3wvg3oy0AQmhwE7SEB33.";
 const RUN_ID = `e2e-truth-${Date.now()}`;
@@ -366,12 +368,20 @@ function buildShippingDetails(label: string) {
 }
 
 async function addProductToCart(customerClient: CookieClient, buyerUserId: number, productId: number) {
-  await resetCartForUser(buyerUserId);
-  const response = await customerClient.request("/api/cart/add", {
-    method: "POST",
-    body: JSON.stringify({ productId, quantity: 1 }),
-  });
-  assertStatus(response, 200, "add product to cart");
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await resetCartForUser(buyerUserId);
+    const response = await customerClient.request("/api/cart/add", {
+      method: "POST",
+      body: JSON.stringify({ productId, quantity: 1 }),
+    });
+    const responseText = String(response.text || "");
+    if (response.status === 500 && responseText.includes("Deadlock") && attempt < 2) {
+      await delay(500);
+      continue;
+    }
+    assertStatus(response, 200, "add product to cart");
+    return;
+  }
 }
 
 function getSingleGroup(data: any, label: string) {
@@ -552,6 +562,12 @@ async function waitForBodyText(page: any, expected: string, timeoutMs = 15000) {
   }
   const text = await locator.textContent();
   throw new Error(`Expected page to include "${expected}", received "${text}"`);
+}
+
+async function waitForAllTexts(page: any, expectedTexts: string[], timeoutMs = 15000) {
+  for (const expected of expectedTexts) {
+    await waitForBodyText(page, expected, timeoutMs);
+  }
 }
 
 async function waitForTestIdText(page: any, testId: string, expected: string, timeoutMs = 15000) {
@@ -868,6 +884,17 @@ async function runScenario(browser: any) {
     orderStore.id,
     approvedScenario.suborderId
   );
+  const publicTrackingResponse = await buyerClient.request(
+    `/api/store/orders/${encodeURIComponent(approvedScenario.invoiceNo)}`
+  );
+  assertStatus(publicTrackingResponse, 200, "approved shipment public tracking");
+  const publicTracking = publicTrackingResponse.body?.data ?? null;
+  assert.equal(Number(publicTracking?.shipmentCount || 0), 1, "shipmentCount should stay visible");
+  assert.equal(
+    Boolean(publicTracking?.usedLegacyFallback),
+    false,
+    "approved shipment should use persisted shipment truth"
+  );
   const expectedSellerStatusLabel = getSellerStatusLabel(sellerDetail);
   const expectedSellerPaymentLabel = getSellerPaymentLabel(sellerDetail);
   const expectedSuborderNumber = String(sellerDetail?.suborderNumber || approvedScenario.suborderId);
@@ -904,12 +931,53 @@ async function runScenario(browser: any) {
       sellerPage,
       `/seller/stores/${encodeURIComponent(orderStore.slug)}/orders/${approvedScenario.suborderId}`
     );
-    await waitForBodyText(sellerPage, expectedSuborderNumber);
-    await waitForBodyText(sellerPage, `Store split ${expectedSellerPaymentLabel}`);
-    await waitForBodyText(sellerPage, `Seller ${expectedSellerStatusLabel}`);
+    await waitForAllTexts(sellerPage, [
+      expectedSuborderNumber,
+      `Store split ${expectedSellerPaymentLabel}`,
+      `Seller ${expectedSellerStatusLabel}`,
+      "Persisted shipment truth for this store split.",
+      "Persisted shipment",
+    ]);
   } finally {
     await sellerPage.close().catch(() => null);
     await sellerContext.close().catch(() => null);
+  }
+
+  log("running shipment browser assertions across public, client, and admin views");
+  const buyerShipmentContext = await createAuthedContext(browser, buyerClient);
+  const adminShipmentContext = await createAuthedContext(browser, adminClient);
+  const publicTrackingPage = await browser.newPage();
+  const buyerShipmentPage = await buyerShipmentContext.newPage();
+  const adminShipmentPage = await adminShipmentContext.newPage();
+  try {
+    await gotoRoute(publicTrackingPage, `/order/${encodeURIComponent(approvedScenario.invoiceNo)}`);
+    await waitForAllTexts(publicTrackingPage, [
+      "Shipping truth stays scoped per store shipment",
+      "Persisted shipment",
+      "Not assigned yet",
+    ]);
+
+    await gotoRoute(buyerShipmentPage, `/user/my-orders/${approvedScenario.orderId}`);
+    await waitForAllTexts(buyerShipmentPage, [
+      "Persisted shipment",
+      "Pending seller assignment",
+    ]);
+
+    await gotoRoute(
+      adminShipmentPage,
+      `/admin/orders/${encodeURIComponent(approvedScenario.invoiceNo)}`
+    );
+    await waitForAllTexts(adminShipmentPage, [
+      "All shipments persisted",
+      "Persisted shipment truth",
+      "Persisted shipment",
+    ]);
+  } finally {
+    await publicTrackingPage.close().catch(() => null);
+    await buyerShipmentPage.close().catch(() => null);
+    await adminShipmentPage.close().catch(() => null);
+    await buyerShipmentContext.close().catch(() => null);
+    await adminShipmentContext.close().catch(() => null);
   }
 
   console.log("[e2e-truth] OK");
@@ -1037,6 +1105,7 @@ async function main() {
         CLIENT_URL: clientOrigin,
         CORS_ORIGIN: smokeCorsOrigins,
         NODE_ENV: "development",
+        VITE_PROXY_API_PORT: String(API_PORT),
       },
       async () => {
         await ensureServerModules();

@@ -17,6 +17,8 @@ import {
   isGroupedPaymentFinal,
 } from "../../utils/groupedPaymentReadModel.ts";
 import { getOrderTruthStatus } from "../../utils/orderTruth.js";
+import { ENABLE_MULTISTORE_SHIPMENT_MVP } from "../../config/featureFlags.js";
+import { normalizeShipmentList } from "../../utils/shipmentReadModel.ts";
 
 const fetchOrder = async (orderId) => {
   const { data } = await api.get(`/store/orders/my/${orderId}`);
@@ -125,17 +127,15 @@ export default function AccountOrderDetailPage() {
   const discountValue = order.discount ?? order.discountAmount ?? 0;
   const subtotalValue = order.subtotal ?? 0;
   const groupedOrder = groupedQuery.data?.data ?? null;
+  const effectiveContract = groupedOrder?.contract || order.contract || null;
   const parentPaymentStatus = groupedOrder?.paymentStatus || order.paymentStatus;
   const parentPaymentMeta = groupedOrder?.paymentStatusMeta || order.paymentStatusMeta || null;
-  const paymentEntry = order.paymentEntry || groupedOrder?.paymentEntry || null;
-  const statusSummary = getOrderContractSummary(order.contract || groupedOrder?.contract);
+  const paymentEntry = groupedOrder?.paymentEntry || order.paymentEntry || null;
+  const statusSummary = getOrderContractSummary(effectiveContract);
   const truthStatus = getOrderTruthStatus(
-    order?.contract
-      ? order
-      : groupedOrder?.contract
-        ? { ...order, contract: groupedOrder.contract }
-        : order
+    effectiveContract ? { ...order, contract: effectiveContract } : order
   );
+  const shipments = normalizeShipmentList(groupedOrder?.shipments || order.shipments);
   const statusLabel = truthStatus.label || statusSummary?.label || order.status;
   const statusTone = truthStatus.tone || statusSummary?.tone || order.status;
 
@@ -192,6 +192,110 @@ export default function AccountOrderDetailPage() {
           </p>
         ) : null}
       </div>
+
+      {ENABLE_MULTISTORE_SHIPMENT_MVP && shipments.length > 0 ? (
+        <div className="rounded-xl border border-slate-200 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900">Shipment Summary</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                Shipment truth per store. Buyer view stays read-only on this page.
+              </p>
+            </div>
+            <span className="text-xs font-medium text-slate-500">
+              {shipments.length} shipment{shipments.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <p className="mt-3 text-xs text-slate-500">
+            {groupedOrder?.usedLegacyFallback || order?.usedLegacyFallback
+              ? "This order still reads some shipping truth through legacy compatibility fallback."
+              : "This buyer lane reads the same shipment truth exposed to seller and admin."}
+          </p>
+          <div className="mt-4 space-y-3">
+            {shipments.map((shipment) => (
+              <div
+                key={shipment.shipmentId || `shipment-${shipment.suborderId || shipment.storeId || shipment.storeName}`}
+                className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-slate-900">
+                      {shipment.storeName || shipment.suborderNumber || "Shipment"}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {shipment.suborderNumber || "Shipment"} • Fee {money(shipment.shippingFee || 0)}
+                    </p>
+                  </div>
+                  <span
+                    className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${statusStyles(
+                      shipment.shipmentStatusMeta?.tone || shipment.shipmentStatus
+                    )}`}
+                  >
+                    {shipment.shipmentStatusMeta?.label || shipment.shipmentStatus}
+                  </span>
+                </div>
+                <div className="mt-3 grid gap-2 text-sm text-slate-600 md:grid-cols-2">
+                  <div>
+                    Source:{" "}
+                    <span className="font-medium text-slate-900">
+                      {shipment.usedLegacyFallback ? "Legacy fallback" : "Persisted shipment"}
+                    </span>
+                  </div>
+                  <div>
+                    Tracking:{" "}
+                    <span className="font-medium text-slate-900">
+                      {shipment.trackingNumber || "Not assigned yet"}
+                    </span>
+                  </div>
+                  <div>
+                    Courier:{" "}
+                    <span className="font-medium text-slate-900">
+                      {shipment.courierService || shipment.courierCode || "Pending seller assignment"}
+                    </span>
+                  </div>
+                </div>
+                <p className="mt-3 text-sm text-slate-500">
+                  {shipment.shipmentStatusMeta?.description ||
+                    "Shipment summary is available for this store shipment."}
+                </p>
+                {shipment.compatibilityMatchesStorage === false ? (
+                  <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                    Shipment truth and legacy compatibility storage are not aligned yet.
+                  </div>
+                ) : null}
+                {shipment.incompleteTrackingData ? (
+                  <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Courier or tracking detail is still incomplete for this shipment stage.
+                  </div>
+                ) : null}
+                {Array.isArray(shipment.trackingEvents) && shipment.trackingEvents.length > 0 ? (
+                  <div className="mt-4 space-y-2 rounded-xl border border-slate-200 bg-white p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Tracking Timeline
+                    </p>
+                    {shipment.trackingEvents.map((event) => (
+                      <div
+                        key={event.eventId || `${event.status}-${event.happenedAt || "event"}`}
+                        className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-slate-900">
+                            {event.statusMeta?.label || event.status || "Update"}
+                          </p>
+                          <p className="text-xs text-slate-500">{formatDate(event.happenedAt)}</p>
+                        </div>
+                        <p className="mt-1 text-sm text-slate-600">
+                          {event.note || event.statusMeta?.description || "Shipment updated."}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {groupedOrder ? (
         <div className="rounded-xl border border-slate-200 p-4">

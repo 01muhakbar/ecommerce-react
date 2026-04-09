@@ -28,6 +28,7 @@ import {
   loadTeamWorkspaceSummaryByStoreIds,
 } from "../services/sellerWorkspaceReadiness.js";
 import { loadSellerWorkspaceAnalyticsSummary } from "../services/sellerWorkspaceAnalytics.js";
+import { buildStoreShippingSetupReadiness } from "../services/sellerShippingSetup.service.js";
 import {
   openSellerPaymentRequestStatuses,
   storePaymentProfileRequestAttributes,
@@ -35,24 +36,59 @@ import {
 
 const router = Router();
 
-const serializeSellerWorkspaceContext = (sellerAccess: any) => ({
-  store: {
-    id: Number(sellerAccess.store.id),
-    name: String(sellerAccess.store.name || ""),
-    slug: String(sellerAccess.store.slug || ""),
-    status: String(sellerAccess.store.status || "ACTIVE"),
-    logoUrl: String(sellerAccess.store.logoUrl || "").trim() || null,
-    imageUrl: String(sellerAccess.store.imageUrl || sellerAccess.store.logoUrl || "").trim() || null,
-  },
-  access: {
-    accessMode: sellerAccess.accessMode,
-    roleCode: sellerAccess.roleCode,
-    permissionKeys: sellerAccess.permissionKeys,
-    membershipStatus: sellerAccess.membershipStatus,
-    isOwner: Boolean(sellerAccess.isOwner),
-    memberId: sellerAccess.memberId,
-  },
-});
+const workspaceContextStoreAttributes = [
+  "id",
+  "name",
+  "slug",
+  "status",
+  "logoUrl",
+  "phone",
+  "whatsapp",
+  "addressLine1",
+  "addressLine2",
+  "city",
+  "province",
+  "postalCode",
+  "country",
+  "shippingSetup",
+] as const;
+
+const serializeSellerWorkspaceContext = (sellerAccess: any, storeRecord: any = null) => {
+  const storeSource = storeRecord || sellerAccess?.store || null;
+  const shippingSetup = buildStoreShippingSetupReadiness(storeSource);
+
+  return {
+    store: {
+      id: Number(storeSource?.id || sellerAccess?.store?.id || 0),
+      name: String(storeSource?.name || sellerAccess?.store?.name || ""),
+      slug: String(storeSource?.slug || sellerAccess?.store?.slug || ""),
+      status: String(storeSource?.status || sellerAccess?.store?.status || "ACTIVE"),
+      logoUrl:
+        String(storeSource?.logoUrl || sellerAccess?.store?.logoUrl || "").trim() || null,
+      imageUrl:
+        String(
+          storeSource?.imageUrl ||
+            storeSource?.logoUrl ||
+            sellerAccess?.store?.imageUrl ||
+            sellerAccess?.store?.logoUrl ||
+            ""
+        ).trim() || null,
+      shippingSetupStatus: shippingSetup.shippingSetupStatus,
+      shippingSetupMeta: shippingSetup.shippingSetupMeta,
+      isShippingReady: shippingSetup.isShippingReady,
+      missingShippingFields: shippingSetup.missingShippingFields,
+      shippingSetupSummary: shippingSetup.shippingSetupSummary,
+    },
+    access: {
+      accessMode: sellerAccess.accessMode,
+      roleCode: sellerAccess.roleCode,
+      permissionKeys: sellerAccess.permissionKeys,
+      membershipStatus: sellerAccess.membershipStatus,
+      isOwner: Boolean(sellerAccess.isOwner),
+      memberId: sellerAccess.memberId,
+    },
+  };
+};
 
 const requiredPaymentProfileFields = [
   { key: "accountName", label: "Account name" },
@@ -634,10 +670,13 @@ const findLatestOpenStorePaymentProfileRequest = async (storeId: number) =>
 
 router.get("/stores/:storeId/context", requireSellerStoreAccess(), async (req, res) => {
   const sellerAccess = (req as any).sellerAccess;
+  const storeRecord = await Store.findByPk(Number(req.params.storeId), {
+    attributes: [...workspaceContextStoreAttributes],
+  });
 
   return res.json({
     success: true,
-    data: serializeSellerWorkspaceContext(sellerAccess),
+    data: serializeSellerWorkspaceContext(sellerAccess, storeRecord),
   });
 });
 
@@ -701,6 +740,7 @@ router.get(
             "province",
             "postalCode",
             "country",
+            "shippingSetup",
             "activeStorePaymentProfileId",
           ],
           include: [
@@ -913,7 +953,12 @@ router.get("/stores/slug/:storeSlug/context", async (req, res, next) => {
 
       return res.json({
         success: true,
-        data: serializeSellerWorkspaceContext(result.data),
+        data: serializeSellerWorkspaceContext(
+          result.data,
+          await Store.findByPk(Number(result.data?.storeId || result.data?.store?.id || 0), {
+            attributes: [...workspaceContextStoreAttributes],
+          })
+        ),
       });
     } catch (error) {
       return next(error);

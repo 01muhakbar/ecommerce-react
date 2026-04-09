@@ -333,11 +333,18 @@ const getCompactSubmissionLabel = (item) => {
 };
 
 const getCompactVisibilityLabel = (item) => {
-  if (item?.visibility?.storefrontVisible) return "Visible";
-  if (item?.submission?.status === "submitted") return "Review blocked";
-  if (item?.submission?.status === "needs_revision") return "Revision blocked";
+  const visibility = item?.visibility || null;
+  const reasonCode = String(visibility?.reasonCode || "").trim().toUpperCase();
+
+  if (visibility?.storefrontVisible) {
+    return visibility?.storefrontLabel || "Visible";
+  }
+  if (reasonCode === "STORE_NOT_READY") return "Store not ready";
+  if (reasonCode === "STORE_NOT_ACTIVE") return "Store inactive";
+  if (reasonCode === "REVIEW_PENDING") return "Review blocked";
+  if (reasonCode === "REVISION_REQUIRED") return "Revision blocked";
   if (item?.status === "draft") return "Draft only";
-  if (item?.visibility?.stateCode === "PUBLISHED_BLOCKED") return "State blocked";
+  if (visibility?.stateCode === "PUBLISHED_BLOCKED") return visibility?.sellerLabel || "State blocked";
   return "Internal";
 };
 
@@ -356,15 +363,12 @@ const getLifecycleTone = (item) => {
 };
 
 const getCompactVisibilityHint = (item) => {
-  if (item?.visibility?.storefrontVisible) return "Visible to customers";
-  if (item?.submission?.status === "submitted") {
-    return "Hidden until admin review finishes";
-  }
-  if (item?.submission?.status === "needs_revision") {
-    return "Hidden until revision is resubmitted";
-  }
+  const visibility = item?.visibility || null;
+  if (visibility?.sellerHint) return visibility.sellerHint;
+  if (visibility?.storefrontReason) return visibility.storefrontReason;
+  if (visibility?.storefrontVisible) return "Visible to customers";
   if (item?.status === "draft") return "Draft stays internal";
-  if (item?.visibility?.stateCode === "PUBLISHED_BLOCKED") {
+  if (visibility?.stateCode === "PUBLISHED_BLOCKED") {
     return "Lifecycle still blocks storefront";
   }
   return "Hidden from storefront";

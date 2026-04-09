@@ -5,8 +5,15 @@ import {
   PUBLIC_STORE_IDENTITY_PUBLIC_SAFE_FIELDS,
   PUBLIC_STORE_IDENTITY_SELLER_OWNED_FIELDS,
 } from "./sharedContracts/publicStoreIdentity.js";
+import {
+  buildStoreShippingSetupReadiness,
+  sellerShippingSetupPatchSchema,
+} from "./sellerShippingSetup.service.js";
 
-export const STORE_PROFILE_ATTRIBUTES = [...PUBLIC_STORE_IDENTITY_ATTRIBUTES] as const;
+export const STORE_PROFILE_ATTRIBUTES = [
+  ...PUBLIC_STORE_IDENTITY_ATTRIBUTES,
+  "shippingSetup",
+] as const;
 
 export const SELLER_EDITABLE_STORE_PROFILE_FIELDS = [
   ...PUBLIC_STORE_IDENTITY_SELLER_OWNED_FIELDS,
@@ -329,6 +336,7 @@ export const sellerStoreProfilePatchSchema = z
     province: nullableStringField(120),
     postalCode: nullablePostalCodeField(),
     country: nullableStringField(120),
+    shippingSetup: sellerShippingSetupPatchSchema.optional(),
   })
   .strict();
 
@@ -469,6 +477,7 @@ export const serializeStoreProfileSnapshot = (
 
   const status = String(getStoreProfileAttr(store, "status") || "ACTIVE");
   const isAdminActor = options.actor === "admin";
+  const shippingSetupReadiness = buildStoreShippingSetupReadiness(store);
 
   return {
     id: Number(getStoreProfileAttr(store, "id")),
@@ -539,6 +548,12 @@ export const serializeStoreProfileSnapshot = (
     },
     contract: buildStoreProfileContract(),
     completeness: buildStoreProfileCompleteness(store),
+    shippingSetup: shippingSetupReadiness.shippingSetup,
+    shippingSetupStatus: shippingSetupReadiness.shippingSetupStatus,
+    shippingSetupMeta: shippingSetupReadiness.shippingSetupMeta,
+    isShippingReady: shippingSetupReadiness.isShippingReady,
+    missingShippingFields: shippingSetupReadiness.missingShippingFields,
+    shippingSetupSummary: shippingSetupReadiness.shippingSetupSummary,
     createdAt: getStoreProfileAttr(store, "createdAt") || null,
     updatedAt: getStoreProfileAttr(store, "updatedAt") || null,
   };

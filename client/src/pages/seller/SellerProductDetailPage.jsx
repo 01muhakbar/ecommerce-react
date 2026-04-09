@@ -95,11 +95,7 @@ const getSubmissionReason = (submission) =>
   submission?.reviewNote || submission?.revisionReason || submission?.revisionNote || null;
 
 const getSellerLaneVisibilityLabel = (product) => {
-  if (product?.visibility?.storefrontVisible) return "Visible in storefront";
-  if (product?.submission?.status === "submitted") return "Hidden by admin review";
-  if (product?.submission?.status === "needs_revision") {
-    return "Hidden until revision is resubmitted";
-  }
+  if (product?.visibility?.sellerLabel) return product.visibility.sellerLabel;
   if (product?.status === "draft") return "Draft only";
   return product?.visibility?.storefrontLabel || "Hidden from storefront";
 };
@@ -117,11 +113,8 @@ const getSellerLanePublishAuthority = (submission, submissionGovernance) => {
 };
 
 const getSellerLaneStorefrontImpact = (product) => {
+  if (product?.visibility?.storefrontReason) return product.visibility.storefrontReason;
   if (product?.visibility?.storefrontVisible) return "Visible in storefront";
-  if (product?.submission?.status === "submitted") return "Hidden until admin review outcome";
-  if (product?.submission?.status === "needs_revision") {
-    return "Hidden until seller revisions are resubmitted";
-  }
   return product?.visibility?.storefrontLabel || "Hidden from storefront";
 };
 

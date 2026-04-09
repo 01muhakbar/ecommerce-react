@@ -54,6 +54,65 @@ const normalizeFieldMatrix = (value: unknown) =>
         .filter((entry) => entry.key)
     : [];
 
+const normalizeShippingSetupValues = (value: unknown) => {
+  const source = value && typeof value === "object" ? (value as Record<string, any>) : {};
+  return {
+    shippingEnabled:
+      typeof source.shippingEnabled === "boolean" ? source.shippingEnabled : true,
+    explicitShippingEnabled:
+      typeof source.explicitShippingEnabled === "boolean"
+        ? source.explicitShippingEnabled
+        : null,
+    originContactName: textOrNull(source.originContactName),
+    originPhone: textOrNull(source.originPhone),
+    originAddressLine1: textOrNull(source.originAddressLine1),
+    originAddressLine2: textOrNull(source.originAddressLine2),
+    originDistrict: textOrNull(source.originDistrict),
+    originCity: textOrNull(source.originCity),
+    originProvince: textOrNull(source.originProvince),
+    originPostalCode: textOrNull(source.originPostalCode),
+    originCountry: textOrNull(source.originCountry),
+    pickupNotes: textOrNull(source.pickupNotes),
+  };
+};
+
+const normalizeShippingSetupMeta = (value: unknown) => {
+  const source = value && typeof value === "object" ? (value as Record<string, any>) : {};
+  return {
+    severity: textOrFallback(source.severity, "info"),
+    message: textOrNull(source.message),
+    hints: toStringList(source.hints),
+    usesStoreProfileFallback: Boolean(source.usesStoreProfileFallback),
+    fallbackFields: normalizeMissingFields(source.fallbackFields),
+    sourceOfTruth: textOrNull(source.sourceOfTruth),
+    operationalBoundary: textOrNull(source.operationalBoundary),
+  };
+};
+
+const normalizeShippingSetupStatus = (value: unknown) => {
+  const source = value && typeof value === "object" ? (value as Record<string, any>) : {};
+  return {
+    code: textOrFallback(source.code, "UNKNOWN"),
+    label: textOrFallback(source.label, "Unavailable"),
+    tone: textOrFallback(source.tone, "stone"),
+    description: textOrNull(source.description),
+  };
+};
+
+const normalizeShippingSetupSummary = (value: unknown) => {
+  const source = value && typeof value === "object" ? (value as Record<string, any>) : {};
+  return {
+    shippingEnabled:
+      typeof source.shippingEnabled === "boolean" ? source.shippingEnabled : true,
+    originContactName: textOrNull(source.originContactName),
+    originPhone: textOrNull(source.originPhone),
+    originAddressLine: textOrNull(source.originAddressLine),
+    pickupNotes: textOrNull(source.pickupNotes),
+    usesStoreProfileFallback: Boolean(source.usesStoreProfileFallback),
+    fallbackFields: normalizeMissingFields(source.fallbackFields),
+  };
+};
+
 const normalizeStoreProfile = (payload: any) => {
   if (!payload) return null;
 
@@ -152,6 +211,12 @@ const normalizeStoreProfile = (payload: any) => {
       description: textOrNull(completeness?.description),
       missingFields,
     },
+    shippingSetup: normalizeShippingSetupValues(payload?.shippingSetup),
+    shippingSetupStatus: normalizeShippingSetupStatus(payload?.shippingSetupStatus),
+    shippingSetupMeta: normalizeShippingSetupMeta(payload?.shippingSetupMeta),
+    isShippingReady: Boolean(payload?.isShippingReady),
+    missingShippingFields: normalizeMissingFields(payload?.missingShippingFields),
+    shippingSetupSummary: normalizeShippingSetupSummary(payload?.shippingSetupSummary),
     createdAt: payload?.createdAt || null,
     updatedAt: payload?.updatedAt || null,
   };

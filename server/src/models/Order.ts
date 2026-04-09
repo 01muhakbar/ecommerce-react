@@ -117,6 +117,10 @@ export class Order
       foreignKey: { name: "orderId", field: "order_id" },
       as: "suborders",
     });
+    Order.hasMany(models.Shipment, {
+      foreignKey: { name: "orderId", field: "order_id" },
+      as: "shipments",
+    });
   }
   static initModel(sequelize: Sequelize): typeof Order {
     Order.init(

@@ -4,6 +4,10 @@ import {
   serializeStorePaymentProfileActiveSnapshot,
   serializeStorePaymentProfilePendingRequest,
 } from "./sharedContracts/storePaymentProfileState.js";
+import {
+  buildStoreShippingSetupReadiness,
+  SELLER_SHIPPING_SETUP_REQUIRED_FIELDS,
+} from "./sellerShippingSetup.service.js";
 
 const getAttr = (row: any, key: string) =>
   row?.getDataValue?.(key) ?? row?.get?.(key) ?? row?.dataValues?.[key];
@@ -442,6 +446,94 @@ const buildPaymentProfileChecklistItem = (
   };
 };
 
+const buildShippingSetupChecklistItem = (store: any, canEdit: boolean) => {
+  const readiness = buildStoreShippingSetupReadiness(store);
+  const missingFields = Array.isArray(readiness.missingShippingFields)
+    ? readiness.missingShippingFields
+    : [];
+
+  let status = createChecklistStatus(
+    "READY",
+    "Ready",
+    "emerald",
+    "Store shipping origin defaults are ready for seller shipment operations."
+  );
+  let cta = createChecklistCta(
+    canEdit ? "Review shipping setup" : "Review shipping setup",
+    "STORE_PROFILE",
+    canEdit ? "SELLER_EDITOR" : "SELLER_VIEWER",
+    canEdit
+      ? "Open store profile and keep the shipping setup snapshot aligned with this store."
+      : "Open store profile to review the current shipping setup snapshot."
+  );
+  let isComplete = Boolean(readiness.isShippingReady);
+
+  if (readiness.shippingSetupStatus?.code === "DISABLED") {
+    status = createChecklistStatus(
+      "DISABLED",
+      "Disabled",
+      "stone",
+      "Shipping setup is disabled for this store, so seller shipment operations should remain blocked here."
+    );
+    cta = createChecklistCta(
+      canEdit ? "Enable shipping setup" : "Ask editor to enable shipping",
+      "STORE_PROFILE",
+      canEdit ? "SELLER_EDITOR" : "STORE_OWNER_OR_ADMIN",
+      canEdit
+        ? "Enable shipping in store profile when the origin contact and pickup address are ready."
+        : "Only seller roles with store edit access can enable shipping setup."
+    );
+    isComplete = false;
+  } else if (missingFields.length > 0) {
+    status = createChecklistStatus(
+      "INCOMPLETE",
+      "Needs update",
+      "amber",
+      "Some required shipping origin fields are still missing for seller shipment operations."
+    );
+    cta = createChecklistCta(
+      canEdit ? "Complete shipping setup" : "Ask editor to complete shipping setup",
+      "STORE_PROFILE",
+      canEdit ? "SELLER_EDITOR" : "STORE_OWNER_OR_ADMIN",
+      canEdit
+        ? "Complete the missing shipping origin fields in store profile."
+        : "Only seller roles with store edit access can complete the shipping setup."
+    );
+    isComplete = false;
+  }
+
+  return {
+    key: "shipping_setup",
+    label: "Shipping setup",
+    required: true,
+    infoOnly: false,
+    visible: true,
+    isComplete,
+    status,
+    progress: {
+      completed: Math.max(
+        0,
+        SELLER_SHIPPING_SETUP_REQUIRED_FIELDS.length - missingFields.length
+      ),
+      total: SELLER_SHIPPING_SETUP_REQUIRED_FIELDS.length,
+      missingFields,
+    },
+    cta,
+    governance: {
+      canEdit,
+      managedBy: "SELLER_STORE_PROFILE_SHIPPING_SETUP",
+      note:
+        "Seller shipping setup stays store-scoped and only prepares default origin data for shipment operations.",
+    },
+    meta: {
+      shippingSetupStatus: readiness.shippingSetupStatus?.code || null,
+      usesStoreProfileFallback: Boolean(
+        readiness.shippingSetupSummary?.usesStoreProfileFallback
+      ),
+    },
+  };
+};
+
 const buildProductChecklistItem = (
   summary: ProductPipelineSummary,
   canCreateDraft: boolean,
@@ -756,6 +848,7 @@ const buildWorkspaceReadinessSummary = (input: {
     permissionKeys.includes("STORE_MEMBERS_MANAGE") || permissionKeys.includes("STORE_ROLES_MANAGE");
 
   const storeItem = buildStoreProfileChecklistItem(input.store, canEditStore);
+  const shippingItem = buildShippingSetupChecklistItem(input.store, canEditStore);
   const paymentItem = buildPaymentProfileChecklistItem(
     input.activePaymentProfile || null,
     input.pendingPaymentRequest || null,
@@ -768,7 +861,7 @@ const buildWorkspaceReadinessSummary = (input: {
     canViewCatalog
   );
 
-  const checklist: any[] = [storeItem, paymentItem, productItem];
+  const checklist: any[] = [storeItem, shippingItem, paymentItem, productItem];
   if (input.includeTeamInfo) {
     checklist.push(
       buildTeamChecklistItem(input.teamSummary || emptyTeamWorkspaceSummary(), canManageTeam)
@@ -784,7 +877,7 @@ const buildWorkspaceReadinessSummary = (input: {
     nextStep,
     boundaries: {
       sourceOfTruth:
-        "Workspace readiness is derived from backend store profile completeness, payment profile workflow, and seller product pipeline data.",
+        "Workspace readiness is derived from backend store profile completeness, store shipping setup, payment profile workflow, and seller product pipeline data.",
       adminAuthority:
         "Readiness highlights next steps, but it does not transfer final payment approval or other admin-owned authority into seller workspace.",
       storefrontBoundary:

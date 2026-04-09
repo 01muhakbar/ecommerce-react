@@ -21,6 +21,8 @@ import { SuborderItem } from "./SuborderItem.js";
 import { Payment } from "./Payment.js";
 import { PaymentProof } from "./PaymentProof.js";
 import { PaymentStatusLog } from "./PaymentStatusLog.js";
+import { Shipment } from "./Shipment.js";
+import { TrackingEvent } from "./TrackingEvent.js";
 import { Coupon } from "./Coupon.js";
 import { ProductReview } from "./ProductReview.js";
 import { Attribute } from "./Attribute.js";
@@ -118,6 +120,8 @@ function initModels() {
   Payment.initModel(sequelize);
   PaymentProof.initModel(sequelize);
   PaymentStatusLog.initModel(sequelize);
+  Shipment.initModel(sequelize);
+  TrackingEvent.initModel(sequelize);
   Coupon.initModel(sequelize);
   ProductReview.initModel(sequelize);
   Attribute.initModel(sequelize);
@@ -148,6 +152,8 @@ function initModels() {
     Payment,
     PaymentProof,
     PaymentStatusLog,
+    Shipment,
+    TrackingEvent,
     Coupon,
     ProductReview,
     Attribute,
@@ -450,6 +456,8 @@ export {
   Payment,
   PaymentProof,
   PaymentStatusLog,
+  Shipment,
+  TrackingEvent,
   Coupon,
   ProductReview,
   Attribute,
