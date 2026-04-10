@@ -231,42 +231,65 @@ export default function AccountDashboardPage() {
   });
 
   const orders = data?.data || [];
-  const totalOrders = orders.length;
-  const pendingOrders = orders.filter((order) => getOrderTruthStatus(order).bucket === "pending").length;
-  const processingOrders = orders.filter(
-    (order) => getOrderTruthStatus(order).bucket === "processing"
+  const orderSnapshots = useMemo(
+    () =>
+      orders.map((order) => ({
+        order,
+        truthStatus: getOrderTruthStatus(order),
+      })),
+    [orders]
+  );
+  const totalOrders = orderSnapshots.length;
+  const pendingOrders = orderSnapshots.filter(
+    ({ truthStatus }) => truthStatus.bucket === "pending"
   ).length;
-  const completeOrders = orders.filter((order) => getOrderTruthStatus(order).bucket === "complete").length;
+  const processingOrders = orderSnapshots.filter(
+    ({ truthStatus }) =>
+      truthStatus.bucket === "processing" || truthStatus.bucket === "shipping"
+  ).length;
+  const completeOrders = orderSnapshots.filter(
+    ({ truthStatus }) => truthStatus.bucket === "complete"
+  ).length;
+  const closedOrders = orderSnapshots.filter(
+    ({ truthStatus }) => truthStatus.bucket === "cancelled"
+  ).length;
 
   const statCards = [
     {
       label: dashboardCopy.totalOrdersLabel,
       value: totalOrders,
       Icon: ShoppingCart,
-      tone: "bg-rose-100 text-rose-600",
+      tone: "bg-slate-100 text-slate-600",
+      hint:
+        closedOrders > 0
+          ? `${closedOrders} closed/problem order(s) stay outside active progress counts.`
+          : "Uses the latest backend order truth across your visible buyer orders.",
     },
     {
       label: dashboardCopy.pendingOrderValue,
       value: pendingOrders,
       Icon: RotateCw,
       tone: "bg-amber-100 text-amber-600",
+      hint: "Includes awaiting payment, review, or other action-required states.",
     },
     {
       label: dashboardCopy.processingOrderValue,
       value: processingOrders,
       Icon: Truck,
       tone: "bg-sky-100 text-sky-600",
+      hint: "Includes processing and shipping states that are still moving.",
     },
     {
       label: dashboardCopy.completeOrderValue,
       value: completeOrders,
       Icon: CheckCircle,
       tone: "bg-emerald-100 text-emerald-600",
+      hint: "Final-positive only. Closed/problem orders stay outside this count.",
     },
   ];
 
-  const recentOrders = [...orders]
-    .sort((a, b) => getOrderTimestamp(b) - getOrderTimestamp(a))
+  const recentOrders = [...orderSnapshots]
+    .sort((a, b) => getOrderTimestamp(b.order) - getOrderTimestamp(a.order))
     .slice(0, 5);
   const sellerStores = Array.isArray(sellerStoresQuery.data) ? sellerStoresQuery.data : [];
   const ownerStore = useMemo(() => {
@@ -310,6 +333,9 @@ export default function AccountDashboardPage() {
             <div>
               <p className="text-sm font-medium text-slate-600">{card.label}</p>
               <p className="text-2xl font-bold text-slate-900">{card.value}</p>
+              {card.hint ? (
+                <p className="mt-1 text-xs leading-5 text-slate-500">{card.hint}</p>
+              ) : null}
             </div>
           </div>
         ))}
@@ -395,10 +421,9 @@ export default function AccountDashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {recentOrders.map((order) => {
+                  {recentOrders.map(({ order, truthStatus }) => {
                     const publicOrderRef = getPublicOrderRef(order);
                     const trackingPath = buildPublicOrderTrackingPath(publicOrderRef);
-                    const truthStatus = getOrderTruthStatus(order);
                     return (
                       <tr
                         key={order.id}

@@ -6,9 +6,7 @@ import {
   BadgePercent,
   ChevronLeft,
   ChevronRight,
-  Eye,
   Layers3,
-  Star,
   Store as StoreIcon,
 } from "lucide-react";
 import { fetchStoreProducts } from "../../api/public/storeProducts.ts";
@@ -18,6 +16,7 @@ import { formatCurrency } from "../../utils/format.js";
 import { resolveAssetUrl } from "../../lib/assetUrl.js";
 import { normalizePublicStoreIdentity } from "../../utils/storePublicIdentity.ts";
 import { UiEmptyState, UiErrorState } from "../../components/primitives/state/index.js";
+import SearchProductCard from "../../components/store/SearchProductCard.jsx";
 import StoreMicrositeShell from "../../components/store/StoreMicrositeShell.jsx";
 
 const toText = (value, fallback = "") => {
@@ -82,102 +81,7 @@ function SectionHeader({ eyebrow, title, description = "", action = null }) {
 }
 
 function MicrositeProductCard({ product }) {
-  const productName = toText(product?.name, "Product");
-  const productSlug = toText(product?.routeSlug || product?.slug);
-  const productHref =
-    toText(product?.productHref) ||
-    (productSlug ? `/product/${encodeURIComponent(productSlug)}` : "");
-  const imageSrc = resolveAssetUrl(product?.imageUrl);
-  const price = toSafeNumber(product?.price, 0);
-  const originalPrice = toSafeNumber(product?.originalPrice, 0);
-  const hasDiscount = originalPrice > price && price > 0;
-  const discountPercent = getDiscountPercent(product);
-  const categoryName = normalizeCategoryName(product);
-  const safeRating =
-    Number.isFinite(Number(product?.ratingAvg)) && Number(product?.ratingAvg) > 0
-      ? Number(product.ratingAvg).toFixed(1)
-      : null;
-  const safeReviewCount = Math.max(0, Number(product?.reviewCount || 0));
-
-  const isClickable = Boolean(productHref);
-
-  const cardBody = (
-    <>
-        <div className="relative aspect-square overflow-hidden bg-slate-100">
-          {hasDiscount ? (
-            <span className="absolute left-4 top-4 z-20 inline-flex h-7 items-center rounded-full bg-rose-500 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-white shadow-sm">
-              -{discountPercent}%
-            </span>
-          ) : null}
-          {imageSrc ? (
-            <img
-              src={imageSrc}
-              alt={productName}
-              className="relative z-0 h-full w-full object-contain p-5 transition duration-300 group-hover:scale-[1.02]"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 text-slate-400">
-              <StoreIcon className="h-8 w-8" />
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-3 p-4">
-          <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-            <span className="inline-flex h-6 items-center rounded-full bg-slate-100 px-2.5">
-              {categoryName}
-            </span>
-            {safeRating ? (
-              <span className="inline-flex h-6 items-center gap-1 rounded-full bg-amber-50 px-2.5 text-amber-700">
-                <Star className="h-3 w-3 fill-current" />
-                {safeRating}
-              </span>
-            ) : null}
-          </div>
-
-          <p className="line-clamp-2 text-sm font-semibold leading-6 text-slate-900 transition group-hover:text-emerald-700">
-            {productName}
-          </p>
-
-          <div className="flex items-end gap-2">
-            <p className="text-lg font-bold text-slate-900">{formatCurrency(price)}</p>
-            {hasDiscount ? (
-              <span className="pb-0.5 text-xs text-slate-400 line-through">
-                {formatCurrency(originalPrice)}
-              </span>
-            ) : null}
-          </div>
-
-          <div className="flex items-center justify-between text-xs text-slate-500">
-            <span>
-              {safeReviewCount} review{safeReviewCount === 1 ? "" : "s"}
-            </span>
-            <span className="inline-flex items-center gap-1 font-semibold text-slate-700">
-              <Eye className="h-3.5 w-3.5" />
-              View
-            </span>
-          </div>
-        </div>
-    </>
-  );
-
-  return (
-    <article
-      className={`relative isolate overflow-hidden rounded-[28px] border border-slate-200 bg-white transition ${
-        isClickable
-          ? "group hover:z-[1] hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
-          : ""
-      }`}
-    >
-      {isClickable ? (
-        <Link to={productHref} className="block h-full cursor-pointer" aria-label={`Open ${productName}`}>
-          {cardBody}
-        </Link>
-      ) : (
-        <div className="block h-full">{cardBody}</div>
-      )}
-    </article>
-  );
+  return <SearchProductCard product={product} variant="grid" />;
 }
 
 function CategoryRail({
@@ -692,6 +596,19 @@ export default function StoreMicrositePage() {
     ? `${filteredProducts.length} item${filteredProducts.length === 1 ? "" : "s"} for "${activeSearchQuery}"`
     : `${filteredProducts.length} item${filteredProducts.length === 1 ? "" : "s"}`;
 
+  const decorateMicrositeProduct = (product) => {
+    const productSlug = toText(product?.routeSlug || product?.slug || product?.id);
+    const productHref = productSlug
+      ? `/product/${encodeURIComponent(productSlug)}`
+      : toText(product?.productHref) || undefined;
+
+    return {
+      ...product,
+      storeSlug: identity.slug || safeSlug,
+      productHref,
+    };
+  };
+
   const navItems = useMemo(
     () => [
       {
@@ -834,7 +751,7 @@ export default function StoreMicrositePage() {
             eyebrow="Store shelf"
             title="Top Picks"
             description="Popular products from this store."
-            products={topPicks.map((product) => ({ ...product, storeSlug: identity.slug || safeSlug }))}
+            products={topPicks.map(decorateMicrositeProduct)}
             loading={productsQuery.isLoading}
             error={productsQuery.isError ? productsQuery.error : null}
             onRetry={() => productsQuery.refetch()}
@@ -856,7 +773,7 @@ export default function StoreMicrositePage() {
               eyebrow="Store deals"
               title="Best Deals"
               description="Current discounted products from this store."
-              products={bestDeals.map((product) => ({ ...product, storeSlug: identity.slug || safeSlug }))}
+              products={bestDeals.map(decorateMicrositeProduct)}
               emptyTitle="No deals right now."
               emptyDescription="Discounted products will appear here when available."
               headerAction={
@@ -1011,7 +928,7 @@ export default function StoreMicrositePage() {
                   {filteredProducts.map((product) => (
                     <MicrositeProductCard
                       key={`product-${product.id || product.slug}`}
-                      product={{ ...product, storeSlug: identity.slug || safeSlug }}
+                      product={decorateMicrositeProduct(product)}
                     />
                   ))}
                 </div>
@@ -1029,7 +946,7 @@ export default function StoreMicrositePage() {
               ? "Browse more from this store."
               : "More products from this category."
           }
-          products={filteredProducts.map((product) => ({ ...product, storeSlug: identity.slug || safeSlug }))}
+          products={filteredProducts.map(decorateMicrositeProduct)}
           loading={productsQuery.isLoading}
           error={productsQuery.isError ? productsQuery.error : null}
           onRetry={() => productsQuery.refetch()}

@@ -55,6 +55,7 @@ import {
   buildSellerSuborderContract,
 } from "../services/orderLifecycleContract.service.js";
 import { buildOrderShippingReadModel } from "../services/orderShippingReadModel.service.js";
+import { buildSplitOperationalTruth } from "../services/splitOperationalTruth.service.js";
 import { getDefaultAddressByUser } from "../services/userAddress.service.js";
 import { protect } from "../middleware/authMiddleware.js";
 import { STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES } from "../services/sharedContracts/storePaymentProfileCompat.js";
@@ -1836,6 +1837,11 @@ router.get(
             const displayStatus = paymentReadModel.status;
             const shippingSummary =
               shippingReadModel.suborders.get(Number(getAttr(suborder, "id") || 0)) ?? null;
+            const operationalTruth = buildSplitOperationalTruth({
+              paymentStatus,
+              paymentReadModel,
+              shipmentReadModel: shippingSummary,
+            });
             return {
               suborderId: Number(getAttr(suborder, "id") || 0),
               suborderNumber: String(getAttr(suborder, "suborderNumber") || ""),
@@ -1876,6 +1882,7 @@ router.get(
               missingTrackingTimeline: Boolean(shippingSummary?.missingTrackingTimeline),
               incompleteTrackingData: Boolean(shippingSummary?.incompleteTrackingData),
               shipments: Array.isArray(shippingSummary?.shipments) ? shippingSummary.shipments : [],
+              operationalTruth,
               payment: payment
                 ? {
                     id: Number(getAttr(payment, "id") || 0) || null,

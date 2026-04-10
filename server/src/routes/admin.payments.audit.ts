@@ -7,14 +7,17 @@ import {
   PaymentProof,
   PaymentStatusLog,
   Product,
+  Shipment,
   Store,
   StorePaymentProfile,
   Suborder,
   SuborderItem,
+  TrackingEvent,
   User,
 } from "../models/index.js";
 import { deriveLegacyPaymentStatus, serializeSplitOrder } from "./checkout.js";
 import { expireOverduePaymentsForOrder } from "../services/paymentExpiry.service.js";
+import { buildGroupedPaymentReadModel } from "../services/groupedPaymentReadModel.service.js";
 import {
   getLatestTimelineRecord,
   sortTimelineDesc,
@@ -24,6 +27,8 @@ import {
   buildOrderStatusMeta,
   buildPaymentStatusMeta,
 } from "../services/orderLifecycleContract.service.js";
+import { buildSuborderShippingReadModel } from "../services/orderShippingReadModel.service.js";
+import { buildSplitOperationalTruth } from "../services/splitOperationalTruth.service.js";
 
 const router = Router();
 
@@ -264,6 +269,48 @@ const auditListInclude = [
           },
         ],
       },
+      {
+        model: Shipment,
+        as: "shipment",
+        attributes: [
+          "id",
+          "orderId",
+          "suborderId",
+          "storeId",
+          "sellerUserId",
+          "status",
+          "courierCode",
+          "courierService",
+          "trackingNumber",
+          "estimatedDelivery",
+          "shippingFee",
+          "shippingAddressSnapshot",
+          "shippingRateSnapshot",
+          "createdAt",
+          "updatedAt",
+        ],
+        required: false,
+        include: [
+          {
+            model: TrackingEvent,
+            as: "trackingEvents",
+            attributes: [
+              "id",
+              "shipmentId",
+              "eventType",
+              "eventLabel",
+              "eventDescription",
+              "occurredAt",
+              "source",
+              "actorType",
+              "actorId",
+              "metadata",
+              "createdAt",
+            ],
+            required: false,
+          },
+        ],
+      },
     ],
   },
 ];
@@ -445,6 +492,11 @@ const summarizeAuditRow = (order: any) => {
   let pendingSuborders = 0;
   let unpaidSuborders = 0;
   let rejectedPayments = 0;
+  let operationalPaidSuborders = 0;
+  let operationalPendingSuborders = 0;
+  let operationalUnpaidSuborders = 0;
+  let operationalShipmentLaneSuborders = 0;
+  let operationalFinalNegativeSuborders = 0;
 
   suborders.forEach((suborder: any) => {
     const suborderStatus = toUpper(getAttr(suborder, "paymentStatus"), "UNPAID");
@@ -453,6 +505,56 @@ const summarizeAuditRow = (order: any) => {
     else unpaidSuborders += 1;
 
     const payments = Array.isArray(suborder?.payments) ? suborder.payments : [];
+    const latestPayment = sortTimelineDesc(payments)[0] ?? null;
+    const paymentReadModel = buildGroupedPaymentReadModel({
+      paymentStatus: getAttr(latestPayment, "status") || "CREATED",
+      suborderPaymentStatus: suborderStatus,
+      expiresAt: getAttr(latestPayment, "expiresAt") || null,
+      hasPaymentRecord: Boolean(latestPayment),
+      missingPaymentReason: "Payment record not found for this suborder.",
+    });
+    const shippingReadModel = buildSuborderShippingReadModel(suborder);
+    const operationalTruth = buildSplitOperationalTruth({
+      paymentStatus: suborderStatus,
+      paymentReadModel,
+      shipmentReadModel: shippingReadModel,
+    });
+    const operationalPaymentStatus = toUpper(
+      operationalTruth?.payment?.settlementStatus || operationalTruth?.payment?.status,
+      suborderStatus
+    );
+    const operationalSummaryCode = toUpper(
+      operationalTruth?.statusSummary?.code,
+      operationalPaymentStatus
+    );
+    const operationalSummaryLane = toUpper(
+      operationalTruth?.statusSummary?.lane,
+      operationalPaymentStatus === "PAID" ? "SHIPMENT" : "PAYMENT"
+    );
+    const operationalFinalNegative = Boolean(
+      operationalTruth?.finality?.isFinalNegative
+    );
+
+    if (operationalPaymentStatus === "PAID") operationalPaidSuborders += 1;
+    else if (operationalPaymentStatus === "PENDING_CONFIRMATION") {
+      operationalPendingSuborders += 1;
+    } else {
+      operationalUnpaidSuborders += 1;
+    }
+
+    if (operationalSummaryLane === "SHIPMENT" && !operationalFinalNegative) {
+      operationalShipmentLaneSuborders += 1;
+    }
+
+    if (
+      operationalFinalNegative ||
+      ["FAILED", "EXPIRED", "CANCELLED", "RETURNED", "FAILED_DELIVERY"].includes(
+        operationalSummaryCode
+      )
+    ) {
+      operationalFinalNegativeSuborders += 1;
+    }
+
     payments.forEach((payment: any) => {
       const latestProof = normalizeProofSummary(payment?.proofs ?? []);
       const paymentState = toUpper(getAttr(payment, "status"), "CREATED");
@@ -492,6 +594,14 @@ const summarizeAuditRow = (order: any) => {
       pendingSuborders,
       unpaidSuborders,
       rejectedPayments,
+    },
+    operationalCounts: {
+      paidSuborders: operationalPaidSuborders,
+      pendingSuborders: operationalPendingSuborders,
+      unpaidSuborders: operationalUnpaidSuborders,
+      rejectedPayments,
+      shipmentLaneSuborders: operationalShipmentLaneSuborders,
+      finalNegativeSuborders: operationalFinalNegativeSuborders,
     },
   };
 };
@@ -537,6 +647,21 @@ const serializeAuditDetail = (order: any) => {
     split,
     suborders: suborders.map((suborder: any) => {
       const payments = sortTimelineDesc(Array.isArray(suborder?.payments) ? suborder.payments : []);
+      const latestPayment = payments[0] ?? null;
+      const paymentStatus = String(getAttr(suborder, "paymentStatus") || "UNPAID");
+      const paymentReadModel = buildGroupedPaymentReadModel({
+        paymentStatus: getAttr(latestPayment, "status") || "CREATED",
+        suborderPaymentStatus: paymentStatus,
+        expiresAt: getAttr(latestPayment, "expiresAt") || null,
+        hasPaymentRecord: Boolean(latestPayment),
+        missingPaymentReason: "Payment record not found for this suborder.",
+      });
+      const shippingReadModel = buildSuborderShippingReadModel(suborder);
+      const operationalTruth = buildSplitOperationalTruth({
+        paymentStatus,
+        paymentReadModel,
+        shipmentReadModel: shippingReadModel,
+      });
       return {
         suborderId: toNumber(getAttr(suborder, "id")),
         suborderNumber: String(getAttr(suborder, "suborderNumber") || ""),
@@ -558,13 +683,25 @@ const serializeAuditDetail = (order: any) => {
         serviceFeeAmount: toNumber(getAttr(suborder, "serviceFeeAmount")),
         totalAmount: toNumber(getAttr(suborder, "totalAmount")),
         paymentMethod: String(getAttr(suborder, "paymentMethod") || "QRIS"),
-        paymentStatus: String(getAttr(suborder, "paymentStatus") || "UNPAID"),
-        paymentStatusMeta: buildPaymentStatusMeta(getAttr(suborder, "paymentStatus") || "UNPAID"),
+        paymentStatus,
+        paymentStatusMeta: buildPaymentStatusMeta(paymentStatus),
         fulfillmentStatus: String(getAttr(suborder, "fulfillmentStatus") || "UNFULFILLED"),
         fulfillmentStatusMeta: buildFulfillmentStatusMeta(
           getAttr(suborder, "fulfillmentStatus") || "UNFULFILLED"
         ),
         paidAt: getAttr(suborder, "paidAt") || null,
+        shippingStatus: shippingReadModel.shippingStatus,
+        shippingStatusMeta: shippingReadModel.shippingStatusMeta,
+        latestTrackingEvent: shippingReadModel.latestTrackingEvent,
+        hasActiveShipment: shippingReadModel.hasActiveShipment,
+        hasTrackingNumber: shippingReadModel.hasTrackingNumber,
+        usedLegacyFallback: shippingReadModel.usedLegacyFallback,
+        hasPersistedShipment: shippingReadModel.hasPersistedShipment,
+        trackingEventCount: shippingReadModel.trackingEventCount,
+        missingTrackingTimeline: shippingReadModel.missingTrackingTimeline,
+        incompleteTrackingData: shippingReadModel.incompleteTrackingData,
+        shipments: shippingReadModel.shipments,
+        operationalTruth,
         paymentProfile: getAttr(suborder?.paymentProfile, "id")
           ? {
               id: toNumber(getAttr(suborder?.paymentProfile, "id")),

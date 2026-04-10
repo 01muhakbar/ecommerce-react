@@ -58,6 +58,9 @@ export const useProducts = ({
   limit,
   enabled = true,
   keepPreviousData = true,
+  staleTime = 1000 * 30,
+  refetchOnWindowFocus = true,
+  refetchInterval,
 }) =>
   useQuery({
     queryKey: [
@@ -86,7 +89,9 @@ export const useProducts = ({
       }),
     placeholderData: keepPreviousData ? prevData : undefined,
     enabled,
-    staleTime: 1000 * 30,
+    staleTime,
+    refetchOnWindowFocus,
+    refetchInterval,
   });
 
 export const useProduct = (slug) =>
@@ -176,7 +181,7 @@ export function CategoryDropdown({
 export function CategoryCard({ category }) {
   return (
     <Link
-      to={`/search?category=${encodeURIComponent(category.slug)}`}
+      to={`/search?category=${encodeURIComponent(category.slug)}&page=1`}
       className="group rounded-2xl border border-slate-200 bg-white p-4 transition hover:-translate-y-1 hover:border-slate-300 hover:shadow-md"
     >
       <div className="text-xs uppercase tracking-[0.15em] text-slate-400">Category</div>

@@ -49,7 +49,7 @@ export default function MobileMenuDrawer({ isOpen, onClose }) {
     const categoryKey = String(node?.code || node?.slug || node?.id || "").trim();
     if (!categoryKey) return;
     onClose();
-    navigate(`/search?category=${encodeURIComponent(categoryKey)}`);
+    navigate(`/search?category=${encodeURIComponent(categoryKey)}&page=1`);
   };
 
   return (

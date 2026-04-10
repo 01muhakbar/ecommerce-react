@@ -9,6 +9,7 @@ import {
   ProofReviewBadge,
 } from "../../components/payments/PaymentReadModelBadges.jsx";
 import {
+  getFirstEnabledOrderContractAction,
   getOrderContractSummary,
   isOrderContractFinal,
 } from "../../utils/orderContract.ts";
@@ -19,6 +20,17 @@ import {
 import { getOrderTruthStatus } from "../../utils/orderTruth.js";
 import { ENABLE_MULTISTORE_SHIPMENT_MVP } from "../../config/featureFlags.js";
 import { normalizeShipmentList } from "../../utils/shipmentReadModel.ts";
+import {
+  getSplitOperationalPayment,
+  getSplitOperationalShipment,
+  getSplitOperationalStatusSummary,
+  isSplitOperationallyFinal,
+} from "../../utils/splitOperationalTruth.ts";
+import {
+  UiEmptyState,
+  UiErrorState,
+  UiSkeleton,
+} from "../../components/primitives/state/index.js";
 
 const fetchOrder = async (orderId) => {
   const { data } = await api.get(`/store/orders/my/${orderId}`);
@@ -50,11 +62,7 @@ const formatDate = (value) => {
   return date.toLocaleString();
 };
 
-const isGroupOperationallyFinal = (group) => {
-  const paymentFinal = isGroupedPaymentFinal(group);
-  const fulfillmentFinal = Boolean(group?.fulfillmentStatusMeta?.isFinal);
-  return isOrderContractFinal(group?.contract) && paymentFinal && fulfillmentFinal;
-};
+const isGroupOperationallyFinal = (group) => isSplitOperationallyFinal(group);
 
 const shouldPollGroupedOrder = (groupedOrder) => {
   if (!groupedOrder || typeof groupedOrder !== "object") return false;
@@ -65,7 +73,13 @@ const shouldPollGroupedOrder = (groupedOrder) => {
 
 export default function AccountOrderDetailPage() {
   const { id } = useParams();
-  const { data, isLoading, isError } = useQuery({
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ["account", "orders", id],
     queryFn: () => fetchOrder(id),
     enabled: Boolean(id),
@@ -90,36 +104,54 @@ export default function AccountOrderDetailPage() {
 
   if (!id) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-        Invalid order id.{" "}
-        <Link to="/user/my-orders" className="font-medium text-slate-700 hover:text-slate-900">
-          Back to orders
-        </Link>
-      </div>
+      <UiEmptyState
+        title="Invalid order id"
+        description="Open this page from My Orders so the buyer detail lane can load the right order."
+        actions={
+          <Link
+            to="/user/my-orders"
+            className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            Back to orders
+          </Link>
+        }
+      />
     );
   }
 
   if (isLoading) {
-    return <div className="text-sm text-slate-500">Loading order...</div>;
+    return <UiSkeleton variant="invoice" rows={5} />;
   }
 
   if (isError) {
     return (
-      <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-600">
-        Failed to load order details.
-      </div>
+      <UiErrorState
+        title="Failed to load order details."
+        message={
+          error?.response?.data?.message ||
+          error?.message ||
+          "Buyer order detail could not be loaded right now."
+        }
+        onRetry={() => refetch()}
+      />
     );
   }
 
   const order = data?.data ?? data?.data?.data ?? null;
   if (!order) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-        Order not found.{" "}
-        <Link to="/user/my-orders" className="font-medium text-slate-700 hover:text-slate-900">
-          Back to orders
-        </Link>
-      </div>
+      <UiEmptyState
+        title="Order not found"
+        description="The selected buyer order is no longer available from this link."
+        actions={
+          <Link
+            to="/user/my-orders"
+            className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            Back to orders
+          </Link>
+        }
+      />
     );
   }
 
@@ -130,7 +162,25 @@ export default function AccountOrderDetailPage() {
   const effectiveContract = groupedOrder?.contract || order.contract || null;
   const parentPaymentStatus = groupedOrder?.paymentStatus || order.paymentStatus;
   const parentPaymentMeta = groupedOrder?.paymentStatusMeta || order.paymentStatusMeta || null;
+  const groupedQueryErrorMessage =
+    groupedQuery.error?.response?.data?.message ||
+    groupedQuery.error?.message ||
+    "Split payment and shipment detail is temporarily unavailable.";
   const paymentEntry = groupedOrder?.paymentEntry || order.paymentEntry || null;
+  const continuePaymentAction = getFirstEnabledOrderContractAction(effectiveContract, [
+    "CONTINUE_PAYMENT",
+    "CONTINUE_STRIPE_PAYMENT",
+  ]);
+  const paymentPath =
+    paymentEntry?.visible && paymentEntry?.targetPath
+      ? paymentEntry.targetPath
+      : continuePaymentAction?.targetPath || null;
+  const paymentLabel =
+    paymentEntry?.label || continuePaymentAction?.label || "Order Payment";
+  const paymentHint =
+    paymentEntry?.summaryLabel ||
+    continuePaymentAction?.description ||
+    "Payment is no longer actionable from this page.";
   const statusSummary = getOrderContractSummary(effectiveContract);
   const truthStatus = getOrderTruthStatus(
     effectiveContract ? { ...order, contract: effectiveContract } : order
@@ -177,21 +227,57 @@ export default function AccountOrderDetailPage() {
             <div>Discount: {money(discountValue)}</div>
             <div>Subtotal: {money(subtotalValue)}</div>
         </div>
-        {order.id && paymentEntry?.visible && paymentEntry?.targetPath ? (
+        {order.id && paymentPath ? (
           <div className="mt-4">
             <Link
-              to={paymentEntry.targetPath}
+              to={paymentPath}
               className="inline-flex h-10 items-center justify-center rounded-full border border-emerald-200 px-4 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
             >
-              {paymentEntry.label || "Order Payment"}
+              {paymentLabel}
             </Link>
           </div>
         ) : order.id ? (
           <p className="mt-4 text-sm text-slate-500">
-            {paymentEntry?.summaryLabel || "Payment is no longer actionable from this page."}
+            {paymentHint}
           </p>
         ) : null}
       </div>
+
+      {groupedQuery.isError ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          <p className="font-semibold text-amber-900">Split detail is temporarily unavailable.</p>
+          <p className="mt-1">{groupedQueryErrorMessage}</p>
+          <button
+            type="button"
+            onClick={() => groupedQuery.refetch()}
+            className="mt-3 inline-flex h-10 items-center justify-center rounded-full border border-amber-300 bg-white px-4 text-sm font-semibold text-amber-800 transition hover:bg-amber-50"
+          >
+            Retry split sync
+          </button>
+        </div>
+      ) : null}
+
+      {!groupedQuery.isError &&
+      !groupedQuery.isLoading &&
+      String(order.checkoutMode || groupedOrder?.checkoutMode || "").toUpperCase() ===
+        "MULTI_STORE" &&
+      !groupedOrder ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          <p className="font-semibold text-amber-900">
+            Parent order is available, but split payment detail has not loaded yet.
+          </p>
+          <p className="mt-1">
+            Retry this page before using the parent summary as an operational source of truth.
+          </p>
+          <button
+            type="button"
+            onClick={() => groupedQuery.refetch()}
+            className="mt-3 inline-flex h-10 items-center justify-center rounded-full border border-amber-300 bg-white px-4 text-sm font-semibold text-amber-800 transition hover:bg-amber-50"
+          >
+            Retry split sync
+          </button>
+        </div>
+      ) : null}
 
       {ENABLE_MULTISTORE_SHIPMENT_MVP && shipments.length > 0 ? (
         <div className="rounded-xl border border-slate-200 p-4">
@@ -320,7 +406,9 @@ export default function AccountOrderDetailPage() {
           ) : (
             <div className="mt-4 space-y-3">
               {groupedOrder.groups.map((group) => {
-                const splitPayment = getGroupedPaymentReadModel(group);
+                const splitPayment = getSplitOperationalPayment(group);
+                const splitShipment = getSplitOperationalShipment(group);
+                const groupStatusSummary = getSplitOperationalStatusSummary(group);
                 return (
                   <div
                     key={`${group.suborderId || group.storeId || group.storeName}`}
@@ -331,10 +419,10 @@ export default function AccountOrderDetailPage() {
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className="font-semibold text-slate-900">{group.storeName}</h4>
                           <PaymentStatusBadge
-                            status={group.paymentStatus}
-                            label={group.paymentStatusMeta?.label}
-                            tone={group.paymentStatusMeta?.tone}
-                            prefix="Suborder"
+                            status={groupStatusSummary?.code || group.paymentStatus}
+                            label={groupStatusSummary?.label || group.paymentStatusMeta?.label}
+                            tone={groupStatusSummary?.tone || group.paymentStatusMeta?.tone}
+                            prefix="Split"
                           />
                           {group.payment?.status || group.paymentReadModel ? (
                             <PaymentStatusBadge
@@ -344,6 +432,12 @@ export default function AccountOrderDetailPage() {
                               prefix="Payment"
                             />
                           ) : null}
+                          <PaymentStatusBadge
+                            status={splitShipment.status}
+                            label={splitShipment.statusMeta?.label}
+                            tone={splitShipment.statusMeta?.tone}
+                            prefix="Shipment"
+                          />
                           {group.payment?.proof?.reviewStatus ? (
                             <ProofReviewBadge
                               status={group.payment.proof.reviewStatus}
@@ -363,7 +457,13 @@ export default function AccountOrderDetailPage() {
                       </div>
                       <div className="text-right text-sm text-slate-600">
                         <p className="font-semibold text-slate-900">{money(group.totalAmount)}</p>
-                        <p>Fulfillment: {group.fulfillmentStatusMeta?.label || group.fulfillmentStatus}</p>
+                        <p>
+                          Status:{" "}
+                          {groupStatusSummary?.label ||
+                            splitShipment.statusMeta?.label ||
+                            group.fulfillmentStatusMeta?.label ||
+                            group.fulfillmentStatus}
+                        </p>
                       </div>
                     </div>
                     <div className="mt-3 grid gap-3 md:grid-cols-[160px_minmax(0,1fr)]">
@@ -390,7 +490,8 @@ export default function AccountOrderDetailPage() {
                           {group.payment?.accountName || group.accountName || "-"}
                         </p>
                         <p className="mt-2 leading-6">
-                          {group.payment?.instructionText ||
+                          {groupStatusSummary?.description ||
+                            group.payment?.instructionText ||
                             group.paymentInstruction ||
                             "Per-store payment instructions are available on the payment page."}
                         </p>

@@ -83,7 +83,7 @@ export default function StoreCategoryPage() {
   const handleCategoryClick = (category) => {
     const categoryKey = String(category?.code || category?.slug || category?.id || "").trim();
     if (!categoryKey) return;
-    navigate(`/search?category=${encodeURIComponent(categoryKey)}`);
+    navigate(`/search?category=${encodeURIComponent(categoryKey)}&page=1`);
   };
 
   if (isCategoryListMode) {

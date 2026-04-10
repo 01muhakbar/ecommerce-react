@@ -14,6 +14,19 @@ export default function SearchProductCard({ product, variant = "grid" }) {
   const timerRef = useRef(null);
 
   const productId = product?.id ?? product?.slug;
+  const productSlug = String(product?.routeSlug || product?.slug || product?.id || "").trim();
+  const storeSlug = String(product?.storeSlug || "").trim();
+  const productHref = useMemo(() => {
+    const explicitHref = String(product?.productHref || "").trim();
+    if (explicitHref) return explicitHref;
+    if (storeSlug && productSlug) {
+      return `/store/${encodeURIComponent(storeSlug)}/products/${encodeURIComponent(productSlug)}`;
+    }
+    if (productId) {
+      return `/product/${encodeURIComponent(String(productId))}`;
+    }
+    return "";
+  }, [product?.productHref, productId, productSlug, storeSlug]);
   const productName = product?.name || product?.title || "Product";
   const ratingValue = Number(product?.rating ?? product?.averageRating ?? 0);
   const safeRating = Number.isFinite(ratingValue) && ratingValue > 0 ? ratingValue : 4.5;
@@ -43,6 +56,10 @@ export default function SearchProductCard({ product, variant = "grid" }) {
   }, [resolvedImage]);
 
   const openProduct = () => {
+    if (productHref) {
+      navigate(productHref);
+      return;
+    }
     if (!productId) return;
     navigate(`/product/${productId}`);
   };
@@ -116,9 +133,18 @@ export default function SearchProductCard({ product, variant = "grid" }) {
             </span>
           ) : null}
 
-          <span className="absolute bottom-3 left-3 inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm sm:h-9 sm:w-9">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              openProduct();
+            }}
+            aria-label={`View ${productName}`}
+            className="absolute bottom-3 left-3 inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-slate-700 sm:h-9 sm:w-9"
+          >
             <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-          </span>
+          </button>
           {!isListVariant ? (
             <button
               type="button"

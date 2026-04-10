@@ -41,6 +41,22 @@ function StatusMetaBadge({ label, tone, prefix = "" }) {
   );
 }
 
+const NOT_CONFIRMED_HELPER =
+  "Not confirmed includes unpaid, expired, failed, and cancelled store splits.";
+
+const getOperationalCounts = (entry) => entry?.operationalCounts || entry?.counts || null;
+
+const getStoreSplitHelperLines = (counts) => {
+  const lines = [];
+  if (Number(counts?.shipmentLaneSuborders || 0) > 0) {
+    lines.push(`Shipment lane: ${counts.shipmentLaneSuborders}`);
+  }
+  if (Number(counts?.finalNegativeSuborders || 0) > 0) {
+    lines.push(`Final-negative: ${counts.finalNegativeSuborders}`);
+  }
+  return lines;
+};
+
 export default function AdminPaymentAuditPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchInput, setSearchInput] = useState(searchParams.get("search") || "");
@@ -84,7 +100,8 @@ export default function AdminPaymentAuditPage() {
         <div>
           <h1 className="text-[22px] font-semibold text-slate-800">Payment Audit</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Read-only audit trail for parent order, suborder, payment, and proof lifecycle.
+            Parent order stays aggregate. Store split counters below prefer operational split
+            payment and shipment truth.
           </p>
         </div>
         <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -179,6 +196,10 @@ export default function AdminPaymentAuditPage() {
         </div>
       </section>
 
+      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        {NOT_CONFIRMED_HELPER}
+      </div>
+
       {auditQuery.isLoading ? (
         <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
           Loading payment audit...
@@ -210,67 +231,83 @@ export default function AdminPaymentAuditPage() {
                     <th className="px-4 py-3">Stores</th>
                     <th className="px-4 py-3">Grand Total</th>
                     <th className="px-4 py-3">Parent State</th>
-                    <th className="px-4 py-3">Counts</th>
+                    <th className="px-4 py-3">Store Split Status</th>
                     <th className="px-4 py-3">Created</th>
                     <th className="px-4 py-3 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {items.map((entry) => (
-                    <tr key={entry.orderId} className="align-top">
-                      <td className="px-4 py-4">
-                        <div className="font-semibold text-slate-900">{entry.orderNumber}</div>
-                        <div className="text-xs text-slate-500">ID {entry.orderId}</div>
-                        <div className="mt-2">
-                          <CheckoutModeBadge mode={entry.checkoutMode} />
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="font-medium text-slate-900">{entry.buyerName}</div>
-                        <div className="text-xs text-slate-500">{entry.buyerEmail || "-"}</div>
-                      </td>
-                      <td className="px-4 py-4 text-slate-700">{entry.checkoutMode}</td>
-                      <td className="px-4 py-4 text-slate-700">{entry.totalStores}</td>
-                      <td className="px-4 py-4 font-medium text-slate-900">
-                        {formatCurrency(entry.grandTotal)}
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="space-y-1">
-                          <StatusMetaBadge
-                            label={entry.orderStatusMeta?.label || entry.orderStatus}
-                            tone={entry.orderStatusMeta?.tone}
-                            prefix="Order"
-                          />
-                          <PaymentStatusBadge
-                            status={entry.paymentStatus}
-                            label={entry.paymentStatusMeta?.label}
-                            tone={entry.paymentStatusMeta?.tone}
-                            prefix="Parent"
-                          />
-                          <div className="text-xs text-slate-500">
-                            {entry.orderStatusMeta?.description ||
-                              entry.paymentStatusMeta?.description ||
-                              "-"}
+                  {items.map((entry) => {
+                    const counts = getOperationalCounts(entry);
+                    const helperLines = getStoreSplitHelperLines(counts);
+
+                    return (
+                      <tr key={entry.orderId} className="align-top">
+                        <td className="px-4 py-4">
+                          <div className="font-semibold text-slate-900">{entry.orderNumber}</div>
+                          <div className="text-xs text-slate-500">ID {entry.orderId}</div>
+                          <div className="mt-2">
+                            <CheckoutModeBadge mode={entry.checkoutMode} />
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-xs text-slate-600">
-                        <div>Paid: {entry.counts.paidSuborders}</div>
-                        <div>Pending: {entry.counts.pendingSuborders}</div>
-                        <div>Unpaid: {entry.counts.unpaidSuborders}</div>
-                        <div>Rejected: {entry.counts.rejectedPayments}</div>
-                      </td>
-                      <td className="px-4 py-4 text-slate-600">{formatDateTime(entry.createdAt)}</td>
-                      <td className="px-4 py-4 text-right">
-                        <Link
-                          to={`/admin/online-store/payment-audit/${entry.orderId}`}
-                          className="inline-flex rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                        >
-                          View Detail
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="font-medium text-slate-900">{entry.buyerName}</div>
+                          <div className="text-xs text-slate-500">{entry.buyerEmail || "-"}</div>
+                        </td>
+                        <td className="px-4 py-4 text-slate-700">{entry.checkoutMode}</td>
+                        <td className="px-4 py-4 text-slate-700">{entry.totalStores}</td>
+                        <td className="px-4 py-4 font-medium text-slate-900">
+                          {formatCurrency(entry.grandTotal)}
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="space-y-1">
+                            <StatusMetaBadge
+                              label={entry.orderStatusMeta?.label || entry.orderStatus}
+                              tone={entry.orderStatusMeta?.tone}
+                              prefix="Order"
+                            />
+                            <PaymentStatusBadge
+                              status={entry.paymentStatus}
+                              label={entry.paymentStatusMeta?.label}
+                              tone={entry.paymentStatusMeta?.tone}
+                              prefix="Parent"
+                            />
+                            <div className="text-xs text-slate-500">
+                              {entry.checkoutMode === "MULTI_STORE"
+                                ? "Parent badges stay aggregate. Split payment and shipment truth is audited separately."
+                                : entry.orderStatusMeta?.description ||
+                                  entry.paymentStatusMeta?.description ||
+                                  "-"}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 text-xs text-slate-600">
+                          <div>Paid: {counts?.paidSuborders || 0}</div>
+                          <div>Under Review: {counts?.pendingSuborders || 0}</div>
+                          <div>Not Confirmed: {counts?.unpaidSuborders || 0}</div>
+                          <div>Rejected Proofs: {counts?.rejectedPayments || 0}</div>
+                          {helperLines.length > 0 ? (
+                            <div className="mt-2 space-y-1 text-[11px] text-slate-500">
+                              {helperLines.map((line) => (
+                                <div key={`${entry.orderId}-${line}`}>{line}</div>
+                              ))}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td className="px-4 py-4 text-slate-600">
+                          {formatDateTime(entry.createdAt)}
+                        </td>
+                        <td className="px-4 py-4 text-right">
+                          <Link
+                            to={`/admin/online-store/payment-audit/${entry.orderId}`}
+                            className="inline-flex rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                          >
+                            View Detail
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

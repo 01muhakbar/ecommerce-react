@@ -66,6 +66,8 @@
   - `/api/store/orders/:ref`
 
 ## Validation Commands
+- Preferred one-shot staging smoke:
+  - `pnpm qa:staging:core`
 - `pnpm -F server build`
 - `pnpm -F client build`
 - `pnpm -F server smoke:store-readiness`

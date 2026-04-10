@@ -250,6 +250,20 @@ export const normalizeStorefrontProduct = (rawProduct: any) => {
     0,
     Math.round(toSafeNumber(rawProduct?.reviewCount ?? rawProduct?.reviewsCount, 0))
   );
+  const soldCount = Math.max(
+    0,
+    Math.round(
+      toSafeNumber(
+        rawProduct?.soldCount ??
+          rawProduct?.soldQty ??
+          rawProduct?.qtySold ??
+          rawProduct?.unitsSold ??
+          rawProduct?.salesCount ??
+          rawProduct?.totalSold,
+        0
+      )
+    )
+  );
   const published = toBoolean(rawProduct?.published ?? rawProduct?.isPublished, false);
   const status = toText(rawProduct?.status) || (published ? "active" : "draft");
   const preorderDays = toNumberOrNull(rawProduct?.preorderDays);
@@ -309,6 +323,7 @@ export const normalizeStorefrontProduct = (rawProduct: any) => {
     rating: ratingAvg,
     ratingAvg,
     reviewCount,
+    soldCount,
     badgeLabel:
       toText(rawProduct?.badgeLabel ?? rawProduct?.label ?? rawProduct?.badge) || null,
     unit: toText(rawProduct?.unit ?? rawProduct?.tags?.unit) || null,

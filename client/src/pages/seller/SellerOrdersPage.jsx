@@ -22,6 +22,15 @@ import {
   getOrderContractMeta,
   getOrderContractSummary,
 } from "../../utils/orderContract.ts";
+import {
+  getSplitOperationalBridge,
+  getSplitOperationalEnabledSellerFulfillmentActions,
+  getSplitOperationalFinality,
+  getSplitOperationalPayment,
+  getSplitOperationalShipment,
+  getSplitOperationalStatusSummary,
+  getSplitOperationalSellerFulfillmentActions,
+} from "../../utils/splitOperationalTruth.ts";
 
 const PAYMENT_STATUS_CLASS = {
   UNPAID: "stone",
@@ -55,12 +64,53 @@ const CHECKOUT_MODE_CLASS = {
   MULTI_STORE: "teal",
 };
 
+const SELLER_PAYMENT_PAID_CODES = new Set(["PAID"]);
+const SELLER_PAYMENT_REVIEW_CODES = new Set(["PENDING_CONFIRMATION", "UNDER_REVIEW"]);
+const SELLER_ACTIVE_FULFILLMENT_CODES = new Set([
+  "READY",
+  "PROCESSING",
+  "IN_PROGRESS",
+  "SHIPPED",
+  "SHIPPING",
+  "IN_DELIVERY",
+]);
+
 const getStatusClass = (value, map) =>
   map[String(value || "").trim()] || map[String(value || "").toUpperCase()] ||
   "stone";
 
-function StatusChip({ value, label, map = PAYMENT_STATUS_CLASS }) {
-  return <SellerWorkspaceBadge label={label || String(value || "-")} tone={getStatusClass(value, map)} />;
+const normalizeAggregateCode = (value) =>
+  String(value || "")
+    .trim()
+    .toUpperCase();
+
+const getAggregateSellerStatusCode = (item) =>
+  normalizeAggregateCode(
+    getSplitOperationalStatusSummary(item)?.code ||
+      getOrderContractSummary(item?.contract)?.code ||
+      item?.readModel?.primaryStatus?.code ||
+      item?.fulfillmentStatusMeta?.code ||
+      item?.fulfillmentStatus
+  );
+
+const getAggregateSellerPaymentCode = (item) =>
+  normalizeAggregateCode(
+    getSplitOperationalPayment(item)?.status ||
+      getOrderContractMeta(item?.contract, "paymentStatusMeta")?.code ||
+      item?.readModel?.paymentState?.code ||
+      item?.paymentStatusMeta?.code ||
+      item?.paymentSummary?.statusMeta?.code ||
+      item?.paymentSummary?.status ||
+      item?.paymentStatus
+  );
+
+function StatusChip({ value, label, map = PAYMENT_STATUS_CLASS, tone }) {
+  return (
+    <SellerWorkspaceBadge
+      label={label || String(value || "-")}
+      tone={tone || getStatusClass(value, map)}
+    />
+  );
 }
 
 function InfoPill({ label, value }) {
@@ -90,10 +140,14 @@ const FULFILLMENT_FILTER_OPTIONS = [
 ];
 
 function buildOrderStats(items) {
-  const paidCount = items.filter((item) => item.paymentStatus === "PAID").length;
-  const reviewCount = items.filter((item) => item.paymentStatus === "PENDING_CONFIRMATION").length;
+  const paidCount = items.filter((item) =>
+    SELLER_PAYMENT_PAID_CODES.has(getAggregateSellerPaymentCode(item))
+  ).length;
+  const reviewCount = items.filter((item) =>
+    SELLER_PAYMENT_REVIEW_CODES.has(getAggregateSellerPaymentCode(item))
+  ).length;
   const activeFulfillmentCount = items.filter((item) =>
-    ["PROCESSING", "SHIPPED"].includes(item.fulfillmentStatus)
+    SELLER_ACTIVE_FULFILLMENT_CODES.has(getAggregateSellerStatusCode(item))
   ).length;
   return {
     paidCount,
@@ -130,19 +184,29 @@ const getPaymentSnapshotHint = (item) => {
 };
 
 const getSellerOperationalHint = (item) =>
+  getSplitOperationalBridge(item)?.shipmentBlockedReason ||
+  getSplitOperationalStatusSummary(item)?.description ||
   item.readModel?.operationalNote ||
-  "Use suborder payment and seller fulfillment as the operational truth for this store split.";
+  "Use split payment and split shipment as the operational truth for this store split.";
 
 const getSellerStatusMeta = (item) =>
+  getSplitOperationalStatusSummary(item) ||
   getOrderContractSummary(item.contract) ||
   item.readModel?.primaryStatus ||
   item.fulfillmentStatusMeta ||
   null;
 
 const getSellerPaymentMeta = (item) =>
+  getSplitOperationalPayment(item)?.statusMeta ||
   getOrderContractMeta(item.contract, "paymentStatusMeta") ||
   item.readModel?.paymentState ||
   item.paymentStatusMeta ||
+  null;
+
+const getSellerShipmentMeta = (item) =>
+  getSplitOperationalShipment(item)?.statusMeta ||
+  item.shippingStatusMeta ||
+  item.fulfillmentStatusMeta ||
   null;
 
 const getParentOrderMeta = (item) =>
@@ -516,18 +580,24 @@ export default function SellerOrdersPage() {
           <SellerWorkspaceStatCard
             label="Visible Suborders"
             value={String(pagination.total || 0)}
-            hint="Rows scoped to the active seller store only."
+            hint="Rows stay scoped to the active seller store and current filters only."
           />
           <SellerWorkspaceStatCard
             label="Paid Split Orders"
             value={String(orderStats.paidCount)}
-            hint={`Awaiting proof review: ${orderStats.reviewCount}`}
-            tone="emerald"
+            hint={`Awaiting payment review: ${orderStats.reviewCount}. This count follows seller payment contract/meta on the current page.`}
+            tone={
+              orderStats.reviewCount > 0
+                ? "amber"
+                : orderStats.paidCount > 0
+                  ? "sky"
+                  : "stone"
+            }
           />
           <SellerWorkspaceStatCard
-            label="Active Fulfillment"
+            label="Open Fulfillment"
             value={String(orderStats.activeFulfillmentCount)}
-            hint="Processing or shipped suborders in the current page."
+            hint="Ready, processing, shipping, or in-delivery seller states on the current page."
             tone="amber"
           />
         </section>
@@ -571,8 +641,32 @@ export default function SellerOrdersPage() {
           {items.map((item) => {
             const sellerStatusMeta = getSellerStatusMeta(item);
             const sellerPaymentMeta = getSellerPaymentMeta(item);
+            const sellerShipmentMeta = getSellerShipmentMeta(item);
+            const operationalShipment = getSplitOperationalShipment(item);
+            const operationalBridge = getSplitOperationalBridge(item);
+            const operationalFinality = getSplitOperationalFinality(item);
             const parentOrderMeta = getParentOrderMeta(item);
             const parentPaymentMeta = getParentPaymentMeta(item);
+            const fulfillmentActions =
+              getSplitOperationalSellerFulfillmentActions(item).length > 0
+                ? getSplitOperationalSellerFulfillmentActions(item)
+                : Array.isArray(item.governance?.fulfillment?.availableActions)
+                  ? item.governance.fulfillment.availableActions
+                  : [];
+            const enabledFulfillmentActions =
+              getSplitOperationalEnabledSellerFulfillmentActions(item).length > 0
+                ? getSplitOperationalEnabledSellerFulfillmentActions(item)
+                : fulfillmentActions.filter((action) => action?.enabled !== false);
+            const blockedFulfillmentReason =
+              operationalFinality.isFinalNegative
+                ? sellerStatusMeta?.description ||
+                  "This store split is already closed in a final-negative state."
+                : operationalBridge.shipmentBlockedReason ||
+              fulfillmentActions.find(
+                (action) => action?.enabled === false && action?.reason
+              )?.reason ||
+              item.governance?.fulfillment?.mutationBlockedReason ||
+              "No fulfillment mutation is available for this suborder.";
 
             return (
               <SellerWorkspacePanel key={item.suborderId} className="p-4">
@@ -592,14 +686,22 @@ export default function SellerOrdersPage() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <StatusChip
-                      value={item.fulfillmentStatus}
-                      label={`Seller ${sellerStatusMeta?.label || item.fulfillmentStatus}`}
+                      value={sellerStatusMeta?.code || item.fulfillmentStatus}
+                      label={`Operational ${sellerStatusMeta?.label || item.fulfillmentStatus}`}
                       map={FULFILLMENT_STATUS_CLASS}
+                      tone={sellerStatusMeta?.tone}
                     />
                     <StatusChip
-                      value={item.paymentStatus}
-                      label={`Store split ${sellerPaymentMeta?.label || item.paymentStatus}`}
+                      value={getSplitOperationalPayment(item)?.status || item.paymentStatus}
+                      label={`Payment ${sellerPaymentMeta?.label || item.paymentStatus}`}
                       map={PAYMENT_STATUS_CLASS}
+                      tone={sellerPaymentMeta?.tone}
+                    />
+                    <StatusChip
+                      value={operationalShipment.status}
+                      label={`Shipment ${sellerShipmentMeta?.label || operationalShipment.status || item.shippingStatus || item.fulfillmentStatus}`}
+                      map={FULFILLMENT_STATUS_CLASS}
+                      tone={sellerShipmentMeta?.tone}
                     />
                     <StatusChip
                       value={item.order?.checkoutMode}
@@ -616,6 +718,7 @@ export default function SellerOrdersPage() {
                         value={item.paymentSummary.status}
                         label={`Payment ${item.paymentSummary.statusMeta?.label || item.paymentSummary.status}`}
                         map={PAYMENT_STATUS_CLASS}
+                        tone={item.paymentSummary.statusMeta?.tone}
                       />
                     ) : null}
                   </div>
@@ -652,7 +755,7 @@ export default function SellerOrdersPage() {
                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5 text-sm text-slate-600 xl:w-[280px]">
                   <p className="font-semibold text-slate-900">Operational Snapshot</p>
                   <p className="mt-2">
-                    Seller Status:{" "}
+                    Operational Status:{" "}
                     <span className="font-semibold text-slate-900">
                       {sellerStatusMeta?.label || item.fulfillmentStatus}
                     </span>
@@ -661,6 +764,15 @@ export default function SellerOrdersPage() {
                     Store Split Payment:{" "}
                     <span className="font-medium text-slate-900">
                       {sellerPaymentMeta?.label || item.paymentStatus}
+                    </span>
+                  </p>
+                  <p className="mt-1">
+                    Shipment Truth:{" "}
+                    <span className="font-medium text-slate-900">
+                      {sellerShipmentMeta?.label ||
+                        operationalShipment.status ||
+                        item.shippingStatus ||
+                        item.fulfillmentStatus}
                     </span>
                   </p>
                   <p className="mt-1">
@@ -699,12 +811,14 @@ export default function SellerOrdersPage() {
                     {sellerStatusMeta?.description || getSellerOperationalHint(item)}
                   </p>
                   <p className="mt-2 text-xs leading-5 text-slate-500">
-                    {item.readModel?.parentOrder?.note || getPaymentSnapshotHint(item)}
+                    {operationalBridge.shipmentBlockedReason ||
+                      item.readModel?.parentOrder?.note ||
+                      getPaymentSnapshotHint(item)}
                   </p>
 
-                  {item.governance?.fulfillment?.availableActions?.length > 0 ? (
+                  {enabledFulfillmentActions.length > 0 ? (
                     <div className="mt-4 space-y-2">
-                      {item.governance.fulfillment.availableActions.map((action) => {
+                      {enabledFulfillmentActions.map((action) => {
                         const actionKey = `${item.suborderId}:${action.code}`;
                         return (
                           <button
@@ -728,8 +842,7 @@ export default function SellerOrdersPage() {
                     </div>
                   ) : (
                     <p className="mt-4 text-xs leading-5 text-slate-500">
-                      {item.governance?.fulfillment?.mutationBlockedReason ||
-                        "No fulfillment mutation is available for this suborder."}
+                      {blockedFulfillmentReason}
                     </p>
                   )}
 

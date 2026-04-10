@@ -7,6 +7,13 @@ import {
   PaymentStatusBadge,
   ProofReviewBadge,
 } from "../../components/payments/PaymentReadModelBadges.jsx";
+import {
+  getSplitOperationalBridge,
+  getSplitOperationalFinality,
+  getSplitOperationalPayment,
+  getSplitOperationalShipment,
+  getSplitOperationalStatusSummary,
+} from "../../utils/splitOperationalTruth.ts";
 
 const formatDateTime = (value) => {
   if (!value) return "-";
@@ -43,6 +50,78 @@ function StatusMetaBadge({ label, tone, prefix = "" }) {
     </span>
   );
 }
+
+const NOT_CONFIRMED_HELPER =
+  "Not confirmed groups unpaid, expired, failed, and cancelled store splits into one compatibility bucket.";
+
+const getSuborderPaymentSummary = (suborder) => {
+  const payment = getSplitOperationalPayment(suborder);
+  const shipment = getSplitOperationalShipment(suborder);
+  const bridge = getSplitOperationalBridge(suborder);
+  const summary = getSplitOperationalStatusSummary(suborder);
+
+  if (payment.status === "PAID" && suborder?.paidAt) {
+    return `Paid ${formatDateTime(suborder.paidAt)}`;
+  }
+  if (bridge.shipmentBlockedReason) return bridge.shipmentBlockedReason;
+  if (summary?.description) return summary.description;
+  if (shipment.statusMeta?.description) return shipment.statusMeta.description;
+  return `Payment ${payment.statusMeta?.label || payment.status || "-"}`;
+};
+
+const getSuborderOperationalDescription = (suborder) => {
+  const summary = getSplitOperationalStatusSummary(suborder);
+  const payment = getSplitOperationalPayment(suborder);
+  const shipment = getSplitOperationalShipment(suborder);
+  const bridge = getSplitOperationalBridge(suborder);
+  const finality = getSplitOperationalFinality(suborder);
+
+  if (finality.isFinalNegative) {
+    return (
+      summary?.description ||
+      shipment.blockedReason ||
+      shipment.statusMeta?.description ||
+      payment.statusMeta?.description ||
+      "This store split is closed in a final-negative state."
+    );
+  }
+  if (bridge.shipmentBlockedReason) return bridge.shipmentBlockedReason;
+  return (
+    summary?.description ||
+    payment.statusMeta?.description ||
+    shipment.statusMeta?.description ||
+    "-"
+  );
+};
+
+const summarizeOperationalCounts = (suborders) =>
+  (Array.isArray(suborders) ? suborders : []).reduce(
+    (acc, suborder) => {
+      const payment = getSplitOperationalPayment(suborder);
+      const summary = getSplitOperationalStatusSummary(suborder);
+      const finality = getSplitOperationalFinality(suborder);
+
+      if (payment.status === "PAID") acc.paidSuborders += 1;
+      else if (payment.status === "PENDING_CONFIRMATION") acc.pendingSuborders += 1;
+      else acc.unpaidSuborders += 1;
+
+      if (summary?.lane === "SHIPMENT" && !finality.isFinalNegative) {
+        acc.shipmentLaneSuborders += 1;
+      }
+      if (finality.isFinalNegative) {
+        acc.finalNegativeSuborders += 1;
+      }
+
+      return acc;
+    },
+    {
+      paidSuborders: 0,
+      pendingSuborders: 0,
+      unpaidSuborders: 0,
+      shipmentLaneSuborders: 0,
+      finalNegativeSuborders: 0,
+    }
+  );
 
 export default function AdminPaymentAuditDetailPage() {
   const { orderId } = useParams();
@@ -84,6 +163,7 @@ export default function AdminPaymentAuditDetailPage() {
   }
 
   const parent = detail.parent;
+  const operationalCounts = summarizeOperationalCounts(detail.suborders);
 
   return (
     <div className="space-y-5">
@@ -139,30 +219,54 @@ export default function AdminPaymentAuditDetailPage() {
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-4">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Paid</p>
-              <p className="mt-1 text-sm font-semibold text-slate-900">{detail.counts.paidSuborders}</p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pending</p>
-              <p className="mt-1 text-sm font-semibold text-slate-900">
-                {detail.counts.pendingSuborders}
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Paid Splits
               </p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Unpaid</p>
               <p className="mt-1 text-sm font-semibold text-slate-900">
-                {detail.counts.unpaidSuborders}
+                {operationalCounts.paidSuborders}
               </p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Rejected
+                Under Review
+              </p>
+              <p className="mt-1 text-sm font-semibold text-slate-900">
+                {operationalCounts.pendingSuborders}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Not Confirmed
+              </p>
+              <p className="mt-1 text-sm font-semibold text-slate-900">
+                {operationalCounts.unpaidSuborders}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Rejected Proofs
               </p>
               <p className="mt-1 text-sm font-semibold text-slate-900">
                 {detail.counts.rejectedPayments}
               </p>
             </div>
           </div>
+          <p className="mt-3 text-sm text-slate-500">{NOT_CONFIRMED_HELPER}</p>
+          {operationalCounts.shipmentLaneSuborders > 0 ||
+          operationalCounts.finalNegativeSuborders > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
+              {operationalCounts.shipmentLaneSuborders > 0 ? (
+                <span className="rounded-full bg-slate-100 px-3 py-1">
+                  Shipment lane {operationalCounts.shipmentLaneSuborders}
+                </span>
+              ) : null}
+              {operationalCounts.finalNegativeSuborders > 0 ? (
+                <span className="rounded-full bg-rose-50 px-3 py-1 text-rose-700">
+                  Final-negative {operationalCounts.finalNegativeSuborders}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
@@ -177,6 +281,10 @@ export default function AdminPaymentAuditDetailPage() {
           <div className="mt-4 space-y-2 text-sm text-slate-600">
             <p>{parent.paymentStatusMeta?.description || "Parent payment meta is unavailable."}</p>
             <p>{parent.orderStatusMeta?.description || "Parent order meta is unavailable."}</p>
+            <p>
+              Parent badges stay aggregate. Store split cards below are the operational truth for
+              split payment and split shipment state.
+            </p>
           </div>
           {detail.split.checkoutMode === "LEGACY" ? (
             <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -187,214 +295,268 @@ export default function AdminPaymentAuditDetailPage() {
       </div>
 
       <div className="space-y-4">
-        {detail.suborders.map((suborder) => (
-          <section
-            key={suborder.suborderId}
-            className="rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.05)]"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-lg font-semibold text-slate-900">{suborder.suborderNumber}</h2>
-                  <PaymentStatusBadge
-                    status={suborder.paymentStatus}
-                    label={suborder.paymentStatusMeta?.label}
-                    tone={suborder.paymentStatusMeta?.tone}
-                    prefix="Suborder"
-                  />
-                  <StatusMetaBadge
-                    label={suborder.fulfillmentStatusMeta?.label || suborder.fulfillmentStatus}
-                    tone={suborder.fulfillmentStatusMeta?.tone}
-                  />
-                </div>
-                <p className="mt-1 text-sm text-slate-500">
-                  {suborder.store.name} • Store ID {suborder.store.id || "-"} • Paid{" "}
-                  {formatDateTime(suborder.paidAt)}
-                </p>
-                <p className="mt-2 text-sm text-slate-600">
-                  {suborder.paymentStatusMeta?.description || suborder.fulfillmentStatusMeta?.description || "-"}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Store Total
-                </p>
-                <p className="mt-1 text-lg font-semibold text-slate-900">
-                  {formatCurrency(suborder.totalAmount)}
-                </p>
-              </div>
-            </div>
+        {detail.suborders.map((suborder) => {
+          const summary = getSplitOperationalStatusSummary(suborder);
+          const payment = getSplitOperationalPayment(suborder);
+          const shipment = getSplitOperationalShipment(suborder);
+          const bridge = getSplitOperationalBridge(suborder);
+          const finality = getSplitOperationalFinality(suborder);
 
-            <div className="mt-4 grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-              <div className="space-y-4">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Payment Profile
+          return (
+            <section
+              key={suborder.suborderId}
+              className="rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.05)]"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-lg font-semibold text-slate-900">
+                      {suborder.suborderNumber}
+                    </h2>
+                    <StatusMetaBadge
+                      label={summary?.label || summary?.code || "Operational status"}
+                      tone={summary?.tone}
+                      prefix={summary?.lane === "SHIPMENT" ? "Shipment Lane" : "Payment Lane"}
+                    />
+                    <PaymentStatusBadge
+                      status={payment.status}
+                      label={payment.statusMeta?.label}
+                      tone={payment.statusMeta?.tone}
+                      prefix="Split Payment"
+                    />
+                    <StatusMetaBadge
+                      label={shipment.statusMeta?.label || shipment.status}
+                      tone={shipment.statusMeta?.tone}
+                      prefix="Shipment"
+                    />
+                  </div>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {suborder.store.name} • Store ID {suborder.store.id || "-"} •{" "}
+                    {getSuborderPaymentSummary(suborder)}
                   </p>
-                  {suborder.paymentProfile ? (
-                    <div className="mt-3 space-y-2 text-sm text-slate-700">
-                      <p>Provider: {suborder.paymentProfile.providerCode}</p>
-                      <p>Type: {suborder.paymentProfile.paymentType}</p>
-                      <p>Account: {suborder.paymentProfile.accountName}</p>
-                      <p>Merchant: {suborder.paymentProfile.merchantName}</p>
-                      <p>Merchant ID: {suborder.paymentProfile.merchantId || "-"}</p>
-                      <p>Status: {suborder.paymentProfile.verificationStatus}</p>
-                      <p>Active: {suborder.paymentProfile.isActive ? "Yes" : "No"}</p>
-                      {suborder.paymentProfile.instructionText ? (
-                        <p>Instruction: {suborder.paymentProfile.instructionText}</p>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <p className="mt-3 text-sm text-slate-500">No payment profile snapshot found.</p>
-                  )}
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Items</p>
-                  <div className="mt-3 space-y-3">
-                    {suborder.items.map((item) => (
-                      <div
-                        key={`${suborder.suborderId}-${item.id || item.productId}`}
-                        className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm"
-                      >
-                        <div>
-                          <p className="font-semibold text-slate-900">{item.productName}</p>
-                          <p className="text-xs text-slate-500">
-                            {item.qty} × {formatCurrency(item.price)}
-                            {item.sku ? ` • SKU ${item.sku}` : ""}
-                          </p>
-                        </div>
-                        <div className="font-semibold text-slate-900">
-                          {formatCurrency(item.totalPrice)}
-                        </div>
-                      </div>
-                    ))}
+                  <p className="mt-2 text-sm text-slate-600">
+                    {getSuborderOperationalDescription(suborder)}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
+                    {bridge.currentLane ? (
+                      <span className="rounded-full bg-slate-100 px-3 py-1">
+                        Current lane {bridge.currentLane}
+                      </span>
+                    ) : null}
+                    {bridge.shipmentBlocked ? (
+                      <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-700">
+                        Shipment blocked
+                      </span>
+                    ) : null}
+                    {finality.isFinalNegative ? (
+                      <span className="rounded-full bg-rose-50 px-3 py-1 text-rose-700">
+                        Final-negative split
+                      </span>
+                    ) : null}
                   </div>
                 </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Store Split Total
+                  </p>
+                  <p className="mt-1 text-lg font-semibold text-slate-900">
+                    {formatCurrency(suborder.totalAmount)}
+                  </p>
+                </div>
               </div>
 
-              <div className="space-y-4">
-                {suborder.payments.map((payment) => (
-                  <div
-                    key={payment.id}
-                    className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Payment
-                        </p>
-                        <p className="mt-1 text-sm font-semibold text-slate-900">
-                          {payment.internalReference}
-                        </p>
-                      </div>
-                      <PaymentStatusBadge
-                        status={payment.status}
-                        label={payment.statusMeta?.label}
-                        tone={payment.statusMeta?.tone}
-                        prefix="Payment"
-                      />
-                    </div>
-                    <div className="mt-3 grid gap-3 md:grid-cols-2 text-sm text-slate-700">
-                      <p>Channel: {payment.paymentChannel}</p>
-                      <p>Type: {payment.paymentType}</p>
-                      <p>Amount: {formatCurrency(payment.amount)}</p>
-                      <p>Paid At: {formatDateTime(payment.paidAt)}</p>
-                      <p>Expires: {formatDateTime(payment.expiresAt)}</p>
-                      <p>Proof Submitted: {payment.proofSubmitted ? "Yes" : "No"}</p>
-                    </div>
-                    <p className="mt-3 text-sm text-slate-600">
-                      {payment.statusMeta?.description || "-"}
+              <div className="mt-4 grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Payment Profile
                     </p>
-                    {payment.proof ? (
-                      <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="font-semibold text-slate-900">Latest Proof</p>
-                          <ProofReviewBadge
-                            status={payment.proof.reviewStatus}
-                            label={payment.proof.reviewMeta?.label}
-                            prefix="Proof"
-                          />
-                        </div>
-                        <div className="mt-3 space-y-1.5">
-                          <p>Sender: {payment.proof.senderName}</p>
-                          <p>Wallet/Bank: {payment.proof.senderBankOrWallet}</p>
-                          <p>Transfer Amount: {formatCurrency(payment.proof.transferAmount)}</p>
-                          <p>Transfer Time: {formatDateTime(payment.proof.transferTime)}</p>
-                          <p>Buyer Note: {payment.proof.note || "-"}</p>
-                          <p>Review Note: {payment.proof.reviewNote || "-"}</p>
-                          <p>Review Status: {payment.proof.reviewMeta?.label || payment.proof.reviewStatus}</p>
-                          <p>Uploaded By: {payment.proof.uploadedByName || "-"}</p>
-                          <p>Reviewed By: {payment.proof.reviewedByName || "-"}</p>
-                          <p>Reviewed At: {formatDateTime(payment.proof.reviewedAt)}</p>
-                          {payment.proof.proofImageUrl ? (
-                            <a
-                              href={payment.proof.proofImageUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex text-sm font-semibold text-emerald-700 underline"
-                            >
-                              Open proof image
-                            </a>
-                          ) : null}
-                        </div>
+                    {suborder.paymentProfile ? (
+                      <div className="mt-3 space-y-2 text-sm text-slate-700">
+                        <p>Provider: {suborder.paymentProfile.providerCode}</p>
+                        <p>Type: {suborder.paymentProfile.paymentType}</p>
+                        <p>Account: {suborder.paymentProfile.accountName}</p>
+                        <p>Merchant: {suborder.paymentProfile.merchantName}</p>
+                        <p>Merchant ID: {suborder.paymentProfile.merchantId || "-"}</p>
+                        <p>Status: {suborder.paymentProfile.verificationStatus}</p>
+                        <p>Active: {suborder.paymentProfile.isActive ? "Yes" : "No"}</p>
+                        {suborder.paymentProfile.instructionText ? (
+                          <p>Instruction: {suborder.paymentProfile.instructionText}</p>
+                        ) : null}
                       </div>
                     ) : (
-                      <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-500">
-                        No payment proof found for this payment.
-                      </div>
+                      <p className="mt-3 text-sm text-slate-500">No payment profile snapshot found.</p>
                     )}
-                    <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-slate-900">
-                          Payment Status Timeline
-                        </p>
-                        <span className="text-xs font-medium text-slate-500">
-                          {(payment.logs || []).length} event
-                          {(payment.logs || []).length === 1 ? "" : "s"}
-                        </span>
-                      </div>
-                      {Array.isArray(payment.logs) && payment.logs.length > 0 ? (
-                        <div className="mt-4 space-y-3">
-                          {payment.logs.map((log) => (
-                            <div
-                              key={`${payment.id}-log-${log.id}`}
-                              className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
-                            >
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <p className="font-semibold text-slate-900">
-                                  {renderStatusTransition(log)}
-                                </p>
-                                <span className="text-xs text-slate-500">
-                                  {formatDateTime(log.createdAt)}
-                                </span>
-                              </div>
-                              <p className="mt-1 text-xs uppercase tracking-wide text-slate-500">
-                                {log.actorType}
-                                {log.actorName ? ` • ${log.actorName}` : ""}
-                                {log.actorId ? ` • ID ${log.actorId}` : ""}
-                              </p>
-                              {log.newStatusMeta?.description ? (
-                                <p className="mt-2 text-sm text-slate-600">
-                                  {log.newStatusMeta.description}
-                                </p>
-                              ) : null}
-                              {log.note ? <p className="mt-2 text-sm text-slate-600">{log.note}</p> : null}
-                            </div>
-                          ))}
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Items
+                    </p>
+                    <div className="mt-3 space-y-3">
+                      {suborder.items.map((item) => (
+                        <div
+                          key={`${suborder.suborderId}-${item.id || item.productId}`}
+                          className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm"
+                        >
+                          <div>
+                            <p className="font-semibold text-slate-900">{item.productName}</p>
+                            <p className="text-xs text-slate-500">
+                              {item.qty} × {formatCurrency(item.price)}
+                              {item.sku ? ` • SKU ${item.sku}` : ""}
+                            </p>
+                          </div>
+                          <div className="font-semibold text-slate-900">
+                            {formatCurrency(item.totalPrice)}
+                          </div>
                         </div>
-                      ) : (
-                        <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                          No payment activity logs yet.
-                        </div>
-                      )}
+                      ))}
                     </div>
                   </div>
-                ))}
+                </div>
+
+                <div className="space-y-4">
+                  {suborder.payments.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                      {finality.isFinalNegative
+                        ? "No payment records remain attached. This store split is already closed in a final-negative state."
+                        : bridge.shipmentBlockedReason ||
+                          "No payment records are attached to this store split yet."}
+                    </div>
+                  ) : null}
+
+                  {suborder.payments.map((paymentRecord) => (
+                    <div
+                      key={paymentRecord.id}
+                      className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Payment
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-slate-900">
+                            {paymentRecord.internalReference}
+                          </p>
+                        </div>
+                        <PaymentStatusBadge
+                          status={paymentRecord.status}
+                          label={paymentRecord.statusMeta?.label}
+                          tone={paymentRecord.statusMeta?.tone}
+                          prefix="Payment"
+                        />
+                      </div>
+                      <div className="mt-3 grid gap-3 text-sm text-slate-700 md:grid-cols-2">
+                        <p>Channel: {paymentRecord.paymentChannel}</p>
+                        <p>Type: {paymentRecord.paymentType}</p>
+                        <p>Amount: {formatCurrency(paymentRecord.amount)}</p>
+                        <p>Paid At: {formatDateTime(paymentRecord.paidAt)}</p>
+                        <p>Expires: {formatDateTime(paymentRecord.expiresAt)}</p>
+                        <p>Proof Submitted: {paymentRecord.proofSubmitted ? "Yes" : "No"}</p>
+                      </div>
+                      <p className="mt-3 text-sm text-slate-600">
+                        {paymentRecord.statusMeta?.description || "-"}
+                      </p>
+
+                      {paymentRecord.proof ? (
+                        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="font-semibold text-slate-900">Latest Proof</p>
+                            <ProofReviewBadge
+                              status={paymentRecord.proof.reviewStatus}
+                              label={paymentRecord.proof.reviewMeta?.label}
+                              prefix="Proof"
+                            />
+                          </div>
+                          <div className="mt-3 space-y-1.5">
+                            <p>Sender: {paymentRecord.proof.senderName}</p>
+                            <p>Wallet/Bank: {paymentRecord.proof.senderBankOrWallet}</p>
+                            <p>
+                              Transfer Amount: {formatCurrency(paymentRecord.proof.transferAmount)}
+                            </p>
+                            <p>Transfer Time: {formatDateTime(paymentRecord.proof.transferTime)}</p>
+                            <p>Buyer Note: {paymentRecord.proof.note || "-"}</p>
+                            <p>Review Note: {paymentRecord.proof.reviewNote || "-"}</p>
+                            <p>
+                              Review Status:{" "}
+                              {paymentRecord.proof.reviewMeta?.label ||
+                                paymentRecord.proof.reviewStatus}
+                            </p>
+                            <p>Uploaded By: {paymentRecord.proof.uploadedByName || "-"}</p>
+                            <p>Reviewed By: {paymentRecord.proof.reviewedByName || "-"}</p>
+                            <p>Reviewed At: {formatDateTime(paymentRecord.proof.reviewedAt)}</p>
+                            {paymentRecord.proof.proofImageUrl ? (
+                              <a
+                                href={paymentRecord.proof.proofImageUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex text-sm font-semibold text-emerald-700 underline"
+                              >
+                                Open proof image
+                              </a>
+                            ) : null}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-500">
+                          No payment proof found for this payment.
+                        </div>
+                      )}
+
+                      <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-slate-900">
+                            Payment Status Timeline
+                          </p>
+                          <span className="text-xs font-medium text-slate-500">
+                            {(paymentRecord.logs || []).length} event
+                            {(paymentRecord.logs || []).length === 1 ? "" : "s"}
+                          </span>
+                        </div>
+                        {Array.isArray(paymentRecord.logs) && paymentRecord.logs.length > 0 ? (
+                          <div className="mt-4 space-y-3">
+                            {paymentRecord.logs.map((log) => (
+                              <div
+                                key={`${paymentRecord.id}-log-${log.id}`}
+                                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <p className="font-semibold text-slate-900">
+                                    {renderStatusTransition(log)}
+                                  </p>
+                                  <span className="text-xs text-slate-500">
+                                    {formatDateTime(log.createdAt)}
+                                  </span>
+                                </div>
+                                <p className="mt-1 text-xs uppercase tracking-wide text-slate-500">
+                                  {log.actorType}
+                                  {log.actorName ? ` • ${log.actorName}` : ""}
+                                  {log.actorId ? ` • ID ${log.actorId}` : ""}
+                                </p>
+                                {log.newStatusMeta?.description ? (
+                                  <p className="mt-2 text-sm text-slate-600">
+                                    {log.newStatusMeta.description}
+                                  </p>
+                                ) : null}
+                                {log.note ? (
+                                  <p className="mt-2 text-sm text-slate-600">{log.note}</p>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                            No payment activity logs yet.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          </section>
-        ))}
+            </section>
+          );
+        })}
       </div>
 
       <div className="flex flex-wrap gap-3">

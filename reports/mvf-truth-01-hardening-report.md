@@ -112,6 +112,12 @@ Tidak ada perubahan contract API besar.
 - Audit komponen legacy shared order table/modal dan putuskan apakah masih dipakai di route aktif. Jika masih aktif, pindahkan juga ke adapter contract yang sama.
 - Bila ingin melanjutkan hardening kecil, audit halaman dashboard atau summary order lain yang masih memetakan `order.status` langsung.
 
+## Addendum 2026-04-09
+
+- Admin order surface masih punya dua drift kecil yang sekarang ditutup:
+  - `client/src/pages/admin/Orders.jsx` dan `client/src/pages/admin/OrderDetail.jsx` tidak lagi mensintesis dropdown action lokal ketika `contract.availableActions` tidak tersedia. Dropdown sekarang ditahan agar tidak memunculkan CTA palsu.
+  - `client/src/components/admin/OrderStatusTimeline.jsx` sekarang membaca `contract.statusSummary` lebih dulu, sehingga state `FAILED`, `EXPIRED`, dan `CANCELLED` tidak lagi terlihat seperti fulfillment timeline normal.
+
 ## STEP 1 — Audit boundary ringkas
 
 - Source of truth backend store readiness:

@@ -22,7 +22,7 @@ import {
 } from "../../utils/publicOrderReference.js";
 import { normalizeDashboardSettingCopy } from "../../utils/dashboardSettingCopy.js";
 import {
-  getOrderContractAction,
+  getEnabledOrderContractAction,
   getOrderContractSummary,
   isOrderContractFinal,
 } from "../../utils/orderContract.ts";
@@ -33,6 +33,13 @@ import {
 } from "../../utils/groupedPaymentReadModel.ts";
 import { ENABLE_MULTISTORE_SHIPMENT_MVP } from "../../config/featureFlags.js";
 import { normalizeShipmentList } from "../../utils/shipmentReadModel.ts";
+import {
+  getSplitOperationalBridge,
+  getSplitOperationalPayment,
+  getSplitOperationalShipment,
+  getSplitOperationalStatusSummary,
+  isSplitOperationallyFinal,
+} from "../../utils/splitOperationalTruth.ts";
 
 const formatDate = (value) => {
   if (!value) return "-";
@@ -75,31 +82,58 @@ const normalizeLabel = (value, fallback = "") => {
 };
 
 const getSplitPresentation = (split) => {
-  const summary = getOrderContractSummary(split?.contract);
-  const fulfillmentMeta =
-    split?.fulfillmentStatusMeta && typeof split.fulfillmentStatusMeta === "object"
-      ? split.fulfillmentStatusMeta
-      : null;
-  const paymentReadModel = getGroupedPaymentReadModel(split);
-  const paymentMeta =
-    paymentReadModel?.statusMeta && typeof paymentReadModel.statusMeta === "object"
-      ? paymentReadModel.statusMeta
-      : split?.paymentStatusMeta && typeof split.paymentStatusMeta === "object"
-        ? split.paymentStatusMeta
-        : null;
+  const summary = getSplitOperationalStatusSummary(split);
+  const shipment = getSplitOperationalShipment(split);
+  const payment = getSplitOperationalPayment(split);
+  const bridge = getSplitOperationalBridge(split);
 
   return {
     summaryLabel: normalizeLabel(summary?.label, "Awaiting update"),
-    summaryDescription: normalizeLabel(summary?.description, "Latest seller split status."),
+    summaryDescription: normalizeLabel(
+      summary?.description,
+      bridge?.shipmentBlockedReason || "Latest seller split status."
+    ),
     summaryTone: summary?.tone || "slate",
     fulfillmentLabel: normalizeLabel(
-      fulfillmentMeta?.label,
-      String(split?.fulfillmentStatus || "UNFULFILLED")
+      shipment?.statusMeta?.label,
+      shipment?.status || String(split?.fulfillmentStatus || "UNFULFILLED")
     ),
-    fulfillmentTone: fulfillmentMeta?.tone || "slate",
-    paymentLabel: normalizeLabel(paymentMeta?.label, paymentReadModel?.status || "UNPAID"),
-    paymentTone: paymentMeta?.tone || "slate",
+    fulfillmentTone: shipment?.statusMeta?.tone || "slate",
+    paymentLabel: normalizeLabel(payment?.statusMeta?.label, payment?.status || "UNPAID"),
+    paymentTone: payment?.statusMeta?.tone || "slate",
   };
+};
+
+const summarizeBuyerSplitTruth = (storeSplits) => {
+  const summary = {
+    awaitingPaymentCount: 0,
+    underReviewCount: 0,
+    shipmentLaneCount: 0,
+    finalNegativeCount: 0,
+  };
+
+  (Array.isArray(storeSplits) ? storeSplits : []).forEach((split) => {
+    const splitSummary = getSplitOperationalStatusSummary(split);
+    const code = String(splitSummary?.code || "").trim().toUpperCase();
+    const lane = String(splitSummary?.lane || "").trim().toUpperCase();
+    if (code === "AWAITING_PAYMENT") {
+      summary.awaitingPaymentCount += 1;
+      return;
+    }
+    if (code === "UNDER_REVIEW") {
+      summary.underReviewCount += 1;
+      return;
+    }
+    if (Boolean(splitSummary?.isFinal) && ["FAILED", "EXPIRED", "CANCELLED", "RETURNED", "FAILED_DELIVERY"].includes(code)) {
+      summary.finalNegativeCount += 1;
+      return;
+    }
+    if (lane === "SHIPMENT") {
+      summary.shipmentLaneCount += 1;
+    }
+  });
+
+  return summary;
 };
 
 const normalizeTrackingPayload = (response) =>
@@ -115,12 +149,7 @@ const shouldPollTrackingOrder = (order) => {
   if (!isOrderContractFinal(order?.contract)) return true;
 
   const storeSplits = Array.isArray(order?.storeSplits) ? order.storeSplits : [];
-  return storeSplits.some((split) => {
-    const paymentFinal = isGroupedPaymentFinal(split);
-    const fulfillmentFinal = Boolean(split?.fulfillmentStatusMeta?.isFinal);
-    const contractFinal = isOrderContractFinal(split?.contract);
-    return !contractFinal || !paymentFinal || !fulfillmentFinal;
-  });
+  return storeSplits.some((split) => !isSplitOperationallyFinal(split));
 };
 
 const TRACKING_STEPS = [
@@ -332,26 +361,29 @@ export default function StoreOrderTrackingPage() {
   const contract = order?.contract || null;
   const statusSummary = getOrderContractSummary(contract);
   const paymentEntry = order?.paymentEntry || null;
-  const continuePaymentAction = getOrderContractAction(contract, "CONTINUE_PAYMENT");
-  const continueStripeAction = getOrderContractAction(contract, "CONTINUE_STRIPE_PAYMENT");
+  const continuePaymentAction = getEnabledOrderContractAction(contract, "CONTINUE_PAYMENT");
+  const continueStripeAction = getEnabledOrderContractAction(
+    contract,
+    "CONTINUE_STRIPE_PAYMENT"
+  );
   const stripeContinuePath =
-    String(paymentMethod || "").toUpperCase() === "STRIPE" &&
-    continueStripeAction?.enabled &&
-    invoiceRef
-      ? `/checkout/success?ref=${encodeURIComponent(invoiceRef)}&method=STRIPE&cancelled=1`
+    String(paymentMethod || "").toUpperCase() === "STRIPE" && continueStripeAction
+      ? continueStripeAction.targetPath ||
+        (invoiceRef
+          ? `/checkout/success?ref=${encodeURIComponent(invoiceRef)}&method=STRIPE&cancelled=1`
+          : null)
       : null;
   const continuePaymentPath =
     !stripeContinuePath &&
     (paymentEntry?.visible && paymentEntry?.targetPath
       ? paymentEntry.targetPath
-      : continuePaymentAction?.enabled && continuePaymentAction?.targetPath
-        ? continuePaymentAction.targetPath
-        : null);
+      : continuePaymentAction?.targetPath || null);
   const continuePaymentLabel =
     paymentEntry?.label || continuePaymentAction?.label || "Continue Payment";
   const items = order?.items || order?.orderItems || order?.products || [];
   const storeSplits = Array.isArray(order?.storeSplits) ? order.storeSplits : [];
   const shipments = normalizeShipmentList(order?.shipments);
+  const splitTruthSummary = summarizeBuyerSplitTruth(storeSplits);
   const shippingCost =
     order?.shippingCost ?? order?.shipping ?? order?.shipping?.cost ?? order?.deliveryFee ?? 0;
   const discount = order?.discount ?? order?.discountAmount ?? order?.discountTotal ?? 0;
@@ -365,6 +397,33 @@ export default function StoreOrderTrackingPage() {
     description: trackingPresentation.description,
   };
   const isTrackingStopped = trackingPresentation.isStopped;
+  const nextStepTitle = isTrackingStopped
+    ? trackingPresentation.stoppedTitle
+    : stripeContinuePath
+      ? continueStripeAction?.label || "Continue Stripe Payment"
+      : continuePaymentPath
+        ? continuePaymentLabel
+        : truthStatus.code === "UNDER_REVIEW"
+          ? "Wait for backend review"
+          : "Keep this page for updates";
+  const nextStepDescription = isTrackingStopped
+    ? trackingPresentation.stoppedDescription
+    : stripeContinuePath
+      ? continueStripeAction?.description ||
+        statusSummary?.description ||
+        "Stripe payment can continue only through the backend-approved next step."
+      : continuePaymentPath
+        ? splitTruthSummary.awaitingPaymentCount > 0
+          ? `Complete payment from your account for ${splitTruthSummary.awaitingPaymentCount} store split${splitTruthSummary.awaitingPaymentCount === 1 ? "" : "s"}. Shipment stays blocked per split until payment truth is settled.`
+          : paymentEntry?.summaryLabel ||
+            continuePaymentAction?.description ||
+            trackingSummary.description
+        : truthStatus.code === "UNDER_REVIEW"
+          ? splitTruthSummary.underReviewCount > 0
+            ? `${splitTruthSummary.underReviewCount} store split payment${splitTruthSummary.underReviewCount === 1 ? " is" : "s are"} under review. Shipment will stay blocked for those splits until backend review finishes.`
+            : trackingSummary.description ||
+              "Payment review is still running. This page will update after the backend state changes."
+          : "Use the order reference for support, tracking checks, or printing the invoice after delivery.";
   const errorMessage = isInvalidRefResponse
     ? "Use the public invoice reference shown after checkout or in My Orders."
     : error?.response?.data?.message || error?.message || GENERIC_ERROR;
@@ -512,18 +571,14 @@ export default function StoreOrderTrackingPage() {
             Next Step
           </p>
           <h2 className="mt-3 text-xl font-bold leading-tight">
-            {isTrackingStopped
-              ? trackingPresentation.stoppedTitle
-              : "Keep this page for updates"}
+            {nextStepTitle}
           </h2>
           <p
             className={`mt-3 text-sm leading-6 ${
               isTrackingStopped ? "text-rose-700" : "text-slate-500"
             }`}
           >
-            {isTrackingStopped
-              ? trackingPresentation.stoppedDescription
-              : "Use the order reference for support, tracking checks, or printing the invoice after delivery."}
+            {nextStepDescription}
           </p>
           <div className="mt-5 space-y-3">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">

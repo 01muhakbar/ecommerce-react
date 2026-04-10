@@ -11,7 +11,6 @@ import {
   PaymentStatusBadge,
 } from "../../components/payments/PaymentReadModelBadges.jsx";
 import {
-  ADMIN_ORDER_ACTION_OPTIONS,
   getAdminOrderTransitionErrorMeta,
   toAdminOrderActionValue,
 } from "./orderLifecyclePresentation.js";
@@ -87,14 +86,18 @@ export default function OrderDetail() {
   const norm = (value) => (value || "").toString().trim().toLowerCase();
   const currentActionStatus = toAdminOrderActionValue(order?.rawStatus || currentStatus);
   const isSameStatus = norm(selectedStatus) === norm(currentActionStatus);
-  const actionOptions = Array.isArray(contract?.availableActions) && contract.availableActions.length > 0
+  const hasBackendActions = Array.isArray(contract?.availableActions) &&
+    contract.availableActions.length > 0;
+  const actionOptions = hasBackendActions
     ? contract.availableActions
-    : ADMIN_ORDER_ACTION_OPTIONS.map((option) => ({
-        code: option.value,
-        label: option.label,
-        enabled: true,
-        reason: null,
-      }));
+    : [
+        {
+          code: currentActionStatus || "pending",
+          label: contract?.statusSummary?.label || "Status unavailable",
+          enabled: false,
+          reason: "Backend actionability is unavailable for this order right now.",
+        },
+      ];
   const selectedAction = actionOptions.find((option) => option.code === selectedStatus) || null;
   const selectedDisabledReason =
     selectedAction && selectedAction.enabled === false ? selectedAction.reason || "" : "";
@@ -157,9 +160,11 @@ export default function OrderDetail() {
     order?.customerNote || order?.note || order?.notes || ""
   ).trim();
   const statusHelper =
-    contract?.statusSummary?.description ||
-    contract?.fulfillmentReadiness?.description ||
-    "Operational order lifecycle is tracked separately from payment review.";
+    String(order?.checkoutMode || "").toUpperCase() === "MULTI_STORE"
+      ? "Parent order badges stay aggregate. Split payment and split shipment remain the operational truth for each store split."
+      : contract?.statusSummary?.description ||
+        contract?.fulfillmentReadiness?.description ||
+        "Operational order lifecycle is tracked separately from payment review.";
   const paymentStatusMeta = order?.paymentStatusMeta || contract?.paymentStatusMeta || null;
   const shipmentAuditMeta = order?.shipmentAuditMeta || null;
   const suborderShipmentSummary = Array.isArray(order?.suborderShipmentSummary)
@@ -329,7 +334,8 @@ export default function OrderDetail() {
                   </div>
                   <p className="mt-2 text-sm text-slate-500">Invoice: {invoiceRef}</p>
                   <p className="mt-2 text-xs leading-5 text-slate-500">
-                    Payment state is tracked separately from operational order progression.
+                    Parent payment stays aggregate here. For multistore orders, split payment and
+                    shipment truth belongs to the split audit lane.
                   </p>
                   {order?.id && String(order?.checkoutMode || "LEGACY").toUpperCase() !== "LEGACY" ? (
                     <Link
@@ -378,7 +384,7 @@ export default function OrderDetail() {
                     </div>
                     <p className="mt-2 text-xs leading-5 text-slate-500">
                       {order?.shippingStatusMeta?.description ||
-                        "Shipment truth is available for audit in read-only mode."}
+                        "Shipment coverage here is a parent aggregate of split shipment truth and does not override split payment blocking."}
                     </p>
                     {auditIssues.length > 0 ? (
                       <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-800">
@@ -455,7 +461,7 @@ export default function OrderDetail() {
                       Shipment Audit
                     </p>
                     <h2 className="mt-1 text-lg font-semibold text-slate-900">
-                      Persisted shipment truth
+                      Persisted split shipment truth
                     </h2>
                   </div>
                   <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
@@ -526,7 +532,7 @@ export default function OrderDetail() {
                             ? "Compatibility storage drift detected between shipment truth and stored fulfillment status."
                             : summary.usedLegacyFallback
                               ? "This suborder still reads shipping truth from legacy fallback."
-                              : "Shipment truth and compatibility storage are aligned for this suborder."}
+                              : "Split shipment truth and compatibility storage are aligned for this suborder. Payment blocking still belongs to split payment audit."}
                         </div>
                       </article>
                     ))}
@@ -717,13 +723,15 @@ export default function OrderDetail() {
                   </div>
                   <div className="text-sm font-semibold text-slate-900">Update Status</div>
                   <p className="text-sm text-slate-500">
-                    Update the operational order lifecycle. Payment review stays on the parent payment lane.
+                    Update the parent aggregate lifecycle only. Split payment and split shipment
+                    readiness stays on the split audit lanes.
                   </p>
                 </div>
                 <div className="mt-3 space-y-3">
                   <select
                     value={selectedStatus}
                     onChange={(event) => setStatus(event.target.value)}
+                    disabled={!hasBackendActions}
                     className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm"
                   >
                     <option value="">Select status</option>
@@ -801,6 +809,7 @@ export default function OrderDetail() {
 
               <OrderStatusTimeline
                 status={order?.status}
+                summary={contract?.statusSummary || null}
                 createdAt={order?.createdAt}
                 updatedAt={updatedAtValue}
               />

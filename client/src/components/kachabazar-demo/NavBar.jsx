@@ -64,7 +64,7 @@ export default function NavBar({
     const categoryKey = String(node?.code || node?.slug || node?.id || "").trim();
     if (!categoryKey) return;
     setShowCategories(false);
-    navigate(`/search?category=${encodeURIComponent(categoryKey)}`);
+    navigate(`/search?category=${encodeURIComponent(categoryKey)}&page=1`);
   };
 
   return (

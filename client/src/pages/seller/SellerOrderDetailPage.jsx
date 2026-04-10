@@ -22,6 +22,17 @@ import {
   getOrderContractSummary,
 } from "../../utils/orderContract.ts";
 import {
+  getSplitOperationalBridge,
+  getSplitOperationalEnabledSellerFulfillmentActions,
+  getSplitOperationalEnabledSellerShipmentActions,
+  getSplitOperationalFinality,
+  getSplitOperationalPayment,
+  getSplitOperationalShipment,
+  getSplitOperationalStatusSummary,
+  getSplitOperationalSellerFulfillmentActions,
+  getSplitOperationalSellerShipmentActions,
+} from "../../utils/splitOperationalTruth.ts";
+import {
   ENABLE_MULTISTORE_SHIPMENT_MVP,
   ENABLE_MULTISTORE_SHIPMENT_MUTATION,
 } from "../../config/featureFlags.js";
@@ -87,20 +98,33 @@ const formatTransitionLabel = (status) =>
     .replaceAll("_", " ")
     .toLowerCase();
 
-function StatusChip({ value, label, map = PAYMENT_STATUS_TONE }) {
-  return <SellerWorkspaceBadge label={label || String(value || "-")} tone={getTone(value, map)} />;
+function StatusChip({ value, label, map = PAYMENT_STATUS_TONE, tone }) {
+  return (
+    <SellerWorkspaceBadge
+      label={label || String(value || "-")}
+      tone={tone || getTone(value, map)}
+    />
+  );
 }
 
 const getSellerStatusMeta = (detail) =>
+  getSplitOperationalStatusSummary(detail) ||
   getOrderContractSummary(detail?.contract) ||
   detail?.readModel?.primaryStatus ||
   detail?.fulfillmentStatusMeta ||
   null;
 
 const getSellerPaymentMeta = (detail) =>
+  getSplitOperationalPayment(detail)?.statusMeta ||
   getOrderContractMeta(detail?.contract, "paymentStatusMeta") ||
   detail?.readModel?.paymentState ||
   detail?.paymentStatusMeta ||
+  null;
+
+const getSellerShipmentMeta = (detail) =>
+  getSplitOperationalShipment(detail)?.statusMeta ||
+  detail?.shippingStatusMeta ||
+  detail?.fulfillmentStatusMeta ||
   null;
 
 const getParentOrderMeta = (detail) =>
@@ -197,6 +221,11 @@ export default function SellerOrderDetailPage() {
   const fulfillmentGovernance = detail?.governance?.fulfillment ?? null;
   const sellerStatusMeta = getSellerStatusMeta(detail);
   const sellerPaymentMeta = getSellerPaymentMeta(detail);
+  const sellerShipmentMeta = getSellerShipmentMeta(detail);
+  const operationalPayment = getSplitOperationalPayment(detail);
+  const operationalShipment = getSplitOperationalShipment(detail);
+  const operationalBridge = getSplitOperationalBridge(detail);
+  const operationalFinality = getSplitOperationalFinality(detail);
   const parentOrderMeta = getParentOrderMeta(detail);
   const parentPaymentMeta = getParentPaymentMeta(detail);
   const primaryShipment =
@@ -204,21 +233,53 @@ export default function SellerOrderDetailPage() {
       ? detail.shipments[0]
       : null;
   const hasPersistedShipment = Boolean(primaryShipment?.shipmentId);
-  const shipmentActions = Array.isArray(primaryShipment?.availableShippingActions)
-    ? primaryShipment.availableShippingActions
-    : [];
+  const shipmentActions =
+    getSplitOperationalSellerShipmentActions(detail).length > 0
+      ? getSplitOperationalSellerShipmentActions(detail)
+      : Array.isArray(primaryShipment?.availableShippingActions)
+        ? primaryShipment.availableShippingActions
+        : [];
   const enabledShipmentActions = new Set(
-    shipmentActions.filter((action) => action?.enabled).map((action) => action.code)
+    (
+      getSplitOperationalEnabledSellerShipmentActions(detail).length > 0
+        ? getSplitOperationalEnabledSellerShipmentActions(detail)
+        : shipmentActions.filter((action) => action?.enabled)
+    ).map((action) => action.code)
   );
   const trackingMutationEnabled =
-    hasPersistedShipment && ENABLE_MULTISTORE_SHIPMENT_MUTATION;
+    hasPersistedShipment &&
+    ENABLE_MULTISTORE_SHIPMENT_MUTATION &&
+    !operationalBridge.shipmentBlocked &&
+    !operationalFinality.isFinalNegative;
   const shipmentActionBlockedReason =
+    (operationalFinality.isFinalNegative
+      ? sellerStatusMeta?.description ||
+        "This store split is already closed in a final-negative state."
+      : operationalBridge.shipmentBlockedReason) ||
     (!ENABLE_MULTISTORE_SHIPMENT_MUTATION
       ? "Shipment mutation is disabled in the current rollout."
       : shipmentActions.find((action) => action?.enabled === false && action?.reason)?.reason) ||
     primaryShipment?.shipmentStatusMeta?.description ||
     fulfillmentGovernance?.mutationBlockedReason ||
     "Shipment mutation is currently unavailable.";
+  const fulfillmentActions =
+    getSplitOperationalSellerFulfillmentActions(detail).length > 0
+      ? getSplitOperationalSellerFulfillmentActions(detail)
+      : Array.isArray(fulfillmentGovernance?.availableActions)
+        ? fulfillmentGovernance.availableActions
+        : [];
+  const enabledFulfillmentActions =
+    getSplitOperationalEnabledSellerFulfillmentActions(detail).length > 0
+      ? getSplitOperationalEnabledSellerFulfillmentActions(detail)
+      : fulfillmentActions.filter((action) => action?.enabled !== false);
+  const fulfillmentActionBlockedReason =
+    (operationalFinality.isFinalNegative
+      ? sellerStatusMeta?.description ||
+        "This store split is already closed in a final-negative state."
+      : operationalBridge.shipmentBlockedReason) ||
+    fulfillmentActions.find((action) => action?.enabled === false && action?.reason)?.reason ||
+    fulfillmentGovernance?.mutationBlockedReason ||
+    "No fulfillment mutation is available for this suborder.";
 
   useEffect(() => {
     if (!primaryShipment) return;
@@ -309,15 +370,24 @@ export default function SellerOrderDetailPage() {
           backButton,
           <StatusChip
             key="payment"
-            value={detail.paymentStatus}
-            label={`Store split ${sellerPaymentMeta?.label || detail.paymentStatus}`}
+            value={operationalPayment.status || detail.paymentStatus}
+            label={`Payment ${sellerPaymentMeta?.label || detail.paymentStatus}`}
             map={PAYMENT_STATUS_TONE}
+            tone={sellerPaymentMeta?.tone}
           />,
           <StatusChip
-            key="fulfillment"
-            value={detail.fulfillmentStatus}
-            label={`Seller ${sellerStatusMeta?.label || detail.fulfillmentStatus}`}
+            key="operational"
+            value={sellerStatusMeta?.code || detail.fulfillmentStatus}
+            label={`Operational ${sellerStatusMeta?.label || detail.fulfillmentStatus}`}
             map={FULFILLMENT_STATUS_TONE}
+            tone={sellerStatusMeta?.tone}
+          />,
+          <StatusChip
+            key="shipment"
+            value={operationalShipment.status}
+            label={`Shipment ${sellerShipmentMeta?.label || operationalShipment.status || detail.shippingStatus || detail.fulfillmentStatus}`}
+            map={FULFILLMENT_STATUS_TONE}
+            tone={sellerShipmentMeta?.tone}
           />,
           <StatusChip
             key="checkout"
@@ -331,14 +401,16 @@ export default function SellerOrderDetailPage() {
               value={detail.paymentSummary.status}
               label={`Payment ${detail.paymentSummary.statusMeta?.label || detail.paymentSummary.status}`}
               map={PAYMENT_STATUS_TONE}
+              tone={detail.paymentSummary.statusMeta?.tone}
             />
           ) : null,
         ].filter(Boolean)}
       >
         <p className="text-sm leading-5 text-slate-500">
-          {fulfillmentGovernance?.actorHasManagePermission
-            ? "Seller shipment operations now follow persisted shipment truth for this store split. Parent order and payment lifecycle remain on separate governance lanes."
-            : "Seller shipment stays read-only here for this actor. Parent order and payment lifecycle remain on separate governance lanes."}
+          {operationalBridge.shipmentBlockedReason ||
+            (fulfillmentGovernance?.actorHasManagePermission
+              ? "Seller shipment operations now follow persisted shipment truth for this store split. Parent order and payment lifecycle remain on separate governance lanes."
+              : "Seller shipment stays read-only here for this actor. Parent order and payment lifecycle remain on separate governance lanes.")}
         </p>
       </SellerWorkspaceSectionHeader>
 
@@ -479,7 +551,10 @@ export default function SellerOrderDetailPage() {
             {detail.shipping?.addressLine || "No shipping address available."}
           </p>
           <p className="mt-2 text-xs leading-5 text-slate-500">
-            {sellerStatusMeta?.description || "Seller fulfillment snapshot."}
+            {sellerShipmentMeta?.description ||
+              operationalBridge.shipmentBlockedReason ||
+              sellerStatusMeta?.description ||
+              "Seller shipment snapshot."}
           </p>
         </SellerWorkspaceSectionCard>
 
@@ -494,7 +569,7 @@ export default function SellerOrderDetailPage() {
           <div className="mt-4 grid gap-3">
             <SellerWorkspaceDetailItem
               label="Store Split Payment"
-              value={sellerPaymentMeta?.label || detail.paymentStatus}
+              value={sellerPaymentMeta?.label || operationalPayment.status || detail.paymentStatus}
             />
             <SellerWorkspaceDetailItem
               label="Payment Record"
@@ -569,9 +644,27 @@ export default function SellerOrderDetailPage() {
           >
             <div className="grid gap-3">
               <SellerWorkspaceDetailItem
-                label="Seller Status"
+                label="Operational Status"
                 value={sellerStatusMeta?.label || detail.fulfillmentStatus}
-                hint={sellerStatusMeta?.description || "Seller fulfillment is the primary operational status for this store split."}
+                hint={
+                  sellerStatusMeta?.description ||
+                  operationalBridge.shipmentBlockedReason ||
+                  "Split payment and split shipment define the operational status for this store split."
+                }
+              />
+              <SellerWorkspaceDetailItem
+                label="Shipment Truth"
+                value={
+                  sellerShipmentMeta?.label ||
+                  operationalShipment.status ||
+                  detail.shippingStatus ||
+                  detail.fulfillmentStatus
+                }
+                hint={
+                  sellerShipmentMeta?.description ||
+                  operationalBridge.shipmentBlockedReason ||
+                  "Shipment stays blocked until split payment truth allows seller fulfillment."
+                }
               />
               <SellerWorkspaceDetailItem
                 label="Store Scope"
@@ -636,8 +729,9 @@ export default function SellerOrderDetailPage() {
 
             <SellerWorkspaceNotice type="info" className="mt-4">
               {sellerStatusMeta?.description ||
+                operationalBridge.shipmentBlockedReason ||
                 detail.readModel?.operationalNote ||
-                "Parent order lifecycle can move on a different lane from seller fulfillment. Use the suborder payment and fulfillment statuses above as the seller-scoped operational truth."}
+                "Parent order lifecycle can move on a different lane from seller fulfillment. Use split payment and split shipment as the seller-scoped operational truth."}
             </SellerWorkspaceNotice>
           </SellerWorkspaceSectionCard>
 
@@ -795,9 +889,9 @@ export default function SellerOrderDetailPage() {
                   </p>
                 ) : null}
               </div>
-            ) : fulfillmentGovernance?.availableActions?.length > 0 ? (
+            ) : enabledFulfillmentActions.length > 0 ? (
               <div className="mt-4 grid gap-2">
-                {fulfillmentGovernance.availableActions.map((action) => (
+                {enabledFulfillmentActions.map((action) => (
                   <button
                     key={action.code}
                     type="button"
@@ -817,8 +911,7 @@ export default function SellerOrderDetailPage() {
               </div>
             ) : (
               <p className="mt-3.5 text-sm leading-5 text-slate-600">
-                {fulfillmentGovernance?.mutationBlockedReason ||
-                  "No fulfillment mutation is available for this suborder."}
+                {fulfillmentActionBlockedReason}
               </p>
             )}
 

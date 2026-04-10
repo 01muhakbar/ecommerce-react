@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import {
   Banknote,
+  ChevronLeft,
+  ChevronRight,
   Facebook,
   House,
   ImageIcon,
@@ -23,6 +25,7 @@ import { getStoreCustomization } from "../../api/public/storeCustomizationPublic
 import QueryState from "../../components/primitives/ui/QueryState.jsx";
 import { UiEmptyState, UiErrorState, UiSkeleton } from "../../components/primitives/state/index.js";
 import ProductSellerInfoCard from "../../components/store/ProductSellerInfoCard.jsx";
+import SearchProductCard from "../../components/store/SearchProductCard.jsx";
 import { formatCurrency } from "../../utils/format.js";
 import { resolveProductImageUrl } from "../../utils/productImage.js";
 import { GENERIC_ERROR } from "../../constants/uiMessages.js";
@@ -310,7 +313,7 @@ function ProductSummaryPanel({
   const preorderDays = Number(product?.preorderDays || 0);
   const variationGroups = normalizeVariationGroups(product?.variations);
   const categoryHref = categorySlug
-    ? `/category/${encodeURIComponent(String(categorySlug))}`
+    ? `/search?category=${encodeURIComponent(String(categorySlug))}&page=1`
     : null;
   const trustMeta = [
     {
@@ -620,8 +623,7 @@ export default function StoreProductDetailPage() {
   const [qty, setQty] = useState(1);
   const [selectedOptions, setSelectedOptions] = useState({});
   const [activeTab, setActiveTab] = useState("reviews");
-  const [addingRelatedId, setAddingRelatedId] = useState(null);
-  const addingTimerRef = useRef(null);
+  const relatedShelfRef = useRef(null);
 
   const {
     data: productData,
@@ -748,15 +750,6 @@ export default function StoreProductDetailPage() {
     setQty((prev) => Math.min(Math.max(1, prev), stockValue));
   }, [hasFiniteStock, stockValue]);
 
-  useEffect(
-    () => () => {
-      if (addingTimerRef.current) {
-        clearTimeout(addingTimerRef.current);
-      }
-    },
-    []
-  );
-
   useEffect(() => {
     if (variationGroups.length === 0) {
       setSelectedOptions({});
@@ -782,27 +775,11 @@ export default function StoreProductDetailPage() {
     });
   };
 
-  const handleAddRelated = (item) => {
-    const relatedStock = Number(item?.stock);
-    const relatedPurchaseState = item?.purchaseState || null;
-    const isRelatedPurchasable =
-      typeof relatedPurchaseState?.isPurchasable === "boolean"
-        ? relatedPurchaseState.isPurchasable
-        : !(Number.isFinite(relatedStock) && relatedStock <= 0);
-    if (!isRelatedPurchasable || (Number.isFinite(relatedStock) && relatedStock <= 0)) return;
-    const relatedImage = resolveProductImageUrl(item);
-    add(item?.id, 1, {
-      name: item?.name || item?.title,
-      price: item?.price,
-      imageUrl: relatedImage,
-    });
-    setAddingRelatedId(item?.id ?? null);
-    if (addingTimerRef.current) {
-      clearTimeout(addingTimerRef.current);
-    }
-    addingTimerRef.current = setTimeout(() => {
-      setAddingRelatedId(null);
-    }, 700);
+  const scrollRelatedProducts = (direction) => {
+    const element = relatedShelfRef.current;
+    if (!element) return;
+    const scrollAmount = Math.max(element.clientWidth * 0.82, 260) * direction;
+    element.scrollBy({ left: scrollAmount, behavior: "smooth" });
   };
 
   if (isLoading) {
@@ -883,7 +860,7 @@ export default function StoreProductDetailPage() {
           <span>&gt;</span>
           {categorySlug ? (
             <Link
-              to={`/category/${encodeURIComponent(String(categorySlug))}`}
+              to={`/search?category=${encodeURIComponent(String(categorySlug))}&page=1`}
               className="font-semibold text-slate-700 hover:text-slate-900"
             >
               {categoryName}
@@ -1120,92 +1097,61 @@ export default function StoreProductDetailPage() {
           emptyHint="Browse more items from this category."
           onRetry={() => relatedQuery.refetch()}
         >
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
-            {relatedProducts.map((item) => {
-              const relatedRating = Math.max(0, toSafeNumber(item?.ratingAvg ?? item?.rating, 0));
-              const relatedReviewCount = Math.max(
-                0,
-                Math.round(toSafeNumber(item?.reviewCount, 0))
-              );
-              const relatedImage = resolveProductImageUrl(item);
-              const relatedName = item?.name || item?.title || "Product";
-              const relatedSlug = item?.slug || item?.id;
-              const isAdding = addingRelatedId === item?.id;
-              const relatedStock = Number(item?.stock);
-              const isRelatedOutOfStock =
-                Number.isFinite(relatedStock) && relatedStock <= 0;
-              const relatedPurchaseState = item?.purchaseState || null;
-              const isRelatedPurchasable =
-                typeof relatedPurchaseState?.isPurchasable === "boolean"
-                  ? relatedPurchaseState.isPurchasable
-                  : !isRelatedOutOfStock;
-              const relatedPurchaseLabel = isRelatedPurchasable
-                ? null
-                : relatedPurchaseState?.label ||
-                  (isRelatedOutOfStock ? "Out of stock" : "Unavailable");
-              return (
-                <article
-                  key={item.id}
-                  className="overflow-hidden rounded-2xl border border-slate-200 bg-white transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+          <div className="space-y-3">
+            <div className="relative">
+              <div className="pointer-events-none absolute inset-y-0 left-0 z-30 hidden items-center sm:flex">
+                <button
+                  type="button"
+                  onClick={() => scrollRelatedProducts(-1)}
+                  className="pointer-events-auto inline-flex h-11 w-11 -translate-x-3 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-md transition hover:bg-slate-50"
+                  aria-label="Scroll related products left"
                 >
-                  <div className="relative aspect-[4/3] bg-slate-100">
-                    <Link to={`/product/${relatedSlug}`} className="block h-full w-full">
-                      <ImageWithFallback
-                        src={relatedImage}
-                        alt={relatedName}
-                        wrapperClassName="h-full w-full"
-                        imageClassName="h-full w-full object-contain p-3 sm:p-4"
-                        iconClassName="h-6 w-6"
-                      />
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => handleAddRelated(item)}
-                      aria-label={
-                        !isRelatedPurchasable
-                          ? `${relatedName} is unavailable`
-                          : `Add ${relatedName} to cart`
-                      }
-                      disabled={!isRelatedPurchasable}
-                      className="absolute right-4 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-300"
-                    >
-                      {!isRelatedPurchasable ? (
-                        <span className="text-[10px] font-semibold">Off</span>
-                      ) : isAdding ? (
-                        <span className="text-xs font-semibold">OK</span>
-                      ) : (
-                        <Plus className="h-4 w-4" />
-                      )}
-                    </button>
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="pointer-events-none absolute inset-y-0 right-0 z-30 hidden items-center sm:flex">
+                <button
+                  type="button"
+                  onClick={() => scrollRelatedProducts(1)}
+                  className="pointer-events-auto inline-flex h-11 w-11 translate-x-3 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-md transition hover:bg-slate-50"
+                  aria-label="Scroll related products right"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div
+                ref={relatedShelfRef}
+                className="flex gap-4 overflow-x-auto px-1 pb-2 pt-1 snap-x snap-mandatory [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              >
+                {relatedProducts.map((item) => (
+                  <div
+                    key={item.id || item.slug}
+                    className="w-[220px] shrink-0 snap-start sm:w-[228px] lg:w-[214px] xl:w-[204px]"
+                  >
+                    <SearchProductCard product={item} variant="grid" />
                   </div>
-                  <div className="space-y-1.5 p-4">
-                    <Link
-                      to={`/product/${relatedSlug}`}
-                      className="line-clamp-2 text-sm font-semibold text-slate-900 hover:text-slate-700"
-                    >
-                      {relatedName}
-                    </Link>
-                    <div className="flex items-center gap-2 text-xs text-slate-500">
-                      <RatingStars rating={relatedRating} className="h-3.5 w-3.5" />
-                      <span>
-                        {relatedRating.toFixed(1)} ({relatedReviewCount} reviews)
-                      </span>
-                    </div>
-                    <div className="pt-1 text-lg font-bold text-slate-900">
-                      {formatCurrency(toSafeNumber(item?.price, 0))}
-                    </div>
-                    {relatedPurchaseLabel ? (
-                      <p
-                        className="text-xs font-medium text-rose-600"
-                        title={relatedPurchaseState?.description || relatedPurchaseLabel}
-                      >
-                        {relatedPurchaseLabel}
-                      </p>
-                    ) : null}
-                  </div>
-                </article>
-              );
-            })}
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 sm:hidden">
+              <button
+                type="button"
+                onClick={() => scrollRelatedProducts(-1)}
+                className="inline-flex h-10 items-center justify-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Prev
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollRelatedProducts(1)}
+                className="inline-flex h-10 items-center justify-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Next
+              </button>
+            </div>
           </div>
         </QueryState>
       </section>

@@ -127,9 +127,9 @@ const getPrimaryFocus = ({
 
   if ((eligiblePaidSummary?.awaitingFulfillmentCount || 0) > 0 && canViewOrders) {
     return {
-      label: "Follow up paid orders",
-      hint: `${eligiblePaidSummary.awaitingFulfillmentCount} paid order(s) are still waiting for fulfillment progress.`,
-      tone: "emerald",
+      label: "Follow up paid store splits",
+      hint: `${eligiblePaidSummary.awaitingFulfillmentCount} paid store split(s) are still waiting for fulfillment progress.`,
+      tone: "amber",
     };
   }
 
@@ -840,35 +840,45 @@ export default function SellerWorkspaceHome() {
           value={String(paymentReviewCounts?.awaitingReview || 0)}
           hint={
             canViewPaymentReview
-              ? (paymentReviewCounts?.awaitingReview || 0) > 0
-                ? "Buyer payment proofs still need review."
-                : "Nothing is waiting for payment review right now."
+              ? paymentReviewCounts?.hint ||
+                ((paymentReviewCounts?.awaitingReview || 0) > 0
+                  ? "Buyer payment proofs still need review."
+                  : "Nothing is waiting for payment review right now.")
               : "Payment review counts are not part of this role."
           }
           Icon={BadgeCheck}
           tone={(paymentReviewCounts?.awaitingReview || 0) > 0 ? "amber" : "stone"}
         />
         <SellerWorkspaceStatCard
-          label="Paid Orders"
+          label="Paid Store Splits"
           value={String(suborderSummary?.paidCount || 0)}
           hint={
             canViewOrders
-              ? "Store-owned orders already marked as paid."
+              ? suborderSummary?.hint ||
+                "Store-owned suborders already marked as paid. Exception counts stay outside this snapshot."
               : "Order payment signals are not part of this role."
           }
           Icon={ShoppingBag}
-          tone={(suborderSummary?.paidCount || 0) > 0 ? "emerald" : "stone"}
+          tone={
+            (suborderSummary?.exceptionCount || 0) > 0
+              ? "amber"
+              : (suborderSummary?.paidCount || 0) > 0
+                ? "sky"
+                : "stone"
+          }
         />
         <SellerWorkspaceStatCard
-          label="Estimated Paid Total"
+          label="Eligible Paid Gross"
           value={formatCurrency(eligiblePaidSummary?.grossAmount || 0)}
           hint={
             canViewOrders
-              ? "A quick paid-order snapshot, not a payout total."
+              ? eligiblePaidSummary?.boundaryNote ||
+                eligiblePaidSummary?.hint ||
+                "A quick paid-order snapshot, not a payout total."
               : "This estimate only appears for roles with order visibility."
           }
           Icon={WalletCards}
-          tone={(eligiblePaidSummary?.grossAmount || 0) > 0 ? "emerald" : "stone"}
+          tone={(eligiblePaidSummary?.count || 0) > 0 ? "sky" : "stone"}
         />
       </section>
 
@@ -1007,7 +1017,7 @@ export default function SellerWorkspaceHome() {
                     <>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <SellerWorkspaceDetailItem
-                          label="Paid Orders"
+                          label="Paid Store Splits"
                           value={String(analyticsOrderSnapshot.paidOrders || 0)}
                         />
                         <SellerWorkspaceDetailItem
@@ -1470,7 +1480,7 @@ export default function SellerWorkspaceHome() {
                       value={String(paymentReviewCounts.awaitingReview || 0)}
                     />
                     <SellerWorkspaceDetailItem
-                      label="Paid"
+                      label="Backend Paid"
                       value={String(paymentReviewCounts.settled || 0)}
                     />
                     <SellerWorkspaceDetailItem
@@ -1508,7 +1518,7 @@ export default function SellerWorkspaceHome() {
                 suborderSummary?.totalSuborders > 0 ? (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <SellerWorkspaceDetailItem
-                      label="Total Orders"
+                      label="Total Store Splits"
                       value={String(suborderSummary.totalSuborders || 0)}
                     />
                     <SellerWorkspaceDetailItem
@@ -1520,7 +1530,7 @@ export default function SellerWorkspaceHome() {
                       value={String(suborderSummary.pendingConfirmationCount || 0)}
                     />
                     <SellerWorkspaceDetailItem
-                      label="Paid"
+                      label="Paid Store Splits"
                       value={String(suborderSummary.paidCount || 0)}
                     />
                     <SellerWorkspaceDetailItem
@@ -1530,7 +1540,7 @@ export default function SellerWorkspaceHome() {
                     <SellerWorkspaceDetailItem
                       label="Paid Gross"
                       value={formatCurrency(suborderSummary.paidGrossAmount || 0)}
-                      hint="This is the gross total of store orders already marked as paid."
+                      hint="This is the gross total of store-owned suborders already marked as paid."
                     />
                   </div>
                 ) : (

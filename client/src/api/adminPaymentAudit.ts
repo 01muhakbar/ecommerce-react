@@ -34,6 +34,14 @@ export type AdminPaymentAuditListItem = {
     unpaidSuborders: number;
     rejectedPayments: number;
   };
+  operationalCounts?: {
+    paidSuborders: number;
+    pendingSuborders: number;
+    unpaidSuborders: number;
+    rejectedPayments: number;
+    shipmentLaneSuborders?: number;
+    finalNegativeSuborders?: number;
+  };
 };
 
 export type AdminPaymentAuditListResponse = {
@@ -187,6 +195,41 @@ export type AdminPaymentAuditDetailResponse = {
       fulfillmentStatus: string;
       fulfillmentStatusMeta?: StatusMeta;
       paidAt?: string | null;
+      shippingStatus?: string | null;
+      shippingStatusMeta?: StatusMeta;
+      latestTrackingEvent?: {
+        status?: string | null;
+        statusMeta?: StatusMeta | null;
+        note?: string | null;
+        happenedAt?: string | null;
+      } | null;
+      operationalTruth?: {
+        payment?: {
+          status?: string;
+          statusMeta?: StatusMeta;
+          settlementStatus?: string;
+          settlementStatusMeta?: StatusMeta;
+        };
+        shipment?: {
+          status?: string;
+          statusMeta?: StatusMeta;
+          blockedReason?: string | null;
+          isBlockedByPayment?: boolean;
+        };
+        bridge?: {
+          currentLane?: string;
+          paymentToShipment?: string;
+          shipmentBlocked?: boolean;
+          shipmentBlockedReason?: string | null;
+        };
+        finality?: {
+          isFinal?: boolean;
+          isFinalNegative?: boolean;
+        };
+        statusSummary?: StatusMeta & {
+          lane?: string;
+        };
+      } | null;
       paymentProfile?: {
         id: number;
         providerCode: string;

@@ -31,5 +31,22 @@ export const getOrderContractAction = (value: unknown, code: string) => {
   );
 };
 
+export const getEnabledOrderContractAction = (value: unknown, code: string) => {
+  const action = getOrderContractAction(value, code);
+  return action?.enabled ? action : null;
+};
+
+export const getFirstEnabledOrderContractAction = (
+  value: unknown,
+  codes: string[]
+) => {
+  if (!Array.isArray(codes)) return null;
+  for (const code of codes) {
+    const action = getEnabledOrderContractAction(value, code);
+    if (action) return action;
+  }
+  return null;
+};
+
 export const isOrderContractFinal = (value: unknown) =>
   Boolean(getOrderContractSummary(value)?.isFinal);

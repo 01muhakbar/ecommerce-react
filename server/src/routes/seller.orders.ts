@@ -5,11 +5,13 @@ import { sellerHasPermission } from "../services/seller/resolveSellerAccess.js";
 import { createUserOrderStatusUpdatedNotification } from "../services/notification.service.js";
 import { recalculateParentOrderFulfillmentStatus } from "../services/orderPaymentAggregation.service.js";
 import { expireOverduePaymentsForOrder } from "../services/paymentExpiry.service.js";
+import { buildGroupedPaymentReadModel } from "../services/groupedPaymentReadModel.service.js";
 import { getLatestTimelineRecord } from "../services/paymentReadModel.js";
 import { buildSellerSuborderContract } from "../services/orderLifecycleContract.service.js";
 import { buildSuborderShippingReadModel } from "../services/orderShippingReadModel.service.js";
 import { applySellerShipmentFulfillment } from "../services/shipmentMutation.service.js";
 import { buildStoreShippingSetupReadiness } from "../services/sellerShippingSetup.service.js";
+import { buildSplitOperationalTruth } from "../services/splitOperationalTruth.service.js";
 import {
   isMultistoreShipmentMvpEnabled,
   isMultistoreShipmentMutationEnabled,
@@ -808,12 +810,25 @@ const serializeListItem = (suborder: any, sellerAccess: any = null) => {
   const shippingReadModel = buildSuborderShippingReadModel(suborder, {
     enforceStoreShippingSetup: true,
   });
+  const paymentReadModel = buildGroupedPaymentReadModel({
+    paymentStatus: getAttr(latestPayment, "status") || "CREATED",
+    suborderPaymentStatus: paymentStatus,
+    expiresAt: getAttr(latestPayment, "expiresAt") || null,
+    hasPaymentRecord: Boolean(latestPayment),
+    missingPaymentReason: "Payment record not found for this suborder.",
+  });
   const contract = buildSellerSuborderContract({
     orderStatus: fulfillmentStatus,
     paymentStatus,
     parentOrderStatus: orderStatus,
     parentPaymentStatus,
     availableActions: governance.fulfillment.availableActions,
+  });
+  const operationalTruth = buildSplitOperationalTruth({
+    paymentStatus,
+    paymentReadModel,
+    shipmentReadModel: shippingReadModel,
+    sellerFulfillmentActions: governance.fulfillment.availableActions,
   });
 
   return {
@@ -848,6 +863,7 @@ const serializeListItem = (suborder: any, sellerAccess: any = null) => {
     readModel,
     governance,
     contract,
+    operationalTruth,
     buyer: {
       userId: toNumber(getAttr(order, "userId"), 0) || null,
       name: String(
@@ -924,12 +940,25 @@ const serializeDetail = (suborder: any, sellerAccess: any = null) => {
   const shippingReadModel = buildSuborderShippingReadModel(suborder, {
     enforceStoreShippingSetup: true,
   });
+  const paymentReadModel = buildGroupedPaymentReadModel({
+    paymentStatus: getAttr(latestPayment, "status") || "CREATED",
+    suborderPaymentStatus: paymentStatus,
+    expiresAt: getAttr(latestPayment, "expiresAt") || null,
+    hasPaymentRecord: Boolean(latestPayment),
+    missingPaymentReason: "Payment record not found for this suborder.",
+  });
   const contract = buildSellerSuborderContract({
     orderStatus: fulfillmentStatus,
     paymentStatus,
     parentOrderStatus: orderStatus,
     parentPaymentStatus,
     availableActions: governance.fulfillment.availableActions,
+  });
+  const operationalTruth = buildSplitOperationalTruth({
+    paymentStatus,
+    paymentReadModel,
+    shipmentReadModel: shippingReadModel,
+    sellerFulfillmentActions: governance.fulfillment.availableActions,
   });
 
   return {
@@ -954,6 +983,7 @@ const serializeDetail = (suborder: any, sellerAccess: any = null) => {
     readModel,
     governance,
     contract,
+    operationalTruth,
     buyer: {
       userId: toNumber(getAttr(order, "userId"), 0) || null,
       name: String(

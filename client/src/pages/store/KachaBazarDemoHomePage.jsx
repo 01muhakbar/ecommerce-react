@@ -83,7 +83,7 @@ const DEFAULT_HOME_SECTION_CONFIG = {
     title: "Popular Products for Daily Shopping",
     description:
       "See all our popular products in this week. You can choose your daily needs products from this list and get some special offer with free shipping.",
-    productsLimit: 18,
+    productsLimit: 10,
   },
   quickDelivery: {
     enabled: true,
@@ -125,6 +125,34 @@ const DEFAULT_HOME_SECTION_CONFIG = {
     securePaymentText: "Secure Payment Totally Safe",
     latestOfferText: "Latest Offer Upto 20% Off",
   },
+};
+
+const POPULAR_PRODUCTS_SECTION_LIMIT = 10;
+const POPULAR_PRODUCTS_SOURCE_LIMIT = 50;
+
+const toPopularityTimestamp = (value) => {
+  const timestamp = Date.parse(String(value ?? ""));
+  return Number.isFinite(timestamp) ? timestamp : 0;
+};
+
+const comparePopularProducts = (left, right) => {
+  const soldDiff = toPositiveInt(right?.soldCount, 0) - toPositiveInt(left?.soldCount, 0);
+  if (soldDiff !== 0) return soldDiff;
+
+  const reviewDiff =
+    toPositiveInt(right?.reviewCount, 0) - toPositiveInt(left?.reviewCount, 0);
+  if (reviewDiff !== 0) return reviewDiff;
+
+  const ratingDiff = Number(right?.ratingAvg || 0) - Number(left?.ratingAvg || 0);
+  if (ratingDiff !== 0) return ratingDiff;
+
+  const freshnessDiff =
+    toPopularityTimestamp(right?.updatedAt) - toPopularityTimestamp(left?.updatedAt);
+  if (freshnessDiff !== 0) return freshnessDiff;
+
+  return String(left?.name || left?.title || "").localeCompare(
+    String(right?.name || right?.title || "")
+  );
 };
 
 const toText = (value, fallback = "") => {
@@ -490,7 +518,13 @@ export default function KachaBazarDemoHomePage() {
     isLoading,
     isError,
     refetch: refetchProducts,
-  } = useProducts({ page: 1, limit: 30 });
+  } = useProducts({
+    page: 1,
+    limit: POPULAR_PRODUCTS_SOURCE_LIMIT,
+    sort: "newest",
+    refetchOnWindowFocus: true,
+    refetchInterval: 60_000,
+  });
   const categories = categoriesData?.data?.items ?? [];
   const allCategories = allCategoriesData?.data?.items ?? categories;
   const hasCategories = categories.length > 0;
@@ -554,7 +588,10 @@ export default function KachaBazarDemoHomePage() {
     }
   }, [activeSlide, mainSlider.slides.length]);
 
-  const popularProducts = rawProducts;
+  const popularProducts = useMemo(
+    () => [...rawProducts].sort(comparePopularProducts),
+    [rawProducts]
+  );
   const coupons = Array.isArray(couponsQuery.data?.data) ? couponsQuery.data.data : [];
   const couponError =
     couponsQuery.error?.response?.data?.message ||
@@ -629,6 +666,18 @@ export default function KachaBazarDemoHomePage() {
         const discountPercent = Number(raw?.discountPercent ?? 0);
         const ratingAvg = Number(raw?.ratingAvg ?? raw?.averageRating ?? 0);
         const reviewCount = Number(raw?.reviewCount ?? 0);
+        const soldCount = Math.max(
+          0,
+          Number(
+            raw?.soldCount ??
+              raw?.soldQty ??
+              raw?.qtySold ??
+              raw?.unitsSold ??
+              raw?.salesCount ??
+              raw?.totalSold ??
+              0
+          ) || 0
+        );
         const categoryObj =
           raw?.category ??
           raw?.Category ??
@@ -648,6 +697,7 @@ export default function KachaBazarDemoHomePage() {
           discountPercent,
           ratingAvg,
           reviewCount,
+          soldCount,
           unit: raw?.unit ?? raw?.tags?.unit ?? "1 pc",
           category: categoryObj,
           imageUrl,
@@ -660,6 +710,10 @@ export default function KachaBazarDemoHomePage() {
   const showDiscountCouponBox = homeSections.discountCouponBox.enabled;
   const showFeaturedCategories = homeSections.featuredCategories.enabled;
   const showPopularProducts = homeSections.popularProducts.enabled;
+  const popularProductsLimit = Math.min(
+    POPULAR_PRODUCTS_SECTION_LIMIT,
+    toPositiveInt(homeSections.popularProducts.productsLimit, POPULAR_PRODUCTS_SECTION_LIMIT)
+  );
   const showPromotionBanner = homeSections.promotionBanner.enabled;
   const showQuickDelivery = homeSections.quickDelivery.enabled;
   const showLatestDiscountedProducts = homeSections.latestDiscountedProducts.enabled;
@@ -801,7 +855,7 @@ export default function KachaBazarDemoHomePage() {
           <ProductSection
             title={homeSections.popularProducts.title}
             subtitle={homeSections.popularProducts.description}
-            maxProducts={homeSections.popularProducts.productsLimit}
+            maxProducts={popularProductsLimit}
             products={safeProducts}
             categories={categories}
             isLoading={isLoading}

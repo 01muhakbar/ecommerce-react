@@ -17,7 +17,6 @@ import {
 } from "../../components/primitives/state/index.js";
 import { GENERIC_ERROR, UPDATING } from "../../constants/uiMessages.js";
 import {
-  ADMIN_ORDER_ACTION_OPTIONS,
   getAdminOrderTransitionErrorMeta,
   toAdminOrderActionValue,
 } from "./orderLifecyclePresentation.js";
@@ -52,6 +51,17 @@ const getCustomerName = (order) =>
   toText(order?.customerName || order?.customer?.name || order?.customer?.email) || "Guest";
 
 const getCustomerHint = (order) => toText(order?.customer?.email || order?.ref) || "";
+
+const getParentAggregateHint = (order, contract) => {
+  if (String(order?.checkoutMode || "").trim().toUpperCase() === "MULTI_STORE") {
+    return "Parent aggregate only. Open detail or split payment audit for store-level operational truth.";
+  }
+  return (
+    contract?.statusSummary?.description ||
+    contract?.fulfillmentReadiness?.description ||
+    "-"
+  );
+};
 
 const methodLabelMap = {
   cash: "Cash",
@@ -292,7 +302,8 @@ export default function Orders() {
           <div className="space-y-0.5">
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Orders</h1>
             <p className="text-sm text-slate-500">
-              Manage customer orders, status updates, and invoice actions.
+              Manage parent orders, status updates, and invoice actions. Split payment and
+              shipment truth stays in the split audit and detail lanes.
             </p>
           </div>
           <p className="text-[11px] text-slate-500">
@@ -448,18 +459,23 @@ export default function Orders() {
               <tbody>
                 {hasItems ? items.map((order, rowIndex) => {
                   const contract = order.contract || null;
-                  const actionOptions = Array.isArray(contract?.availableActions) &&
-                    contract.availableActions.length > 0
-                    ? contract.availableActions
-                    : ADMIN_ORDER_ACTION_OPTIONS.map((option) => ({
-                        code: option.value,
-                        label: option.label,
-                        enabled: true,
-                        reason: null,
-                      }));
                   const actionStatus = toAdminOrderActionValue(
                     order.rawStatus || order.status || "pending"
                   );
+                  const actionOptions = Array.isArray(contract?.availableActions) &&
+                    contract.availableActions.length > 0
+                    ? contract.availableActions
+                    : [
+                        {
+                          code: actionStatus,
+                          label: contract?.statusSummary?.label || "Status unavailable",
+                          enabled: false,
+                          reason:
+                            "Backend actionability is unavailable for this order row right now.",
+                        },
+                      ];
+                  const hasBackendActions = Array.isArray(contract?.availableActions) &&
+                    contract.availableActions.length > 0;
                   const isUpdating = pendingUpdateId === order.id;
                   const orderId = order?.id;
                   const invoiceParam = getInvoiceParam(order);
@@ -511,9 +527,7 @@ export default function Orders() {
                             />
                           </div>
                           <div className="text-[10px] text-slate-400">
-                            {contract?.statusSummary?.description ||
-                              contract?.fulfillmentReadiness?.description ||
-                              "-"}
+                            {getParentAggregateHint(order, contract)}
                           </div>
                         </div>
                       </td>
@@ -522,7 +536,7 @@ export default function Orders() {
                           <select
                             value={actionStatus}
                             onChange={(event) => onUpdateStatus(order, event.target.value)}
-                            disabled={isUpdating}
+                            disabled={isUpdating || !hasBackendActions}
                             className="h-7 w-[102px] rounded-lg border border-slate-200 bg-white px-2 text-[10px] font-medium text-slate-700 focus:border-emerald-500 focus:outline-none disabled:opacity-60"
                           >
                             {actionOptions.map((option) => (
@@ -537,6 +551,10 @@ export default function Orders() {
                           </select>
                           {isUpdating ? (
                             <span className="text-[10px] text-slate-400">Saving...</span>
+                          ) : !hasBackendActions ? (
+                            <span className="text-[10px] text-amber-600">
+                              Actions unavailable
+                            </span>
                           ) : null}
                           {invoiceParam ? (
                             <Link

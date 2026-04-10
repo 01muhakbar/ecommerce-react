@@ -13,13 +13,46 @@ import {
   buildPublicOrderTrackingPath,
 } from "../../utils/publicOrderReference.js";
 import {
-  getOrderContractAction,
+  getEnabledOrderContractAction,
   getOrderContractMeta,
   getOrderContractSummary,
 } from "../../utils/orderContract.ts";
+import { getSplitOperationalStatusSummary } from "../../utils/splitOperationalTruth.ts";
 
 const cardClass =
   "mx-auto max-w-2xl rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_20px_45px_rgba(15,23,42,0.08)] sm:p-8";
+
+const summarizeSplitOperationalTruth = (storeSplits) => {
+  const summary = {
+    awaitingPaymentCount: 0,
+    underReviewCount: 0,
+    finalNegativeCount: 0,
+    shipmentLaneCount: 0,
+  };
+
+  (Array.isArray(storeSplits) ? storeSplits : []).forEach((split) => {
+    const splitSummary = getSplitOperationalStatusSummary(split);
+    const code = String(splitSummary?.code || "").trim().toUpperCase();
+    const lane = String(splitSummary?.lane || "").trim().toUpperCase();
+    if (code === "AWAITING_PAYMENT") {
+      summary.awaitingPaymentCount += 1;
+      return;
+    }
+    if (code === "UNDER_REVIEW") {
+      summary.underReviewCount += 1;
+      return;
+    }
+    if (Boolean(splitSummary?.isFinal) && ["FAILED", "EXPIRED", "CANCELLED", "RETURNED", "FAILED_DELIVERY"].includes(code)) {
+      summary.finalNegativeCount += 1;
+      return;
+    }
+    if (lane === "SHIPMENT") {
+      summary.shipmentLaneCount += 1;
+    }
+  });
+
+  return summary;
+};
 
 function StripeActionButton({ disabled, busy, onClick, label = "Continue Stripe Payment" }) {
   return (
@@ -93,6 +126,8 @@ export default function StoreCheckoutSuccessPage() {
 
   const stripeVerification = verifyStripeQuery.data?.data || null;
   const orderSnapshot = orderSnapshotQuery.data?.data || null;
+  const orderStoreSplits = Array.isArray(orderSnapshot?.storeSplits) ? orderSnapshot.storeSplits : [];
+  const splitTruthSummary = summarizeSplitOperationalTruth(orderStoreSplits);
   const stripeOrderSnapshot = isStripeFlow ? orderSnapshot : null;
   const stripeContract = stripeVerification?.contract || stripeOrderSnapshot?.contract || null;
   const stripeStatusSummary = getOrderContractSummary(stripeContract);
@@ -103,7 +138,7 @@ export default function StoreCheckoutSuccessPage() {
   const stripeOrderPaid = String(stripePaymentMeta?.code || stripeOrderSnapshot?.paymentStatus || "")
     .toUpperCase()
     .trim() === "PAID";
-  const stripeContinueAction = getOrderContractAction(
+  const stripeContinueAction = getEnabledOrderContractAction(
     stripeContract,
     "CONTINUE_STRIPE_PAYMENT"
   );
@@ -112,17 +147,36 @@ export default function StoreCheckoutSuccessPage() {
     stripeOrderPaid;
   const orderStatusSummary = getOrderContractSummary(orderSnapshot?.contract);
   const orderPaymentEntry = orderSnapshot?.paymentEntry || null;
-  const orderContinueAction = getOrderContractAction(orderSnapshot?.contract, "CONTINUE_PAYMENT");
+  const orderContinueAction = getEnabledOrderContractAction(
+    orderSnapshot?.contract,
+    "CONTINUE_PAYMENT"
+  );
   const nonStripePaymentPath =
     orderPaymentEntry?.visible && orderPaymentEntry?.targetPath
       ? orderPaymentEntry.targetPath
-      : orderContinueAction?.enabled && orderContinueAction?.targetPath
-        ? orderContinueAction.targetPath
-        : null;
+      : orderContinueAction?.targetPath || null;
   const nonStripeStatusLabel = orderStatusSummary?.label || "Order Created";
+  const nonStripeOperationalLabel =
+    splitTruthSummary.awaitingPaymentCount > 0
+      ? "Split Payment Required"
+      : splitTruthSummary.underReviewCount > 0
+        ? "Split Payment Under Review"
+        : splitTruthSummary.finalNegativeCount > 0
+          ? "Split Status Updated"
+          : nonStripeStatusLabel;
   const nonStripeStatusDescription =
-    orderStatusSummary?.description ||
-    "Your order reference is ready. Continue with the latest backend-approved next step from your account.";
+    splitTruthSummary.awaitingPaymentCount > 0
+      ? `Pay ${splitTruthSummary.awaitingPaymentCount} store split${splitTruthSummary.awaitingPaymentCount === 1 ? "" : "s"} from your account payment lane. Shipment will stay blocked per split until payment truth is settled.`
+      : splitTruthSummary.underReviewCount > 0
+        ? `${splitTruthSummary.underReviewCount} store split payment${splitTruthSummary.underReviewCount === 1 ? " is" : "s are"} under review. Wait for backend confirmation before expecting shipment progress.`
+        : splitTruthSummary.finalNegativeCount > 0
+          ? `${splitTruthSummary.finalNegativeCount} store split${splitTruthSummary.finalNegativeCount === 1 ? " is" : "s are"} already in a closed or failed state. Open tracking or My Orders for the latest per-split truth.`
+          : orderStatusSummary?.description ||
+            "Your order reference is ready. Continue with the latest backend-approved next step from your account.";
+  const nonStripeOrderStatusError =
+    orderSnapshotQuery.error?.response?.data?.message ||
+    orderSnapshotQuery.error?.message ||
+    "We could not load the latest checkout state yet.";
   const stripeActionLabel = stripeContinueAction?.label || "Continue Stripe Payment";
   const stripeVerificationError =
     verifyStripeQuery.error?.response?.data?.message ||
@@ -226,6 +280,76 @@ export default function StoreCheckoutSuccessPage() {
           <p className="mx-auto mt-2 max-w-xl text-center text-sm text-slate-500 sm:text-base">
             The backend is loading the newest order contract before we show the next action.
           </p>
+        </div>
+      </section>
+    );
+  }
+
+  if (!isStripeFlow && orderSnapshotQuery.isError) {
+    return (
+      <section className="mx-auto max-w-[1100px] px-3 py-6 sm:px-4 sm:py-8 lg:px-6">
+        <div className={cardClass}>
+          <div className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-amber-600 sm:h-20 sm:w-20">
+            <AlertCircle className="h-8 w-8 sm:h-10 sm:w-10" />
+          </div>
+          <p className="mt-5 text-center text-sm font-semibold uppercase tracking-[0.14em] text-amber-600">
+            Status Unavailable
+          </p>
+          <h1 className="mt-2 text-center text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            We could not confirm the latest checkout state
+          </h1>
+          <p className="mx-auto mt-2 max-w-xl text-center text-sm text-slate-500 sm:text-base">
+            {nonStripeOrderStatusError}
+          </p>
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+            <Link
+              to={trackingPath}
+              className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Track Order
+            </Link>
+            <Link
+              to="/account/orders"
+              className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Open My Orders
+            </Link>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (!isStripeFlow && !orderSnapshot) {
+    return (
+      <section className="mx-auto max-w-[1100px] px-3 py-6 sm:px-4 sm:py-8 lg:px-6">
+        <div className={cardClass}>
+          <div className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-amber-600 sm:h-20 sm:w-20">
+            <AlertCircle className="h-8 w-8 sm:h-10 sm:w-10" />
+          </div>
+          <p className="mt-5 text-center text-sm font-semibold uppercase tracking-[0.14em] text-amber-600">
+            Status Unavailable
+          </p>
+          <h1 className="mt-2 text-center text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            The latest checkout state is not available
+          </h1>
+          <p className="mx-auto mt-2 max-w-xl text-center text-sm text-slate-500 sm:text-base">
+            We could not load the latest backend order snapshot, so this page will not claim payment or order completion.
+          </p>
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+            <Link
+              to={trackingPath}
+              className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Track Order
+            </Link>
+            <Link
+              to="/account/orders"
+              className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Open My Orders
+            </Link>
+          </div>
         </div>
       </section>
     );
@@ -439,12 +563,14 @@ export default function StoreCheckoutSuccessPage() {
           <p className="mt-5 text-sm font-semibold uppercase tracking-[0.14em] text-emerald-600">
             {isStripeFlow
               ? stripeStatusSummary?.label || "Payment Confirmed"
-              : nonStripeStatusLabel}
+              : nonStripeOperationalLabel}
           </p>
           <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
             {isStripeFlow
               ? "Stripe payment completed"
-              : nonStripePaymentPath
+              : splitTruthSummary.underReviewCount > 0
+                ? "Payment Review In Progress"
+                : nonStripePaymentPath
                 ? "Continue Payment From Your Account"
                 : "Order status updated"}
           </h1>

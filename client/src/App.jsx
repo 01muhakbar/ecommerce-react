@@ -1,8 +1,7 @@
-import { Suspense, lazy } from "react";
-import { Routes, Route, Navigate, useParams } from "react-router-dom";
+import { Suspense, lazy, useEffect } from "react";
+import { Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
 import StoreLayout from "./components/Layout/StoreLayout.jsx";
 import { AuthProvider } from "./auth/AuthContext.jsx";
-import StoreCategoryPage from "./pages/store/StoreCategoryPage.jsx";
 import StoreProductDetailPage from "./pages/store/StoreProductDetailPage.jsx";
 import StoreCartPage from "./pages/store/StoreCartPage.jsx";
 import CheckoutPage from "./pages/store/Checkout.jsx";
@@ -213,9 +212,29 @@ function LegacyAdminCurrenciesRedirect() {
   return <Navigate to="/admin/international/currencies" replace />;
 }
 
+function LegacyStoreCategoryRedirect() {
+  const { slug } = useParams();
+  const target = slug
+    ? `/search?category=${encodeURIComponent(slug)}&page=1`
+    : "/search?page=1";
+  return <Navigate to={target} replace />;
+}
+
+function ScrollToTopOnRouteChange() {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.hash) return;
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [location.pathname, location.search, location.hash]);
+
+  return null;
+}
+
 export default function App() {
   return (
     <AuthProvider>
+      <ScrollToTopOnRouteChange />
       <SeoCustomizationBridge />
       <Suspense
         fallback={
@@ -232,8 +251,8 @@ export default function App() {
           <Route path="/" element={<StoreLayout />}>
             <Route index element={<KachaBazarDemoHomePage />} />
             <Route path="search" element={<StoreSearchPage />} />
-            <Route path="category" element={<StoreCategoryPage />} />
-            <Route path="category/:slug" element={<StoreCategoryPage />} />
+            <Route path="category" element={<LegacyStoreCategoryRedirect />} />
+            <Route path="category/:slug" element={<LegacyStoreCategoryRedirect />} />
             <Route path="product/:slug" element={<StoreProductDetailPage />} />
             <Route path="cart" element={<StoreCartPage />} />
             <Route path="checkout" element={<CheckoutPage />} />

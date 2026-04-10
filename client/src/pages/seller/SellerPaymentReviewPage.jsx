@@ -50,6 +50,17 @@ const getStatusTone = (value) =>
 const resolveBadgeTone = (metaTone, fallbackValue) =>
   String(metaTone || "").trim() || getStatusTone(fallbackValue);
 
+const normalizeReviewPaymentCode = (entry) =>
+  String(
+    entry?.payment?.statusMeta?.code ||
+      entry?.payment?.status ||
+      entry?.paymentStatusMeta?.code ||
+      entry?.paymentStatus ||
+      ""
+  )
+    .trim()
+    .toUpperCase();
+
 const formatDateTime = (value) => {
   if (!value) return "-";
   const date = new Date(value);
@@ -63,10 +74,13 @@ const formatDateTime = (value) => {
 const buildReviewStats = (items) => ({
   total: items.length,
   awaitingReview: items.filter(
-    (item) => String(item.payment?.status || item.paymentStatus).toUpperCase() === "PENDING_CONFIRMATION"
+    (item) => normalizeReviewPaymentCode(item) === "PENDING_CONFIRMATION"
   ).length,
-  settled: items.filter(
-    (item) => String(item.payment?.status || item.paymentStatus).toUpperCase() === "PAID"
+  settled: items.filter((item) => normalizeReviewPaymentCode(item) === "PAID").length,
+  exceptionCount: items.filter((item) =>
+    ["REJECTED", "FAILED", "EXPIRED", "CANCELLED"].includes(
+      normalizeReviewPaymentCode(item)
+    )
   ).length,
 });
 
@@ -192,20 +206,30 @@ export default function SellerPaymentReviewPage() {
         <SellerWorkspaceStatCard
           label="Visible Records"
           value={String(reviewStats.total)}
-          hint="Payment review rows for the active filter and current store only."
+          hint={
+            reviewStats.exceptionCount > 0
+              ? `Payment review rows for the active filter and current store only. Exception latest records: ${reviewStats.exceptionCount}.`
+              : "Payment review rows for the active filter and current store only."
+          }
           Icon={CreditCard}
         />
         <SellerWorkspaceStatCard
           label="Awaiting Review"
           value={String(reviewStats.awaitingReview)}
-          hint="Rows whose latest payment snapshot still waits for seller review."
+          hint="Rows whose latest backend payment snapshot still waits for seller review."
           Icon={BadgeCheck}
           tone="amber"
         />
         <SellerWorkspaceStatCard
-          label="Settled"
+          label="Paid"
           value={String(reviewStats.settled)}
-          hint={actorCanReview ? "You can process pending proofs from this lane." : "This actor can observe outcomes only."}
+          hint={
+            reviewStats.exceptionCount > 0
+              ? `Backend-paid only. ${reviewStats.exceptionCount} rejected/failed/expired record(s) stay outside this count.`
+              : actorCanReview
+                ? "Backend-paid records in the active filter and store scope."
+                : "This actor can observe outcomes only."
+          }
           Icon={BadgeCheck}
           tone="emerald"
         />

@@ -30,6 +30,19 @@ import {
   hasGroupedPaymentDeadlinePassed,
   shouldPollGroupedPaymentGroups,
 } from "../../utils/groupedPaymentReadModel.ts";
+import {
+  getSplitOperationalBridge,
+  getSplitOperationalEnabledBuyerAction,
+  getSplitOperationalFinality,
+  getSplitOperationalPayment,
+  getSplitOperationalShipment,
+  getSplitOperationalStatusSummary,
+} from "../../utils/splitOperationalTruth.ts";
+import {
+  UiEmptyState,
+  UiErrorState,
+  UiSkeleton,
+} from "../../components/primitives/state/index.js";
 
 const formatDateTime = (value) => {
   if (!value) return "-";
@@ -54,6 +67,75 @@ const formatCountdown = (value, now) => {
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
   return [hours, minutes, seconds].map((part) => String(part).padStart(2, "0")).join(":");
+};
+
+const OPEN_PAYMENT_STATUSES = new Set(["CREATED", "REJECTED"]);
+const REVIEW_PAYMENT_STATUSES = new Set(["PENDING_CONFIRMATION"]);
+const CLOSED_PAYMENT_STATUSES = new Set(["FAILED", "EXPIRED", "CANCELLED"]);
+
+const summarizeGroupedPayments = (groups) => {
+  const summary = {
+    openCount: 0,
+    reviewCount: 0,
+    paidCount: 0,
+    closedCount: 0,
+    unavailableCount: 0,
+    earliestOpenExpiresAt: null,
+  };
+
+  (Array.isArray(groups) ? groups : []).forEach((group) => {
+    const readModel = getGroupedPaymentReadModel(group);
+    const operationalPayment = getSplitOperationalPayment(group);
+    const status = String(operationalPayment.status || readModel.status || "").toUpperCase();
+    const expiresAt = readModel.expiresAt ? new Date(readModel.expiresAt).getTime() : Number.NaN;
+
+    if (!group?.payment?.id && status === "UNPAID") {
+      summary.unavailableCount += 1;
+      return;
+    }
+
+    if (status === "PAID") {
+      summary.paidCount += 1;
+      return;
+    }
+
+    if (REVIEW_PAYMENT_STATUSES.has(status)) {
+      summary.reviewCount += 1;
+      return;
+    }
+
+    if (OPEN_PAYMENT_STATUSES.has(status)) {
+      summary.openCount += 1;
+      if (Number.isFinite(expiresAt)) {
+        summary.earliestOpenExpiresAt =
+          summary.earliestOpenExpiresAt === null
+            ? readModel.expiresAt
+            : new Date(summary.earliestOpenExpiresAt).getTime() > expiresAt
+              ? readModel.expiresAt
+              : summary.earliestOpenExpiresAt;
+      }
+      return;
+    }
+
+    if (CLOSED_PAYMENT_STATUSES.has(status)) {
+      summary.closedCount += 1;
+      return;
+    }
+
+    summary.unavailableCount += 1;
+  });
+
+  const summaryParts = [];
+  if (summary.openCount > 0) summaryParts.push(`${summary.openCount} open`);
+  if (summary.reviewCount > 0) summaryParts.push(`${summary.reviewCount} under review`);
+  if (summary.paidCount > 0) summaryParts.push(`${summary.paidCount} confirmed`);
+  if (summary.closedCount > 0) summaryParts.push(`${summary.closedCount} closed`);
+  if (summary.unavailableCount > 0) summaryParts.push(`${summary.unavailableCount} unavailable`);
+
+  return {
+    ...summary,
+    summaryText: summaryParts.length > 0 ? summaryParts.join(" • ") : "No store payment snapshot",
+  };
 };
 
 const createEmptyForm = (amount = "") => ({
@@ -147,6 +229,17 @@ const resolveBuyerPaymentStep = (status) => {
     detail: "Pay the exact amount for this store, then continue with proof submission from the same card.",
     tone: "sky",
     Icon: QrCode,
+  };
+};
+
+const resolveBuyerOperationalStep = (summary, paymentStatus) => {
+  const baseStep = resolveBuyerPaymentStep(paymentStatus);
+  if (!summary || typeof summary !== "object") return baseStep;
+  return {
+    ...baseStep,
+    title: summary.label || baseStep.title,
+    detail: summary.description || baseStep.detail,
+    tone: summary.tone || baseStep.tone,
   };
 };
 
@@ -371,9 +464,15 @@ function StorePaymentStepList({ groups }) {
       <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {groups.map((group) => {
           const readModel = getGroupedPaymentReadModel(group);
-          const status = readModel.status;
+          const operationalPayment = getSplitOperationalPayment(group);
+          const operationalSummary = getSplitOperationalStatusSummary(group);
+          const status = operationalPayment.status || readModel.status;
           const progress = getBuyerPaymentProgress(status);
-          const statusLabel = readModel.statusMeta?.label || progress.summary;
+          const statusLabel =
+            operationalSummary?.label ||
+            operationalPayment.statusMeta?.label ||
+            readModel.statusMeta?.label ||
+            progress.summary;
           return (
             <div key={`${group.suborderId || group.storeId}`} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
               <div className="flex items-start justify-between gap-3">
@@ -383,8 +482,8 @@ function StorePaymentStepList({ groups }) {
                 </div>
                 <PaymentStatusBadge
                   status={status}
-                  label={readModel.statusMeta?.label}
-                  tone={readModel.statusMeta?.tone}
+                  label={statusLabel}
+                  tone={operationalSummary?.tone || operationalPayment.statusMeta?.tone || readModel.statusMeta?.tone}
                 />
               </div>
             </div>
@@ -707,17 +806,38 @@ function PaymentGroupCard({
 }) {
   const payment = group.payment;
   const readModel = getGroupedPaymentReadModel(group);
-  const currentStatus = readModel.status;
+  const operationalPayment = getSplitOperationalPayment(group);
+  const operationalShipment = getSplitOperationalShipment(group);
+  const operationalBridge = getSplitOperationalBridge(group);
+  const operationalFinality = getSplitOperationalFinality(group);
+  const operationalSummary = getSplitOperationalStatusSummary(group);
+  const submitProofAction = getSplitOperationalEnabledBuyerAction(
+    group,
+    "SUBMIT_PAYMENT_PROOF"
+  );
+  const cancelAction = getSplitOperationalEnabledBuyerAction(group, "CANCEL_PAYMENT");
+  const currentStatus = operationalPayment.status || readModel.status;
   const canSubmitProof =
-    Boolean(payment?.id) && Boolean(readModel.proofActionability?.canStartProof);
-  const canCancel = Boolean(payment?.id) && Boolean(readModel.cancelability?.canCancel);
-  const cancelReason = readModel.cancelability?.reason || null;
+    Boolean(payment?.id) &&
+    Boolean(submitProofAction?.enabled ?? readModel.proofActionability?.canStartProof);
+  const canCancel =
+    Boolean(payment?.id) &&
+    Boolean(cancelAction?.enabled ?? readModel.cancelability?.canCancel);
+  const cancelReason =
+    cancelAction?.reason ||
+    operationalPayment.cancelability?.reason ||
+    readModel.cancelability?.reason ||
+    null;
   const isProofIntentActive = Boolean(proofIntent[payment?.id || group.suborderId]);
   const countdown = formatCountdown(readModel.expiresAt, now);
-  const step = resolveBuyerPaymentStep(currentStatus);
+  const step = resolveBuyerOperationalStep(operationalSummary, currentStatus);
   const progress = getBuyerPaymentProgress(currentStatus);
   const expiryMeta = getExpiryMeta(currentStatus, readModel.expiresAt, now);
-  const currentStatusLabel = readModel.statusMeta?.label || currentStatus;
+  const currentStatusLabel =
+    operationalSummary?.label ||
+    operationalPayment.statusMeta?.label ||
+    readModel.statusMeta?.label ||
+    currentStatus;
   const StepIcon = step.Icon;
 
   return (
@@ -727,29 +847,42 @@ function PaymentGroupCard({
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-semibold text-slate-900">{group.storeName}</h2>
             <PaymentStatusBadge
-              status={group.paymentStatus}
-              label={group.paymentStatusMeta?.label}
-              tone={group.paymentStatusMeta?.tone}
-              prefix="Suborder"
+              status={operationalSummary?.code || group.paymentStatus}
+              label={operationalSummary?.label || group.paymentStatusMeta?.label}
+              tone={operationalSummary?.tone || group.paymentStatusMeta?.tone}
+              prefix="Split"
             />
             <PaymentStatusBadge
               status={currentStatus}
-              label={readModel.statusMeta?.label}
-              tone={readModel.statusMeta?.tone}
+              label={operationalPayment.statusMeta?.label || readModel.statusMeta?.label}
+              tone={operationalPayment.statusMeta?.tone || readModel.statusMeta?.tone}
               prefix="Payment"
+            />
+            <PaymentStatusBadge
+              status={operationalShipment.status}
+              label={operationalShipment.statusMeta?.label}
+              tone={operationalShipment.statusMeta?.tone}
+              prefix="Shipment"
             />
             {payment?.proof?.reviewStatus ? (
               <ProofReviewBadge status={payment.proof.reviewStatus} prefix="Proof" />
             ) : null}
           </div>
           <p className="mt-1 text-sm text-slate-500">
-            Suborder {group.suborderNumber || "-"} • Fulfillment {group.fulfillmentStatusMeta?.label || group.fulfillmentStatus}
+            Suborder {group.suborderNumber || "-"} • Shipment{" "}
+            {operationalShipment.statusMeta?.label ||
+              operationalShipment.status ||
+              group.fulfillmentStatusMeta?.label ||
+              group.fulfillmentStatus}
           </p>
+          {operationalBridge.shipmentBlockedReason ? (
+            <p className="mt-2 text-sm text-slate-500">{operationalBridge.shipmentBlockedReason}</p>
+          ) : null}
           {group.warning ? <p className="mt-2 text-sm text-amber-700">{group.warning}</p> : null}
         </div>
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right">
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-            Store Total
+            Store Split Total
           </p>
           <p className="mt-2 text-xl font-semibold text-slate-900">
             {formatCurrency(group.totalAmount)}
@@ -1077,22 +1210,40 @@ function PaymentGroupCard({
             </div>
           ) : null}
 
-          {payment?.id && currentStatus === "EXPIRED" ? (
+          {payment?.id && operationalSummary?.code === "EXPIRED" ? (
             <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
               The payment deadline for this store has expired. New proof submission is blocked.
             </div>
           ) : null}
 
-          {payment?.id && currentStatus === "CANCELLED" ? (
+          {payment?.id && operationalSummary?.code === "FAILED" ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              This transaction is already closed by the latest backend payment state. Transfer and proof actions are no longer available for this store split.
+            </div>
+          ) : null}
+
+          {payment?.id && operationalSummary?.code === "CANCELLED" ? (
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
               This transaction was cancelled. Transfer and proof actions are no longer available for this payment.
             </div>
           ) : null}
 
-          {payment?.id && !canSubmitProof && currentStatus !== "EXPIRED" && currentStatus !== "CANCELLED" ? (
+          {payment?.id &&
+          !canSubmitProof &&
+          !operationalFinality.isFinalNegative &&
+          operationalSummary?.code !== "EXPIRED" &&
+          operationalSummary?.code !== "FAILED" &&
+          operationalSummary?.code !== "CANCELLED" ? (
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              Proof submission is locked because payment status is currently{" "}
-              <span className="font-semibold text-slate-900">{currentStatusLabel}</span>.
+              {submitProofAction?.reason ||
+                operationalSummary?.description ||
+                operationalBridge.shipmentBlockedReason ||
+                (
+                  <>
+                    Proof submission is locked because payment status is currently{" "}
+                    <span className="font-semibold text-slate-900">{currentStatusLabel}</span>.
+                  </>
+                )}
             </div>
           ) : null}
         </div>
@@ -1191,12 +1342,11 @@ export default function AccountOrderPaymentPage() {
     return () => window.clearTimeout(timeout);
   }, [groups, now, refetch]);
 
-  const groupedStats = useMemo(() => {
-    const expiredCount = groups.filter(
-      (group) => getGroupedPaymentReadModel(group).status === "EXPIRED"
-    ).length;
-    return { expiredCount };
-  }, [groups]);
+  const groupedStats = useMemo(() => summarizeGroupedPayments(groups), [groups]);
+  const hasMissingSplitPayload =
+    Boolean(order) &&
+    String(order?.checkoutMode || "").toUpperCase() !== "LEGACY" &&
+    groups.length === 0;
 
   const handleSubmitProof = async (paymentId, payload) =>
     proofMutation.mutateAsync({ paymentId, payload });
@@ -1212,31 +1362,56 @@ export default function AccountOrderPaymentPage() {
   };
 
   if (!id) {
-    return <div className="text-sm text-slate-500">Invalid order id.</div>;
+    return (
+      <UiEmptyState
+        title="Invalid order id"
+        description="Open this page from your order history so the payment lane can load the right store splits."
+        actions={
+          <Link
+            to="/user/my-orders"
+            className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            Back to Orders
+          </Link>
+        }
+      />
+    );
   }
 
   if (isLoading) {
-    return <div className="text-sm text-slate-500">Loading payment groups...</div>;
+    return <UiSkeleton variant="invoice" rows={5} />;
   }
 
   if (isError) {
     return (
-      <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-        {error?.response?.data?.message || "Failed to load grouped payment details."}
-      </div>
+      <UiErrorState
+        title="Failed to load grouped payment details."
+        message={
+          error?.response?.data?.message ||
+          error?.message ||
+          "The latest split payment and shipment truth could not be loaded."
+        }
+        onRetry={() => refetch()}
+      />
     );
   }
 
   if (!order) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-        Order payment view not found.
-      </div>
+      <UiEmptyState
+        title="Order payment view not found"
+        description="This payment lane is unavailable for the selected order. Open your order list and choose an active payment flow."
+        actions={
+          <Link
+            to="/user/my-orders"
+            className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            Back to Orders
+          </Link>
+        }
+      />
     );
   }
-
-  const primaryPayment = groups[0]?.payment ?? null;
-  const primaryPaymentReadModel = groups[0] ? getGroupedPaymentReadModel(groups[0]) : null;
 
   return (
     <div className="space-y-6">
@@ -1257,6 +1432,33 @@ export default function AccountOrderPaymentPage() {
           }`}
         >
           {actionNotice.message}
+        </div>
+      ) : null}
+
+      {groupedStats.reviewCount > 0 ? (
+        <div className="rounded-[28px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {groupedStats.reviewCount} store split payment
+          {groupedStats.reviewCount === 1 ? " is" : "s are"} under review. If seller confirmation
+          or settlement sync feels delayed, refresh this page before retrying any manual action.
+        </div>
+      ) : null}
+
+      {hasMissingSplitPayload ? (
+        <div className="rounded-[28px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <p className="font-semibold text-amber-900">
+            Store split payment details are temporarily unavailable.
+          </p>
+          <p className="mt-1">
+            Parent order was loaded, but split payment panels are still missing from the latest
+            payload. Retry the page before asking buyer or seller to continue.
+          </p>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="mt-3 inline-flex h-10 items-center justify-center rounded-full border border-amber-300 bg-white px-4 text-sm font-semibold text-amber-800 transition hover:bg-amber-50"
+          >
+            Retry payment sync
+          </button>
         </div>
       ) : null}
 
@@ -1295,13 +1497,17 @@ export default function AccountOrderPaymentPage() {
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                Deadline
+                Open Payment Deadline
               </p>
               <p className="mt-2 text-lg font-semibold text-slate-900">
-                {formatCountdown(primaryPaymentReadModel?.expiresAt || primaryPayment?.expiresAt, now)}
+                {groupedStats.earliestOpenExpiresAt
+                  ? formatCountdown(groupedStats.earliestOpenExpiresAt, now)
+                  : "No open payment"}
               </p>
               <p className="mt-1 text-xs text-slate-500">
-                {formatDateTime(primaryPaymentReadModel?.expiresAt || primaryPayment?.expiresAt)}
+                {groupedStats.earliestOpenExpiresAt
+                  ? formatDateTime(groupedStats.earliestOpenExpiresAt)
+                  : "All store splits are already closed, confirmed, or waiting review."}
               </p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
@@ -1310,7 +1516,7 @@ export default function AccountOrderPaymentPage() {
               </p>
               <p className="mt-2 text-lg font-semibold text-slate-900">{groups.length}</p>
               <p className="mt-1 text-xs text-slate-500">
-                {groupedStats.expiredCount > 0 ? `${groupedStats.expiredCount} expired` : "All active"}
+                {groupedStats.summaryText}
               </p>
             </div>
           </div>

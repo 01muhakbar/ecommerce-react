@@ -14,6 +14,7 @@ import {
 } from "../../utils/publicOrderReference.js";
 import { normalizeDashboardSettingCopy } from "../../utils/dashboardSettingCopy.js";
 import {
+  getFirstEnabledOrderContractAction,
   getOrderContractSummary,
   isOrderContractFinal,
 } from "../../utils/orderContract.ts";
@@ -225,6 +226,22 @@ export default function AccountOrdersPage() {
                   const totalAmount = order.totalAmount ?? order.total ?? 0;
                   const paymentMethod = order.paymentMethod || order.method || "COD";
                   const paymentEntry = order.paymentEntry || null;
+                  const continuePaymentAction = getFirstEnabledOrderContractAction(
+                    order?.contract,
+                    ["CONTINUE_PAYMENT", "CONTINUE_STRIPE_PAYMENT"]
+                  );
+                  const paymentPath =
+                    paymentEntry?.visible && paymentEntry?.targetPath
+                      ? paymentEntry.targetPath
+                      : continuePaymentAction?.targetPath || null;
+                  const paymentLabel =
+                    paymentEntry?.label ||
+                    continuePaymentAction?.label ||
+                    "Order Payment";
+                  const paymentHint =
+                    paymentEntry?.summaryLabel ||
+                    continuePaymentAction?.description ||
+                    null;
                   return (
                     <tr key={order.id} className="border-t border-slate-100 hover:bg-slate-50">
                       <td className="px-5 py-4">
@@ -251,8 +268,8 @@ export default function AccountOrdersPage() {
                             tone={order.paymentStatusMeta?.tone}
                             prefix="Parent"
                           />
-                          {paymentEntry?.summaryLabel ? (
-                            <p className="text-xs text-slate-500">{paymentEntry.summaryLabel}</p>
+                          {paymentHint ? (
+                            <p className="text-xs text-slate-500">{paymentHint}</p>
                           ) : null}
                         </div>
                       </td>
@@ -267,13 +284,13 @@ export default function AccountOrdersPage() {
                       </td>
                       <td className="px-5 py-4 text-right">
                         <div className="flex justify-end gap-2">
-                          {paymentEntry?.visible && paymentEntry?.targetPath ? (
+                          {paymentPath ? (
                             <Link
-                              to={paymentEntry.targetPath}
+                              to={paymentPath}
                               className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-sky-200 px-3 text-xs font-semibold text-sky-700 transition hover:bg-sky-50"
                             >
                               <QrCode className="h-3.5 w-3.5" />
-                              {paymentEntry.label || "Order Payment"}
+                              {paymentLabel}
                             </Link>
                           ) : null}
                           {trackingPath ? (

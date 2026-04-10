@@ -11,7 +11,7 @@ export default function FeaturedCategoriesMega({ featuredCategories }) {
         {featuredCategories.map((category, index) => (
           <Link
             key={category.id || index}
-            to={`/category/${encodeURIComponent(category.slug)}`}
+            to={`/search?category=${encodeURIComponent(category.slug)}&page=1`}
             className="flex h-full items-start gap-3 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:border-slate-300 hover:shadow-md"
           >
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-xl">

@@ -55,6 +55,7 @@ import {
   STORE_PAYMENT_PROFILE_CHECKOUT_ATTRIBUTES,
 } from "../services/sharedContracts/storePaymentProfileCompat.js";
 import { buildPublicStoreOperationalReadiness } from "../services/sharedContracts/publicStoreIdentity.js";
+import { buildSplitOperationalTruth } from "../services/splitOperationalTruth.service.js";
 import {
   buildStorePaymentProfileActivityMeta,
   buildStorePaymentProfileVerificationMeta,
@@ -1030,6 +1031,16 @@ const serializeSplitOrder = (order: any) => {
       fulfillmentStatuses: [orderStatus],
       availableActions: [],
     });
+    const operationalTruth = buildSplitOperationalTruth({
+      paymentStatus,
+      shipmentReadModel: {
+        shippingStatus: "WAITING_PAYMENT",
+        shippingStatusMeta: buildShipmentStatusMeta("WAITING_PAYMENT"),
+        usedLegacyFallback: true,
+        hasPersistedShipment: false,
+        shipments: [],
+      },
+    });
     return {
       orderId: toNumber(getAttr(order, "id")),
       ref: String(getAttr(order, "invoiceNo") || getAttr(order, "id") || ""),
@@ -1086,6 +1097,7 @@ const serializeSplitOrder = (order: any) => {
           latestTrackingEvent: null,
           hasActiveShipment: false,
           hasTrackingNumber: false,
+          operationalTruth,
           shipments: [],
           items: legacyItems.map((item: any) => ({
             id: toNumber(getAttr(item, "id")),
@@ -1130,6 +1142,11 @@ const serializeSplitOrder = (order: any) => {
     const cancelability = paymentReadModel.cancelability;
     const shippingSummary =
       shippingReadModel.suborders.get(toNumber(getAttr(suborder, "id"))) ?? null;
+    const operationalTruth = buildSplitOperationalTruth({
+      paymentStatus: suborderPaymentStatus,
+      paymentReadModel,
+      shipmentReadModel: shippingSummary,
+    });
 
     return {
       suborderId: toNumber(getAttr(suborder, "id")),
@@ -1189,10 +1206,11 @@ const serializeSplitOrder = (order: any) => {
          typeof shippingSummary?.compatibilityMatchesStorage === "boolean"
            ? shippingSummary.compatibilityMatchesStorage
            : true,
-       trackingEventCount: Number(shippingSummary?.trackingEventCount || 0),
-       missingTrackingTimeline: Boolean(shippingSummary?.missingTrackingTimeline),
-       incompleteTrackingData: Boolean(shippingSummary?.incompleteTrackingData),
-       shipments: Array.isArray(shippingSummary?.shipments) ? shippingSummary.shipments : [],
+      trackingEventCount: Number(shippingSummary?.trackingEventCount || 0),
+      missingTrackingTimeline: Boolean(shippingSummary?.missingTrackingTimeline),
+      incompleteTrackingData: Boolean(shippingSummary?.incompleteTrackingData),
+      shipments: Array.isArray(shippingSummary?.shipments) ? shippingSummary.shipments : [],
+      operationalTruth,
       items: items.map((item: any) => ({
         id: toNumber(getAttr(item, "id")),
         productId: toNumber(getAttr(item, "productId")),
