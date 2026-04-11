@@ -43,6 +43,7 @@ import {
   retrieveStripeCheckoutSession,
 } from "../services/stripeCheckout.js";
 import { syncStoreOrderFromStripeSession } from "../services/stripeOrderSync.js";
+import { getRequestTraceId } from "../services/operationalAudit.service.js";
 import {
   buildBuyerOrderPaymentEntry,
   resolveBuyerFacingPaymentStatus,
@@ -595,6 +596,7 @@ const toProductListItem = (product: any) => {
     purchaseState,
     status: plain?.status,
     published: plain?.isPublished ?? plain?.published ?? false,
+    createdAt: plain?.createdAt,
     updatedAt: plain?.updatedAt,
   };
 };
@@ -713,6 +715,7 @@ router.get(
       const maxPriceParam = Number(req.query.maxPrice);
       const minRatingParam = Number(req.query.minRating);
       const sortParam = String(req.query.sort || "featured").trim().toLowerCase();
+      const discountedOnly = parseBool(req.query.discounted) === true;
       const storeSlug = normalizeStoreSlug(req.query.storeSlug);
       const hasMinPrice = Number.isFinite(minPriceParam) && minPriceParam >= 0;
       const hasMaxPrice = Number.isFinite(maxPriceParam) && maxPriceParam >= 0;
@@ -757,6 +760,15 @@ router.get(
         where[Op.and] = [
           ...(Array.isArray(where[Op.and]) ? where[Op.and] : []),
           sequelize.where(ratingExpr, { [Op.gte]: Math.min(5, minRatingParam) }),
+        ];
+      }
+
+      if (discountedOnly) {
+        where[Op.and] = [
+          ...(Array.isArray(where[Op.and]) ? where[Op.and] : []),
+          sequelize.literal(
+            "Product.sale_price IS NOT NULL AND Product.sale_price > 0 AND Product.sale_price < Product.price"
+          ),
         ];
       }
 
@@ -831,6 +843,10 @@ router.get(
       }
 
       const offset = (page - 1) * limit;
+      const newestOrder =
+        discountedOnly && sortParam === "newest"
+          ? ([["updatedAt", "DESC"] as any, ["createdAt", "DESC"] as any])
+          : ([["createdAt", "DESC"] as any]);
       const order =
         sortParam === "price_asc"
           ? [[effectivePriceExpr, "ASC"] as any, ["createdAt", "DESC"] as any]
@@ -839,7 +855,7 @@ router.get(
             : sortParam === "highest_rated"
               ? [[ratingExpr, "DESC"] as any, ["createdAt", "DESC"] as any]
               : sortParam === "newest"
-                ? [["createdAt", "DESC"] as any]
+                ? newestOrder
                 : [["createdAt", "DESC"] as any];
 
       const { rows, count } = await Product.findAndCountAll({
@@ -857,6 +873,7 @@ router.get(
           "tags",
           "status",
           "isPublished",
+          "createdAt",
           "updatedAt",
           [
             sequelize.literal(
@@ -2876,6 +2893,7 @@ router.get(
       const syncResult = await syncStoreOrderFromStripeSession({
         session,
         source: "return",
+        traceId: getRequestTraceId(req),
       });
       const nextPaymentStatus = syncResult.ok
         ? syncResult.paymentStatus || "UNPAID"

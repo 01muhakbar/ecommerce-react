@@ -23,6 +23,7 @@ const fetchProducts = async ({
   sort,
   page,
   limit,
+  discounted,
 }) => {
   const keyword = search ?? q;
   return fetchStoreProducts({
@@ -34,6 +35,7 @@ const fetchProducts = async ({
     sort,
     page,
     limit,
+    discounted,
   });
 };
 
@@ -56,10 +58,13 @@ export const useProducts = ({
   sort,
   page,
   limit,
+  discounted,
   enabled = true,
   keepPreviousData = true,
   staleTime = 1000 * 30,
+  refetchOnMount = true,
   refetchOnWindowFocus = true,
+  refetchOnReconnect = true,
   refetchInterval,
 }) =>
   useQuery({
@@ -74,6 +79,7 @@ export const useProducts = ({
       sort || "",
       page || 1,
       limit || 12,
+      discounted ? "discounted" : "",
     ],
     queryFn: () =>
       fetchProducts({
@@ -86,11 +92,14 @@ export const useProducts = ({
         sort,
         page,
         limit,
+        discounted,
       }),
     placeholderData: keepPreviousData ? prevData : undefined,
     enabled,
     staleTime,
+    refetchOnMount,
     refetchOnWindowFocus,
+    refetchOnReconnect,
     refetchInterval,
   });
 

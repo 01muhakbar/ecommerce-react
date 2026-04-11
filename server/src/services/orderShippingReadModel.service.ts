@@ -44,6 +44,8 @@ const ACTIVE_SHIPMENT_STATUSES = new Set([
 ]);
 const SHIPPED_LIKE_STATUSES = new Set(["SHIPPED", "IN_TRANSIT", "OUT_FOR_DELIVERY"]);
 const PROCESSING_LIKE_STATUSES = new Set(["PROCESSING", "PACKED"]);
+const EXCEPTION_ACTIVE_STATUSES = new Set(["FAILED_DELIVERY"]);
+const EXCEPTION_FINAL_STATUSES = new Set(["RETURNED", "CANCELLED"]);
 const OPERATIONAL_TIMELINE_EXPECTED_STATUSES = new Set([
   "PACKED",
   "SHIPPED",
@@ -83,7 +85,9 @@ const buildShipmentActionability = (input: {
   shippingSetupBlockedReason?: string | null;
 }) => {
   const mutationEnabled = input.featureEnabled && isMultistoreShipmentMutationEnabled();
-  const finalStatus = new Set(["DELIVERED", "RETURNED", "CANCELLED"]).has(input.shipmentStatus);
+  const finalStatus = new Set(["DELIVERED", ...EXCEPTION_FINAL_STATUSES]).has(
+    input.shipmentStatus
+  );
 
   const disabledByFlagReason = "Shipment mutation is disabled for the current rollout.";
   const legacyOnlyReason =
@@ -113,7 +117,19 @@ const buildShipmentActionability = (input: {
   const canMarkShipped = canOperate && input.shipmentStatus === "PACKED";
   const canUploadTracking = canMarkShipped;
   const canConfirmDelivery =
-    canOperate && (input.shipmentStatus === "SHIPPED" || input.shipmentStatus === "IN_TRANSIT");
+    canOperate &&
+    (input.shipmentStatus === "SHIPPED" ||
+      input.shipmentStatus === "IN_TRANSIT" ||
+      input.shipmentStatus === "OUT_FOR_DELIVERY");
+  const canMarkFailedDelivery =
+    canOperate &&
+    (input.shipmentStatus === "SHIPPED" ||
+      input.shipmentStatus === "IN_TRANSIT" ||
+      input.shipmentStatus === "OUT_FOR_DELIVERY");
+  const canMarkReturned = canOperate && input.shipmentStatus === "FAILED_DELIVERY";
+  const canCancelShipment =
+    canOperate &&
+    (input.shipmentStatus === "READY_TO_FULFILL" || input.shipmentStatus === "PACKED");
 
   return {
     canUploadTracking,
@@ -159,6 +175,38 @@ const buildShipmentActionability = (input: {
             : input.shipmentStatus === "DELIVERED"
               ? "Shipment is already delivered."
               : "Delivery can be confirmed after shipment dispatch."),
+      },
+      {
+        code: "MARK_FAILED_DELIVERY",
+        label: "Mark delivery failed",
+        enabled: canMarkFailedDelivery,
+        reason:
+          baseReason ||
+          (input.shipmentStatus === "FAILED_DELIVERY"
+            ? "Shipment is already marked as failed delivery."
+            : input.shipmentStatus === "RETURNED" || input.shipmentStatus === "CANCELLED"
+              ? "Shipment is already closed in an exception state."
+              : "Delivery failure can be recorded after dispatch."),
+      },
+      {
+        code: "MARK_RETURNED",
+        label: "Mark returned",
+        enabled: canMarkReturned,
+        reason:
+          baseReason ||
+          (input.shipmentStatus === "FAILED_DELIVERY"
+            ? "Returned shipment can be recorded after failed delivery follow-up."
+            : "Return can be recorded only after a failed delivery exception."),
+      },
+      {
+        code: "CANCEL_SHIPMENT",
+        label: "Cancel shipment",
+        enabled: canCancelShipment,
+        reason:
+          baseReason ||
+          (input.shipmentStatus === "READY_TO_FULFILL" || input.shipmentStatus === "PACKED"
+            ? "Shipment can be cancelled before dispatch."
+            : "Shipment cancellation is only available before dispatch."),
       },
     ],
   };
@@ -311,6 +359,7 @@ export const mapShipmentStatusToCompatibilityFulfillment = (value: unknown) => {
   const status = normalizeShipmentStatus(value);
   if (status === "DELIVERED") return "DELIVERED";
   if (status === "CANCELLED") return "CANCELLED";
+  if (EXCEPTION_ACTIVE_STATUSES.has(status) || status === "RETURNED") return "SHIPPED";
   if (PROCESSING_LIKE_STATUSES.has(status)) return "PROCESSING";
   if (SHIPPED_LIKE_STATUSES.has(status)) return "SHIPPED";
   return "UNFULFILLED";
@@ -327,7 +376,7 @@ const deriveLegacyShipmentStatus = (input: {
   if (fulfillmentStatus === "CANCELLED") return "CANCELLED";
   if (fulfillmentStatus === "DELIVERED") return "DELIVERED";
   if (fulfillmentStatus === "SHIPPED") return "SHIPPED";
-  if (fulfillmentStatus === "PROCESSING") return "PROCESSING";
+  if (fulfillmentStatus === "PROCESSING") return "PACKED";
 
   const paymentStatus = toUpper(input.paymentStatus, "UNPAID") || "UNPAID";
   if (paymentStatus === "PAID") return "READY_TO_FULFILL";
@@ -629,6 +678,10 @@ export const buildShippingAggregate = (shipments: any[], fallbackStatus = "WAITI
     const active = statuses.filter((status) => status !== "CANCELLED");
     if (active.length === 0) {
       aggregateStatus = "CANCELLED";
+    } else if (active.some((status) => status === "RETURNED")) {
+      aggregateStatus = "RETURNED";
+    } else if (active.some((status) => status === "FAILED_DELIVERY")) {
+      aggregateStatus = "FAILED_DELIVERY";
     } else if (active.every((status) => status === "DELIVERED")) {
       aggregateStatus = "DELIVERED";
     } else if (active.some((status) => SHIPPED_LIKE_STATUSES.has(status))) {

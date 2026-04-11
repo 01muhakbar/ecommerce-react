@@ -117,6 +117,76 @@ const DEFAULT_CHECKOUT_COPY = {
   },
 };
 
+const CHECKOUT_REQUEST_KEY_STORAGE_KEY = "tppreneurs.checkout.request";
+
+const createCheckoutRequestKey = () => {
+  const randomUUID =
+    typeof globalThis !== "undefined" && globalThis.crypto?.randomUUID
+      ? globalThis.crypto.randomUUID.bind(globalThis.crypto)
+      : null;
+  if (randomUUID) {
+    return randomUUID();
+  }
+  return `checkout-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+};
+
+const readCheckoutRequestKeyState = () => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(CHECKOUT_REQUEST_KEY_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+const hashCheckoutRequestSignature = (signature) => {
+  const value = String(signature || "");
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return Math.abs(hash >>> 0).toString(36);
+};
+
+const getCheckoutRequestKeyForSignature = (signature) => {
+  const safeSignature = hashCheckoutRequestSignature(signature);
+  if (!safeSignature || typeof window === "undefined") {
+    return createCheckoutRequestKey();
+  }
+  const stored = readCheckoutRequestKeyState();
+  if (
+    stored?.signature === safeSignature &&
+    typeof stored?.key === "string" &&
+    stored.key.trim()
+  ) {
+    return stored.key.trim();
+  }
+  const key = createCheckoutRequestKey();
+  try {
+    window.sessionStorage.setItem(
+      CHECKOUT_REQUEST_KEY_STORAGE_KEY,
+      JSON.stringify({ signature: safeSignature, key, createdAt: Date.now() })
+    );
+  } catch {
+    // Best-effort only; the server still treats the generated key as authoritative.
+  }
+  return key;
+};
+
+const clearCheckoutRequestKeyForSignature = (signature) => {
+  if (typeof window === "undefined") return;
+  const safeSignature = hashCheckoutRequestSignature(signature);
+  const stored = readCheckoutRequestKeyState();
+  if (!stored || stored.signature !== safeSignature) return;
+  try {
+    window.sessionStorage.removeItem(CHECKOUT_REQUEST_KEY_STORAGE_KEY);
+  } catch {
+    // Ignore storage cleanup failures.
+  }
+};
+
 const toCopyText = (value, fallback = "") => {
   const normalized = String(value ?? "").trim();
   return normalized || fallback;
@@ -1497,7 +1567,28 @@ export default function CheckoutPage() {
         useDefaultShipping,
         shippingDetails: useDefaultShipping ? undefined : shippingDetailsPayload,
       };
-      const response = await createMultiStoreCheckoutOrder(submitPayload);
+      const checkoutRequestSignature = JSON.stringify({
+        items: summaryItems
+          .map((item) => ({
+            productId: Number(item.productId),
+            qty: Number(item.qty),
+          }))
+          .sort((left, right) => left.productId - right.productId),
+        couponCode: submitPayload.couponCode || null,
+        groupCoupons: Array.isArray(submitPayload.groupCoupons)
+          ? [...submitPayload.groupCoupons].sort(
+              (left, right) => Number(left.storeId) - Number(right.storeId)
+            )
+          : [],
+        useDefaultShipping: submitPayload.useDefaultShipping === true,
+        shippingDetails: submitPayload.shippingDetails || null,
+        customer: submitPayload.customer || null,
+      });
+      const checkoutRequestKey = getCheckoutRequestKeyForSignature(checkoutRequestSignature);
+      const response = await createMultiStoreCheckoutOrder({
+        ...submitPayload,
+        checkoutRequestKey,
+      });
       const result = resolveOrderPayload(response);
       const resolvedOrderRef = resolvePublicOrderReference(
         result?.invoiceNo,
@@ -1505,6 +1596,7 @@ export default function CheckoutPage() {
         result?.invoice,
         result?.orderRef
       );
+      clearCheckoutRequestKeyForSignature(checkoutRequestSignature);
       clearCart();
       await queryClient.invalidateQueries({
         queryKey: ["account", "orders", "my"],
@@ -1543,7 +1635,12 @@ export default function CheckoutPage() {
         );
         return;
       }
-      if (err?.response?.status === 409 && Array.isArray(data?.data?.invalidItems)) {
+      if (err?.response?.status === 409 && data?.code === "CHECKOUT_IDEMPOTENCY_IN_PROGRESS") {
+        setError(
+          serverMessage ||
+            "Your checkout is still being processed. Please wait a moment and try again. If the order completed, check My Orders."
+        );
+      } else if (err?.response?.status === 409 && Array.isArray(data?.data?.invalidItems)) {
         setError(resolveCheckoutSubmitErrorMessage(data, serverMessage));
       } else if (
         err?.response?.status === 409 &&

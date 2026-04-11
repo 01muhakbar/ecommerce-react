@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Toaster, toast } from "react-hot-toast";
+import { toast } from "react-hot-toast";
 import { statCards, orderStatusStats } from "../data/dashboardStats.js";
 import { analyticsService, orderService } from "../api/index.ts";
 import { useAuth } from "../auth/useAuth.js";
@@ -324,7 +324,6 @@ export default function Dashboard() {
   }, [recentOrders, formatDateTime, formatMoney]);
   return (
     <div className="dashboard">
-      <Toaster position="top-right" />
       <KPIOverviewCards
         items={isLoadingSummary || summaryError ? statCards : kpiItems}
         labelMap={statLabelMap}

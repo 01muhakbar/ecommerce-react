@@ -1,4 +1,5 @@
 import { PaymentStatusLog } from "../models/index.js";
+import { logOperationalAuditEvent } from "./operationalAudit.service.js";
 
 export type PaymentStatusLogActorType =
   | "SYSTEM"
@@ -14,6 +15,7 @@ type AppendPaymentStatusLogInput = {
   actorType: PaymentStatusLogActorType;
   actorId?: number | null;
   note?: string | null;
+  traceId?: string | null;
 };
 
 const normalizeStatus = (value?: string | null) => {
@@ -42,4 +44,18 @@ export const appendPaymentStatusLog = async (
     } as any,
     transaction ? { transaction } : undefined
   );
+  const logTransition = () =>
+    logOperationalAuditEvent("payment.status.transition", {
+      paymentId,
+      oldStatus: normalizeStatus(input.oldStatus) || "NONE",
+      newStatus,
+      actorType: input.actorType,
+      actorId: input.actorId ?? null,
+      traceId: input.traceId ?? null,
+    });
+  if (transaction?.afterCommit) {
+    transaction.afterCommit(logTransition);
+  } else {
+    logTransition();
+  }
 };

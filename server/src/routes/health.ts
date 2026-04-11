@@ -22,4 +22,24 @@ router.get("/health", async (_req, res) => {
   });
 });
 
+router.get("/diagnostics/request-context", (req, res) => {
+  const request = req as typeof req & {
+    requestId?: string;
+    correlationId?: string;
+    requestIdSource?: "x-request-id" | "x-correlation-id" | "generated";
+  };
+
+  res.json({
+    ok: true,
+    requestId: request.requestId || null,
+    correlationId: request.correlationId || null,
+    requestIdSource: request.requestIdSource || null,
+    responseHeaders: {
+      requestId: "X-Request-Id",
+      correlationId: "X-Correlation-Id",
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
 export default router;

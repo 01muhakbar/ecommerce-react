@@ -7,6 +7,7 @@ import fs from "fs";
 import path from "path";
 
 import authFromCookie from "./middleware/authFromCookie.js";
+import { requestIdMiddleware } from "./middleware/requestId.js";
 import requireAuth from "./middleware/requireAuth.js";
 import {
   requireAdmin,
@@ -65,6 +66,7 @@ const app = express();
 // If behind a reverse proxy (nginx/vercel), allow req.secure via X-Forwarded-Proto
 app.set("trust proxy", 1);
 
+app.use(requestIdMiddleware);
 app.use(cookieParser());
 app.use("/api/store", stripeWebhookRouter);
 app.use(express.json({ limit: "5mb" }));

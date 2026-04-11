@@ -185,6 +185,12 @@ export default function SellerOrderDetailPage() {
             ? "This store split must be paid before seller fulfillment can move forward."
             : code === "SHIPMENT_MUTATION_DISABLED"
               ? "Shipment mutation is disabled in the current rollout."
+              : code === "SHIPMENT_ACTION_REQUIRES_PERSISTED_SHIPMENT"
+                ? "This shipment exception requires persisted shipment truth."
+              : code === "INVALID_SHIPMENT_TRANSITION"
+                ? "This shipment step is not valid for the current shipping state."
+              : code === "SHIPMENT_STATUS_ALREADY_SET"
+                ? "Shipment is already on the requested shipping status."
               : code === "TRACKING_NUMBER_REQUIRED"
                 ? "Tracking number is required before the shipment can be marked as shipped."
             : code === "PARENT_ORDER_CANCELLED"
@@ -880,6 +886,39 @@ export default function SellerOrderDetailPage() {
                     className={sellerPrimaryButtonClass}
                   >
                     {fulfillmentMutation.isPending ? "Saving..." : "Confirm delivered"}
+                  </button>
+                ) : null}
+
+                {trackingMutationEnabled && enabledShipmentActions.has("MARK_FAILED_DELIVERY") ? (
+                  <button
+                    type="button"
+                    onClick={() => fulfillmentMutation.mutate({ action: "MARK_FAILED_DELIVERY" })}
+                    disabled={fulfillmentMutation.isPending}
+                    className={sellerSecondaryButtonClass}
+                  >
+                    {fulfillmentMutation.isPending ? "Saving..." : "Mark delivery failed"}
+                  </button>
+                ) : null}
+
+                {trackingMutationEnabled && enabledShipmentActions.has("MARK_RETURNED") ? (
+                  <button
+                    type="button"
+                    onClick={() => fulfillmentMutation.mutate({ action: "MARK_RETURNED" })}
+                    disabled={fulfillmentMutation.isPending}
+                    className={sellerSecondaryButtonClass}
+                  >
+                    {fulfillmentMutation.isPending ? "Saving..." : "Mark returned"}
+                  </button>
+                ) : null}
+
+                {trackingMutationEnabled && enabledShipmentActions.has("CANCEL_SHIPMENT") ? (
+                  <button
+                    type="button"
+                    onClick={() => fulfillmentMutation.mutate({ action: "CANCEL_SHIPMENT" })}
+                    disabled={fulfillmentMutation.isPending}
+                    className={sellerSecondaryButtonClass}
+                  >
+                    {fulfillmentMutation.isPending ? "Saving..." : "Cancel shipment"}
                   </button>
                 ) : null}
 

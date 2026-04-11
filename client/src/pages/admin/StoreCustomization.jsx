@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router-dom";
+import { toast } from "react-hot-toast";
 import { ChevronDown, Plus, Settings, Upload, X } from "lucide-react";
 import {
   fetchAdminLanguages,
@@ -2809,15 +2810,22 @@ export default function StoreCustomizationPage() {
   }, [customizationQuery.data]);
 
   const updateMutation = useMutation({
+    meta: {
+      suppressGlobalToast: true,
+    },
     mutationFn: ({ language, payload }) =>
       updateAdminStoreCustomization(language, payload),
     onMutate: () => {
+      const activeTabLabel = TABS.find((tab) => tab.key === activeTab)?.label || "Store";
+      const toastId = `store-customization-${activeTab}-update`;
       setNotice({
         type: "success",
         message: `Updating customization for ${String(lang || "en").toUpperCase()}...`,
       });
+      toast.loading(`Updating ${activeTabLabel} settings...`, { id: toastId });
+      return { toastId, activeTabLabel };
     },
-    onSuccess: async (data) => {
+    onSuccess: async (data, _variables, context) => {
       const payload = data?.customization || data;
       const normalized = normalizeCustomizationPayload(payload);
       setHomeState(normalized.home);
@@ -2837,11 +2845,14 @@ export default function StoreCustomizationPage() {
         type: "success",
         message: `Store customization updated for ${String(lang || "en").toUpperCase()}.`,
       });
+      toast.success(`${context?.activeTabLabel || "Store"} settings updated.`, {
+        id: context?.toastId || `store-customization-${activeTab}-update`,
+      });
       await queryClient.invalidateQueries({
         queryKey: ["admin-store-customization", lang],
       });
     },
-    onError: (error) => {
+    onError: (error, _variables, context) => {
       const serverMessage =
         error?.response?.data?.message || error?.message || "";
       const isWhatsAppError = String(serverMessage)
@@ -2857,6 +2868,14 @@ export default function StoreCustomizationPage() {
           error?.message ||
           `Failed to update customization for ${String(lang || "en").toUpperCase()}.`,
       });
+      toast.error(
+        error?.response?.data?.message ||
+          error?.message ||
+          `Failed to update ${context?.activeTabLabel || "store"} settings.`,
+        {
+          id: context?.toastId || `store-customization-${activeTab}-update`,
+        }
+      );
     },
   });
 

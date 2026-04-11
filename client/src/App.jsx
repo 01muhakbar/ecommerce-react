@@ -2,34 +2,42 @@ import { Suspense, lazy, useEffect } from "react";
 import { Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
 import StoreLayout from "./components/Layout/StoreLayout.jsx";
 import { AuthProvider } from "./auth/AuthContext.jsx";
-import StoreProductDetailPage from "./pages/store/StoreProductDetailPage.jsx";
 import StoreCartPage from "./pages/store/StoreCartPage.jsx";
-import CheckoutPage from "./pages/store/Checkout.jsx";
-import StoreLoginPage from "./pages/store/StoreLoginPage.jsx";
-import StoreRegisterPage from "./pages/store/StoreRegisterPage.jsx";
-import StoreForgotPasswordPage from "./pages/store/StoreForgotPasswordPage.jsx";
-import StoreResetPasswordPage from "./pages/store/StoreResetPasswordPage.jsx";
-import StoreCheckoutSuccessPage from "./pages/store/StoreCheckoutSuccessPage.jsx";
-import StoreOrderTrackingPage from "./pages/store/StoreOrderTrackingPage.jsx";
-import StoreSearchPage from "./pages/store/StoreSearchPage.jsx";
-import StoreOffersPage from "./pages/store/StoreOffersPage.jsx";
-import StoreAboutUsPage from "./pages/store/StoreAboutUsPage.jsx";
-import StoreContactUsPage from "./pages/store/StoreContactUsPage.jsx";
-import StorePrivacyPolicyPage from "./pages/store/StorePrivacyPolicyPage.jsx";
-import StoreTermsAndConditionsPage from "./pages/store/StoreTermsAndConditionsPage.jsx";
-import StoreFaqPage from "./pages/store/StoreFaqPage.jsx";
-import StoreMicrositePage from "./pages/store/StoreMicrositePage.jsx";
-import StoreMicrositeProductDetailPage from "./pages/store/StoreMicrositeProductDetailPage.jsx";
-import KachaBazarDemoHomePage from "./pages/store/KachaBazarDemoHomePage.jsx";
 import AdminGuard from "./components/AdminGuard.jsx";
-import AdminLayout from "./components/layouts/AdminLayout.jsx";
-import AdminLoginPage from "./pages/admin/AdminLoginPage.jsx";
-import AdminCreateAccountPage from "./pages/admin/AdminCreateAccountPage.jsx";
-import AdminVerifyAccountPage from "./pages/admin/AdminVerifyAccountPage.jsx";
-import AdminForgotPasswordPage from "./pages/admin/AdminForgotPasswordPage.jsx";
-import AdminResetPasswordPage from "./pages/admin/AdminResetPasswordPage.jsx";
-import AdminResendVerificationPage from "./pages/admin/AdminResendVerificationPage.jsx";
 import RequirePerm from "./components/guards/RequirePerm.jsx";
+import AccountGuard from "./components/AccountGuard.jsx";
+import SeoCustomizationBridge from "./components/SeoCustomizationBridge.jsx";
+const StoreProductDetailPage = lazy(() => import("./pages/store/StoreProductDetailPage.jsx"));
+const CheckoutPage = lazy(() => import("./pages/store/Checkout.jsx"));
+const StoreLoginPage = lazy(() => import("./pages/store/StoreLoginPage.jsx"));
+const StoreRegisterPage = lazy(() => import("./pages/store/StoreRegisterPage.jsx"));
+const StoreForgotPasswordPage = lazy(() => import("./pages/store/StoreForgotPasswordPage.jsx"));
+const StoreResetPasswordPage = lazy(() => import("./pages/store/StoreResetPasswordPage.jsx"));
+const StoreCheckoutSuccessPage = lazy(() => import("./pages/store/StoreCheckoutSuccessPage.jsx"));
+const StoreOrderTrackingPage = lazy(() => import("./pages/store/StoreOrderTrackingPage.jsx"));
+const StoreSearchPage = lazy(() => import("./pages/store/StoreSearchPage.jsx"));
+const StoreOffersPage = lazy(() => import("./pages/store/StoreOffersPage.jsx"));
+const StoreAboutUsPage = lazy(() => import("./pages/store/StoreAboutUsPage.jsx"));
+const StoreContactUsPage = lazy(() => import("./pages/store/StoreContactUsPage.jsx"));
+const StorePrivacyPolicyPage = lazy(() => import("./pages/store/StorePrivacyPolicyPage.jsx"));
+const StoreTermsAndConditionsPage = lazy(() =>
+  import("./pages/store/StoreTermsAndConditionsPage.jsx")
+);
+const StoreFaqPage = lazy(() => import("./pages/store/StoreFaqPage.jsx"));
+const StoreMicrositePage = lazy(() => import("./pages/store/StoreMicrositePage.jsx"));
+const StoreMicrositeProductDetailPage = lazy(() =>
+  import("./pages/store/StoreMicrositeProductDetailPage.jsx")
+);
+const KachaBazarDemoHomePage = lazy(() => import("./pages/store/KachaBazarDemoHomePage.jsx"));
+const AdminLayout = lazy(() => import("./components/layouts/AdminLayout.jsx"));
+const AdminLoginPage = lazy(() => import("./pages/admin/AdminLoginPage.jsx"));
+const AdminCreateAccountPage = lazy(() => import("./pages/admin/AdminCreateAccountPage.jsx"));
+const AdminVerifyAccountPage = lazy(() => import("./pages/admin/AdminVerifyAccountPage.jsx"));
+const AdminForgotPasswordPage = lazy(() => import("./pages/admin/AdminForgotPasswordPage.jsx"));
+const AdminResetPasswordPage = lazy(() => import("./pages/admin/AdminResetPasswordPage.jsx"));
+const AdminResendVerificationPage = lazy(() =>
+  import("./pages/admin/AdminResendVerificationPage.jsx")
+);
 const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
 const AdminProductsPage = lazy(() => import("./pages/admin/Products.jsx"));
 const AdminProductForm = lazy(() => import("./pages/admin/ProductForm.jsx"));
@@ -57,48 +65,73 @@ const StoreCustomizationPage = lazy(() =>
   import("./pages/admin/StoreCustomization.jsx")
 );
 const StoreSettingsPage = lazy(() => import("./pages/admin/StoreSettings.jsx"));
-import AdminStaffPage from "./pages/admin/Staff.jsx";
+const AdminStaffPage = lazy(() => import("./pages/admin/Staff.jsx"));
 const AdminForbiddenPage = lazy(() => import("./pages/admin/Forbidden.jsx"));
-import AccountGuard from "./components/AccountGuard.jsx";
-import AccountLayout from "./layouts/AccountLayout.jsx";
-import AccountDashboardPage from "./pages/account/AccountDashboardPage.jsx";
-import AccountOrdersPage from "./pages/account/AccountOrdersPage.jsx";
-import AccountOrderDetailPage from "./pages/account/AccountOrderDetailPage.jsx";
-import AccountOrderPaymentPage from "./pages/account/AccountOrderPaymentPage.jsx";
-import AccountProfilePage from "./pages/account/AccountProfilePage.jsx";
-import AccountMyReviewPage from "./pages/account/AccountMyReviewPage.jsx";
-import AccountNotificationsPage from "./pages/account/AccountNotificationsPage.jsx";
-import AccountMyAccountPage from "./pages/account/AccountMyAccountPage.jsx";
-import AccountChangePasswordPage from "./pages/account/AccountChangePasswordPage.jsx";
-import AccountShippingAddressPage from "./pages/account/AccountShippingAddressPage.jsx";
-import AccountStoreInvitationsPage from "./pages/account/AccountStoreInvitationsPage.jsx";
-import AccountLegacySellerRoutePage from "./pages/account/AccountLegacySellerRoutePage.jsx";
-import AccountStoreApplicationPage from "./pages/account/AccountStoreApplicationPage.jsx";
-import AdminStorePaymentPage from "./pages/admin/AdminStorePaymentPage.jsx";
-import AdminStorePaymentReviewPage from "./pages/admin/AdminStorePaymentReviewPage.jsx";
-import AdminStoreProfilePage from "./pages/admin/AdminStoreProfilePage.jsx";
-import AdminStoreApplicationsPage from "./pages/admin/AdminStoreApplicationsPage.jsx";
-import AdminStoreApplicationDetailPage from "./pages/admin/AdminStoreApplicationDetailPage.jsx";
-import SellerLayout from "./layouts/SellerLayout.jsx";
-import SeoCustomizationBridge from "./components/SeoCustomizationBridge.jsx";
-import SellerOrderDetailPage from "./pages/seller/SellerOrderDetailPage.jsx";
-import SellerOrdersPage from "./pages/seller/SellerOrdersPage.jsx";
-import SellerPaymentReviewPage from "./pages/seller/SellerPaymentReviewPage.jsx";
-import SellerPaymentProfilePage from "./pages/seller/SellerPaymentProfilePage.jsx";
-import SellerStoreProfilePage from "./pages/seller/SellerStoreProfilePage.jsx";
-import SellerCouponsPage from "./pages/seller/SellerCouponsPage.jsx";
-import SellerTeamAuditPage from "./pages/seller/SellerTeamAuditPage.jsx";
-import SellerMemberLifecyclePage from "./pages/seller/SellerMemberLifecyclePage.jsx";
-import SellerCatalogPage from "./pages/seller/SellerCatalogPage.jsx";
-import SellerProductDetailPage from "./pages/seller/SellerProductDetailPage.jsx";
-import SellerProductAuthoringPage from "./pages/seller/SellerProductAuthoringPage.jsx";
-import SellerTeamPage from "./pages/seller/SellerTeamPage.jsx";
-import SellerWorkspaceHome from "./pages/seller/SellerWorkspaceHome.jsx";
+const AccountLayout = lazy(() => import("./layouts/AccountLayout.jsx"));
+const AccountDashboardPage = lazy(() => import("./pages/account/AccountDashboardPage.jsx"));
+const AccountOrdersPage = lazy(() => import("./pages/account/AccountOrdersPage.jsx"));
+const AccountOrderDetailPage = lazy(() => import("./pages/account/AccountOrderDetailPage.jsx"));
+const AccountOrderPaymentPage = lazy(() => import("./pages/account/AccountOrderPaymentPage.jsx"));
+const AccountProfilePage = lazy(() => import("./pages/account/AccountProfilePage.jsx"));
+const AccountMyReviewPage = lazy(() => import("./pages/account/AccountMyReviewPage.jsx"));
+const AccountNotificationsPage = lazy(() =>
+  import("./pages/account/AccountNotificationsPage.jsx")
+);
+const AccountMyAccountPage = lazy(() => import("./pages/account/AccountMyAccountPage.jsx"));
+const AccountChangePasswordPage = lazy(() =>
+  import("./pages/account/AccountChangePasswordPage.jsx")
+);
+const AccountShippingAddressPage = lazy(() =>
+  import("./pages/account/AccountShippingAddressPage.jsx")
+);
+const AccountStoreInvitationsPage = lazy(() =>
+  import("./pages/account/AccountStoreInvitationsPage.jsx")
+);
+const AccountLegacySellerRoutePage = lazy(() =>
+  import("./pages/account/AccountLegacySellerRoutePage.jsx")
+);
+const AccountStoreApplicationPage = lazy(() =>
+  import("./pages/account/AccountStoreApplicationPage.jsx")
+);
+const AdminStorePaymentPage = lazy(() => import("./pages/admin/AdminStorePaymentPage.jsx"));
+const AdminStorePaymentReviewPage = lazy(() =>
+  import("./pages/admin/AdminStorePaymentReviewPage.jsx")
+);
+const AdminStoreProfilePage = lazy(() => import("./pages/admin/AdminStoreProfilePage.jsx"));
+const AdminStoreApplicationsPage = lazy(() =>
+  import("./pages/admin/AdminStoreApplicationsPage.jsx")
+);
+const AdminStoreApplicationDetailPage = lazy(() =>
+  import("./pages/admin/AdminStoreApplicationDetailPage.jsx")
+);
+const SellerLayout = lazy(() => import("./layouts/SellerLayout.jsx"));
+const SellerOrderDetailPage = lazy(() => import("./pages/seller/SellerOrderDetailPage.jsx"));
+const SellerOrdersPage = lazy(() => import("./pages/seller/SellerOrdersPage.jsx"));
+const SellerPaymentReviewPage = lazy(() => import("./pages/seller/SellerPaymentReviewPage.jsx"));
+const SellerPaymentProfilePage = lazy(() =>
+  import("./pages/seller/SellerPaymentProfilePage.jsx")
+);
+const SellerStoreProfilePage = lazy(() => import("./pages/seller/SellerStoreProfilePage.jsx"));
+const SellerCouponsPage = lazy(() => import("./pages/seller/SellerCouponsPage.jsx"));
+const SellerTeamAuditPage = lazy(() => import("./pages/seller/SellerTeamAuditPage.jsx"));
+const SellerMemberLifecyclePage = lazy(() =>
+  import("./pages/seller/SellerMemberLifecyclePage.jsx")
+);
+const SellerCatalogPage = lazy(() => import("./pages/seller/SellerCatalogPage.jsx"));
+const SellerProductDetailPage = lazy(() => import("./pages/seller/SellerProductDetailPage.jsx"));
+const SellerProductAuthoringPage = lazy(() =>
+  import("./pages/seller/SellerProductAuthoringPage.jsx")
+);
+const SellerTeamPage = lazy(() => import("./pages/seller/SellerTeamPage.jsx"));
+const SellerWorkspaceHome = lazy(() => import("./pages/seller/SellerWorkspaceHome.jsx"));
 const AdminPaymentAuditPage = lazy(() =>
   import("./pages/admin/AdminPaymentAuditPage.jsx")
 );
 const AdminPaymentAuditDetailPage = lazy(() =>
   import("./pages/admin/AdminPaymentAuditDetailPage.jsx")
+);
+const AdminShippingReconciliationPage = lazy(() =>
+  import("./pages/admin/AdminShippingReconciliationPage.jsx")
 );
 const AdminStorePaymentProfilesPage = lazy(() =>
   import("./pages/admin/AdminStorePaymentProfilesPage.jsx")
@@ -602,6 +635,14 @@ export default function App() {
                 element={
                   <RequirePerm perm="DASHBOARD_VIEW">
                     <AdminPaymentAuditDetailPage />
+                  </RequirePerm>
+                }
+              />
+              <Route
+                path="online-store/shipping-reconciliation"
+                element={
+                  <RequirePerm perm="DASHBOARD_VIEW">
+                    <AdminShippingReconciliationPage />
                   </RequirePerm>
                 }
               />

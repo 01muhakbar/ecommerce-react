@@ -2,6 +2,7 @@ import { Op } from "sequelize";
 import { Order, Payment, Suborder, sequelize } from "../models/index.js";
 import { recalculateParentOrderPaymentStatus } from "./orderPaymentAggregation.service.js";
 import { appendPaymentStatusLog } from "./paymentStatusLog.service.js";
+import { appendAuditNote } from "./operationalAudit.service.js";
 
 const getAttr = (row: any, key: string) =>
   row?.getDataValue?.(key) ?? row?.get?.(key) ?? row?.dataValues?.[key];
@@ -57,7 +58,12 @@ const expirePaymentRow = async (payment: any, transaction: any) => {
       newStatus: "EXPIRED",
       actorType: "SYSTEM",
       actorId: null,
-      note: "Payment deadline expired before buyer confirmation was submitted.",
+      note: appendAuditNote("Payment deadline expired before buyer confirmation was submitted.", {
+        source: "payment-expiry",
+        paymentId,
+        orderId: toNumber(getAttr(suborder, "orderId"), 0) || null,
+        suborderId,
+      }),
     },
     transaction
   );

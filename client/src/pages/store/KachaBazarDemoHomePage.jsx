@@ -100,7 +100,7 @@ const DEFAULT_HOME_SECTION_CONFIG = {
     title: "Latest Discounted Products",
     description:
       "See Our latest discounted products below. Choose your daily needs from here and get a special discount with free shipping.",
-    productsLimit: 18,
+    productsLimit: 10,
   },
   getYourDailyNeeds: {
     enabled: true,
@@ -129,6 +129,7 @@ const DEFAULT_HOME_SECTION_CONFIG = {
 
 const POPULAR_PRODUCTS_SECTION_LIMIT = 10;
 const POPULAR_PRODUCTS_SOURCE_LIMIT = 50;
+const LATEST_DISCOUNTED_PRODUCTS_LIMIT = 10;
 
 const toPopularityTimestamp = (value) => {
   const timestamp = Date.parse(String(value ?? ""));
@@ -525,6 +526,22 @@ export default function KachaBazarDemoHomePage() {
     refetchOnWindowFocus: true,
     refetchInterval: 60_000,
   });
+  const {
+    data: discountedProductsData,
+    isLoading: isDiscountedLoading,
+    isError: isDiscountedError,
+    refetch: refetchDiscountedProducts,
+  } = useProducts({
+    page: 1,
+    limit: LATEST_DISCOUNTED_PRODUCTS_LIMIT,
+    sort: "newest",
+    discounted: true,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchInterval: 30_000,
+  });
   const categories = categoriesData?.data?.items ?? [];
   const allCategories = allCategoriesData?.data?.items ?? categories;
   const hasCategories = categories.length > 0;
@@ -551,6 +568,7 @@ export default function KachaBazarDemoHomePage() {
     return map;
   }, [allCategories]);
   const rawProducts = productsData?.data?.items ?? [];
+  const rawDiscountedProducts = discountedProductsData?.data?.items ?? [];
 
   const [activeSlide, setActiveSlide] = useState(0);
   const [copiedCode, setCopiedCode] = useState("");
@@ -699,6 +717,8 @@ export default function KachaBazarDemoHomePage() {
           reviewCount,
           soldCount,
           unit: raw?.unit ?? raw?.tags?.unit ?? "1 pc",
+          createdAt: raw?.createdAt ?? null,
+          updatedAt: raw?.updatedAt ?? null,
           category: categoryObj,
           imageUrl,
           image: imageUrl,
@@ -706,6 +726,60 @@ export default function KachaBazarDemoHomePage() {
         };
       }),
     [popularProducts, categoriesById]
+  );
+  const latestPlatformProducts = useMemo(
+    () =>
+      rawDiscountedProducts.map((raw) => {
+        const title = raw?.title ?? raw?.name ?? "";
+        const price = Number(raw?.price ?? raw?.sellingPrice ?? raw?.salePrice ?? 0);
+        const originalPrice = Number(raw?.originalPrice ?? raw?.price ?? 0);
+        const salePrice =
+          raw?.salePrice != null ? Number(raw.salePrice) : null;
+        const discountPercent = Number(raw?.discountPercent ?? 0);
+        const ratingAvg = Number(raw?.ratingAvg ?? raw?.averageRating ?? 0);
+        const reviewCount = Number(raw?.reviewCount ?? 0);
+        const soldCount = Math.max(
+          0,
+          Number(
+            raw?.soldCount ??
+              raw?.soldQty ??
+              raw?.qtySold ??
+              raw?.unitsSold ??
+              raw?.salesCount ??
+              raw?.totalSold ??
+              0
+          ) || 0
+        );
+        const categoryObj =
+          raw?.category ??
+          raw?.Category ??
+          (raw?.categoryId != null ? categoriesById.get(Number(raw.categoryId)) : null) ??
+          (raw?.categoryName ? { name: raw.categoryName } : null) ??
+          { name: "Uncategorized" };
+        const imageUrl = raw?.promoImagePath ?? raw?.imageUrl ?? raw?.image ?? null;
+        const slug = raw?.slug ?? String(raw?.id ?? "");
+
+        return {
+          id: raw?.id,
+          title,
+          name: raw?.name ?? title,
+          price,
+          originalPrice,
+          salePrice,
+          discountPercent,
+          ratingAvg,
+          reviewCount,
+          soldCount,
+          unit: raw?.unit ?? raw?.tags?.unit ?? "1 pc",
+          createdAt: raw?.createdAt ?? null,
+          updatedAt: raw?.updatedAt ?? null,
+          category: categoryObj,
+          imageUrl,
+          image: imageUrl,
+          slug,
+        };
+      }),
+    [rawDiscountedProducts, categoriesById]
   );
   const showDiscountCouponBox = homeSections.discountCouponBox.enabled;
   const showFeaturedCategories = homeSections.featuredCategories.enabled;
@@ -885,11 +959,10 @@ export default function KachaBazarDemoHomePage() {
           <DiscountedProductsSection
             title={homeSections.latestDiscountedProducts.title}
             description={homeSections.latestDiscountedProducts.description}
-            maxProducts={homeSections.latestDiscountedProducts.productsLimit}
-            products={safeProducts}
-            isLoading={isLoading}
-            isError={isError}
-            onRetry={() => refetchProducts()}
+            products={latestPlatformProducts}
+            isLoading={isDiscountedLoading}
+            isError={isDiscountedError}
+            onRetry={() => refetchDiscountedProducts()}
           />
         ) : null}
         {showGetYourDailyNeeds ? (

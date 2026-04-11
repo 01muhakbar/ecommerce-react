@@ -12,7 +12,7 @@ const normalizeUpper = (value: unknown, fallback = "") =>
 const PAYMENT_ACTION_REQUIRED = new Set(["UNPAID", "CREATED", "REJECTED"]);
 const PAYMENT_UNDER_REVIEW = new Set(["PENDING_CONFIRMATION"]);
 const PAYMENT_FINAL_NEGATIVE = new Set(["FAILED", "EXPIRED", "CANCELLED"]);
-const SHIPMENT_FINAL_NEGATIVE = new Set(["FAILED_DELIVERY", "RETURNED", "CANCELLED"]);
+const SHIPMENT_FINAL_NEGATIVE = new Set(["RETURNED", "CANCELLED"]);
 
 const normalizeActions = (actions: unknown, fallbackScope: string) =>
   (Array.isArray(actions) ? actions : [])

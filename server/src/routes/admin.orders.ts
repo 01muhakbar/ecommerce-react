@@ -14,6 +14,7 @@ import { TrackingEvent } from "../models/TrackingEvent.js";
 import { createUserOrderStatusUpdatedNotification } from "../services/notification.service.js";
 import {
   inspectParentOrderFinalizationEligibility,
+  recalculateParentOrderFulfillmentStatus,
   resolveParentOrderFulfillmentStatus,
   resolveParentPaymentStatus,
 } from "../services/orderPaymentAggregation.service.js";
@@ -24,6 +25,14 @@ import {
   buildPaymentStatusMeta,
 } from "../services/orderLifecycleContract.service.js";
 import { buildOrderShippingReadModel } from "../services/orderShippingReadModel.service.js";
+import { applyAdminShipmentCorrection } from "../services/shipmentMutation.service.js";
+import {
+  fingerprintAuditValue,
+  getRequestTraceId,
+  logOperationalAuditEvent,
+} from "../services/operationalAudit.service.js";
+import { listAdminShippingReconciliationReport } from "../services/shippingReconciliationReport.service.js";
+import sequelize from "../config/database.js";
 
 const router = Router();
 type UiOrderStatus = "pending" | "processing" | "shipping" | "complete" | "cancelled";
@@ -1019,6 +1028,23 @@ router.get("/by-invoice/:invoiceNo", requireStaffOrAdmin, async (req, res) => {
   return sendOrderDetail(res, invoiceNo, true);
 });
 
+router.get("/shipping-reconciliation/report", requireStaffOrAdmin, async (req, res) => {
+  try {
+    const report = await listAdminShippingReconciliationReport(req.query || {});
+    return res.json({
+      success: true,
+      data: report.items,
+      meta: report.meta,
+    });
+  } catch (error) {
+    console.error("[admin/orders:shipping-reconciliation] error", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to load shipping reconciliation report.",
+    });
+  }
+});
+
 router.get("/:id", requireStaffOrAdmin, async (req, res) => {
   const idStr = String(asSingle(req.params.id) ?? "").trim();
   if (!idStr) {
@@ -1026,6 +1052,195 @@ router.get("/:id", requireStaffOrAdmin, async (req, res) => {
   }
   return sendOrderDetail(res, idStr, false);
 });
+
+router.patch(
+  "/:id/suborders/:suborderId/shipment-correction",
+  requireAdmin,
+  async (req, res) => {
+    const idStr = String(asSingle(req.params.id) ?? "").trim();
+    const suborderId = Number(asSingle(req.params.suborderId));
+    if (!idStr || !Number.isFinite(suborderId) || suborderId <= 0) {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_ADMIN_SHIPMENT_CORRECTION_TARGET",
+        message: "Invalid order or suborder target.",
+      });
+    }
+
+    const targetStatus = String(req.body?.targetStatus || "").trim().toUpperCase();
+    const reason = String(req.body?.reason || "").trim();
+    const actorUserId = Number((req as any).user?.id || 0) || null;
+
+    const tx = await sequelize.transaction();
+    try {
+      const order = await Order.findOne({
+        where: resolveOrderWhere(idStr),
+        attributes: ["id", "invoiceNo", "status", "paymentStatus", "userId"],
+        transaction: tx,
+        lock: tx.LOCK.UPDATE,
+      });
+
+      if (!order) {
+        await tx.rollback();
+        return res.status(404).json({
+          success: false,
+          code: "ORDER_NOT_FOUND",
+          message: "Order was not found.",
+        });
+      }
+
+      const orderId = Number(getAttr(order, "id") || 0);
+      const suborder = await Suborder.findOne({
+        where: { id: suborderId, orderId },
+        attributes: [
+          "id",
+          "orderId",
+          "suborderNumber",
+          "storeId",
+          "paymentStatus",
+          "fulfillmentStatus",
+        ],
+        include: [
+          {
+            model: Shipment,
+            as: "shipment",
+            required: false,
+            include: [
+              {
+                model: TrackingEvent,
+                as: "trackingEvents",
+                required: false,
+              },
+            ],
+          },
+        ],
+        transaction: tx,
+        lock: tx.LOCK.UPDATE,
+      });
+
+      if (!suborder) {
+        await tx.rollback();
+        return res.status(404).json({
+          success: false,
+          code: "SUBORDER_NOT_FOUND",
+          message: "Suborder was not found for this order.",
+        });
+      }
+
+      const beforeState = {
+        orderId,
+        invoiceNo: String(getAttr(order, "invoiceNo") || ""),
+        suborderId: Number(getAttr(suborder, "id") || 0),
+        suborderNumber: String(getAttr(suborder, "suborderNumber") || ""),
+        paymentStatus: normalizeSuborderPaymentStatus(getAttr(suborder, "paymentStatus")),
+        fulfillmentStatus: normalizeSuborderFulfillmentStatus(
+          getAttr(suborder, "fulfillmentStatus")
+        ),
+        shipmentStatus: String(getAttr((suborder as any).shipment, "status") || ""),
+      };
+
+      const correction = await applyAdminShipmentCorrection({
+        suborder,
+        targetStatus,
+        reason,
+        actorUserId,
+        transaction: tx,
+      });
+
+      const parentOrderSync = await recalculateParentOrderFulfillmentStatus(orderId, tx);
+      await tx.commit();
+
+      logOperationalAuditEvent("admin.shipment.correction", {
+        traceId: getRequestTraceId(req),
+        actorUserId,
+        orderId,
+        invoiceNo: beforeState.invoiceNo,
+        suborderId: beforeState.suborderId,
+        suborderNumber: beforeState.suborderNumber,
+        statusFrom: correction.fromShipmentStatus,
+        statusTo: correction.toShipmentStatus,
+        compatibilityFrom: beforeState.fulfillmentStatus,
+        compatibilityTo: correction.compatibilityFulfillmentStatus,
+        reasonFingerprint: fingerprintAuditValue(correction.reason),
+        reasonLength: correction.reason.length,
+      });
+
+      if (parentOrderSync?.changed && parentOrderSync.userId) {
+        try {
+          await createUserOrderStatusUpdatedNotification({
+            userId: parentOrderSync.userId,
+            orderId,
+            invoiceNo:
+              parentOrderSync.invoiceNo ||
+              String(getAttr(order, "invoiceNo") || "").trim() ||
+              null,
+            statusFrom: parentOrderSync.previousStatus,
+            statusTo: parentOrderSync.nextStatus,
+          });
+        } catch (notifyError) {
+          console.warn(
+            "[admin/orders:shipment-correction] failed to create user status notification",
+            notifyError
+          );
+        }
+      }
+
+      return res.json({
+        success: true,
+        message: "Admin shipment correction applied.",
+        data: {
+          correction: {
+            source: "ADMIN_SHIPPING_EXCEPTION_CORRECTION",
+            orderId,
+            invoiceNo: beforeState.invoiceNo,
+            suborderId: beforeState.suborderId,
+            suborderNumber: beforeState.suborderNumber,
+            from: correction.fromShipmentStatus,
+            to: correction.toShipmentStatus,
+            compatibilityFrom: beforeState.fulfillmentStatus,
+            compatibilityTo: correction.compatibilityFulfillmentStatus,
+            shipmentId: Number(getAttr(correction.shipment, "id") || 0) || null,
+          },
+          parentOrderSync: parentOrderSync
+            ? {
+                changed: Boolean(parentOrderSync.changed),
+                from: parentOrderSync.previousStatus,
+                to: parentOrderSync.nextStatus,
+                source: "SUBORDER_FULFILLMENT_AGGREGATION",
+              }
+            : null,
+        },
+      });
+    } catch (error) {
+      try {
+        await tx.rollback();
+      } catch {
+        // ignore rollback failure after primary error
+      }
+
+      const code = String((error as any)?.code || "").toUpperCase();
+      const statusCode = Number((error as any)?.statusCode || 0) || 500;
+      if (code) {
+        console.warn("[admin/orders:shipment-correction] rejected", {
+          code,
+          message:
+            (error as any)?.message || "Failed to apply admin shipment correction.",
+        });
+        return res.status(statusCode).json({
+          success: false,
+          code,
+          message:
+            (error as any)?.message || "Failed to apply admin shipment correction.",
+        });
+      }
+      console.error("[admin/orders:shipment-correction] error", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to apply admin shipment correction.",
+      });
+    }
+  }
+);
 
 router.patch("/:id/status", requireStaffOrAdmin, async (req, res) => {
   const idStr = String(asSingle(req.params.id) ?? "");

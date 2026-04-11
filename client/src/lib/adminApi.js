@@ -430,6 +430,65 @@ export const updateAdminOrderStatus = async (id, payload) => {
   return data;
 };
 
+export const correctAdminShipmentException = async (orderId, suborderId, payload) => {
+  const { data } = await adminApi.patch(
+    `/admin/orders/${orderId}/suborders/${suborderId}/shipment-correction`,
+    payload
+  );
+  return data;
+};
+
+const normalizeShippingReconciliationItem = (item) => ({
+  ...item,
+  orderId: Number(item?.orderId || 0) || null,
+  suborderId: Number(item?.suborderId || 0) || null,
+  invoiceNo: item?.invoiceNo || null,
+  orderDetailHref: item?.orderDetailHref || null,
+  store: item?.store && typeof item.store === "object" ? item.store : null,
+  categories: Array.isArray(item?.categories) ? item.categories : [],
+  primaryCategory: item?.primaryCategory || null,
+  canonicalShipmentStatus: item?.canonicalShipmentStatus || null,
+  canonicalShipmentStatusMeta: item?.canonicalShipmentStatusMeta || null,
+  compatibilityFulfillmentStatus: item?.compatibilityFulfillmentStatus || null,
+  compatibilityFulfillmentStatusMeta: item?.compatibilityFulfillmentStatusMeta || null,
+  storedFulfillmentStatus: item?.storedFulfillmentStatus || null,
+  storedFulfillmentStatusMeta: item?.storedFulfillmentStatusMeta || null,
+  compatibilityMatchesStorage:
+    typeof item?.compatibilityMatchesStorage === "boolean"
+      ? item.compatibilityMatchesStorage
+      : null,
+  tracking: item?.tracking && typeof item.tracking === "object" ? item.tracking : {},
+  mixedOutcome: item?.mixedOutcome && typeof item.mixedOutcome === "object" ? item.mixedOutcome : {},
+});
+
+export const fetchAdminShippingReconciliationReport = async (params = {}) => {
+  const query = Object.fromEntries(
+    Object.entries({
+      page: params?.page,
+      pageSize: params?.pageSize ?? params?.limit,
+      category: params?.category || undefined,
+      shipmentStatus: params?.shipmentStatus || undefined,
+      search: params?.search || undefined,
+      storeId: params?.storeId || undefined,
+    }).filter(([, value]) => value !== undefined && value !== null && value !== "")
+  );
+  const { data } = await adminApi.get("/admin/orders/shipping-reconciliation/report", {
+    params: query,
+  });
+  const items = Array.isArray(data?.data) ? data.data : [];
+  return {
+    items: items.map(normalizeShippingReconciliationItem),
+    meta: data?.meta || {
+      page: 1,
+      pageSize: 20,
+      total: 0,
+      totalPages: 1,
+      filters: {},
+      categoryCounts: {},
+    },
+  };
+};
+
 export const fetchAdminCustomers = async (params) => {
   const { data } = await adminApi.get("/admin/customers", { params });
   return normalizeCustomersList(data, params);

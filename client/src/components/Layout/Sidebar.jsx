@@ -180,6 +180,11 @@ const MENU = [
         perm: "DASHBOARD_VIEW",
       },
       {
+        label: "Shipping Reconciliation",
+        to: "/admin/online-store/shipping-reconciliation",
+        perm: "DASHBOARD_VIEW",
+      },
+      {
         label: "Store Applications",
         to: "/admin/store/applications",
         perm: "STORE_APPLICATIONS_REVIEW",

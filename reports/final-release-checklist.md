@@ -7,7 +7,8 @@
 ## Must Fix Before Public Release
 - Confirm production server starts from built output using `pnpm -F server start:prod`.
 - Set a strong `JWT_SECRET`.
-- Set database connectivity values: `DATABASE_URL` or `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASS`.
+- Set and verify database connectivity values: `DATABASE_URL` or `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASS`.
+- Run `pnpm qa:public-release` and confirm DB readiness preflight passes before build/boot smoke continues.
 - Decide deployment topology:
   - same-origin/proxy deployment, or
   - cross-origin deployment with `CLIENT_URL` or `CORS_ORIGIN` configured.
@@ -20,8 +21,8 @@
 - Ensure MySQL and any production migrations/data setup are complete before traffic.
 
 ## Should Fix Soon After Release Candidate
-- Reduce Vite main bundle size warning from client build.
-- Add a small runtime/operator check for production startup env completeness instead of relying only on docs and route-time failures.
+- Audit remaining medium-size client chunks such as `vendor-ui`, `StoreCustomization`, and shared address helpers.
+- Keep runtime/operator env completeness checks aligned with `pnpm qa:public-release`.
 - Review remaining compatibility-only routes periodically so old paths do not accumulate unnoticed.
 
 ## Acceptable Residual Risk
@@ -61,11 +62,15 @@
   - account order detail/payment, success, and tracking pages show honest payment state
 - Backend:
   - `/api/health`
+  - `/api/diagnostics/request-context`
   - `/api/store/stripe/webhook`
   - `/api/orders/:id/checkout-payment`
   - `/api/store/orders/:ref`
 
 ## Validation Commands
+- Full public-release smoke gate:
+  - `pnpm qa:public-release`
+  - Expected DB failure classification when env is invalid: `DB readiness failed: ... Verify DB_USER/DB_PASS or DATABASE_URL ...`
 - Preferred one-shot staging smoke:
   - `pnpm qa:staging:core`
 - `pnpm -F server build`
@@ -74,9 +79,10 @@
 - `pnpm -F server smoke:product-visibility`
 - `pnpm -F server smoke:order-payment`
 - `pnpm -F server smoke:stripe-webhook`
+- `pnpm -F server smoke:request-diagnostics`
 - `pnpm qa:mvf:visibility:frontend`
 
 ## Known Warnings To Re-check During Deployment
 - Cross-origin cookie session will fail if HTTPS and `COOKIE_SECURE=true` are not aligned with deployment.
 - Stripe checkout will fail fast if public base URL is missing even when credentials are valid.
-- Build warning about oversized client chunks does not block release, but should stay on the release radar.
+- Client build chunk warning was reduced in Task 4A; keep medium-size chunks on the release radar.

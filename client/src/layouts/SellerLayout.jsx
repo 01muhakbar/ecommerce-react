@@ -53,6 +53,8 @@ import {
   markAllSellerNotificationsRead,
   markSellerNotificationRead,
 } from "../api/sellerNotifications.ts";
+import "../components/Layout/MainLayout.css";
+import "../components/Layout/Navbar.css";
 
 const SELLER_SIDEBAR_COLLAPSED_KEY = "seller_sidebar_collapsed";
 const SELLER_THEME_KEY = "seller_theme";
@@ -1047,6 +1049,9 @@ export default function SellerLayout() {
   });
   const markSellerNotificationReadMutation = useMutation({
     mutationFn: (notificationId) => markSellerNotificationRead(canonicalStoreId, notificationId),
+    meta: {
+      suppressGlobalToast: true,
+    },
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({
@@ -1060,6 +1065,9 @@ export default function SellerLayout() {
   });
   const markAllSellerNotificationsReadMutation = useMutation({
     mutationFn: () => markAllSellerNotificationsRead(canonicalStoreId),
+    meta: {
+      suppressGlobalToast: true,
+    },
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({
@@ -1292,7 +1300,7 @@ export default function SellerLayout() {
 
   return (
     <div
-      className={`layout ${sellerShellPageClass} ${
+      className={`layout flex ${sellerShellPageClass} ${
         isDark ? "admin-theme-dark dark" : "admin-theme-light"
       }`}
       data-seller-theme={theme}
@@ -1306,7 +1314,11 @@ export default function SellerLayout() {
         onLogout={handleSellerLogout}
       />
 
-      <div className={`layout__content min-w-0 flex-1 ${isDark ? "bg-slate-950" : "bg-slate-100"}`}>
+      <div
+        className={`layout__content flex min-w-0 flex-1 flex-col ${
+          isDark ? "bg-slate-950" : "bg-slate-100"
+        }`}
+      >
         <header className="navbar">
           <div className="navbar__left">
             <button

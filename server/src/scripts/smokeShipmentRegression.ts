@@ -399,7 +399,13 @@ async function mutateSellerFulfillment(input: {
   client: CookieClient;
   storeId: number;
   suborderId: number;
-  action: "MARK_PROCESSING" | "MARK_SHIPPED" | "MARK_DELIVERED";
+  action:
+    | "MARK_PROCESSING"
+    | "MARK_SHIPPED"
+    | "MARK_DELIVERED"
+    | "MARK_FAILED_DELIVERY"
+    | "MARK_RETURNED"
+    | "CANCEL_SHIPMENT";
   courierCode?: string;
   courierService?: string;
   trackingNumber?: string;
@@ -426,6 +432,47 @@ async function mutateSellerFulfillment(input: {
   } else {
     assertStatus(response, input.expectedStatus || 200, `${input.action} mutation`);
   }
+  return response;
+}
+
+async function mutateAdminShipmentCorrection(input: {
+  client: CookieClient;
+  orderId: number;
+  suborderId: number;
+  targetStatus: "RETURNED" | "SHIPPED" | "DELIVERED" | "CANCELLED";
+  reason: string;
+  expectedStatus?: number;
+}) {
+  const response = await input.client.request(
+    `/api/admin/orders/${input.orderId}/suborders/${input.suborderId}/shipment-correction`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        targetStatus: input.targetStatus,
+        reason: input.reason,
+      }),
+    }
+  );
+  assertStatus(
+    response,
+    input.expectedStatus || 200,
+    `admin ${input.targetStatus} shipment correction`
+  );
+  return response;
+}
+
+async function fetchAdminShippingReconciliationReport(
+  client: CookieClient,
+  params: Record<string, string | number> = {},
+  expectedStatus = 200
+) {
+  const query = new URLSearchParams(
+    Object.entries(params).map(([key, value]) => [key, String(value)])
+  ).toString();
+  const response = await client.request(
+    `/api/admin/orders/shipping-reconciliation/report${query ? `?${query}` : ""}`
+  );
+  assertStatus(response, expectedStatus, "admin shipping reconciliation report");
   return response;
 }
 
@@ -865,6 +912,18 @@ async function run() {
           courierService: "REG",
           trackingNumber: "JNE-SMOKE-001",
         });
+        await mutateSellerFulfillment({
+          client: sellerClientOne,
+          storeId: storeOne.id,
+          suborderId: groupOne.suborderId,
+          action: "MARK_FAILED_DELIVERY",
+        });
+        await mutateSellerFulfillment({
+          client: sellerClientOne,
+          storeId: storeOne.id,
+          suborderId: groupOne.suborderId,
+          action: "MARK_RETURNED",
+        });
 
         await mutateSellerFulfillment({
           client: sellerClientTwo,
@@ -899,7 +958,7 @@ async function run() {
         const deliveredShipment = readModel.shipments.find(
           (shipment: any) => shipment.storeId === storeTwo.id
         );
-        assert.equal(shippedShipment?.shipmentStatus, "SHIPPED");
+        assert.equal(shippedShipment?.shipmentStatus, "RETURNED");
         assert.equal(deliveredShipment?.shipmentStatus, "DELIVERED");
         assert.equal(shippedShipment?.trackingNumber, "JNE-SMOKE-001");
         assert.equal(deliveredShipment?.trackingNumber, "JNT-SMOKE-002");
@@ -927,6 +986,9 @@ async function run() {
         const deliveredRow: any = shipmentRows.find(
           (shipment: any) => toNumber(shipment.getDataValue("storeId"), 0) === storeTwo.id
         );
+        const returnedRow: any = shipmentRows.find(
+          (shipment: any) => toNumber(shipment.getDataValue("storeId"), 0) === storeOne.id
+        );
         const eventTypes = (
           Array.isArray(deliveredRow?.trackingEvents) ? deliveredRow.trackingEvents : []
         )
@@ -936,7 +998,197 @@ async function run() {
         assert.equal(eventTypes.includes("READY_TO_FULFILL"), true);
         assert.equal(eventTypes.includes("SHIPPED"), true);
         assert.equal(eventTypes[eventTypes.length - 1], "DELIVERED");
+        const returnedEventTypes = (
+          Array.isArray(returnedRow?.trackingEvents) ? returnedRow.trackingEvents : []
+        )
+          .map((event: any) => String(event?.getDataValue?.("eventType") || event?.eventType || ""))
+          .filter(Boolean);
+        assert.equal(returnedEventTypes.includes("FAILED_DELIVERY"), true);
+        assert.equal(returnedEventTypes[returnedEventTypes.length - 1], "RETURNED");
+
+        const mixedReport = await fetchAdminShippingReconciliationReport(adminClient, {
+          search: scenario.invoiceNo,
+          category: "mixedShipmentOutcome",
+        });
+        const mixedItems = Array.isArray(mixedReport.body?.data) ? mixedReport.body.data : [];
+        assert.equal(
+          mixedItems.some((item: any) => String(item?.invoiceNo || "") === scenario.invoiceNo),
+          true,
+          "shipping reconciliation should include mixed returned/delivered outcome"
+        );
         logPass("mutation ON shipment sync and tracking timeline");
+      }
+    );
+
+    await withEnv(
+      {
+        ENABLE_MULTISTORE_SHIPMENT_MVP: "true",
+        ENABLE_MULTISTORE_SHIPMENT_MUTATION: "true",
+      },
+      async () => {
+        logStep("exception lane can cancel a pre-dispatch shipment");
+        const scenario = await createMultiStoreOrder({
+          buyerClient,
+          buyerUserId: buyer.id,
+          products: [productOne],
+          label: "cancel-before-dispatch",
+        });
+        await approveAllGroupPayments(scenario, buyerClient, sellerClientsByStoreId);
+        const group = scenario.groups[0];
+        await mutateSellerFulfillment({
+          client: sellerClientOne,
+          storeId: storeOne.id,
+          suborderId: group.suborderId,
+          action: "MARK_PROCESSING",
+          expectedStatuses: [200, 409],
+        });
+        await mutateSellerFulfillment({
+          client: sellerClientOne,
+          storeId: storeOne.id,
+          suborderId: group.suborderId,
+          action: "CANCEL_SHIPMENT",
+        });
+
+        const suborders = await loadOrderSuborders(scenario.orderId);
+        const readModel = buildOrderShippingReadModel(suborders);
+        const cancelledShipment = readModel.shipments.find(
+          (shipment: any) => shipment.storeId === storeOne.id
+        );
+        assert.equal(cancelledShipment?.shipmentStatus, "CANCELLED");
+        assert.equal(cancelledShipment?.shipmentStatusMeta?.isFinal, true);
+
+        const storedSuborder = await Suborder.findByPk(group.suborderId);
+        assert.equal(String(storedSuborder?.getDataValue("fulfillmentStatus") || ""), "CANCELLED");
+        logPass("exception lane cancelled shipment");
+      }
+    );
+
+    await withEnv(
+      {
+        ENABLE_MULTISTORE_SHIPMENT_MVP: "true",
+        ENABLE_MULTISTORE_SHIPMENT_MUTATION: "true",
+      },
+      async () => {
+        logStep("admin-only correction reconciles a failed delivery");
+        const scenario = await createMultiStoreOrder({
+          buyerClient,
+          buyerUserId: buyer.id,
+          products: [productOne],
+          label: "admin-correction",
+        });
+        await approveAllGroupPayments(scenario, buyerClient, sellerClientsByStoreId);
+        const group = scenario.groups[0];
+        await mutateSellerFulfillment({
+          client: sellerClientOne,
+          storeId: storeOne.id,
+          suborderId: group.suborderId,
+          action: "MARK_PROCESSING",
+          expectedStatuses: [200, 409],
+        });
+        await mutateSellerFulfillment({
+          client: sellerClientOne,
+          storeId: storeOne.id,
+          suborderId: group.suborderId,
+          action: "MARK_SHIPPED",
+          courierCode: "SICEPAT",
+          courierService: "BEST",
+          trackingNumber: "SICEPAT-SMOKE-003",
+        });
+        await mutateSellerFulfillment({
+          client: sellerClientOne,
+          storeId: storeOne.id,
+          suborderId: group.suborderId,
+          action: "MARK_FAILED_DELIVERY",
+        });
+
+        const activeExceptionReport = await fetchAdminShippingReconciliationReport(adminClient, {
+          search: scenario.invoiceNo,
+          category: "activeShippingException",
+        });
+        const activeExceptionItems = Array.isArray(activeExceptionReport.body?.data)
+          ? activeExceptionReport.body.data
+          : [];
+        assert.equal(
+          activeExceptionItems.some(
+            (item: any) =>
+              String(item?.invoiceNo || "") === scenario.invoiceNo &&
+              String(item?.canonicalShipmentStatus || "") === "FAILED_DELIVERY"
+          ),
+          true,
+          "shipping reconciliation should include active failed-delivery exception"
+        );
+
+        await fetchAdminShippingReconciliationReport(
+          sellerClientOne,
+          { search: scenario.invoiceNo },
+          403
+        );
+
+        await mutateAdminShipmentCorrection({
+          client: sellerClientOne,
+          orderId: scenario.orderId,
+          suborderId: group.suborderId,
+          targetStatus: "DELIVERED",
+          reason: "seller should not have admin correction privilege",
+          expectedStatus: 403,
+        });
+
+        await mutateAdminShipmentCorrection({
+          client: adminClient,
+          orderId: scenario.orderId,
+          suborderId: group.suborderId,
+          targetStatus: "DELIVERED",
+          reason: "courier confirmation received after failed delivery smoke",
+        });
+
+        const correctedSuborders = await loadOrderSuborders(scenario.orderId);
+        const readModel = buildOrderShippingReadModel(correctedSuborders);
+        const correctedShipment = readModel.shipments.find(
+          (shipment: any) => shipment.storeId === storeOne.id
+        );
+        assert.equal(correctedShipment?.shipmentStatus, "DELIVERED");
+        assert.equal(correctedShipment?.compatibilityFulfillmentStatus, "DELIVERED");
+
+        const storedSuborder = await Suborder.findByPk(group.suborderId);
+        assert.equal(String(storedSuborder?.getDataValue("fulfillmentStatus") || ""), "DELIVERED");
+
+        const invalidResponse = await mutateAdminShipmentCorrection({
+          client: adminClient,
+          orderId: scenario.orderId,
+          suborderId: group.suborderId,
+          targetStatus: "RETURNED",
+          reason: "invalid delivered rollback should stay blocked",
+          expectedStatus: 409,
+        });
+        assert.equal(
+          String(invalidResponse.body?.code || "").toUpperCase(),
+          "INVALID_ADMIN_SHIPMENT_CORRECTION_TRANSITION",
+          "admin correction should reject delivered rollback"
+        );
+
+        await Suborder.update(
+          { fulfillmentStatus: "SHIPPED" } as any,
+          { where: { id: group.suborderId } as any }
+        );
+        const mismatchReport = await fetchAdminShippingReconciliationReport(adminClient, {
+          search: scenario.invoiceNo,
+          category: "compatibilityMismatch",
+        });
+        const mismatchItems = Array.isArray(mismatchReport.body?.data)
+          ? mismatchReport.body.data
+          : [];
+        assert.equal(
+          mismatchItems.some(
+            (item: any) =>
+              String(item?.invoiceNo || "") === scenario.invoiceNo &&
+              String(item?.compatibilityFulfillmentStatus || "") === "DELIVERED" &&
+              String(item?.storedFulfillmentStatus || "") === "SHIPPED"
+          ),
+          true,
+          "shipping reconciliation should include compatibility mismatch"
+        );
+
+        logPass("admin-only correction reconciled failed delivery");
       }
     );
 

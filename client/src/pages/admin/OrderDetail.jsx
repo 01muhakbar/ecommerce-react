@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchAdminOrderByInvoice, updateAdminOrderStatus } from "../../lib/adminApi.js";
+import {
+  correctAdminShipmentException,
+  fetchAdminOrderByInvoice,
+  updateAdminOrderStatus,
+} from "../../lib/adminApi.js";
 import QueryState from "../../components/primitives/ui/QueryState.jsx";
 import OrderStatusBadge from "../../components/admin/OrderStatusBadge.jsx";
 import OrderStatusTimeline from "../../components/admin/OrderStatusTimeline.jsx";
@@ -27,6 +31,39 @@ const formatCoverageLabel = (value) => {
   return "No shipment scope";
 };
 
+const getAdminShipmentCorrectionOptions = (shipment) => {
+  const status = String(shipment?.shipmentStatus || "").trim().toUpperCase();
+  if (status === "FAILED_DELIVERY") {
+    return [
+      {
+        targetStatus: "RETURNED",
+        label: "Confirm returned",
+        hint: "Use when the failed delivery was returned to seller or warehouse.",
+      },
+      {
+        targetStatus: "SHIPPED",
+        label: "Mark re-dispatched",
+        hint: "Use only when shipment was sent out again after delivery failure.",
+      },
+      {
+        targetStatus: "DELIVERED",
+        label: "Confirm delivered",
+        hint: "Use only when evidence confirms delivery after a failed-delivery state.",
+      },
+    ];
+  }
+  if (status === "RETURNED") {
+    return [
+      {
+        targetStatus: "CANCELLED",
+        label: "Close as cancelled",
+        hint: "Use when a returned shipment needs administrative closure.",
+      },
+    ];
+  }
+  return [];
+};
+
 export default function OrderDetail() {
   const { invoiceNo } = useParams();
   const [searchParams] = useSearchParams();
@@ -35,6 +72,7 @@ export default function OrderDetail() {
   const [status, setStatus] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [correctionDrafts, setCorrectionDrafts] = useState({});
   const noticeTimerRef = useRef(null);
   const autoPrintDoneRef = useRef(false);
 
@@ -69,6 +107,38 @@ export default function OrderDetail() {
       const msg = [errorMeta.title, errorMeta.message, errorMeta.detail]
         .filter(Boolean)
         .join(". ");
+      setSuccessMessage("");
+      setErrorMessage(msg);
+    },
+  });
+
+  const correctionMutation = useMutation({
+    mutationFn: ({ orderId, suborderId, targetStatus, reason }) =>
+      correctAdminShipmentException(orderId, suborderId, { targetStatus, reason }),
+    onSuccess: (payload) => {
+      qc.invalidateQueries({ queryKey: ["admin-order", invoiceNo] });
+      qc.invalidateQueries({ queryKey: ["admin-orders"], exact: false });
+      orderQuery.refetch();
+      if (noticeTimerRef.current) {
+        clearTimeout(noticeTimerRef.current);
+      }
+      setCorrectionDrafts({});
+      setErrorMessage("");
+      setSuccessMessage(payload?.message || "Admin shipment correction applied.");
+      noticeTimerRef.current = setTimeout(() => {
+        setSuccessMessage("");
+        noticeTimerRef.current = null;
+      }, 3000);
+    },
+    onError: (err) => {
+      if (noticeTimerRef.current) {
+        clearTimeout(noticeTimerRef.current);
+        noticeTimerRef.current = null;
+      }
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Failed to apply admin shipment correction.";
       setSuccessMessage("");
       setErrorMessage(msg);
     },
@@ -204,6 +274,17 @@ export default function OrderDetail() {
   const handlePrint = () => {
     window.print();
   };
+
+  const updateCorrectionDraft = (shipmentKey, patch) => {
+    setCorrectionDrafts((current) => ({
+      ...current,
+      [shipmentKey]: {
+        ...(current[shipmentKey] || {}),
+        ...patch,
+      },
+    }));
+  };
+
   const isEmpty = !orderQuery.isLoading && !orderQuery.isError && !order;
   return (
     <div className="order-print-root mx-auto w-full max-w-7xl space-y-5 px-4 py-6 lg:px-6 lg:py-8">
@@ -539,9 +620,27 @@ export default function OrderDetail() {
                   </div>
                 ) : null}
                 <div className="mt-4 grid gap-3">
-                  {order.shipments.map((shipment) => (
+                  {order.shipments.map((shipment) => {
+                    const shipmentKey =
+                      shipment.shipmentId ||
+                      `shipment-${shipment.suborderId || shipment.storeId || shipment.storeName}`;
+                    const correctionOptions = getAdminShipmentCorrectionOptions(shipment);
+                    const correctionDraft = correctionDrafts[shipmentKey] || {};
+                    const correctionTarget = correctionDraft.targetStatus || "";
+                    const correctionReason = correctionDraft.reason || "";
+                    const selectedCorrection = correctionOptions.find(
+                      (option) => option.targetStatus === correctionTarget
+                    );
+                    const canSubmitCorrection =
+                      Boolean(order?.id) &&
+                      Boolean(shipment.suborderId) &&
+                      Boolean(correctionTarget) &&
+                      correctionReason.trim().length >= 8 &&
+                      !correctionMutation.isPending;
+
+                    return (
                     <article
-                      key={shipment.shipmentId || `shipment-${shipment.suborderId || shipment.storeId || shipment.storeName}`}
+                      key={shipmentKey}
                       className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -603,6 +702,64 @@ export default function OrderDetail() {
                           Shipment status looks operational but tracking timeline is still empty.
                         </div>
                       ) : null}
+                      {correctionOptions.length > 0 ? (
+                        <div className="admin-no-print mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Admin Exception Correction
+                          </p>
+                          <p className="mt-1 text-xs leading-5 text-slate-500">
+                            Use only after support verifies the shipment exception. A reason is required and will be stored in the audit trail.
+                          </p>
+                          <div className="mt-3 grid gap-2 md:grid-cols-[minmax(0,180px)_minmax(0,1fr)]">
+                            <select
+                              value={correctionTarget}
+                              onChange={(event) =>
+                                updateCorrectionDraft(shipmentKey, {
+                                  targetStatus: event.target.value,
+                                })
+                              }
+                              className="h-10 rounded-xl border border-slate-200 px-3 text-sm"
+                            >
+                              <option value="">Select correction</option>
+                              {correctionOptions.map((option) => (
+                                <option key={option.targetStatus} value={option.targetStatus}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              value={correctionReason}
+                              onChange={(event) =>
+                                updateCorrectionDraft(shipmentKey, {
+                                  reason: event.target.value,
+                                })
+                              }
+                              className="h-10 rounded-xl border border-slate-200 px-3 text-sm"
+                              placeholder="Required reason, e.g. courier confirmation received"
+                            />
+                          </div>
+                          {selectedCorrection?.hint ? (
+                            <p className="mt-2 text-xs leading-5 text-slate-500">
+                              {selectedCorrection.hint}
+                            </p>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              correctionMutation.mutate({
+                                orderId: order.id,
+                                suborderId: shipment.suborderId,
+                                targetStatus: correctionTarget,
+                                reason: correctionReason,
+                              })
+                            }
+                            disabled={!canSubmitCorrection}
+                            className="mt-3 h-10 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {correctionMutation.isPending ? "Applying..." : "Apply Correction"}
+                          </button>
+                        </div>
+                      ) : null}
                       {Array.isArray(shipment.trackingEvents) && shipment.trackingEvents.length > 0 ? (
                         <div className="mt-4 space-y-2">
                           {shipment.trackingEvents.map((event) => (
@@ -626,7 +783,8 @@ export default function OrderDetail() {
                         </div>
                       ) : null}
                     </article>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
             ) : null}

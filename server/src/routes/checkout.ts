@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Router } from "express";
 import { Op } from "sequelize";
 import { z } from "zod";
@@ -61,6 +62,12 @@ import {
   buildStorePaymentProfileVerificationMeta,
 } from "../services/sharedContracts/storePaymentProfileState.js";
 import { getDefaultAddressByUser } from "../services/userAddress.service.js";
+import {
+  appendAuditNote,
+  fingerprintAuditValue,
+  getRequestTraceId,
+  logOperationalAuditEvent,
+} from "../services/operationalAudit.service.js";
 
 const router = Router();
 
@@ -83,9 +90,21 @@ const shippingDetailsSchema = z.object({
   markAs: z.enum(["HOME", "OFFICE"]).optional(),
 });
 
+const CHECKOUT_REQUEST_KEY_SOURCE = "CHECKOUT_REQUEST_KEY";
+const CHECKOUT_REQUEST_KEY_PATTERN = /^[A-Za-z0-9._:-]{8,120}$/;
+const CHECKOUT_IDEMPOTENCY_RETRY_AFTER_SECONDS = 2;
+
 const createMultiStoreSchema = z.object({
   cartId: z.number().int().positive().optional(),
   shippingAddressId: z.number().int().positive().optional(),
+  checkoutRequestKey: z
+    .string()
+    .trim()
+    .min(8)
+    .max(120)
+    .regex(CHECKOUT_REQUEST_KEY_PATTERN)
+    .optional()
+    .nullable(),
   useDefaultShipping: z.boolean().optional(),
   customer: z
     .object({
@@ -348,6 +367,15 @@ const isAdminRole = (role: string) =>
 
 const buildInvoiceNo = () =>
   `STORE-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+const buildIdempotentInvoiceNo = (userId: number, requestKey: string) => {
+  const digest = createHash("sha256")
+    .update(`${userId}:${requestKey}`)
+    .digest("hex")
+    .slice(0, 24)
+    .toUpperCase();
+  return `STORE-IDEMP-${digest}`;
+};
 
 const buildSuborderNumber = (invoiceNo: string, index: number) =>
   `${invoiceNo}-S${String(index + 1).padStart(2, "0")}`;
@@ -1317,6 +1345,58 @@ const serializeSplitOrder = (order: any) => {
   };
 };
 
+const serializeIdempotentCheckoutOrder = (order: any, replayed: boolean) => ({
+  ...serializeSplitOrder(order),
+  idempotency: {
+    replayed,
+    source: CHECKOUT_REQUEST_KEY_SOURCE,
+  },
+});
+
+const loadIdempotentCheckoutOrder = async (invoiceNo: string, userId: number) => {
+  const order = await loadOrderWithSplitRelations(invoiceNo);
+  if (!order) return null;
+  return toNumber(getAttr(order, "userId"), 0) === userId ? order : null;
+};
+
+const waitForIdempotentCheckoutOrder = async (invoiceNo: string, userId: number) => {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const existingOrder = await loadIdempotentCheckoutOrder(invoiceNo, userId);
+    if (existingOrder) return existingOrder;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  return null;
+};
+
+const isRecoverableIdempotencyRaceError = (error: any) => {
+  const name = String(error?.name || "");
+  const code = String(error?.parent?.code || error?.original?.code || error?.code || "");
+  return (
+    name === "SequelizeUniqueConstraintError" ||
+    code === "ER_DUP_ENTRY" ||
+    code === "SQLITE_CONSTRAINT" ||
+    code === "SQLITE_BUSY" ||
+    code === "ER_LOCK_DEADLOCK" ||
+    code === "ER_LOCK_WAIT_TIMEOUT"
+  );
+};
+
+const resolveCheckoutRequestKey = (req: any, bodyKey: unknown) => {
+  const bodyRequestKey = String(bodyKey || "").trim();
+  if (bodyRequestKey) return { key: bodyRequestKey, invalidHeader: false, source: "body" };
+
+  const headerRequestKey = String(
+    req.get?.("Idempotency-Key") || req.get?.("X-Idempotency-Key") || ""
+  ).trim();
+  if (!headerRequestKey) return { key: "", invalidHeader: false, source: null };
+
+  return {
+    key: headerRequestKey,
+    invalidHeader: !CHECKOUT_REQUEST_KEY_PATTERN.test(headerRequestKey),
+    source: "header",
+  };
+};
+
 router.use(requireAuth);
 
 router.post("/preview", async (req, res) => {
@@ -1372,6 +1452,47 @@ router.post("/create-multi-store", async (req, res) => {
     const authUser = getAuthUser(req);
     if (!authUser.id) {
       return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const resolvedCheckoutRequestKey = resolveCheckoutRequestKey(
+      req,
+      parsed.data.checkoutRequestKey
+    );
+    const traceId = getRequestTraceId(req);
+    if (resolvedCheckoutRequestKey.invalidHeader) {
+      logOperationalAuditEvent("checkout.idempotency.invalid_key", {
+        traceId,
+        userId: authUser.id,
+        idempotencySource: resolvedCheckoutRequestKey.source || "header",
+      });
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid idempotency key. Use 8-120 characters: letters, numbers, dot, underscore, colon, or dash.",
+        code: "CHECKOUT_IDEMPOTENCY_KEY_INVALID",
+      });
+    }
+    const checkoutRequestKey = resolvedCheckoutRequestKey.key;
+    const idempotencyKeyFingerprint = fingerprintAuditValue(checkoutRequestKey);
+    const idempotentInvoiceNo = checkoutRequestKey
+      ? buildIdempotentInvoiceNo(authUser.id, checkoutRequestKey)
+      : null;
+    if (idempotentInvoiceNo) {
+      const existingOrder = await loadIdempotentCheckoutOrder(idempotentInvoiceNo, authUser.id);
+      if (existingOrder) {
+        logOperationalAuditEvent("checkout.idempotency.replay", {
+          traceId,
+          userId: authUser.id,
+          orderId: toNumber(getAttr(existingOrder, "id"), 0),
+          invoiceNo: getAttr(existingOrder, "invoiceNo"),
+          idempotencyKeyFingerprint,
+          idempotencySource: resolvedCheckoutRequestKey.source,
+        });
+        return res.status(200).json({
+          success: true,
+          data: serializeIdempotentCheckoutOrder(existingOrder, true),
+        });
+      }
     }
 
     const normalizedCouponCode = String(parsed.data.couponCode || "").trim().toUpperCase();
@@ -1477,6 +1598,7 @@ router.post("/create-multi-store", async (req, res) => {
       }
       if (prepared.invalidItems.length > 0) {
         await tx.rollback();
+        res.set("Retry-After", String(CHECKOUT_IDEMPOTENCY_RETRY_AFTER_SECONDS));
         return res.status(409).json({
           success: false,
           message: "Some cart items are no longer eligible for checkout.",
@@ -1625,7 +1747,7 @@ router.post("/create-multi-store", async (req, res) => {
       );
       const discountAmount = orderLevelDiscountAmount + groupDiscountAmount;
       const discountedGrandTotal = Math.max(0, prepared.summary.grandTotal - discountAmount);
-      const invoiceNo = buildInvoiceNo();
+      const invoiceNo = idempotentInvoiceNo || buildInvoiceNo();
       const parentOrder = await Order.create(
         {
           invoiceNo,
@@ -1757,7 +1879,18 @@ router.post("/create-multi-store", async (req, res) => {
             newStatus: "CREATED",
             actorType: "SYSTEM",
             actorId: null,
-            note: "Payment record created during multi-store checkout.",
+            traceId,
+            note: appendAuditNote("Payment record created during multi-store checkout.", {
+              source: "checkout:create-multi-store",
+              traceId,
+              orderId: Number(parentOrder.id || 0),
+              invoiceNo,
+              suborderId: Number(suborder.id || 0),
+              suborderNumber,
+              storeId: Number(group.storeId || 0),
+              idempotencyKeyFingerprint,
+              idempotencySource: resolvedCheckoutRequestKey.source,
+            }),
           },
           tx
         );
@@ -1790,6 +1923,17 @@ router.post("/create-multi-store", async (req, res) => {
 
       await recalculateParentOrderPaymentStatus(Number(parentOrder.id), tx);
       await tx.commit();
+      logOperationalAuditEvent("checkout.create.committed", {
+        traceId,
+        userId: authUser.id,
+        orderId: Number(parentOrder.id || 0),
+        invoiceNo,
+        checkoutMode: prepared.checkoutMode,
+        suborderCount: createdSellerSuborders.length,
+        paymentStatus: "UNPAID",
+        idempotencyKeyFingerprint,
+        idempotencySource: resolvedCheckoutRequestKey.source,
+      });
 
       try {
         await Promise.allSettled([
@@ -1808,7 +1952,7 @@ router.post("/create-multi-store", async (req, res) => {
             createSellerNotificationsForStoreRecipients({
               storeId: suborder.storeId,
               type: "SELLER_SUBORDER_CREATED",
-              title: `New suborder ${suborder.suborderNumber} is ready for seller review`,
+              title: `New suborder ${suborder.suborderNumber} is awaiting buyer payment`,
               actionCode: "SELLER_SUBORDER_CREATED",
               orderId: Number(parentOrder.id || 0),
               suborderId: suborder.suborderId,
@@ -1821,6 +1965,8 @@ router.post("/create-multi-store", async (req, res) => {
                 invoiceNo,
                 amount: suborder.totalAmount,
                 suborderNumber: suborder.suborderNumber,
+                paymentStatus: "UNPAID",
+                fulfillmentStatus: "UNFULFILLED",
               },
             })
           ),
@@ -1833,7 +1979,9 @@ router.post("/create-multi-store", async (req, res) => {
       return res.status(201).json({
         success: true,
         data: createdOrder
-          ? serializeSplitOrder(createdOrder)
+          ? idempotentInvoiceNo
+            ? serializeIdempotentCheckoutOrder(createdOrder, false)
+            : serializeSplitOrder(createdOrder)
           : {
               orderId: parentOrder.id,
               ref: invoiceNo,
@@ -1842,10 +1990,64 @@ router.post("/create-multi-store", async (req, res) => {
               paymentStatus: "UNPAID",
               orderStatus: "pending",
               paymentMethod: "QRIS",
+              ...(idempotentInvoiceNo
+                ? {
+                    idempotency: {
+                      replayed: false,
+                      source: CHECKOUT_REQUEST_KEY_SOURCE,
+                    },
+                  }
+                : {}),
             },
       });
     } catch (error) {
-      await tx.rollback();
+      const canRecoverIdempotentRace =
+        Boolean(idempotentInvoiceNo) && isRecoverableIdempotencyRaceError(error);
+      await tx.rollback().catch((rollbackError) => {
+        console.warn("[checkout/create-multi-store] rollback failed", rollbackError);
+      });
+      if (canRecoverIdempotentRace && idempotentInvoiceNo) {
+        const existingOrder = await waitForIdempotentCheckoutOrder(
+          idempotentInvoiceNo,
+          authUser.id
+        );
+        if (existingOrder) {
+          logOperationalAuditEvent("checkout.idempotency.race_replay", {
+            traceId,
+            userId: authUser.id,
+            orderId: toNumber(getAttr(existingOrder, "id"), 0),
+            invoiceNo: getAttr(existingOrder, "invoiceNo"),
+            idempotencyKeyFingerprint,
+            idempotencySource: resolvedCheckoutRequestKey.source,
+          });
+          return res.status(200).json({
+            success: true,
+            data: serializeIdempotentCheckoutOrder(existingOrder, true),
+          });
+        }
+        logOperationalAuditEvent("checkout.idempotency.in_progress", {
+          traceId,
+          userId: authUser.id,
+          invoiceNo: idempotentInvoiceNo,
+          idempotencyKeyFingerprint,
+          idempotencySource: resolvedCheckoutRequestKey.source,
+          retryAfterMs: CHECKOUT_IDEMPOTENCY_RETRY_AFTER_SECONDS * 1000,
+        });
+        res.set("Retry-After", String(CHECKOUT_IDEMPOTENCY_RETRY_AFTER_SECONDS));
+        return res.status(409).json({
+          success: false,
+          message: "Checkout request is already being processed. Please wait a moment and retry.",
+          code: "CHECKOUT_IDEMPOTENCY_IN_PROGRESS",
+          data: {
+            retryable: true,
+            retryAfterMs: CHECKOUT_IDEMPOTENCY_RETRY_AFTER_SECONDS * 1000,
+            idempotency: {
+              replayed: false,
+              source: CHECKOUT_REQUEST_KEY_SOURCE,
+            },
+          },
+        });
+      }
       console.error("[checkout/create-multi-store] error", error);
       return res.status(500).json({
         success: false,

@@ -21,6 +21,10 @@ import {
 } from "../services/paymentCheckoutView.service.js";
 import { buildGroupedPaymentReadModel } from "../services/groupedPaymentReadModel.service.js";
 import { createSellerNotificationsForStoreRecipients } from "../services/notification.service.js";
+import {
+  appendAuditNote,
+  getRequestTraceId,
+} from "../services/operationalAudit.service.js";
 
 const router = Router();
 
@@ -382,7 +386,20 @@ router.post("/:paymentId/proof", async (req, res) => {
           newStatus: "PENDING_CONFIRMATION",
           actorType: "BUYER",
           actorId: authUser.id,
-          note: `Proof submitted by ${parsed.data.senderName} for ${parsed.data.transferAmount}.`,
+          traceId: getRequestTraceId(req),
+          note: appendAuditNote(
+            `Proof submitted by ${parsed.data.senderName} for ${parsed.data.transferAmount}.`,
+            {
+              source: "payments:proof-submit",
+              traceId: getRequestTraceId(req),
+              paymentId,
+              orderId: Number(getAttr(suborder?.order, "id") || 0) || null,
+              invoiceNo: String(getAttr(suborder?.order, "invoiceNo") || ""),
+              suborderId: Number(getAttr(suborder, "id") || 0) || null,
+              suborderNumber: String(getAttr(suborder, "suborderNumber") || ""),
+              storeId: Number(getAttr(paymentForSubmit, "storeId") || getAttr(suborder, "storeId") || 0) || null,
+            }
+          ),
         },
         tx
       );
@@ -525,7 +542,19 @@ router.post("/:paymentId/cancel", async (req, res) => {
           newStatus: "FAILED",
           actorType: "BUYER",
           actorId: authUser.id,
-          note: "Buyer cancelled this payment before final confirmation.",
+          traceId: getRequestTraceId(req),
+          note: appendAuditNote("Buyer cancelled this payment before final confirmation.", {
+            source: "payments:cancel",
+            traceId: getRequestTraceId(req),
+            paymentId,
+            orderId,
+            invoiceNo: String(getAttr(activeSuborder?.order, "invoiceNo") || ""),
+            suborderId: Number(getAttr(activeSuborder, "id") || 0) || null,
+            suborderNumber: String(getAttr(activeSuborder, "suborderNumber") || ""),
+            storeId:
+              Number(getAttr(paymentForCancel, "storeId") || getAttr(activeSuborder, "storeId") || 0) ||
+              null,
+          }),
         },
         tx
       );

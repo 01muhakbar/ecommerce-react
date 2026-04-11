@@ -17,6 +17,10 @@ import {
   isMultistoreShipmentMutationEnabled,
 } from "../services/featureFlags.service.js";
 import {
+  getRequestTraceId,
+  logOperationalAuditEvent,
+} from "../services/operationalAudit.service.js";
+import {
   Order,
   Payment,
   PaymentProof,
@@ -37,6 +41,9 @@ const SELLER_FULFILLMENT_CANDIDATE_ACTIONS = [
   "MARK_PROCESSING",
   "MARK_SHIPPED",
   "MARK_DELIVERED",
+  "MARK_FAILED_DELIVERY",
+  "MARK_RETURNED",
+  "CANCEL_SHIPMENT",
 ];
 const SELLER_FULFILLMENT_READ_ONLY_ACTIONS = [
   "VIEW_PAYMENT_PROOF",
@@ -54,21 +61,26 @@ const SELLER_FULFILLMENT_AUDIT_ACTIONS = {
   MARK_PROCESSING: "SELLER_SUBORDER_MARK_PROCESSING",
   MARK_SHIPPED: "SELLER_SUBORDER_MARK_SHIPPED",
   MARK_DELIVERED: "SELLER_SUBORDER_MARK_DELIVERED",
+  MARK_FAILED_DELIVERY: "SELLER_SUBORDER_MARK_FAILED_DELIVERY",
+  MARK_RETURNED: "SELLER_SUBORDER_MARK_RETURNED",
+  CANCEL_SHIPMENT: "SELLER_SUBORDER_CANCEL_SHIPMENT",
 } as const;
 const FULFILLMENT_ACTIONS = {
   MARK_PROCESSING: {
     code: "MARK_PROCESSING",
-    label: "Mark processing",
+    label: "Mark packed",
     nextStatus: "PROCESSING",
+    shipmentStatus: "PACKED",
     allowedFrom: ["UNFULFILLED"],
-    description: "Move the suborder into seller processing or packing.",
-    successMessage: "Suborder moved to processing.",
+    description: "Pack the shipment; compatibility fulfillment remains PROCESSING.",
+    successMessage: "Shipment marked as packed.",
     auditAction: SELLER_FULFILLMENT_AUDIT_ACTIONS.MARK_PROCESSING,
   },
   MARK_SHIPPED: {
     code: "MARK_SHIPPED",
     label: "Mark shipped",
     nextStatus: "SHIPPED",
+    shipmentStatus: "SHIPPED",
     allowedFrom: ["PROCESSING"],
     description: "Confirm the suborder has been dispatched from the store.",
     successMessage: "Suborder marked as shipped.",
@@ -78,10 +90,43 @@ const FULFILLMENT_ACTIONS = {
     code: "MARK_DELIVERED",
     label: "Mark delivered",
     nextStatus: "DELIVERED",
+    shipmentStatus: "DELIVERED",
     allowedFrom: ["SHIPPED"],
     description: "Confirm the seller-side delivery step is complete.",
     successMessage: "Suborder marked as delivered.",
     auditAction: SELLER_FULFILLMENT_AUDIT_ACTIONS.MARK_DELIVERED,
+  },
+  MARK_FAILED_DELIVERY: {
+    code: "MARK_FAILED_DELIVERY",
+    label: "Mark delivery failed",
+    nextStatus: "SHIPPED",
+    shipmentStatus: "FAILED_DELIVERY",
+    allowedFrom: ["SHIPPED"],
+    description:
+      "Record a failed delivery exception; compatibility fulfillment remains SHIPPED.",
+    successMessage: "Shipment marked as failed delivery.",
+    auditAction: SELLER_FULFILLMENT_AUDIT_ACTIONS.MARK_FAILED_DELIVERY,
+  },
+  MARK_RETURNED: {
+    code: "MARK_RETURNED",
+    label: "Mark returned",
+    nextStatus: "SHIPPED",
+    shipmentStatus: "RETURNED",
+    allowedFrom: ["SHIPPED"],
+    description:
+      "Record that a failed-delivery shipment was returned; compatibility fulfillment remains SHIPPED.",
+    successMessage: "Shipment marked as returned.",
+    auditAction: SELLER_FULFILLMENT_AUDIT_ACTIONS.MARK_RETURNED,
+  },
+  CANCEL_SHIPMENT: {
+    code: "CANCEL_SHIPMENT",
+    label: "Cancel shipment",
+    nextStatus: "CANCELLED",
+    shipmentStatus: "CANCELLED",
+    allowedFrom: ["UNFULFILLED", "PROCESSING"],
+    description: "Cancel a shipment before dispatch.",
+    successMessage: "Shipment cancelled.",
+    auditAction: SELLER_FULFILLMENT_AUDIT_ACTIONS.CANCEL_SHIPMENT,
   },
 } as const;
 
@@ -1345,46 +1390,9 @@ router.patch(
         });
       }
 
-      if (
-        isMultistoreShipmentMvpEnabled() &&
-        !isMultistoreShipmentMutationEnabled()
-      ) {
-        await tx.rollback();
-        tx = null;
-        return res.status(409).json({
-          success: false,
-          code: "SHIPMENT_MUTATION_DISABLED",
-          message: "Shipment mutation is disabled for the current rollout.",
-        });
-      }
-
       const currentFulfillmentStatus = normalizeFulfillmentStatus(
         getAttr(suborder, "fulfillmentStatus")
       );
-
-      if (currentFulfillmentStatus === actionDefinition.nextStatus) {
-        await tx.rollback();
-        tx = null;
-        return res.status(409).json({
-          success: false,
-          code: "FULFILLMENT_STATUS_ALREADY_SET",
-          message: `Suborder is already ${serializeFulfillmentStatusMeta(currentFulfillmentStatus).label.toLowerCase()}.`,
-        });
-      }
-
-      if (
-        !(actionDefinition.allowedFrom as readonly string[]).includes(
-          currentFulfillmentStatus
-        )
-      ) {
-        await tx.rollback();
-        tx = null;
-        return res.status(409).json({
-          success: false,
-          code: "INVALID_FULFILLMENT_TRANSITION",
-          message: `Cannot ${actionDefinition.label.toLowerCase()} from ${serializeFulfillmentStatusMeta(currentFulfillmentStatus).label.toLowerCase()}.`,
-        });
-      }
 
       const hydratedSuborder: any = suborder;
       const order = hydratedSuborder?.order ?? hydratedSuborder?.get?.("order") ?? null;
@@ -1407,12 +1415,67 @@ router.patch(
       });
 
       if (transitionBlocker) {
+        logOperationalAuditEvent("seller.fulfillment.blocked_by_payment", {
+          traceId: getRequestTraceId(req),
+          actorUserId,
+          storeId,
+          suborderId,
+          suborderNumber: beforeState.suborderNumber,
+          orderId: toNumber(getAttr(order, "id"), 0),
+          invoiceNo: String(getAttr(order, "invoiceNo") || ""),
+          paymentStatus: beforeState.paymentStatus,
+          paymentRecordStatus: beforeState.paymentRecordStatus,
+          orderPaymentStatus: beforeState.orderPaymentStatus,
+          blockerCode: transitionBlocker.code,
+          action: actionDefinition.code,
+        });
         await tx.rollback();
         tx = null;
         return res.status(409).json({
           success: false,
           code: transitionBlocker.code,
           message: transitionBlocker.message,
+        });
+      }
+
+      if (
+        isMultistoreShipmentMvpEnabled() &&
+        !isMultistoreShipmentMutationEnabled()
+      ) {
+        await tx.rollback();
+        tx = null;
+        return res.status(409).json({
+          success: false,
+          code: "SHIPMENT_MUTATION_DISABLED",
+          message: "Shipment mutation is disabled for the current rollout.",
+        });
+      }
+
+      const isCanonicalShipmentTransition =
+        Boolean((actionDefinition as any).shipmentStatus) &&
+        (actionDefinition as any).shipmentStatus !== actionDefinition.nextStatus;
+
+      if (currentFulfillmentStatus === actionDefinition.nextStatus && !isCanonicalShipmentTransition) {
+        await tx.rollback();
+        tx = null;
+        return res.status(409).json({
+          success: false,
+          code: "FULFILLMENT_STATUS_ALREADY_SET",
+          message: `Suborder is already ${serializeFulfillmentStatusMeta(currentFulfillmentStatus).label.toLowerCase()}.`,
+        });
+      }
+
+      if (
+        !(actionDefinition.allowedFrom as readonly string[]).includes(
+          currentFulfillmentStatus
+        )
+      ) {
+        await tx.rollback();
+        tx = null;
+        return res.status(409).json({
+          success: false,
+          code: "INVALID_FULFILLMENT_TRANSITION",
+          message: `Cannot ${actionDefinition.label.toLowerCase()} from ${serializeFulfillmentStatusMeta(currentFulfillmentStatus).label.toLowerCase()}.`,
         });
       }
 
@@ -1502,6 +1565,22 @@ router.patch(
       await tx.commit();
       tx = null;
 
+      logOperationalAuditEvent("seller.shipment.transition", {
+        traceId: getRequestTraceId(req),
+        actorUserId,
+        storeId,
+        suborderId,
+        suborderNumber: afterState.suborderNumber,
+        orderId: toNumber(getAttr(refreshedOrder, "id"), 0),
+        invoiceNo: String(getAttr(refreshedOrder, "invoiceNo") || ""),
+        action: actionDefinition.code,
+        compatibilityFrom: currentFulfillmentStatus,
+        compatibilityTo:
+          shipmentSync.compatibilityFulfillmentStatus || actionDefinition.nextStatus,
+        shipmentTo: String(getAttr(shipmentSync.shipment, "status") || (actionDefinition as any).shipmentStatus || ""),
+        usedLegacyFallback: Boolean(shipmentSync.usedLegacyFallback),
+      });
+
       if (parentOrderSync?.changed && parentOrderSync.userId) {
         try {
           await createUserOrderStatusUpdatedNotification({
@@ -1534,6 +1613,7 @@ router.patch(
           transition: {
             from: currentFulfillmentStatus,
             to: actionDefinition.nextStatus,
+            shipmentTo: (actionDefinition as any).shipmentStatus || null,
           },
           parentOrderSync: parentOrderSync
             ? {

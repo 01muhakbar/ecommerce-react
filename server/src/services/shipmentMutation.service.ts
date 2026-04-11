@@ -47,7 +47,7 @@ const deriveLegacyShipmentStatus = (input: {
   if (fulfillmentStatus === "CANCELLED") return "CANCELLED";
   if (fulfillmentStatus === "DELIVERED") return "DELIVERED";
   if (fulfillmentStatus === "SHIPPED") return "SHIPPED";
-  if (fulfillmentStatus === "PROCESSING") return "PROCESSING";
+  if (fulfillmentStatus === "PROCESSING") return "PACKED";
 
   const paymentStatus = toUpper(input.paymentStatus, "UNPAID") || "UNPAID";
   if (paymentStatus === "PAID") return "READY_TO_FULFILL";
@@ -91,14 +91,17 @@ const SELLER_ACTION_SHIPMENT_STATUS: Record<
   {
     shipmentStatus: string;
     compatibilityFulfillmentStatus: string;
+    allowedFrom: string[];
     eventType: string;
     eventLabel: string;
     eventDescription: string;
+    requiresPersistedShipment?: boolean;
   }
 > = {
   MARK_PROCESSING: {
     shipmentStatus: "PACKED",
     compatibilityFulfillmentStatus: "PROCESSING",
+    allowedFrom: ["READY_TO_FULFILL"],
     eventType: "PACKED",
     eventLabel: "Packed",
     eventDescription: "Seller packed the shipment and it is ready for dispatch.",
@@ -106,6 +109,7 @@ const SELLER_ACTION_SHIPMENT_STATUS: Record<
   MARK_SHIPPED: {
     shipmentStatus: "SHIPPED",
     compatibilityFulfillmentStatus: "SHIPPED",
+    allowedFrom: ["PACKED"],
     eventType: "SHIPPED",
     eventLabel: "Shipped",
     eventDescription: "Seller dispatched the shipment and provided tracking details.",
@@ -113,11 +117,82 @@ const SELLER_ACTION_SHIPMENT_STATUS: Record<
   MARK_DELIVERED: {
     shipmentStatus: "DELIVERED",
     compatibilityFulfillmentStatus: "DELIVERED",
+    allowedFrom: ["SHIPPED", "IN_TRANSIT", "OUT_FOR_DELIVERY"],
     eventType: "DELIVERED",
     eventLabel: "Delivered",
     eventDescription: "Seller confirmed the shipment reached the buyer.",
   },
+  MARK_FAILED_DELIVERY: {
+    shipmentStatus: "FAILED_DELIVERY",
+    compatibilityFulfillmentStatus: "SHIPPED",
+    allowedFrom: ["SHIPPED", "IN_TRANSIT", "OUT_FOR_DELIVERY"],
+    eventType: "FAILED_DELIVERY",
+    eventLabel: "Delivery Failed",
+    eventDescription: "Seller recorded a failed delivery attempt for follow-up.",
+    requiresPersistedShipment: true,
+  },
+  MARK_RETURNED: {
+    shipmentStatus: "RETURNED",
+    compatibilityFulfillmentStatus: "SHIPPED",
+    allowedFrom: ["FAILED_DELIVERY"],
+    eventType: "RETURNED",
+    eventLabel: "Returned",
+    eventDescription: "Seller recorded that the shipment was returned after delivery failure.",
+    requiresPersistedShipment: true,
+  },
+  CANCEL_SHIPMENT: {
+    shipmentStatus: "CANCELLED",
+    compatibilityFulfillmentStatus: "CANCELLED",
+    allowedFrom: ["READY_TO_FULFILL", "PACKED"],
+    eventType: "CANCELLED",
+    eventLabel: "Shipment Cancelled",
+    eventDescription: "Seller cancelled the shipment before dispatch.",
+    requiresPersistedShipment: true,
+  },
 };
+
+const ADMIN_CORRECTION_SHIPMENT_STATUS: Record<
+  string,
+  {
+    shipmentStatus: string;
+    compatibilityFulfillmentStatus: string;
+    allowedFrom: string[];
+    eventLabel: string;
+    eventDescription: string;
+  }
+> = {
+  RETURNED: {
+    shipmentStatus: "RETURNED",
+    compatibilityFulfillmentStatus: "SHIPPED",
+    allowedFrom: ["FAILED_DELIVERY"],
+    eventLabel: "Returned",
+    eventDescription: "Admin reconciled the failed delivery as a returned shipment.",
+  },
+  SHIPPED: {
+    shipmentStatus: "SHIPPED",
+    compatibilityFulfillmentStatus: "SHIPPED",
+    allowedFrom: ["FAILED_DELIVERY"],
+    eventLabel: "Re-dispatched",
+    eventDescription: "Admin reconciled the failed delivery as re-dispatched.",
+  },
+  DELIVERED: {
+    shipmentStatus: "DELIVERED",
+    compatibilityFulfillmentStatus: "DELIVERED",
+    allowedFrom: ["FAILED_DELIVERY"],
+    eventLabel: "Delivered",
+    eventDescription: "Admin reconciled the failed delivery as delivered.",
+  },
+  CANCELLED: {
+    shipmentStatus: "CANCELLED",
+    compatibilityFulfillmentStatus: "CANCELLED",
+    allowedFrom: ["RETURNED"],
+    eventLabel: "Shipment Cancelled",
+    eventDescription: "Admin closed the returned shipment as cancelled.",
+  },
+};
+
+const normalizeAdminCorrectionReason = (value: unknown) =>
+  normalizeText(value).replace(/\s+/g, " ").slice(0, 500);
 
 const appendTrackingEvent = async (input: {
   shipmentId: number;
@@ -224,6 +299,12 @@ export const applySellerShipmentFulfillment = async (input: {
 
   const mvpEnabled = isMultistoreShipmentMvpEnabled();
   if (!mvpEnabled) {
+    if (action.requiresPersistedShipment) {
+      throw createShipmentMutationError(
+        "SHIPMENT_ACTION_REQUIRES_PERSISTED_SHIPMENT",
+        "This shipment exception action requires a persisted shipment record."
+      );
+    }
     return {
       shipment: null,
       usedLegacyFallback: true,
@@ -250,6 +331,12 @@ export const applySellerShipmentFulfillment = async (input: {
     }));
 
   if (!shipment) {
+    if (action.requiresPersistedShipment) {
+      throw createShipmentMutationError(
+        "SHIPMENT_ACTION_REQUIRES_PERSISTED_SHIPMENT",
+        "This shipment exception action requires a persisted shipment record."
+      );
+    }
     return {
       shipment: null,
       usedLegacyFallback: true,
@@ -297,6 +384,20 @@ export const applySellerShipmentFulfillment = async (input: {
     suborder: input.suborder,
     transaction: input.transaction,
   });
+
+  const currentShipmentStatus = resolveEffectiveShipmentStatus(shipment, input.suborder);
+  if (currentShipmentStatus === action.shipmentStatus) {
+    throw createShipmentMutationError(
+      "SHIPMENT_STATUS_ALREADY_SET",
+      `Shipment is already ${action.eventLabel.toLowerCase()}.`
+    );
+  }
+  if (!action.allowedFrom.includes(currentShipmentStatus)) {
+    throw createShipmentMutationError(
+      "INVALID_SHIPMENT_TRANSITION",
+      `Cannot ${action.eventLabel.toLowerCase()} from ${currentShipmentStatus.replaceAll("_", " ").toLowerCase()}.`
+    );
+  }
 
   if (action.shipmentStatus === "SHIPPED") {
     const trackingNumber = normalizeText(input.payload?.trackingNumber);
@@ -359,5 +460,141 @@ export const applySellerShipmentFulfillment = async (input: {
     shipment: refreshedShipment ?? shipment,
     usedLegacyFallback: false,
     compatibilityFulfillmentStatus: action.compatibilityFulfillmentStatus,
+  };
+};
+
+export const applyAdminShipmentCorrection = async (input: {
+  suborder: any;
+  targetStatus: unknown;
+  reason: unknown;
+  actorUserId?: number | null;
+  transaction?: any;
+}) => {
+  const targetStatus = toUpper(input.targetStatus, "");
+  const correction = ADMIN_CORRECTION_SHIPMENT_STATUS[targetStatus];
+  if (!correction) {
+    throw createShipmentMutationError(
+      "INVALID_ADMIN_SHIPMENT_CORRECTION_TARGET",
+      "Admin shipment correction target is not supported.",
+      400
+    );
+  }
+
+  const reason = normalizeAdminCorrectionReason(input.reason);
+  if (reason.length < 8) {
+    throw createShipmentMutationError(
+      "ADMIN_SHIPMENT_CORRECTION_REASON_REQUIRED",
+      "Admin shipment correction requires a clear reason.",
+      400
+    );
+  }
+
+  if (!isMultistoreShipmentMvpEnabled() || !isMultistoreShipmentMutationEnabled()) {
+    throw createShipmentMutationError(
+      "SHIPMENT_MUTATION_DISABLED",
+      "Shipment mutation is disabled for the current rollout."
+    );
+  }
+
+  const paymentStatus = toUpper(getAttr(input.suborder, "paymentStatus"), "UNPAID");
+  if (paymentStatus !== "PAID") {
+    throw createShipmentMutationError(
+      "ADMIN_SHIPMENT_CORRECTION_PAYMENT_NOT_SETTLED",
+      "Admin shipment correction cannot bypass split payment settlement."
+    );
+  }
+
+  const shipment =
+    input.suborder?.shipment ??
+    input.suborder?.get?.("shipment") ??
+    (await Shipment.findOne({
+      where: {
+        suborderId: toNumber(getAttr(input.suborder, "id"), 0),
+      },
+      include: [
+        {
+          model: TrackingEvent,
+          as: "trackingEvents",
+          required: false,
+        },
+      ],
+      transaction: input.transaction,
+      lock: input.transaction?.LOCK?.UPDATE ? input.transaction.LOCK.UPDATE : undefined,
+    }));
+
+  if (!shipment) {
+    throw createShipmentMutationError(
+      "SHIPMENT_ACTION_REQUIRES_PERSISTED_SHIPMENT",
+      "Admin shipment correction requires a persisted shipment record."
+    );
+  }
+
+  const currentShipmentStatus = resolveEffectiveShipmentStatus(shipment, input.suborder);
+  if (currentShipmentStatus === correction.shipmentStatus) {
+    throw createShipmentMutationError(
+      "SHIPMENT_STATUS_ALREADY_SET",
+      `Shipment is already ${correction.eventLabel.toLowerCase()}.`
+    );
+  }
+
+  if (!correction.allowedFrom.includes(currentShipmentStatus)) {
+    throw createShipmentMutationError(
+      "INVALID_ADMIN_SHIPMENT_CORRECTION_TRANSITION",
+      `Admin cannot correct shipment from ${currentShipmentStatus.replaceAll("_", " ").toLowerCase()} to ${correction.shipmentStatus.replaceAll("_", " ").toLowerCase()}.`
+    );
+  }
+
+  await shipment.update(
+    {
+      status: correction.shipmentStatus,
+    },
+    { transaction: input.transaction }
+  );
+
+  await input.suborder.update(
+    {
+      fulfillmentStatus: correction.compatibilityFulfillmentStatus,
+    },
+    { transaction: input.transaction }
+  );
+
+  await appendTrackingEvent({
+    shipmentId: toNumber(getAttr(shipment, "id"), 0),
+    eventType: correction.shipmentStatus,
+    eventLabel: correction.eventLabel,
+    eventDescription: correction.eventDescription,
+    source: "ADMIN",
+    actorType: "ADMIN",
+    actorId: input.actorUserId ?? null,
+    metadata: {
+      correction: true,
+      source: "ADMIN_SHIPPING_EXCEPTION_CORRECTION",
+      reason,
+      statusFrom: currentShipmentStatus,
+      statusTo: correction.shipmentStatus,
+      suborderId: toNumber(getAttr(input.suborder, "id"), 0) || null,
+    },
+    transaction: input.transaction,
+  });
+
+  const refreshedShipment = await Shipment.findOne({
+    where: { id: toNumber(getAttr(shipment, "id"), 0) },
+    include: [
+      {
+        model: TrackingEvent,
+        as: "trackingEvents",
+        required: false,
+      },
+    ],
+    transaction: input.transaction,
+  });
+
+  return {
+    shipment: refreshedShipment ?? shipment,
+    usedLegacyFallback: false,
+    fromShipmentStatus: currentShipmentStatus,
+    toShipmentStatus: correction.shipmentStatus,
+    compatibilityFulfillmentStatus: correction.compatibilityFulfillmentStatus,
+    reason,
   };
 };

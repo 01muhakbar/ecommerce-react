@@ -27,6 +27,10 @@ import {
   resolveSellerAccess,
   sellerHasPermission,
 } from "../services/seller/resolveSellerAccess.js";
+import {
+  appendAuditNote,
+  getRequestTraceId,
+} from "../services/operationalAudit.service.js";
 
 const router = Router();
 
@@ -844,7 +848,17 @@ const handleSellerPaymentReview = async (req: any, res: any, options: { requireR
             newStatus: "PAID",
             actorType: "SELLER",
             actorId: authUser.id,
-            note: reviewNote || "Seller approved payment proof.",
+            traceId: getRequestTraceId(req),
+            note: appendAuditNote(reviewNote || "Seller approved payment proof.", {
+              source: "seller:payment-review:approve",
+              traceId: getRequestTraceId(req),
+              paymentId,
+              orderId,
+              invoiceNo: String(getAttr(suborder?.order, "invoiceNo") || ""),
+              suborderId: toNumber(getAttr(suborder, "id"), 0) || null,
+              suborderNumber: String(getAttr(suborder, "suborderNumber") || ""),
+              storeId: toNumber(getAttr(suborder, "storeId"), 0) || null,
+            }),
           },
           tx
         );
@@ -881,7 +895,17 @@ const handleSellerPaymentReview = async (req: any, res: any, options: { requireR
             newStatus: "REJECTED",
             actorType: "SELLER",
             actorId: authUser.id,
-            note: reviewNote || "Seller rejected payment proof.",
+            traceId: getRequestTraceId(req),
+            note: appendAuditNote(reviewNote || "Seller rejected payment proof.", {
+              source: "seller:payment-review:reject",
+              traceId: getRequestTraceId(req),
+              paymentId,
+              orderId,
+              invoiceNo: String(getAttr(suborder?.order, "invoiceNo") || ""),
+              suborderId: toNumber(getAttr(suborder, "id"), 0) || null,
+              suborderNumber: String(getAttr(suborder, "suborderNumber") || ""),
+              storeId: toNumber(getAttr(suborder, "storeId"), 0) || null,
+            }),
           },
           tx
         );

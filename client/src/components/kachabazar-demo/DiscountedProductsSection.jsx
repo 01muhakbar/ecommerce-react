@@ -1,5 +1,9 @@
+import { useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import ProductCardKacha from "./ProductCardKacha.jsx";
+
+const DISCOUNTED_PRODUCTS_LIMIT = 10;
 
 const isDiscounted = (product) => {
   const discountPercent = Number(product?.discountPercent || 0);
@@ -9,6 +13,19 @@ const isDiscounted = (product) => {
     discountPercent > 0 ||
     (originalPrice > 0 && salePrice > 0 && salePrice < originalPrice)
   );
+};
+
+const toProductTimestamp = (product) => {
+  const timestamp = Date.parse(
+    String(product?.updatedAt || product?.createdAt || product?.publishedAt || "")
+  );
+  return Number.isFinite(timestamp) ? timestamp : 0;
+};
+
+const compareNewestProducts = (left, right) => {
+  const timestampDiff = toProductTimestamp(right) - toProductTimestamp(left);
+  if (timestampDiff !== 0) return timestampDiff;
+  return Number(right?.id || 0) - Number(left?.id || 0);
 };
 
 function ProductSkeletonCard() {
@@ -25,32 +42,54 @@ function ProductSkeletonCard() {
 export default function DiscountedProductsSection({
   title = "Latest Discounted Products",
   description = "Don't miss out the latest discounted products from this week.",
-  maxProducts = 12,
   products = [],
   isLoading = false,
   isError = false,
   onRetry,
 }) {
-  const discountedProducts = (Array.isArray(products) ? products : [])
-    .filter(isDiscounted)
-    .slice(0, Math.max(1, Number(maxProducts) || 12))
-    .map((product) => ({ ...product, variant: "discounted" }));
+  const sliderRef = useRef(null);
+  const discountedProducts = useMemo(
+    () =>
+      (Array.isArray(products) ? products : [])
+        .filter(isDiscounted)
+        .sort(compareNewestProducts)
+        .slice(0, DISCOUNTED_PRODUCTS_LIMIT)
+        .map((product) => ({ ...product, variant: "discounted" })),
+    [products]
+  );
+
+  const scrollSlider = (direction) => {
+    const element = sliderRef.current;
+    if (!element) return;
+    const scrollAmount = Math.max(260, Math.floor(element.clientWidth * 0.86));
+    element.scrollBy({
+      left: direction === "previous" ? -scrollAmount : scrollAmount,
+      behavior: "smooth",
+    });
+  };
 
   return (
     <section className="space-y-6">
-      <header className="text-center">
-        <h2 className="text-2xl font-semibold text-slate-900 sm:text-3xl">
-          {title}
-        </h2>
-        <p className="mt-2 text-sm text-slate-500">
-          {description}
-        </p>
+      <header>
+        <div>
+          <h2 className="text-2xl font-semibold text-slate-900 sm:text-3xl">
+            {title}
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+            {description}
+          </p>
+        </div>
       </header>
 
       {isLoading ? (
-        <div className="grid grid-cols-2 gap-3.5 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {Array.from({ length: 10 }).map((_, index) => (
-            <ProductSkeletonCard key={`discounted-skeleton-${index}`} />
+        <div className="flex gap-4 overflow-hidden">
+          {Array.from({ length: DISCOUNTED_PRODUCTS_LIMIT }).map((_, index) => (
+            <div
+              key={`discounted-skeleton-${index}`}
+              className="w-[220px] shrink-0 sm:w-[228px] lg:w-[214px] xl:w-[220px]"
+            >
+              <ProductSkeletonCard />
+            </div>
           ))}
         </div>
       ) : isError ? (
@@ -72,13 +111,36 @@ export default function DiscountedProductsSection({
         </div>
       ) : (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-3.5 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {discountedProducts.map((product, index) => (
-              <ProductCardKacha
-                key={`${product?.id ?? product?.slug ?? "discounted"}-${index}`}
-                product={product}
-              />
-            ))}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => scrollSlider("previous")}
+              aria-label="Show previous discounted products"
+              className="absolute left-0 top-1/2 z-20 inline-flex h-10 w-10 -translate-x-1 -translate-y-1/2 items-center justify-center rounded-full border border-white/80 bg-white/95 text-slate-700 shadow-[0_16px_30px_-18px_rgba(15,23,42,0.65)] backdrop-blur transition hover:bg-white hover:text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 sm:h-11 sm:w-11 sm:-translate-x-3"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <div
+              ref={sliderRef}
+              className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2 pt-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:px-1"
+            >
+              {discountedProducts.map((product, index) => (
+                <div
+                  key={`${product?.id ?? product?.slug ?? "discounted"}-${index}`}
+                  className="w-[220px] shrink-0 snap-start sm:w-[228px] lg:w-[214px] xl:w-[220px]"
+                >
+                  <ProductCardKacha product={product} />
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => scrollSlider("next")}
+              aria-label="Show next discounted products"
+              className="absolute right-0 top-1/2 z-20 inline-flex h-10 w-10 translate-x-1 -translate-y-1/2 items-center justify-center rounded-full border border-white/80 bg-white/95 text-slate-700 shadow-[0_16px_30px_-18px_rgba(15,23,42,0.65)] backdrop-blur transition hover:bg-white hover:text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 sm:h-11 sm:w-11 sm:translate-x-3"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
           </div>
           <div className="flex justify-center">
             <Link

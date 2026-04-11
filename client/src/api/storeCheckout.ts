@@ -11,6 +11,7 @@ export type {
 export const createMultiStoreCheckoutOrder = async (payload?: {
   cartId?: number;
   shippingAddressId?: number;
+  checkoutRequestKey?: string | null;
   useDefaultShipping?: boolean;
   customer?: { name?: string; phone?: string; address?: string; notes?: string };
   shippingDetails?: StoreShippingDetails;

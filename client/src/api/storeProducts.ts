@@ -39,6 +39,7 @@ export const fetchStoreProducts = async (params?: {
   sort?: string;
   page?: number;
   limit?: number;
+  discounted?: boolean;
 }) => {
   const query = {
     search: params?.search ?? params?.q,
@@ -50,6 +51,7 @@ export const fetchStoreProducts = async (params?: {
     sort: params?.sort,
     page: params?.page,
     limit: params?.limit,
+    discounted: params?.discounted,
   };
   const { data } = await api.get<StoreProductsResponse>("/store/products", { params: query });
   return normalizeStorefrontProductsResponse(data);

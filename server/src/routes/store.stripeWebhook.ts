@@ -9,6 +9,7 @@ import {
   getStripeWebhookConfig,
 } from "../services/storeSettings.js";
 import { syncStoreOrderFromStripeSession } from "../services/stripeOrderSync.js";
+import { getRequestTraceId } from "../services/operationalAudit.service.js";
 
 const router = Router();
 
@@ -86,6 +87,7 @@ router.post(
       const syncResult = await syncStoreOrderFromStripeSession({
         session: session as any,
         source: "webhook",
+        traceId: getRequestTraceId(req),
       });
 
       if (!syncResult.ok && syncResult.reason === "order_not_found") {

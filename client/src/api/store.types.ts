@@ -46,6 +46,8 @@ export type StoreProduct = {
   } | null;
   status?: string | null;
   published?: boolean;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 };
 
 export type StorefrontProductSellerInfo = {

@@ -1,5 +1,5 @@
 // server/src/types/express.d.ts
-import "express";
+import "express-serve-static-core";
 
 declare module "express-serve-static-core" {
   interface Request {
@@ -8,5 +8,8 @@ declare module "express-serve-static-core" {
       email?: string;
       role?: string;
     };
+    requestId?: string;
+    correlationId?: string;
+    requestIdSource?: "x-request-id" | "x-correlation-id" | "generated";
   }
 }

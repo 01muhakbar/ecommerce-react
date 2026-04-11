@@ -36,6 +36,7 @@
     "smoke:auth-session-invalidation": "tsx src/scripts/smokeAuthSessionInvalidation.ts",
     "smoke:client-registration-otp": "tsx src/scripts/smokeClientRegistrationOtp.ts",
     "smoke:stripe-webhook": "tsx src/scripts/smokeStripeWebhook.ts",
+    "smoke:request-diagnostics": "tsx src/scripts/smokeRequestDiagnostics.ts",
     "smoke:store-customization-right-box": "tsx src/scripts/smokeStoreCustomizationRightBox.ts",
     "smoke:store-customization-about-us": "tsx src/scripts/smokeStoreCustomizationAboutUs.ts",
     "smoke:store-customization-checkout": "tsx src/scripts/smokeStoreCustomizationCheckout.ts",

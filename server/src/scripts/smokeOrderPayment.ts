@@ -5,6 +5,7 @@ import { Op } from "sequelize";
 import {
   Cart,
   CartItem,
+  Notification,
   Order,
   OrderItem,
   Payment,
@@ -320,6 +321,7 @@ async function createCheckoutOrder(input: {
   label: string;
   storeId: number;
   couponCode?: string;
+  checkoutRequestKey?: string;
 }): Promise<CheckoutScenario> {
   await addProductToCart(input.customerClient, input.buyerUserId, input.productId);
   const shippingDetails = buildShippingDetails(input.label);
@@ -333,6 +335,7 @@ async function createCheckoutOrder(input: {
         notes: `Smoke ${input.label}`,
       },
       couponCode: input.couponCode,
+      checkoutRequestKey: input.checkoutRequestKey,
       shippingDetails,
     }),
   });
@@ -355,6 +358,159 @@ async function createCheckoutOrder(input: {
     suborderId,
     paymentId,
   };
+}
+
+async function runCheckoutIdempotencyScenario(input: {
+  customerClient: CookieClient;
+  buyerUserId: number;
+  productId: number;
+  storeId: number;
+}) {
+  logStep("idempotency scenario: duplicate checkout request reuses existing order");
+  await addProductToCart(input.customerClient, input.buyerUserId, input.productId);
+  const shippingDetails = buildShippingDetails("idempotency");
+  const checkoutRequestKey = `${RUN_ID}:checkout-idempotency`;
+  const checkoutBody = {
+    customer: {
+      name: shippingDetails.fullName,
+      phone: shippingDetails.phoneNumber,
+      address: `${shippingDetails.streetName} ${shippingDetails.houseNumber}`,
+      notes: "Smoke idempotency",
+    },
+    checkoutRequestKey,
+    shippingDetails,
+  };
+
+  const first = await input.customerClient.request("/api/checkout/create-multi-store", {
+    method: "POST",
+    body: JSON.stringify(checkoutBody),
+  });
+  assertStatus(first, 201, "idempotency first checkout");
+  assert.equal(Boolean(first.body?.success), true, "idempotency first checkout: missing success");
+  const firstData = first.body?.data ?? null;
+  assertInitialState(firstData, "idempotency first checkout");
+  const firstGroup = getSingleGroup(firstData, "idempotency first checkout");
+  const orderId = toNumber(firstData?.orderId, 0);
+  const suborderId = toNumber(firstGroup?.suborderId, 0);
+  const paymentId = toNumber(firstGroup?.payment?.id, 0);
+  const invoiceNo = String(firstData?.invoiceNo || firstData?.ref || "");
+  const suborderNumber = String(firstGroup?.suborderNumber || "");
+  assert.ok(orderId > 0, "idempotency first checkout: orderId missing");
+  assert.ok(suborderId > 0, "idempotency first checkout: suborderId missing");
+  assert.ok(paymentId > 0, "idempotency first checkout: paymentId missing");
+  assert.ok(invoiceNo, "idempotency first checkout: invoiceNo missing");
+  assert.ok(suborderNumber, "idempotency first checkout: suborderNumber missing");
+  assert.equal(
+    toNumber(firstGroup?.storeId, 0),
+    input.storeId,
+    "idempotency first checkout: storeId mismatch"
+  );
+  createdOrderIds.push(orderId);
+
+  const replay = await input.customerClient.request("/api/checkout/create-multi-store", {
+    method: "POST",
+    body: JSON.stringify(checkoutBody),
+  });
+  assertStatus(replay, 200, "idempotency replay checkout");
+  assert.equal(Boolean(replay.body?.success), true, "idempotency replay checkout: missing success");
+  assert.equal(
+    Boolean(replay.body?.data?.idempotency?.replayed),
+    true,
+    "idempotency replay checkout: replay flag missing"
+  );
+  assert.equal(
+    toNumber(replay.body?.data?.orderId, 0),
+    orderId,
+    "idempotency replay checkout: orderId mismatch"
+  );
+  assert.equal(
+    String(replay.body?.data?.invoiceNo || replay.body?.data?.ref || ""),
+    invoiceNo,
+    "idempotency replay checkout: invoiceNo mismatch"
+  );
+  const replayGroup = getSingleGroup(replay.body?.data, "idempotency replay checkout");
+  assert.equal(
+    toNumber(replayGroup?.suborderId, 0),
+    suborderId,
+    "idempotency replay checkout: suborderId mismatch"
+  );
+  assert.equal(
+    toNumber(replayGroup?.payment?.id, 0),
+    paymentId,
+    "idempotency replay checkout: paymentId mismatch"
+  );
+
+  const headerReplay = await input.customerClient.request("/api/checkout/create-multi-store", {
+    method: "POST",
+    headers: {
+      "Idempotency-Key": checkoutRequestKey,
+    },
+    body: JSON.stringify({
+      customer: checkoutBody.customer,
+      shippingDetails,
+    }),
+  });
+  assertStatus(headerReplay, 200, "idempotency header replay checkout");
+  assert.equal(
+    Boolean(headerReplay.body?.data?.idempotency?.replayed),
+    true,
+    "idempotency header replay checkout: replay flag missing"
+  );
+  assert.equal(
+    toNumber(headerReplay.body?.data?.orderId, 0),
+    orderId,
+    "idempotency header replay checkout: orderId mismatch"
+  );
+
+  const orders = await Order.findAll({
+    where: { invoiceNo } as any,
+    attributes: ["id"],
+  });
+  assert.equal(orders.length, 1, "idempotency checkout: duplicate parent order created");
+
+  const suborders = await Suborder.findAll({
+    where: { orderId } as any,
+    attributes: ["id"],
+  });
+  assert.equal(suborders.length, 1, "idempotency checkout: duplicate suborder created");
+
+  const payments = await Payment.findAll({
+    where: { suborderId } as any,
+    attributes: ["id"],
+  });
+  assert.equal(payments.length, 1, "idempotency checkout: duplicate payment created");
+
+  const createdPaymentLog = await PaymentStatusLog.findOne({
+    where: {
+      paymentId,
+      newStatus: "CREATED",
+    } as any,
+    attributes: ["id", "note"],
+  });
+  assert.ok(createdPaymentLog, "idempotency checkout: payment creation audit log missing");
+  const createdPaymentLogNote = String((createdPaymentLog as any)?.note || "");
+  assert.ok(
+    createdPaymentLogNote.includes("source=checkout:create-multi-store"),
+    "idempotency checkout: payment creation audit source missing"
+  );
+  assert.ok(
+    createdPaymentLogNote.includes(`invoiceNo=${invoiceNo}`),
+    "idempotency checkout: payment creation audit invoice missing"
+  );
+
+  const sellerNotificationCount = await Notification.count({
+    where: {
+      type: "SELLER_SUBORDER_CREATED",
+      title: `New suborder ${suborderNumber} is awaiting buyer payment`,
+    } as any,
+  });
+  assert.equal(
+    sellerNotificationCount,
+    1,
+    "idempotency checkout: duplicate seller notification created"
+  );
+
+  logPass("checkout idempotency duplicate-submit coverage");
 }
 
 async function fetchBuyerGroupedOrder(customerClient: CookieClient, orderId: number, label: string) {
@@ -383,6 +539,31 @@ async function fetchSellerOrderDetail(
   assertStatus(response, 200, label);
   assert.equal(Boolean(response.body?.success), true, `${label}: seller order detail missing success`);
   return response.body?.data ?? null;
+}
+
+async function expectSellerFulfillmentBlocked(input: {
+  sellerClient: CookieClient;
+  storeId: number;
+  suborderId: number;
+  action: "MARK_PROCESSING" | "MARK_SHIPPED" | "MARK_DELIVERED";
+  expectedCode: string;
+  label: string;
+}) {
+  const response = await input.sellerClient.request(
+    `/api/seller/stores/${input.storeId}/suborders/${input.suborderId}/fulfillment`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ action: input.action }),
+    }
+  );
+  assertStatus(response, 409, input.label);
+  assert.equal(Boolean(response.body?.success), false, `${input.label}: mutation should fail`);
+  assert.equal(
+    String(response.body?.code || ""),
+    input.expectedCode,
+    `${input.label}: blocker code mismatch`
+  );
+  return response.body ?? null;
 }
 
 async function fetchSellerPaymentReviewList(
@@ -548,6 +729,36 @@ async function runApproveScenario(input: {
     "approve buyer initial grouped view"
   );
   assertInitialState(initialBuyerView, "approve buyer initial grouped view");
+
+  const initialSellerDetail = await fetchSellerOrderDetail(
+    input.sellerClient,
+    input.storeId,
+    scenario.suborderId,
+    "approve seller initial detail"
+  );
+  assert.equal(
+    String(initialSellerDetail?.operationalTruth?.bridge?.paymentToShipment || ""),
+    "BLOCKED",
+    "approve seller initial detail: shipment should start blocked by payment"
+  );
+  assert.equal(
+    Boolean(
+      Array.isArray(initialSellerDetail?.operationalTruth?.actions?.sellerFulfillment) &&
+        initialSellerDetail.operationalTruth.actions.sellerFulfillment.some(
+          (action: any) => action?.enabled === true
+        )
+    ),
+    false,
+    "approve seller initial detail: fulfillment actions should be disabled before payment"
+  );
+  await expectSellerFulfillmentBlocked({
+    sellerClient: input.sellerClient,
+    storeId: input.storeId,
+    suborderId: scenario.suborderId,
+    action: "MARK_PROCESSING",
+    expectedCode: "SUBORDER_PAYMENT_NOT_SETTLED",
+    label: "approve seller pre-payment fulfillment gate",
+  });
   logPass("approve scenario initial state");
 
   logStep("approve scenario: buyer submit proof");
@@ -1210,6 +1421,13 @@ async function run() {
   await login(buyerClient, buyerUser.email, buyerUser.password, "buyer login");
 
   await runCheckoutGuardrailScenarios({
+    customerClient: buyerClient,
+    buyerUserId: buyerUser.id,
+    productId: product.id,
+    storeId: store.id,
+  });
+
+  await runCheckoutIdempotencyScenario({
     customerClient: buyerClient,
     buyerUserId: buyerUser.id,
     productId: product.id,

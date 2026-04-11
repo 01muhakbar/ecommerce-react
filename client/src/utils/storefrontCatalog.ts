@@ -327,6 +327,7 @@ export const normalizeStorefrontProduct = (rawProduct: any) => {
     badgeLabel:
       toText(rawProduct?.badgeLabel ?? rawProduct?.label ?? rawProduct?.badge) || null,
     unit: toText(rawProduct?.unit ?? rawProduct?.tags?.unit) || null,
+    createdAt: rawProduct?.createdAt ?? null,
     updatedAt: rawProduct?.updatedAt ?? null,
     reviews: Array.isArray(rawProduct?.reviews) ? rawProduct.reviews : [],
   };

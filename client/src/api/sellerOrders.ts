@@ -664,7 +664,13 @@ export const updateSellerSuborderFulfillment = async (
   storeId: number | string,
   suborderId: number | string,
   payload: {
-    action: "MARK_PROCESSING" | "MARK_SHIPPED" | "MARK_DELIVERED";
+    action:
+      | "MARK_PROCESSING"
+      | "MARK_SHIPPED"
+      | "MARK_DELIVERED"
+      | "MARK_FAILED_DELIVERY"
+      | "MARK_RETURNED"
+      | "CANCEL_SHIPMENT";
     courierCode?: string | null;
     courierService?: string | null;
     trackingNumber?: string | null;

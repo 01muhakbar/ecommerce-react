@@ -5,6 +5,7 @@ import {
   getStripeSessionOrderId,
   isStripeCheckoutSessionPaid,
 } from "./stripeCheckout.js";
+import { logOperationalAuditEvent } from "./operationalAudit.service.js";
 
 const getAttr = (row: any, key: string) =>
   row?.getDataValue?.(key) ??
@@ -21,6 +22,7 @@ export const syncStoreOrderFromStripeSession = async (input: {
     status?: string | null;
   };
   source: "return" | "webhook";
+  traceId?: string | null;
 }) => {
   const invoiceNo = getStripeSessionInvoiceNo(input.session);
   const orderId = getStripeSessionOrderId(input.session);
@@ -120,7 +122,7 @@ export const syncStoreOrderFromStripeSession = async (input: {
       updated = Number(affectedRows || 0) > 0;
     }
 
-    return {
+    const syncResult = {
       ok: true as const,
       invoiceNo,
       orderId: Number(getAttr(order, "id") || 0) || orderId,
@@ -131,6 +133,22 @@ export const syncStoreOrderFromStripeSession = async (input: {
       orderStatus: nextOrderStatus,
       alreadyFinalized: !updated && currentPaymentStatus === nextPaymentStatus,
       source: input.source,
+      traceId: input.traceId || null,
     };
+    logOperationalAuditEvent("stripe.order.sync", {
+      source: input.source,
+      invoiceNo: syncResult.invoiceNo,
+      orderId: syncResult.orderId,
+      sessionId: syncResult.sessionId,
+      paid: syncResult.paid,
+      updated: syncResult.updated,
+      alreadyFinalized: syncResult.alreadyFinalized,
+      oldPaymentStatus: currentPaymentStatus,
+      newPaymentStatus: nextPaymentStatus,
+      oldOrderStatus: currentOrderStatus,
+      newOrderStatus: nextOrderStatus,
+      traceId: syncResult.traceId,
+    });
+    return syncResult;
   });
 };
