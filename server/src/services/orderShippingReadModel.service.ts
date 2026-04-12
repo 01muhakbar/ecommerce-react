@@ -386,6 +386,50 @@ const deriveLegacyShipmentStatus = (input: {
 const getShipmentPriority = (status: string) =>
   SHIPMENT_STATUS_PRIORITY[normalizeShipmentStatus(status)] ?? 0;
 
+const buildShipmentStatusCounts = (statuses: string[]) =>
+  statuses.reduce(
+    (acc, status) => {
+      const normalized = normalizeShipmentStatus(status, "WAITING_PAYMENT");
+      acc[normalized] = (acc[normalized] ?? 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>
+  );
+
+const buildAggregateShipmentStatusMeta = (status: string, activeStatuses: string[]) => {
+  const baseMeta = buildShipmentStatusMeta(status);
+  const normalizedActive = (Array.isArray(activeStatuses) ? activeStatuses : [])
+    .map((value) => normalizeShipmentStatus(value, "WAITING_PAYMENT"))
+    .filter(Boolean);
+
+  const partiallyShipped =
+    normalizedActive.some((value) => SHIPPED_LIKE_STATUSES.has(value)) &&
+    !normalizedActive.every(
+      (value) => SHIPPED_LIKE_STATUSES.has(value) || value === "DELIVERED"
+    );
+
+  if (status === "PROCESSING" && partiallyShipped) {
+    return {
+      ...baseMeta,
+      description:
+        "Some store splits are already shipped, but the full order is not fully shipped yet.",
+    };
+  }
+
+  if (
+    status === "READY_TO_FULFILL" &&
+    normalizedActive.some((value) => value === "WAITING_PAYMENT")
+  ) {
+    return {
+      ...baseMeta,
+      description:
+        "At least one store split is ready for packing, while other splits are still waiting for payment.",
+    };
+  }
+
+  return baseMeta;
+};
+
 const resolveEffectiveShipmentStatus = (persistedStatus: string, suborder: any) => {
   const normalizedPersisted = normalizeShipmentStatus(persistedStatus, "WAITING_PAYMENT");
   const legacyStatus = deriveLegacyShipmentStatus({
@@ -672,31 +716,48 @@ export const buildShippingAggregate = (shipments: any[], fallbackStatus = "WAITI
   const statuses = (Array.isArray(shipments) ? shipments : [])
     .map((shipment) => normalizeShipmentStatus(shipment?.shipmentStatus, fallbackStatus))
     .filter(Boolean);
+  const statusCounts = buildShipmentStatusCounts(statuses);
 
   let aggregateStatus = normalizeShipmentStatus(fallbackStatus, "WAITING_PAYMENT");
+  let aggregateStateCode = "WAITING_PAYMENT";
   if (statuses.length > 0) {
     const active = statuses.filter((status) => status !== "CANCELLED");
     if (active.length === 0) {
       aggregateStatus = "CANCELLED";
+      aggregateStateCode = "ALL_CANCELLED";
     } else if (active.some((status) => status === "RETURNED")) {
       aggregateStatus = "RETURNED";
+      aggregateStateCode = "RETURNED";
     } else if (active.some((status) => status === "FAILED_DELIVERY")) {
       aggregateStatus = "FAILED_DELIVERY";
+      aggregateStateCode = "FAILED_DELIVERY";
     } else if (active.every((status) => status === "DELIVERED")) {
       aggregateStatus = "DELIVERED";
-    } else if (active.some((status) => SHIPPED_LIKE_STATUSES.has(status))) {
+      aggregateStateCode = "ALL_DELIVERED";
+    } else if (
+      active.every((status) => SHIPPED_LIKE_STATUSES.has(status) || status === "DELIVERED") &&
+      active.some((status) => SHIPPED_LIKE_STATUSES.has(status))
+    ) {
       aggregateStatus = "SHIPPED";
+      aggregateStateCode = "ALL_ACTIVE_SPLITS_SHIPPED";
+    } else if (active.some((status) => SHIPPED_LIKE_STATUSES.has(status))) {
+      aggregateStatus = "PROCESSING";
+      aggregateStateCode = "PARTIALLY_SHIPPED";
     } else if (active.some((status) => PROCESSING_LIKE_STATUSES.has(status))) {
       aggregateStatus = "PROCESSING";
+      aggregateStateCode = "PACKING_IN_PROGRESS";
     } else if (active.some((status) => status === "READY_TO_FULFILL")) {
       aggregateStatus = "READY_TO_FULFILL";
+      aggregateStateCode = "READY_TO_PACK";
     }
   }
 
   return {
     shipmentCount: Array.isArray(shipments) ? shipments.length : 0,
     shippingStatus: aggregateStatus,
-    shippingStatusMeta: buildShipmentStatusMeta(aggregateStatus),
+    shippingStatusMeta: buildAggregateShipmentStatusMeta(aggregateStatus, statuses),
+    aggregateStateCode,
+    activeStatusCounts: statusCounts,
     latestTrackingEvent: resolveLatestTrackingEvent(shipments),
     hasActiveShipment: Array.isArray(shipments)
       ? shipments.some((shipment) =>
@@ -739,6 +800,9 @@ export const buildSuborderShippingReadModel = (
 
 const buildOrderShipmentAuditMeta = (suborderShipping: any[]) => {
   const entries = Array.isArray(suborderShipping) ? suborderShipping : [];
+  const activeEntries = entries.filter(
+    (entry) => normalizeShipmentStatus(entry?.shippingStatus, "WAITING_PAYMENT") !== "CANCELLED"
+  );
   const totalSuborders = entries.length;
   const persistedShipmentCount = entries.filter((entry) => Boolean(entry?.hasPersistedShipment)).length;
   const legacyFallbackSuborderCount = entries.filter((entry) => Boolean(entry?.usedLegacyFallback)).length;
@@ -751,6 +815,19 @@ const buildOrderShipmentAuditMeta = (suborderShipping: any[]) => {
   const incompleteTrackingDataCount = entries.filter((entry) =>
     Boolean(entry?.incompleteTrackingData)
   ).length;
+  const activeStatusCounts = buildShipmentStatusCounts(
+    activeEntries.map((entry) => entry?.shippingStatus)
+  );
+  const partiallyShipped =
+    activeEntries.some((entry) =>
+      SHIPPED_LIKE_STATUSES.has(
+        normalizeShipmentStatus(entry?.shippingStatus, "WAITING_PAYMENT")
+      )
+    ) &&
+    !activeEntries.every((entry) => {
+      const status = normalizeShipmentStatus(entry?.shippingStatus, "WAITING_PAYMENT");
+      return SHIPPED_LIKE_STATUSES.has(status) || status === "DELIVERED";
+    });
 
   let persistedCoverage = "NO_SUBORDERS";
   if (totalSuborders > 0 && persistedShipmentCount === totalSuborders) {
@@ -768,6 +845,8 @@ const buildOrderShipmentAuditMeta = (suborderShipping: any[]) => {
     compatibilityMismatchCount,
     missingTrackingTimelineCount,
     incompleteTrackingDataCount,
+    activeStatusCounts,
+    partiallyShipped,
     usedLegacyFallback: legacyFallbackSuborderCount > 0,
     persistedCoverage,
   };
@@ -809,6 +888,8 @@ export const buildOrderShippingReadModel = (
     shipmentCount: featureEnabled ? aggregate.shipmentCount : 0,
     shippingStatus: aggregate.shippingStatus,
     shippingStatusMeta: aggregate.shippingStatusMeta,
+    aggregateStateCode: aggregate.aggregateStateCode,
+    activeStatusCounts: aggregate.activeStatusCounts,
     latestTrackingEvent: featureEnabled ? aggregate.latestTrackingEvent : null,
     hasActiveShipment: featureEnabled ? aggregate.hasActiveShipment : false,
     hasTrackingNumber: featureEnabled ? aggregate.hasTrackingNumber : false,

@@ -116,6 +116,8 @@ export default function SellerPaymentReviewPage() {
         queryClient.invalidateQueries({ queryKey: ["seller", "payment-review", storeId] }),
         queryClient.invalidateQueries({ queryKey: ["seller", "suborders", storeId] }),
         queryClient.invalidateQueries({ queryKey: ["seller", "suborder", "detail", storeId] }),
+        queryClient.invalidateQueries({ queryKey: ["seller", "workspace", "finance-summary", storeId] }),
+        queryClient.invalidateQueries({ queryKey: ["seller", "workspace", "analytics-summary", storeId] }),
         queryClient.invalidateQueries({ queryKey: ["account", "order", "payment"] }),
         queryClient.invalidateQueries({ queryKey: ["account", "orders"] }),
         queryClient.invalidateQueries({ queryKey: ["account", "orders", "grouped"] }),
@@ -279,6 +281,9 @@ export default function SellerPaymentReviewPage() {
             reviewMutation.isPending && reviewMutation.variables?.paymentId === payment?.id;
           const entryPaymentMeta = payment?.statusMeta || entry.paymentStatusMeta || null;
           const proofMeta = proof?.reviewMeta || null;
+          const isApprovedForFulfillment =
+            normalizeReviewPaymentCode(entry) === "PAID" &&
+            String(entry?.fulfillmentStatus || "").trim().toUpperCase() === "UNFULFILLED";
 
           return (
             <SellerWorkspacePanel key={entry.suborderId} className="p-4">
@@ -523,6 +528,15 @@ export default function SellerPaymentReviewPage() {
                         Open seller order detail
                       </Link>
                     </div>
+
+                    {isApprovedForFulfillment ? (
+                      <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 px-3.5 py-3 text-sm text-sky-900">
+                        <p className="font-semibold">Next step after payment approval</p>
+                        <p className="mt-1.5 leading-6">
+                          Use <span className="font-semibold">Mark packed</span> when the package is ready to ship. Use <span className="font-semibold">Mark shipped</span> only after the parcel is handed to the courier and tracking is available.
+                        </p>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </div>

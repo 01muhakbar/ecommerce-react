@@ -205,6 +205,7 @@ async function createFixtureProduct(input: {
     isPublished: true,
     sellerSubmissionStatus: "none",
     description: `Fixture ${slug}`,
+    promoImagePath: "/uploads/products/demo.svg",
   } as any);
   const id = Number(product.getDataValue("id"));
   createdProductIds.push(id);
@@ -802,6 +803,11 @@ async function runApproveScenario(input: {
   );
   assert.equal(String(sellerApproved?.paymentStatus || ""), "PAID", "approve scenario: suborder should be PAID");
   assert.equal(String(sellerApproved?.payment?.status || ""), "PAID", "approve scenario: payment record should be PAID");
+  assert.equal(
+    String(sellerApproved?.fulfillmentStatus || ""),
+    "UNFULFILLED",
+    "approve scenario: approval should not auto-pack the suborder"
+  );
 
   const buyerPaid = await fetchBuyerGroupedOrder(
     input.customerClient,
@@ -818,6 +824,20 @@ async function runApproveScenario(input: {
   assert.equal(String(buyerPaid?.orderStatus || ""), "processing", "approve buyer: parent orderStatus should move to processing");
   assert.equal(String(buyerPaidGroup?.paymentStatus || ""), "PAID", "approve buyer: suborder paymentStatus should be PAID");
   assert.equal(String(buyerPaidGroup?.payment?.status || ""), "PAID", "approve buyer: payment record should be PAID");
+  assert.equal(
+    String(buyerPaidGroup?.fulfillmentStatus || ""),
+    "UNFULFILLED",
+    "approve buyer: split should still wait for seller packing"
+  );
+  assert.equal(
+    String(
+      buyerPaidGroup?.shippingStatus ||
+        buyerPaidGroup?.operationalTruth?.shipment?.status ||
+        ""
+    ),
+    "READY_TO_FULFILL",
+    "approve buyer: shipment should be ready to fulfill, not packed"
+  );
   assert.equal(
     String(buyerPaidGroup?.paymentReadModel?.status || ""),
     "PAID",
@@ -846,6 +866,16 @@ async function runApproveScenario(input: {
   assert.equal(String(adminPaid?.parent?.orderStatus || ""), "processing", "approve admin: parent orderStatus should be processing");
   assert.equal(String(adminPaidGroup?.payment?.status || ""), "PAID", "approve admin: split payment should be PAID");
   assert.equal(String(adminPaidSuborder?.paymentStatus || ""), "PAID", "approve admin: suborder paymentStatus should be PAID");
+  assert.equal(
+    String(adminPaidSuborder?.fulfillmentStatus || ""),
+    "UNFULFILLED",
+    "approve admin: split should still wait for seller packing"
+  );
+  assert.equal(
+    String(adminPaidSuborder?.shippingStatus || adminPaidSuborder?.operationalTruth?.shipment?.status || ""),
+    "READY_TO_FULFILL",
+    "approve admin: shipment should be ready to fulfill after approval"
+  );
 
   const adminOrderDetail = await fetchAdminOrderDetail(
     input.adminClient,
@@ -881,6 +911,16 @@ async function runApproveScenario(input: {
     String(publicTracking?.storeSplits?.[0]?.paymentReadModel?.status || ""),
     "PAID",
     "approve public tracking: split paymentReadModel should be PAID"
+  );
+  assert.equal(
+    String(publicTracking?.storeSplits?.[0]?.shippingStatus || publicTracking?.storeSplits?.[0]?.operationalTruth?.shipment?.status || ""),
+    "READY_TO_FULFILL",
+    "approve public tracking: split shipment should stay ready to fulfill after approval"
+  );
+  assert.equal(
+    String(publicTracking?.items?.[0]?.imageUrl || ""),
+    "/uploads/products/demo.svg",
+    "approve public tracking: invoice item should expose normalized product imageUrl"
   );
   logPass("approve scenario cross-lane sync");
 }

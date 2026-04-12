@@ -113,6 +113,7 @@ export const fetchStoreOrder = async (ref: string) => {
         id: number;
         productId: number;
         name: string;
+        imageUrl?: string | null;
         quantity: number;
         price: number;
         lineTotal: number;
@@ -123,6 +124,7 @@ export const fetchStoreOrder = async (ref: string) => {
         storeId?: number | null;
         storeName?: string | null;
         storeSlug?: string | null;
+        storeLogoUrl?: string | null;
         totalAmount?: number;
         paymentStatus?: string | null;
         fulfillmentStatus?: string | null;

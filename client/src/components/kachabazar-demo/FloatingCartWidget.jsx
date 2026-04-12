@@ -10,7 +10,7 @@ export default function FloatingCartWidget({ totalQty, subtotalDisplay }) {
       type="button"
       onClick={handleOpenDrawer}
       aria-label="Open shopping cart"
-      className="fixed right-3 top-1/2 z-30 hidden w-[98px] -translate-y-1/2 flex-col items-center rounded-[18px] border border-slate-200 bg-white px-2.5 pb-3.5 pt-3.5 text-slate-900 shadow-[0_18px_40px_rgba(15,23,42,0.15)] transition hover:-translate-y-[calc(50%+2px)] hover:shadow-[0_22px_46px_rgba(15,23,42,0.18)] sm:flex"
+      className="no-print fixed right-3 top-1/2 z-30 hidden w-[98px] -translate-y-1/2 flex-col items-center rounded-[18px] border border-slate-200 bg-white px-2.5 pb-3.5 pt-3.5 text-slate-900 shadow-[0_18px_40px_rgba(15,23,42,0.15)] transition hover:-translate-y-[calc(50%+2px)] hover:shadow-[0_22px_46px_rgba(15,23,42,0.18)] sm:flex"
     >
       <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-emerald-100 bg-emerald-50 text-emerald-600">
         <ShoppingCart className="h-4.5 w-4.5" />

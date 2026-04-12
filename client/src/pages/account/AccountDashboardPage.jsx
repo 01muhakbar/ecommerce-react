@@ -415,7 +415,6 @@ export default function AccountDashboardPage() {
                     <th className="px-4 py-3">Method</th>
                     <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3">Shipping</th>
-                    <th className="px-4 py-3">Shipping Cost</th>
                     <th className="px-4 py-3">Total</th>
                     <th className="px-4 py-3 text-right">Action</th>
                   </tr>
@@ -424,6 +423,8 @@ export default function AccountDashboardPage() {
                   {recentOrders.map(({ order, truthStatus }) => {
                     const publicOrderRef = getPublicOrderRef(order);
                     const trackingPath = buildPublicOrderTrackingPath(publicOrderRef);
+                    const shippingAmount =
+                      order.shipping ?? order.shippingAmount ?? order.deliveryFee ?? null;
                     return (
                       <tr
                         key={order.id}
@@ -447,8 +448,11 @@ export default function AccountDashboardPage() {
                             {truthStatus.label}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-slate-600">-</td>
-                        <td className="px-4 py-3 text-slate-600">-</td>
+                        <td className="px-4 py-3 text-slate-600">
+                          {shippingAmount != null && shippingAmount !== ""
+                            ? money(shippingAmount)
+                            : "-"}
+                        </td>
                         <td className="px-4 py-3 font-semibold text-slate-900">
                           {money(order.totalAmount)}
                         </td>

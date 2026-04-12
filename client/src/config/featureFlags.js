@@ -15,5 +15,5 @@ export const ENABLE_MULTISTORE_SHIPMENT_MVP = normalizeBoolean(
 
 export const ENABLE_MULTISTORE_SHIPMENT_MUTATION = normalizeBoolean(
   import.meta.env.VITE_ENABLE_MULTISTORE_SHIPMENT_MUTATION,
-  false
+  nonProductionDefault
 );

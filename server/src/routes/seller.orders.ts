@@ -138,6 +138,15 @@ const toNumber = (value: unknown, fallback = 0) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const parseOptionalNonNegativeAmount = (value: unknown) => {
+  if (value === null || typeof value === "undefined") return null;
+  const normalized = String(value).trim();
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.round(parsed);
+};
+
 const toUpper = (value: unknown, fallback = "") =>
   String(value || fallback)
     .toUpperCase()
@@ -209,6 +218,100 @@ const normalizePaymentRecordStatus = (value: unknown) => {
 const normalizeOrderStatus = (value: unknown) => {
   const normalized = String(value || "pending").trim().toLowerCase();
   return allowedOrderStatuses.has(normalized) ? normalized : "pending";
+};
+
+const normalizeSnapshotObject = (value: unknown) => {
+  if (!value) return null;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return typeof value === "object" ? { ...(value as Record<string, unknown>) } : null;
+};
+
+const syncSellerShipmentFinancials = async (input: {
+  orderId: number;
+  suborder: any;
+  shipment: any;
+  shippingFee: number;
+  transaction?: any;
+}) => {
+  const currentSuborderShippingAmount = toNumber(getAttr(input.suborder, "shippingAmount"), 0);
+  const currentSuborderTotalAmount = toNumber(getAttr(input.suborder, "totalAmount"), 0);
+  const nextShippingFee = Math.max(0, toNumber(input.shippingFee, 0));
+  const shippingDelta = nextShippingFee - currentSuborderShippingAmount;
+
+  const currentRateSnapshot = normalizeSnapshotObject(
+    getAttr(input.shipment, "shippingRateSnapshot")
+  );
+  const nextRateSnapshot =
+    currentRateSnapshot && typeof currentRateSnapshot === "object"
+      ? {
+          ...currentRateSnapshot,
+          amount: nextShippingFee,
+        }
+      : {
+          source: "SELLER_SHIPMENT_UPDATE",
+          amount: nextShippingFee,
+        };
+
+  await input.shipment.update(
+    {
+      shippingFee: nextShippingFee,
+      shippingRateSnapshot: nextRateSnapshot,
+    } as any,
+    { transaction: input.transaction }
+  );
+
+  if (shippingDelta !== 0) {
+    await input.suborder.update(
+      {
+        shippingAmount: nextShippingFee,
+        totalAmount: Math.max(0, currentSuborderTotalAmount + shippingDelta),
+      } as any,
+      { transaction: input.transaction }
+    );
+  }
+
+  const scopedSuborders = await Suborder.findAll({
+    where: { orderId: input.orderId } as any,
+    attributes: ["subtotalAmount", "shippingAmount", "serviceFeeAmount", "totalAmount"],
+    transaction: input.transaction,
+  });
+
+  const parentSubtotalAmount = scopedSuborders.reduce(
+    (sum, suborder) => sum + toNumber(getAttr(suborder, "subtotalAmount"), 0),
+    0
+  );
+  const parentShippingAmount = scopedSuborders.reduce(
+    (sum, suborder) => sum + toNumber(getAttr(suborder, "shippingAmount"), 0),
+    0
+  );
+  const parentServiceFeeAmount = scopedSuborders.reduce(
+    (sum, suborder) => sum + toNumber(getAttr(suborder, "serviceFeeAmount"), 0),
+    0
+  );
+  const parentTotalAmount = scopedSuborders.reduce(
+    (sum, suborder) => sum + toNumber(getAttr(suborder, "totalAmount"), 0),
+    0
+  );
+
+  await Order.update(
+    {
+      subtotalAmount: parentSubtotalAmount,
+      shippingAmount: parentShippingAmount,
+      serviceFeeAmount: parentServiceFeeAmount,
+      totalAmount: parentTotalAmount,
+    } as any,
+    {
+      where: { id: input.orderId } as any,
+      transaction: input.transaction,
+    }
+  );
 };
 
 const serializePaymentStatusMeta = (status: string) => ({
@@ -1320,8 +1423,11 @@ router.patch(
       const courierCode = String(req.body?.courierCode || "").trim() || null;
       const courierService = String(req.body?.courierService || "").trim() || null;
       const trackingNumber = String(req.body?.trackingNumber || "").trim() || null;
+      const rawShippingFee = req.body?.shippingFee;
       const actionDefinition =
         FULFILLMENT_ACTIONS[actionCode as keyof typeof FULFILLMENT_ACTIONS] ?? null;
+      const shippingFee =
+        actionCode === "MARK_SHIPPED" ? parseOptionalNonNegativeAmount(rawShippingFee) : null;
 
       if (!Number.isInteger(suborderId) || suborderId <= 0) {
         return res.status(400).json({
@@ -1336,6 +1442,20 @@ router.patch(
           success: false,
           code: "INVALID_FULFILLMENT_ACTION",
           message: "Invalid seller fulfillment action.",
+        });
+      }
+
+      if (
+        actionCode === "MARK_SHIPPED" &&
+        rawShippingFee !== undefined &&
+        rawShippingFee !== null &&
+        String(rawShippingFee).trim() !== "" &&
+        shippingFee === null
+      ) {
+        return res.status(400).json({
+          success: false,
+          code: "INVALID_SHIPPING_FEE",
+          message: "Shipping fee must be a non-negative number.",
         });
       }
 
@@ -1403,11 +1523,15 @@ router.patch(
         suborderNumber: String(getAttr(suborder, "suborderNumber") || ""),
         fulfillmentStatus: currentFulfillmentStatus,
         paymentStatus: normalizePaymentStatus(getAttr(suborder, "paymentStatus")),
+        shippingAmount: toNumber(getAttr(suborder, "shippingAmount"), 0),
+        totalAmount: toNumber(getAttr(suborder, "totalAmount"), 0),
         paymentRecordStatus: latestPayment
           ? normalizePaymentRecordStatus(getAttr(latestPayment, "status"))
           : null,
         orderStatus: normalizeOrderStatus(getAttr(order, "status")),
         orderPaymentStatus: normalizePaymentStatus(getAttr(order, "paymentStatus")),
+        orderShippingAmount: toNumber(getAttr(order, "shippingAmount"), 0),
+        orderTotalAmount: toNumber(getAttr(order, "totalAmount"), 0),
       };
       const transitionBlocker = resolveFulfillmentTransitionBlocker({
         orderStatus: beforeState.orderStatus,
@@ -1491,6 +1615,20 @@ router.patch(
         },
       });
 
+      if (
+        actionDefinition.code === "MARK_SHIPPED" &&
+        shippingFee !== null &&
+        shipmentSync.shipment
+      ) {
+        await syncSellerShipmentFinancials({
+          orderId: toNumber(getAttr(suborder, "orderId"), 0),
+          suborder,
+          shipment: shipmentSync.shipment,
+          shippingFee,
+          transaction: tx,
+        });
+      }
+
       await (suborder as any).update(
         {
           fulfillmentStatus:
@@ -1545,11 +1683,15 @@ router.patch(
         suborderNumber: String(getAttr(refreshed, "suborderNumber") || ""),
         fulfillmentStatus: normalizeFulfillmentStatus(getAttr(refreshed, "fulfillmentStatus")),
         paymentStatus: normalizePaymentStatus(getAttr(refreshed, "paymentStatus")),
+        shippingAmount: toNumber(getAttr(refreshed, "shippingAmount"), 0),
+        totalAmount: toNumber(getAttr(refreshed, "totalAmount"), 0),
         paymentRecordStatus: refreshedLatestPayment
           ? normalizePaymentRecordStatus(getAttr(refreshedLatestPayment, "status"))
           : null,
         orderStatus: normalizeOrderStatus(getAttr(refreshedOrder, "status")),
         orderPaymentStatus: normalizePaymentStatus(getAttr(refreshedOrder, "paymentStatus")),
+        orderShippingAmount: toNumber(getAttr(refreshedOrder, "shippingAmount"), 0),
+        orderTotalAmount: toNumber(getAttr(refreshedOrder, "totalAmount"), 0),
       };
 
       const auditLog = await recordSellerFulfillmentAudit({

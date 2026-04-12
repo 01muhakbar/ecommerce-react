@@ -826,7 +826,7 @@ const handleSellerPaymentReview = async (req: any, res: any, options: { requireR
           await suborder.update(
             {
               paymentStatus: "PAID",
-              fulfillmentStatus: "PROCESSING",
+              fulfillmentStatus: "UNFULFILLED",
               paidAt: now,
             } as any,
             { transaction: tx }

@@ -725,9 +725,7 @@ const toOrderDetailPayload = (orderItem: any) => {
     return sum + Number(item.lineTotal || 0);
   }, 0);
   const subtotalSnapshot = Number(getAttr(orderItem, "subtotalAmount"));
-  const shippingSnapshot = Number(
-    getAttr(orderItem, "shippingAmount") ?? getAttr(orderItem, "shippingCost") ?? 0
-  );
+  const shippingSnapshot = Number(getAttr(orderItem, "shippingAmount") ?? 0);
   const serviceFeeAmount = Number(getAttr(orderItem, "serviceFeeAmount") || 0);
   const discount = Number(getAttr(orderItem, "discountAmount") || 0);
   const subtotal = Number.isFinite(subtotalSnapshot) ? subtotalSnapshot : computedSubtotal;
@@ -755,7 +753,6 @@ const toOrderDetailPayload = (orderItem: any) => {
     subtotalAmount: subtotal,
     discount,
     shipping,
-    shippingCost: shipping,
     serviceFeeAmount,
     total: totalAmount,
     grandTotal: totalAmount,

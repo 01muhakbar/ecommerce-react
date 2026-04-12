@@ -1099,12 +1099,12 @@ try {
         ($null -ne $buyerSingleAfter) -and `
         ([string]$buyerSingleAfter.payment.status -eq "PAID") -and `
         ([string]$buyerSingleAfter.paymentStatus -eq "PAID") -and `
-        ([string]$buyerSingleAfter.fulfillmentStatus -eq "PROCESSING") -and `
+        ([string]$buyerSingleAfter.fulfillmentStatus -eq "UNFULFILLED") -and `
         ([string]$buyerGroupedAfter.paymentStatus -eq "PAID") -and `
         ([string]$buyerOrderAfter.paymentStatus -eq "PAID") -and `
         ([string]$buyerOrderAfter.status -eq "processing") -and `
         ([string]$sellerApprovedDetail.paymentStatus -eq "PAID") -and `
-        ([string]$sellerApprovedDetail.fulfillmentStatus -eq "PROCESSING") -and `
+        ([string]$sellerApprovedDetail.fulfillmentStatus -eq "UNFULFILLED") -and `
         ($null -ne $adminSinglePayment) -and `
         ([string]$adminSinglePayment.status -eq "PAID") -and `
         ([string]$adminSingleSuborder.paymentStatus -eq "PAID")
@@ -1913,10 +1913,10 @@ const bcrypt = require('bcrypt');
         ($null -ne $accountGroupMidB) -and `
         ([string]$accountGroupMidB.payment.status -eq "PAID") -and `
         ([string]$accountGroupMidB.paymentStatus -eq "PAID") -and `
-        ([string]$accountGroupMidB.fulfillmentStatus -eq "PROCESSING") -and `
+        ([string]$accountGroupMidB.fulfillmentStatus -eq "UNFULFILLED") -and `
         ([string]$accountGroupedMid.paymentStatus -eq "PARTIALLY_PAID") -and `
         ([string]$sellerDetailMidB.paymentStatus -eq "PAID") -and `
-        ([string]$sellerDetailMidB.fulfillmentStatus -eq "PROCESSING") -and `
+        ([string]$sellerDetailMidB.fulfillmentStatus -eq "UNFULFILLED") -and `
         ($null -ne $adminPaymentMidB) -and `
         ([string]$adminPaymentMidB.status -eq "PAID") -and `
         ([string]$adminSuborderMidB.paymentStatus -eq "PAID")
@@ -2032,7 +2032,7 @@ const bcrypt = require('bcrypt');
         ($null -ne $accountGroupFinalA) -and `
         ([string]$accountGroupFinalA.payment.status -eq "PAID") -and `
         ([string]$accountGroupFinalA.paymentStatus -eq "PAID") -and `
-        ([string]$accountGroupFinalA.fulfillmentStatus -eq "PROCESSING") -and `
+        ([string]$accountGroupFinalA.fulfillmentStatus -eq "UNFULFILLED") -and `
         ([string]$accountGroupedFinal.paymentStatus -eq "PAID") -and `
         ([string]$buyerOrderFinal.paymentStatus -eq "PAID") -and `
         ([string]$buyerOrderFinal.status -eq "processing") -and `
@@ -2040,7 +2040,7 @@ const bcrypt = require('bcrypt');
         ([string]$adminPaymentFinalA.status -eq "PAID") -and `
         ([string]$adminSuborderFinalA.paymentStatus -eq "PAID") -and `
         ([string]$sellerDetailFinalA.paymentStatus -eq "PAID") -and `
-        ([string]$sellerDetailFinalA.fulfillmentStatus -eq "PROCESSING")
+        ([string]$sellerDetailFinalA.fulfillmentStatus -eq "UNFULFILLED")
       Set-Entity "trueMultiStoreResubmittedPayment" @{
         paymentId = $paymentAId
         suborderId = [int]$GeneratedMultiStoreSuborderAId

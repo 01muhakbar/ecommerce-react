@@ -2,6 +2,8 @@ import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "react-router-dom";
 import { getStoreCustomization } from "../api/public/storeCustomizationPublic.ts";
+import useStoreBranding from "../hooks/useStoreBranding.js";
+import { getWorkspaceFaviconUrl } from "../lib/branding.js";
 import { normalizeSeoSettings, resolveSeoAbsoluteUrl } from "../utils/seoSettings.js";
 
 const ensureMetaTag = (selector, attrs = {}) => {
@@ -28,17 +30,26 @@ const ensureLinkTag = (selector, attrs = {}) => {
   return element;
 };
 
-const buildDocumentTitle = (pathname, metaTitle, fallbackTitle) => {
+const buildDocumentTitle = (pathname, metaTitle, fallbackTitle, branding = {}) => {
+  const workspaceBrandName =
+    String(branding?.workspaceBrandName || "").trim() || "TP PRENEURS";
   const normalizedMetaTitle = String(metaTitle || "").trim();
-  const fallback = String(fallbackTitle || "Storefront").trim() || "Storefront";
-  const baseTitle = normalizedMetaTitle || fallback;
-  if (pathname.startsWith("/admin")) return `${baseTitle} | Admin Workspace`;
-  if (pathname.startsWith("/seller")) return `${baseTitle} | Seller Workspace`;
-  return baseTitle;
+  const fallback = String(fallbackTitle || workspaceBrandName).trim() || workspaceBrandName;
+
+  if (pathname.startsWith("/admin")) {
+    return `${workspaceBrandName} | Admin Workspace`;
+  }
+
+  if (pathname.startsWith("/seller")) {
+    return `${workspaceBrandName} | Seller Workspace`;
+  }
+
+  return normalizedMetaTitle || workspaceBrandName || fallback;
 };
 
 export default function SeoCustomizationBridge() {
   const location = useLocation();
+  const { branding } = useStoreBranding();
   const seoSettingsQuery = useQuery({
     queryKey: ["store-customization", "seo-settings", "en"],
     queryFn: () => getStoreCustomization({ lang: "en", include: "seoSettings" }),
@@ -61,6 +72,11 @@ export default function SeoCustomizationBridge() {
       type: "image/x-icon",
     });
     const originalFaviconHref = faviconLink.getAttribute("href") || "/vite.svg";
+    const workspaceFaviconHref = getWorkspaceFaviconUrl(
+      location.pathname,
+      branding,
+      originalFaviconHref
+    );
 
     const descriptionMeta = ensureMetaTag("meta[name='description']", {
       name: "description",
@@ -85,7 +101,8 @@ export default function SeoCustomizationBridge() {
     const nextTitle = buildDocumentTitle(
       location.pathname,
       seoSettings.metaTitle,
-      existingTitle
+      existingTitle,
+      branding
     );
     const nextDescription = seoSettings.metaDescription;
     const nextKeywords = seoSettings.metaKeywords;
@@ -100,7 +117,10 @@ export default function SeoCustomizationBridge() {
     ogImageMeta.setAttribute("content", nextImage);
     ogUrlMeta.setAttribute("content", nextUrl);
     canonicalLink.setAttribute("href", nextUrl);
-    faviconLink.setAttribute("href", seoSettings.faviconDataUrl || originalFaviconHref);
+    faviconLink.setAttribute(
+      "href",
+      workspaceFaviconHref || seoSettings.faviconDataUrl || originalFaviconHref
+    );
 
     return () => {
       document.title = existingTitle;
@@ -108,6 +128,7 @@ export default function SeoCustomizationBridge() {
     };
   }, [
     currentUrl,
+    branding,
     location.pathname,
     seoSettings.faviconDataUrl,
     seoSettings.metaDescription,

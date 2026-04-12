@@ -28,3 +28,14 @@ export const getWorkspaceLogoUrl = (workspaceKey, logoUrl) =>
   resolveAssetUrl(logoUrl) || DEFAULT_BRANDING_LOGOS[workspaceKey] || DEFAULT_BRANDING_LOGOS.admin;
 
 export const hasCustomBrandingLogo = (logoUrl) => Boolean(String(logoUrl || "").trim());
+
+export const getWorkspaceBrandingKeyFromPathname = (pathname = "") =>
+  String(pathname || "").startsWith("/seller") ? "seller" : "admin";
+
+export const getWorkspaceFaviconUrl = (pathname = "", branding = {}, fallbackUrl = "") => {
+  const workspaceKey = getWorkspaceBrandingKeyFromPathname(pathname);
+  const logoUrl =
+    workspaceKey === "seller" ? branding?.sellerLogoUrl : branding?.adminLogoUrl;
+
+  return resolveAssetUrl(logoUrl) || getWorkspaceLogoUrl(workspaceKey, logoUrl) || fallbackUrl;
+};

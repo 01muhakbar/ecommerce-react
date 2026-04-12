@@ -15,6 +15,7 @@ import {
 import { resolveAssetUrl } from "../../lib/assetUrl.js";
 import StoreHeaderKacha from "../kachabazar-demo/StoreHeaderKacha.jsx";
 import { StoreCartDrawer } from "../../pages/store/StoreCartPage.jsx";
+import useStoreBranding from "../../hooks/useStoreBranding.js";
 
 const toText = (value, fallback = "") => {
   const normalized = String(value ?? "").trim();
@@ -174,6 +175,7 @@ export default function StoreMicrositeShell({
 }) {
   const [isCartDrawerOpen, setIsCartDrawerOpen] = useState(false);
   const location = useLocation();
+  const { branding } = useStoreBranding();
   const storeName = toText(identity?.name, "Store");
   const storeSlug = toText(identity?.slug, safeSlug);
   const storeHref = buildStoreMicrositeHref(storeSlug || safeSlug);
@@ -225,6 +227,7 @@ export default function StoreMicrositeShell({
       <StoreHeaderKacha
         onCartClick={() => setIsCartDrawerOpen(true)}
         publicIdentityOverride={identity}
+        brandingLogoUrl={branding.clientLogoUrl}
       />
       <main className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
         <nav className="flex flex-wrap items-center gap-2 text-sm text-slate-500">

@@ -1,9 +1,12 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Download, Printer } from "lucide-react";
 import { fetchStoreOrder } from "../../api/public/storeOrders.ts";
-import { getStoreCustomization } from "../../api/public/storeCustomizationPublic.ts";
+import {
+  getStoreCustomization,
+  getStoreSettings,
+} from "../../api/public/storeCustomizationPublic.ts";
 import { formatCurrency } from "../../utils/format.js";
 import {
   UiEmptyState,
@@ -33,6 +36,7 @@ import {
 } from "../../utils/groupedPaymentReadModel.ts";
 import { ENABLE_MULTISTORE_SHIPMENT_MVP } from "../../config/featureFlags.js";
 import { normalizeShipmentList } from "../../utils/shipmentReadModel.ts";
+import { getBuyerShipmentPresentation } from "../../utils/buyerShipmentPresentation.js";
 import {
   getSplitOperationalBridge,
   getSplitOperationalPayment,
@@ -40,6 +44,7 @@ import {
   getSplitOperationalStatusSummary,
   isSplitOperationallyFinal,
 } from "../../utils/splitOperationalTruth.ts";
+import { resolveAssetUrl } from "../../lib/assetUrl.js";
 
 const formatDate = (value) => {
   if (!value) return "-";
@@ -57,12 +62,28 @@ const getItemPrice = (item) =>
   Number(item?.price ?? item?.unitPrice ?? item?.product?.price ?? 0);
 
 const getItemImage = (item) =>
-  item?.imageUrl ??
-  item?.image ??
-  item?.product?.imageUrl ??
-  item?.product?.image ??
-  item?.product?.promoImagePath ??
-  null;
+  resolveAssetUrl(
+    item?.imageUrl ??
+      item?.image ??
+      item?.product?.imageUrl ??
+      item?.product?.image ??
+      item?.product?.promoImagePath ??
+      (Array.isArray(item?.imageUrls) ? item.imageUrls[0] : null) ??
+      (Array.isArray(item?.product?.imagePaths) ? item.product.imagePaths[0] : null) ??
+      null
+  );
+
+const getInitials = (value, fallback = "TP") => {
+  const words = String(value || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length === 0) return fallback;
+  return words
+    .slice(0, 2)
+    .map((word) => word.charAt(0).toUpperCase())
+    .join("");
+};
 
 const getToneBadgeClass = (tone) => {
   const value = String(tone || "").trim().toLowerCase();
@@ -86,19 +107,25 @@ const getSplitPresentation = (split) => {
   const shipment = getSplitOperationalShipment(split);
   const payment = getSplitOperationalPayment(split);
   const bridge = getSplitOperationalBridge(split);
+  const buyerShipment = getBuyerShipmentPresentation(shipment?.status, shipment?.statusMeta);
+  const summaryUsesShipmentLane =
+    String(summary?.lane || "").trim().toUpperCase() === "SHIPMENT";
 
   return {
-    summaryLabel: normalizeLabel(summary?.label, "Awaiting update"),
+    summaryLabel: normalizeLabel(
+      summaryUsesShipmentLane ? buyerShipment.label : summary?.label,
+      "Awaiting update"
+    ),
     summaryDescription: normalizeLabel(
-      summary?.description,
+      summaryUsesShipmentLane ? buyerShipment.description : summary?.description,
       bridge?.shipmentBlockedReason || "Latest seller split status."
     ),
     summaryTone: summary?.tone || "slate",
     fulfillmentLabel: normalizeLabel(
-      shipment?.statusMeta?.label,
+      buyerShipment.label,
       shipment?.status || String(split?.fulfillmentStatus || "UNFULFILLED")
     ),
-    fulfillmentTone: shipment?.statusMeta?.tone || "slate",
+    fulfillmentTone: buyerShipment.tone || "slate",
     paymentLabel: normalizeLabel(payment?.statusMeta?.label, payment?.status || "UNPAID"),
     paymentTone: payment?.statusMeta?.tone || "slate",
   };
@@ -162,7 +189,13 @@ const TRACKING_STEPS = [
 const STOPPED_TRACKING_CODES = new Set(["CANCELLED", "FAILED", "EXPIRED"]);
 const DELIVERED_TRACKING_CODES = new Set(["DELIVERED", "FINAL", "COMPLETE"]);
 const SHIPPING_TRACKING_CODES = new Set(["IN_DELIVERY", "SHIPPING", "SHIPPED"]);
-const PROCESSING_TRACKING_CODES = new Set(["READY", "PROCESSING", "IN_PROGRESS"]);
+const PROCESSING_TRACKING_CODES = new Set([
+  "READY",
+  "READY_TO_FULFILL",
+  "PACKED",
+  "PROCESSING",
+  "IN_PROGRESS",
+]);
 const PENDING_TRACKING_CODES = new Set([
   "PENDING",
   "ACTION_REQUIRED",
@@ -294,6 +327,8 @@ const getTrackingPresentation = (order) => {
 
 export default function StoreOrderTrackingPage() {
   const { ref } = useParams();
+  const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
+  const [downloadError, setDownloadError] = useState("");
   const orderRefParam = String(ref || "").trim();
   const hasRefParam = orderRefParam.length > 0;
   const hasValidRef = isPublicOrderReference(orderRefParam);
@@ -301,6 +336,12 @@ export default function StoreOrderTrackingPage() {
     queryKey: ["store-customization", "dashboard-setting", "en"],
     queryFn: () => getStoreCustomization({ lang: "en", include: "dashboardSetting" }),
     staleTime: 60_000,
+  });
+  const brandingSettingsQuery = useQuery({
+    queryKey: ["store-settings", "public", "invoice-branding"],
+    queryFn: getStoreSettings,
+    staleTime: 60_000,
+    retry: 1,
   });
   const dashboardSettingCopy = normalizeDashboardSettingCopy(
     dashboardSettingQuery.data?.customization?.dashboardSetting
@@ -341,7 +382,155 @@ export default function StoreOrderTrackingPage() {
     Boolean(order);
 
   const handlePrint = () => {
+    document.body.classList.add("order-print-mode");
+    const cleanup = () => {
+      document.body.classList.remove("order-print-mode");
+      window.removeEventListener("afterprint", cleanup);
+    };
+    window.addEventListener("afterprint", cleanup);
     window.print();
+    window.setTimeout(cleanup, 1000);
+  };
+
+  const handleDownloadInvoice = async () => {
+    if (isDownloadingInvoice) return;
+
+    try {
+      setDownloadError("");
+      setIsDownloadingInvoice(true);
+
+      const { jsPDF } = await import("jspdf");
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 14;
+      const contentWidth = pageWidth - margin * 2;
+      const lineHeight = 6.5;
+      const money = (value) => formatCurrency(Number(value || 0));
+      const itemRows = Array.isArray(items)
+        ? items.map((item, index) => {
+            const quantity = getItemQuantity(item);
+            const price = getItemPrice(item);
+            const lineTotal = Number(item?.lineTotal ?? item?.total ?? price * quantity);
+            return {
+              no: String(index + 1),
+              name: getItemName(item),
+              quantity: String(quantity),
+              price: money(price),
+              total: money(lineTotal),
+            };
+          })
+        : [];
+
+      let cursorY = margin;
+      const ensurePageSpace = (requiredHeight = 12) => {
+        if (cursorY + requiredHeight <= pageHeight - margin) return;
+        pdf.addPage();
+        cursorY = margin;
+      };
+      const writeLabelValue = (label, value, valueAlign = "left") => {
+        ensurePageSpace(lineHeight + 1);
+        pdf.setFont("helvetica", "bold");
+        pdf.text(`${label}:`, margin, cursorY);
+        pdf.setFont("helvetica", "normal");
+        if (valueAlign === "right") {
+          pdf.text(String(value || "-"), pageWidth - margin, cursorY, { align: "right" });
+        } else {
+          pdf.text(String(value || "-"), margin + 32, cursorY);
+        }
+        cursorY += lineHeight;
+      };
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(22);
+      pdf.text("INVOICE", margin, cursorY);
+      pdf.setFontSize(11);
+      pdf.text("TP PRENEURS", pageWidth - margin, cursorY, { align: "right" });
+      cursorY += 8;
+
+      pdf.setDrawColor(226, 232, 240);
+      pdf.line(margin, cursorY, pageWidth - margin, cursorY);
+      cursorY += 8;
+
+      pdf.setFont("helvetica", "normal");
+      writeLabelValue("Invoice No", `#${invoiceRef || "-"}`);
+      writeLabelValue("Date", formatDate(createdAt));
+      writeLabelValue("Status", statusLabel);
+      writeLabelValue("Payment Method", paymentMethod);
+
+      cursorY += 2;
+      pdf.setFont("helvetica", "bold");
+      pdf.text("Invoice To", margin, cursorY);
+      cursorY += lineHeight;
+      pdf.setFont("helvetica", "normal");
+      [customerName, customerEmail, customerPhone, customerAddress]
+        .filter(Boolean)
+        .forEach((entry) => {
+          const lines = pdf.splitTextToSize(String(entry), contentWidth);
+          ensurePageSpace(lines.length * lineHeight);
+          pdf.text(lines, margin, cursorY);
+          cursorY += lines.length * lineHeight;
+        });
+
+      cursorY += 3;
+      ensurePageSpace(18);
+      pdf.setFillColor(248, 250, 252);
+      pdf.roundedRect(margin, cursorY - 4, contentWidth, 10, 2, 2, "F");
+      pdf.setFont("helvetica", "bold");
+      pdf.text("SR.", margin + 2, cursorY + 2.5);
+      pdf.text("PRODUCT", margin + 18, cursorY + 2.5);
+      pdf.text("QTY", pageWidth - margin - 58, cursorY + 2.5, { align: "right" });
+      pdf.text("PRICE", pageWidth - margin - 30, cursorY + 2.5, { align: "right" });
+      pdf.text("AMOUNT", pageWidth - margin, cursorY + 2.5, { align: "right" });
+      cursorY += 12;
+
+      pdf.setFont("helvetica", "normal");
+      itemRows.forEach((row) => {
+        const nameLines = pdf.splitTextToSize(row.name, 84);
+        const rowHeight = Math.max(8, nameLines.length * 5 + 2);
+        ensurePageSpace(rowHeight + 2);
+        pdf.text(row.no, margin + 2, cursorY);
+        pdf.text(nameLines, margin + 18, cursorY);
+        pdf.text(row.quantity, pageWidth - margin - 58, cursorY, { align: "right" });
+        pdf.text(row.price, pageWidth - margin - 30, cursorY, { align: "right" });
+        pdf.text(row.total, pageWidth - margin, cursorY, { align: "right" });
+        cursorY += rowHeight;
+        pdf.setDrawColor(241, 245, 249);
+        pdf.line(margin, cursorY - 3, pageWidth - margin, cursorY - 3);
+      });
+
+      cursorY += 6;
+      writeLabelValue("Shipping", money(shippingAmount), "right");
+      writeLabelValue("Discount", money(discount), "right");
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(14);
+      ensurePageSpace(10);
+      pdf.text("Total Amount", margin, cursorY);
+      pdf.text(money(totalAmount), pageWidth - margin, cursorY, { align: "right" });
+      pdf.setFontSize(11);
+      cursorY += 10;
+
+      pdf.setFont("helvetica", "bold");
+      pdf.text(String(dashboardCopy.invoiceMessageFirstPartValue || "Thank You"), margin, cursorY);
+      cursorY += lineHeight;
+      pdf.setFont("helvetica", "normal");
+      const thankYouLines = pdf.splitTextToSize(
+        String(dashboardCopy.invoiceMessageLastPartValue || "Your order has been received!"),
+        contentWidth
+      );
+      pdf.text(thankYouLines, margin, cursorY);
+
+      const fileRef = String(invoiceRef || orderRefParam || "invoice")
+        .trim()
+        .replace(/[^a-z0-9-_]+/gi, "-")
+        .replace(/^-+|-+$/g, "");
+      pdf.save(`${fileRef || "invoice"}.pdf`);
+    } catch (error) {
+      console.error("[store/order-tracking] failed to download invoice pdf", error);
+      setDownloadError("Failed to download invoice PDF.");
+    } finally {
+      setIsDownloadingInvoice(false);
+    }
   };
 
   const invoiceRef = resolvePublicOrderReference(
@@ -384,8 +573,30 @@ export default function StoreOrderTrackingPage() {
   const storeSplits = Array.isArray(order?.storeSplits) ? order.storeSplits : [];
   const shipments = normalizeShipmentList(order?.shipments);
   const splitTruthSummary = summarizeBuyerSplitTruth(storeSplits);
-  const shippingCost =
-    order?.shippingCost ?? order?.shipping ?? order?.shipping?.cost ?? order?.deliveryFee ?? 0;
+  const brandingSettings = brandingSettingsQuery.data?.data?.storeSettings?.branding ?? {};
+  const platformBrandName =
+    String(brandingSettings?.workspaceBrandName || "").trim() || "TP PRENEURS";
+  const platformLogoUrl = resolveAssetUrl(brandingSettings?.clientLogoUrl || "");
+  const sellerLogoEntries = Array.from(
+    new Map(
+      storeSplits
+        .map((split) => {
+          const storeId = Number(split?.storeId || 0);
+          if (!storeId) return null;
+          return [
+            storeId,
+            {
+              storeId,
+              storeName: String(split?.storeName || `Store #${storeId}`).trim(),
+              storeLogoUrl: resolveAssetUrl(split?.storeLogoUrl || ""),
+            },
+          ];
+        })
+        .filter(Boolean)
+    ).values()
+  );
+  const shippingAmount =
+    order?.shipping ?? order?.shippingAmount ?? order?.deliveryFee ?? 0;
   const discount = order?.discount ?? order?.discountAmount ?? order?.discountTotal ?? 0;
   const totalAmount = order?.totalAmount ?? order?.total ?? order?.grandTotal ?? 0;
   const truthStatus = getOrderTruthStatus(order);
@@ -524,7 +735,7 @@ export default function StoreOrderTrackingPage() {
   }
 
   return (
-    <section className="mx-auto max-w-7xl px-3 py-6 sm:px-4 sm:py-8 lg:px-6 lg:py-10">
+    <section className="order-print-root mx-auto max-w-7xl px-3 py-6 sm:px-4 sm:py-8 lg:px-6 lg:py-10">
       {isRefetching ? (
         <div className="no-print mb-4 flex justify-end">
           <UiUpdatingBadge label={UPDATING} />
@@ -677,11 +888,17 @@ export default function StoreOrderTrackingPage() {
               : "This tracking lane reads the same shipment truth that seller and admin use."}
           </p>
           <div className="mt-5 grid gap-3 lg:grid-cols-2">
-            {shipments.map((shipment) => (
-              <div
-                key={shipment.shipmentId || `shipment-${shipment.suborderId || shipment.storeId || shipment.storeName}`}
-                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
-              >
+            {shipments.map((shipment) => {
+              const buyerShipment = getBuyerShipmentPresentation(
+                shipment.shipmentStatus,
+                shipment.shipmentStatusMeta
+              );
+
+              return (
+                <div
+                  key={shipment.shipmentId || `shipment-${shipment.suborderId || shipment.storeId || shipment.storeName}`}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
+                >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-slate-900">
@@ -693,10 +910,10 @@ export default function StoreOrderTrackingPage() {
                   </div>
                   <span
                     className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getToneBadgeClass(
-                      shipment.shipmentStatusMeta?.tone
+                      buyerShipment.tone
                     )}`}
                   >
-                    {shipment.shipmentStatusMeta?.label || shipment.shipmentStatus}
+                    {buyerShipment.label}
                   </span>
                 </div>
                 <div className="mt-3 space-y-1.5 text-sm text-slate-600">
@@ -726,7 +943,7 @@ export default function StoreOrderTrackingPage() {
                   </p>
                 </div>
                 <p className="mt-3 text-sm text-slate-500">
-                  {shipment.shipmentStatusMeta?.description ||
+                  {buyerShipment.description ||
                     shipment.latestTrackingEvent?.note ||
                     "Shipment read model is available for this store shipment."}
                 </p>
@@ -765,8 +982,9 @@ export default function StoreOrderTrackingPage() {
                     ))}
                   </div>
                 ) : null}
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         </div>
       ) : null}
@@ -779,7 +997,7 @@ export default function StoreOrderTrackingPage() {
                 Store Split Status
               </p>
               <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
-                Parent order and seller fulfillment are shown separately
+                Parent order and seller shipment are shown separately
               </h2>
             </div>
             <p className="text-sm text-slate-500">
@@ -816,7 +1034,7 @@ export default function StoreOrderTrackingPage() {
                         splitPresentation.fulfillmentTone
                       )}`}
                     >
-                      Fulfillment {splitPresentation.fulfillmentLabel}
+                      Shipment {splitPresentation.fulfillmentLabel}
                     </span>
                     <span
                       className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getToneBadgeClass(
@@ -834,46 +1052,78 @@ export default function StoreOrderTrackingPage() {
       ) : null}
 
       <div className="print-area overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_45px_rgba(15,23,42,0.08)]">
-        <div className="bg-slate-100/60 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+        <div className="invoice-hero bg-slate-100/60 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+          <div className="invoice-print-header flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <h1 className="text-3xl font-extrabold tracking-wide text-slate-900">
+              <div className="mb-4">
+                {platformLogoUrl ? (
+                  <img
+                    src={platformLogoUrl}
+                    alt={`${platformBrandName} client logo`}
+                    className="invoice-platform-logo h-14 w-auto max-w-[180px] object-contain sm:h-16"
+                  />
+                ) : (
+                  <div className="invoice-platform-logo flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-100 text-sm font-extrabold text-emerald-700 sm:h-16 sm:w-16">
+                    {getInitials(platformBrandName)}
+                  </div>
+                )}
+              </div>
+              <h1 className="invoice-title text-3xl font-extrabold tracking-wide text-slate-900">
                 INVOICE
               </h1>
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+              <div className="invoice-status-row mt-3 flex flex-wrap items-center gap-2 text-sm text-slate-600">
                 <span>Status:</span>
                 <span
-                    className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getToneBadgeClass(
+                    className={`invoice-status-badge inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getToneBadgeClass(
                     truthStatus.tone || statusSummary?.tone
                   )}`}
                 >
                   {statusLabel}
                 </span>
               </div>
-              <div className="mt-3">
+              <div className="invoice-ref mt-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Order Ref</p>
                 <p className="mt-1.5 inline-flex break-all rounded-full border border-slate-300 bg-white px-3 py-1 font-mono text-sm font-bold text-slate-900 sm:text-base">
                   #{invoiceRef || "-"}
                 </p>
               </div>
             </div>
-            <div className="text-left text-sm text-slate-600 lg:text-right">
-              <div className="text-lg font-bold text-emerald-600">KACHA BAZAR</div>
-              <div>59 Station Rd, Purls Bridge,</div>
-              <div>United Kingdom</div>
+            <div className="invoice-seller-branding lg:max-w-sm lg:text-right">
+              {sellerLogoEntries.length > 0 ? (
+                <div className="invoice-seller-logo-strip inline-flex flex-wrap items-center gap-3 lg:justify-end">
+                  {sellerLogoEntries.map((sellerEntry) => (
+                    <div
+                      key={sellerEntry.storeId}
+                      className="invoice-seller-logo-box flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:h-20 sm:w-20"
+                    >
+                      {sellerEntry.storeLogoUrl ? (
+                        <img
+                          src={sellerEntry.storeLogoUrl}
+                          alt={`${sellerEntry.storeName} logo`}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-slate-200 text-sm font-bold text-slate-600">
+                          {getInitials(sellerEntry.storeName, "ST")}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-1 gap-4 border-t border-slate-200 pt-6 md:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+          <div className="invoice-meta-grid mt-6 grid grid-cols-1 gap-4 border-t border-slate-200 pt-6 md:grid-cols-3">
+            <div className="invoice-meta-card rounded-2xl border border-slate-200 bg-white px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Date</p>
               <p className="mt-2 text-sm text-slate-900">{formatDate(createdAt)}</p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+            <div className="invoice-meta-card rounded-2xl border border-slate-200 bg-white px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Invoice No.</p>
               <p className="mt-2 break-all text-sm text-slate-900">#{invoiceRef}</p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 md:text-right">
+            <div className="invoice-meta-card rounded-2xl border border-slate-200 bg-white px-4 py-3 md:text-right">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Invoice To</p>
               <p className="mt-2 text-sm font-medium text-slate-900">{customerName}</p>
               <p className="text-sm text-slate-600">{customerEmail}</p>
@@ -883,8 +1133,8 @@ export default function StoreOrderTrackingPage() {
           </div>
         </div>
 
-        <div className="px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
-          <div className="space-y-3 md:hidden">
+        <div className="invoice-items-section px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
+          <div className="invoice-items-mobile space-y-3 md:hidden">
             {items.length > 0 ? (
               items.map((item, index) => {
                 const quantity = getItemQuantity(item);
@@ -936,7 +1186,7 @@ export default function StoreOrderTrackingPage() {
             )}
           </div>
 
-          <div className="hidden overflow-x-auto md:block">
+          <div className="invoice-items-table hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                 <tr>
@@ -996,21 +1246,21 @@ export default function StoreOrderTrackingPage() {
           </div>
         </div>
 
-        <div className="bg-emerald-50 px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
-          <div className="grid gap-6 md:grid-cols-4">
-            <div className="rounded-xl border border-emerald-100 bg-white/70 p-3">
+        <div className="invoice-summary-panel bg-emerald-50 px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
+          <div className="invoice-summary-grid grid gap-6 md:grid-cols-4">
+            <div className="invoice-summary-card rounded-xl border border-emerald-100 bg-white/70 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Payment Method</p>
               <p className="mt-2 text-sm text-slate-900">{paymentMethod}</p>
             </div>
-            <div className="rounded-xl border border-emerald-100 bg-white/70 p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Shipping Cost</p>
-              <p className="mt-2 text-sm text-slate-900">{formatCurrency(Number(shippingCost || 0))}</p>
+            <div className="invoice-summary-card rounded-xl border border-emerald-100 bg-white/70 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Shipping</p>
+              <p className="mt-2 text-sm text-slate-900">{formatCurrency(Number(shippingAmount || 0))}</p>
             </div>
-            <div className="rounded-xl border border-emerald-100 bg-white/70 p-3">
+            <div className="invoice-summary-card rounded-xl border border-emerald-100 bg-white/70 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Discount</p>
               <p className="mt-2 text-sm text-slate-900">{formatCurrency(Number(discount || 0))}</p>
             </div>
-            <div className="rounded-xl border border-emerald-100 bg-white p-3">
+            <div className="invoice-total-card rounded-xl border border-emerald-100 bg-white p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Total Amount</p>
               <p className="mt-3 text-3xl font-extrabold text-red-500 sm:text-4xl">
                 {formatCurrency(Number(totalAmount || 0))}
@@ -1025,15 +1275,19 @@ export default function StoreOrderTrackingPage() {
               {dashboardCopy.invoiceMessageFirstPartValue}
             </p>
             <p className="mt-1">{dashboardCopy.invoiceMessageLastPartValue}</p>
+            {downloadError ? (
+              <p className="mt-2 text-sm text-rose-600">{downloadError}</p>
+            ) : null}
           </div>
           <button
             type="button"
-            onClick={handlePrint}
-            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 sm:w-auto"
+            onClick={handleDownloadInvoice}
+            disabled={isDownloadingInvoice}
+            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-400 sm:w-auto"
             aria-label={dashboardCopy.downloadButtonLabel}
           >
             <Download className="h-4 w-4" />
-            {dashboardCopy.downloadButtonValue}
+            {isDownloadingInvoice ? "Preparing PDF..." : dashboardCopy.downloadButtonValue}
           </button>
           <button
             type="button"

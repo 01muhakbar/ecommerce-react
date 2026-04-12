@@ -12,4 +12,4 @@ export const isMultistoreShipmentMvpEnabled = () =>
   normalizeBoolean(process.env.ENABLE_MULTISTORE_SHIPMENT_MVP, nonProductionDefault);
 
 export const isMultistoreShipmentMutationEnabled = () =>
-  normalizeBoolean(process.env.ENABLE_MULTISTORE_SHIPMENT_MUTATION, false);
+  normalizeBoolean(process.env.ENABLE_MULTISTORE_SHIPMENT_MUTATION, nonProductionDefault);

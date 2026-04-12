@@ -214,9 +214,7 @@ const resolveOrderAmountSnapshot = (order: any, computedSubtotal = 0) => {
   const shippingAmount = toNumber(
     getAttr(order, "shippingAmount") ??
       order?.shippingAmount ??
-      order?.shipping_amount ??
-      getAttr(order, "shippingCost") ??
-      order?.shippingCost
+      order?.shipping_amount
   );
   const serviceFeeAmount = toNumber(
     getAttr(order, "serviceFeeAmount") ??
@@ -1190,7 +1188,7 @@ router.get(
       )) as any;
 
       const [rows] = await sequelize.query(
-        "SELECT id, invoice_no, checkout_mode, status, payment_status, total_amount, created_at, payment_method FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        "SELECT id, invoice_no, checkout_mode, status, payment_status, total_amount, shipping_amount, created_at, payment_method FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
         { replacements: [userId, limit, offset] }
       );
 
@@ -1272,6 +1270,7 @@ router.get(
               row.payment_status ?? row.paymentStatus ?? "UNPAID"
             ),
             totalAmount: Number(row.total_amount ?? row.totalAmount ?? 0),
+            shipping: Number(row.shipping_amount ?? row.shippingAmount ?? 0),
             createdAt: row.created_at ?? row.createdAt ?? null,
             paymentMethod: row.payment_method ?? row.paymentMethod ?? null,
             paymentEntry,
@@ -1491,7 +1490,6 @@ router.get(
           discount: amounts.discount,
           tax,
           shipping: amounts.shipping,
-          shippingCost: amounts.shipping,
           serviceFeeAmount: amounts.serviceFee,
           total: amounts.total,
           grandTotal: amounts.total,
@@ -1590,11 +1588,15 @@ router.put(
   }
 );
 
-// GET /api/store/orders/:ref
+// GET /api/store/orders/:ref (account session required)
 router.get(
   "/orders/:ref",
+  protect,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const userId = getAuthUserId(req, res);
+      if (!userId) return;
+
       const refParam = String(req.params.ref || "").trim();
       if (!refParam) {
         return res.status(400).json({ message: "Invalid order reference." });
@@ -1608,7 +1610,12 @@ router.get(
         });
       }
 
-      const where = sequelize.where(sequelize.col("invoice_no"), refParam);
+      const where = {
+        [Op.and]: [
+          { userId },
+          sequelize.where(sequelize.col("invoice_no"), refParam),
+        ],
+      } as any;
 
       const order = await Order.findOne({
         where,
@@ -1661,7 +1668,7 @@ router.get(
               {
                 model: Store,
                 as: "store",
-                attributes: ["id", "name", "slug"],
+                attributes: ["id", "name", "slug", "logoUrl"],
                 required: false,
               },
               {
@@ -1805,7 +1812,7 @@ router.get(
         null;
 
       const [rows] = await sequelize.query(
-        "SELECT oi.product_id, oi.quantity, oi.price, p.name FROM orderitems oi LEFT JOIN products p ON p.id=oi.product_id WHERE oi.order_id = ?",
+        "SELECT oi.product_id, oi.quantity, oi.price, p.name, p.promo_image_path AS promoImagePath FROM orderitems oi LEFT JOIN products p ON p.id=oi.product_id WHERE oi.order_id = ?",
         { replacements: [orderId] }
       );
 
@@ -1816,6 +1823,7 @@ router.get(
         return {
           productId,
           name: r.name ?? `Product #${productId || "-"}`,
+          imageUrl: normalizeUploadsUrl(r.promoImagePath ?? null),
           quantity,
           price,
           lineTotal: price * quantity,
@@ -1865,6 +1873,9 @@ router.get(
               storeId: Number(getAttr(suborder, "storeId") || getAttr(store, "id") || 0) || null,
               storeName: String(getAttr(store, "name") || `Store #${getAttr(suborder, "storeId")}`),
               storeSlug: getAttr(store, "slug") ? String(getAttr(store, "slug")) : null,
+              storeLogoUrl: normalizeUploadsUrl(
+                String(getAttr(store, "logoUrl") || "").trim() || null
+              ),
               totalAmount: Number(getAttr(suborder, "totalAmount") || 0),
               paymentStatus,
               paymentStatusMeta: buildPaymentStatusMeta(paymentStatus),
@@ -1989,7 +2000,6 @@ router.get(
           discount: amounts.discount,
           tax,
           shipping: amounts.shipping,
-          shippingCost: amounts.shipping,
           serviceFeeAmount: amounts.serviceFee,
           total: amounts.total,
           grandTotal: amounts.total,

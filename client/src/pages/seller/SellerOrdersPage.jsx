@@ -25,9 +25,11 @@ import {
 import {
   getSplitOperationalBridge,
   getSplitOperationalEnabledSellerFulfillmentActions,
+  getSplitOperationalEnabledSellerShipmentActions,
   getSplitOperationalFinality,
   getSplitOperationalPayment,
   getSplitOperationalShipment,
+  getSplitOperationalSellerShipmentActions,
   getSplitOperationalStatusSummary,
   getSplitOperationalSellerFulfillmentActions,
 } from "../../utils/splitOperationalTruth.ts";
@@ -319,8 +321,13 @@ export default function SellerOrdersPage() {
         type: "success",
         message: result?.message || "Seller fulfillment updated.",
       });
-      await queryClient.invalidateQueries({ queryKey: ["seller", "suborders", storeId] });
-      await queryClient.invalidateQueries({ queryKey: ["seller", "suborder", "detail", storeId] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["seller", "suborders", storeId] }),
+        queryClient.invalidateQueries({ queryKey: ["seller", "suborder", "detail", storeId] }),
+        queryClient.invalidateQueries({ queryKey: ["seller", "payment-review", storeId] }),
+        queryClient.invalidateQueries({ queryKey: ["seller", "workspace", "finance-summary", storeId] }),
+        queryClient.invalidateQueries({ queryKey: ["seller", "workspace", "analytics-summary", storeId] }),
+      ]);
     },
     onError: (error) => {
       const code = String(error?.response?.data?.code || "").toUpperCase();
@@ -657,6 +664,16 @@ export default function SellerOrdersPage() {
               getSplitOperationalEnabledSellerFulfillmentActions(item).length > 0
                 ? getSplitOperationalEnabledSellerFulfillmentActions(item)
                 : fulfillmentActions.filter((action) => action?.enabled !== false);
+            const shipmentActions = getSplitOperationalSellerShipmentActions(item);
+            const enabledShipmentActions = getSplitOperationalEnabledSellerShipmentActions(item);
+            const hasShipmentTruthLane =
+              Boolean(item.hasPersistedShipment) || shipmentActions.length > 0;
+            const canMarkPackedFromList =
+              hasShipmentTruthLane &&
+              enabledShipmentActions.some((action) => action?.code === "MARK_PROCESSING");
+            const needsDetailShipmentAction =
+              hasShipmentTruthLane &&
+              shipmentActions.some((action) => action?.code && action.code !== "MARK_PROCESSING");
             const blockedFulfillmentReason =
               operationalFinality.isFinalNegative
                 ? sellerStatusMeta?.description ||
@@ -816,7 +833,48 @@ export default function SellerOrdersPage() {
                       getPaymentSnapshotHint(item)}
                   </p>
 
-                  {enabledFulfillmentActions.length > 0 ? (
+                  {canMarkPackedFromList ? (
+                    <div className="mt-4 space-y-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          fulfillmentMutation.mutate({
+                            suborderId: item.suborderId,
+                            action: "MARK_PROCESSING",
+                          })
+                        }
+                        disabled={fulfillmentMutation.isPending}
+                        className={sellerSecondaryButtonClass}
+                      >
+                        {busyActionKey === `${item.suborderId}:MARK_PROCESSING`
+                          ? "Saving..."
+                          : "Mark packed"}
+                      </button>
+                      <p className="text-xs leading-5 text-slate-500">
+                        Use this only when the package is ready to ship. Dispatch stays on the
+                        next step.
+                      </p>
+                    </div>
+                  ) : needsDetailShipmentAction ? (
+                    <div className="mt-4 space-y-2">
+                      <Link
+                        to={workspaceRoutes.orderDetail(item.suborderId)}
+                        className={sellerSecondaryButtonClass}
+                      >
+                        Open detail for shipment action
+                      </Link>
+                      <p className="text-xs leading-5 text-slate-500">
+                        Use detail view for courier handoff, tracking input, and post-dispatch
+                        updates.
+                      </p>
+                    </div>
+                  ) : hasShipmentTruthLane ? (
+                    <p className="mt-4 text-xs leading-5 text-slate-500">
+                      {shipmentActions.find((action) => action?.enabled === false && action?.reason)
+                        ?.reason ||
+                        blockedFulfillmentReason}
+                    </p>
+                  ) : enabledFulfillmentActions.length > 0 ? (
                     <div className="mt-4 space-y-2">
                       {enabledFulfillmentActions.map((action) => {
                         const actionKey = `${item.suborderId}:${action.code}`;
@@ -845,6 +903,15 @@ export default function SellerOrdersPage() {
                       {blockedFulfillmentReason}
                     </p>
                   )}
+
+                  {hasShipmentTruthLane &&
+                  !canMarkPackedFromList &&
+                  !needsDetailShipmentAction ? (
+                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                      Shipment truth is active, but the next operational step is not available
+                      from the list view right now.
+                    </p>
+                  ) : null}
 
                   <Link
                     to={workspaceRoutes.orderDetail(item.suborderId)}

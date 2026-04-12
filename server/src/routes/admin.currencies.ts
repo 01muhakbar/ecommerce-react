@@ -124,17 +124,19 @@ const ensureCurrenciesTable = async () => {
 
 const ensureDefaultCurrencies = async () => {
   await ensureCurrenciesTable();
+  const countRows = (await sequelize.query(
+    "SELECT COUNT(*) AS total FROM currencies",
+    { type: QueryTypes.SELECT }
+  )) as Array<{ total: number | string }>;
+  const total = Number(countRows[0]?.total || 0);
+
+  if (total > 0) return;
+
   for (const currency of DEFAULT_CURRENCIES) {
     await sequelize.query(
       `
         INSERT INTO currencies (name, code, symbol, exchange_rate, published, createdAt, updatedAt)
         VALUES (:name, :code, :symbol, :exchangeRate, :published, NOW(), NOW())
-        ON DUPLICATE KEY UPDATE
-          name = VALUES(name),
-          symbol = VALUES(symbol),
-          exchange_rate = VALUES(exchange_rate),
-          published = VALUES(published),
-          updatedAt = VALUES(updatedAt)
       `,
       {
         replacements: {

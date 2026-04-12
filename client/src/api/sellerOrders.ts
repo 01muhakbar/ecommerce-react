@@ -674,6 +674,7 @@ export const updateSellerSuborderFulfillment = async (
     courierCode?: string | null;
     courierService?: string | null;
     trackingNumber?: string | null;
+    shippingFee?: number | string | null;
   }
 ) => {
   const { data } = await api.patch(

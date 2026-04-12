@@ -242,6 +242,9 @@ export default function OrderDetail() {
     : [];
   const auditCoverageLabel = formatCoverageLabel(shipmentAuditMeta?.persistedCoverage);
   const auditIssues = [
+    shipmentAuditMeta?.partiallyShipped
+      ? "At least one seller split is already shipped, but the full parent order is not fully shipped yet"
+      : null,
     shipmentAuditMeta?.usedLegacyFallback
       ? `${shipmentAuditMeta.legacyFallbackSuborderCount || 0} suborder still uses legacy fallback`
       : null,

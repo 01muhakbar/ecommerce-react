@@ -149,6 +149,7 @@ export default function SellerOrderDetailPage() {
     courierCode: "",
     courierService: "",
     trackingNumber: "",
+    shippingFee: "",
   });
   const hasOrderPermission = sellerContext?.access?.permissionKeys?.includes("ORDER_VIEW");
   const numericSuborderId = Number(suborderId);
@@ -171,10 +172,15 @@ export default function SellerOrderDetailPage() {
         type: "success",
         message: result?.message || "Seller fulfillment updated.",
       });
-      await queryClient.invalidateQueries({ queryKey: ["seller", "suborders", storeId] });
-      await queryClient.invalidateQueries({
-        queryKey: ["seller", "suborder", "detail", storeId, suborderId],
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["seller", "suborders", storeId] }),
+        queryClient.invalidateQueries({
+          queryKey: ["seller", "suborder", "detail", storeId, suborderId],
+        }),
+        queryClient.invalidateQueries({ queryKey: ["seller", "payment-review", storeId] }),
+        queryClient.invalidateQueries({ queryKey: ["seller", "workspace", "finance-summary", storeId] }),
+        queryClient.invalidateQueries({ queryKey: ["seller", "workspace", "analytics-summary", storeId] }),
+      ]);
     },
     onError: (error) => {
       const code = String(error?.response?.data?.code || "").toUpperCase();
@@ -193,6 +199,10 @@ export default function SellerOrderDetailPage() {
                 ? "Shipment is already on the requested shipping status."
               : code === "TRACKING_NUMBER_REQUIRED"
                 ? "Tracking number is required before the shipment can be marked as shipped."
+              : code === "COURIER_DETAILS_REQUIRED"
+                ? "Courier code or courier service is required before the shipment can be marked as shipped."
+              : code === "INVALID_SHIPPING_FEE"
+                ? "Shipping fee must be a non-negative number."
             : code === "PARENT_ORDER_CANCELLED"
               ? "Parent order is cancelled, so seller fulfillment can no longer move forward."
           : code === "FULFILLMENT_STATUS_ALREADY_SET"
@@ -293,12 +303,15 @@ export default function SellerOrderDetailPage() {
       courierCode: primaryShipment.courierCode || "",
       courierService: primaryShipment.courierService || "",
       trackingNumber: primaryShipment.trackingNumber || "",
+      shippingFee: String(primaryShipment.shippingFee ?? detail?.totals?.shippingAmount ?? "").trim(),
     });
   }, [
     primaryShipment?.shipmentId,
     primaryShipment?.courierCode,
     primaryShipment?.courierService,
     primaryShipment?.trackingNumber,
+    primaryShipment?.shippingFee,
+    detail?.totals?.shippingAmount,
   ]);
 
   if (!hasOrderPermission) {
@@ -799,6 +812,16 @@ export default function SellerOrderDetailPage() {
 
             {hasPersistedShipment ? (
               <div className="mt-4 space-y-3">
+                {(enabledShipmentActions.has("MARK_PROCESSING") ||
+                  enabledShipmentActions.has("MARK_SHIPPED")) && (
+                  <div className="rounded-xl border border-sky-200 bg-sky-50 px-3.5 py-3 text-sm text-sky-900">
+                    <p className="font-semibold">Operational sequence</p>
+                    <p className="mt-1.5 leading-6">
+                      After payment approval, use <span className="font-semibold">Mark packed</span> when the parcel is ready to ship. Use <span className="font-semibold">Mark shipped</span> only after courier handoff and tracking is available.
+                    </p>
+                  </div>
+                )}
+
                 {trackingMutationEnabled && enabledShipmentActions.has("MARK_PROCESSING") ? (
                   <button
                     type="button"
@@ -814,9 +837,11 @@ export default function SellerOrderDetailPage() {
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
                     <p className="text-sm font-semibold text-slate-900">Courier and Tracking</p>
                     <p className="mt-1 text-sm text-slate-500">
-                      Dispatch this shipment only after courier and tracking details are ready.
+                      Dispatch this shipment only after the parcel is handed to the courier.
+                      Tracking number and at least one courier field are required before this
+                      step can continue.
                     </p>
-                    <div className="mt-3 grid gap-3 md:grid-cols-3">
+                    <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                       <label className="grid gap-1.5 text-sm text-slate-600">
                         <span>Courier code</span>
                         <input
@@ -846,7 +871,7 @@ export default function SellerOrderDetailPage() {
                         />
                       </label>
                       <label className="grid gap-1.5 text-sm text-slate-600">
-                        <span>Tracking number</span>
+                        <span>Tracking number *</span>
                         <input
                           value={trackingForm.trackingNumber}
                           onChange={(event) =>
@@ -859,6 +884,23 @@ export default function SellerOrderDetailPage() {
                           placeholder="Input shipment tracking number"
                         />
                       </label>
+                      <label className="grid gap-1.5 text-sm text-slate-600">
+                        <span>Shipping fee</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1000"
+                          value={trackingForm.shippingFee}
+                          onChange={(event) =>
+                            setTrackingForm((current) => ({
+                              ...current,
+                              shippingFee: event.target.value,
+                            }))
+                          }
+                          className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                          placeholder="15000"
+                        />
+                      </label>
                     </div>
                     <button
                       type="button"
@@ -868,13 +910,27 @@ export default function SellerOrderDetailPage() {
                           courierCode: trackingForm.courierCode,
                           courierService: trackingForm.courierService,
                           trackingNumber: trackingForm.trackingNumber,
+                          shippingFee:
+                            String(trackingForm.shippingFee || "").trim() === ""
+                              ? null
+                              : Number(trackingForm.shippingFee),
                         })
                       }
-                      disabled={fulfillmentMutation.isPending}
+                      disabled={
+                        fulfillmentMutation.isPending ||
+                        String(trackingForm.trackingNumber || "").trim().length === 0 ||
+                        (String(trackingForm.courierCode || "").trim().length === 0 &&
+                          String(trackingForm.courierService || "").trim().length === 0)
+                      }
                       className={`mt-3 ${sellerPrimaryButtonClass}`}
                     >
                       {fulfillmentMutation.isPending ? "Saving..." : "Mark shipped"}
                     </button>
+                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                      Fill at least one courier field and keep the tracking number exact so Admin
+                      and buyer tracking stay aligned after dispatch. Shipping fee here becomes
+                      the synced invoice shipping cost for this seller split.
+                    </p>
                   </div>
                 ) : null}
 

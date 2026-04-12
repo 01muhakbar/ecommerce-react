@@ -20,6 +20,11 @@ const toUpper = (value: unknown, fallback = "") =>
 
 const normalizeText = (value: unknown) => String(value || "").trim();
 
+const normalizeParentOrderStatus = (value: unknown) =>
+  String(value || "pending")
+    .trim()
+    .toLowerCase();
+
 const SHIPMENT_STATUS_PRIORITY: Record<string, number> = {
   WAITING_PAYMENT: 10,
   READY_TO_FULFILL: 20,
@@ -297,6 +302,30 @@ export const applySellerShipmentFulfillment = async (input: {
     );
   }
 
+  const paymentStatus = toUpper(getAttr(input.suborder, "paymentStatus"), "UNPAID");
+  if (paymentStatus !== "PAID") {
+    throw createShipmentMutationError(
+      "SUBORDER_PAYMENT_NOT_SETTLED",
+      "Seller shipment can move forward only after this store split payment is settled."
+    );
+  }
+
+  const parentOrderStatus = normalizeParentOrderStatus(
+    getAttr(input.suborder?.order, "status")
+  );
+  if (parentOrderStatus === "cancelled") {
+    throw createShipmentMutationError(
+      "PARENT_ORDER_CANCELLED",
+      "Parent order is cancelled, so seller shipment can no longer move forward."
+    );
+  }
+  if (parentOrderStatus === "delivered" || parentOrderStatus === "completed") {
+    throw createShipmentMutationError(
+      "PARENT_ORDER_FINALIZED",
+      "Parent order is already in a final delivered state, so seller shipment can no longer move forward."
+    );
+  }
+
   const mvpEnabled = isMultistoreShipmentMvpEnabled();
   if (!mvpEnabled) {
     if (action.requiresPersistedShipment) {
@@ -401,10 +430,18 @@ export const applySellerShipmentFulfillment = async (input: {
 
   if (action.shipmentStatus === "SHIPPED") {
     const trackingNumber = normalizeText(input.payload?.trackingNumber);
+    const courierCode = normalizeText(input.payload?.courierCode);
+    const courierService = normalizeText(input.payload?.courierService);
     if (!trackingNumber) {
       throw createShipmentMutationError(
         "TRACKING_NUMBER_REQUIRED",
         "Tracking number is required before the shipment can be marked as shipped."
+      );
+    }
+    if (!courierCode && !courierService) {
+      throw createShipmentMutationError(
+        "COURIER_DETAILS_REQUIRED",
+        "Courier code or courier service is required before the shipment can be marked as shipped."
       );
     }
   }
@@ -413,9 +450,12 @@ export const applySellerShipmentFulfillment = async (input: {
     status: action.shipmentStatus,
   };
   if (action.shipmentStatus === "SHIPPED") {
-    updatePayload.courierCode = normalizeText(input.payload?.courierCode) || null;
-    updatePayload.courierService = normalizeText(input.payload?.courierService) || null;
-    updatePayload.trackingNumber = normalizeText(input.payload?.trackingNumber) || null;
+    const courierCode = normalizeText(input.payload?.courierCode);
+    const courierService = normalizeText(input.payload?.courierService);
+    const trackingNumber = normalizeText(input.payload?.trackingNumber);
+    updatePayload.courierCode = courierCode || null;
+    updatePayload.courierService = courierService || null;
+    updatePayload.trackingNumber = trackingNumber || null;
   }
 
   await shipment.update(updatePayload as any, { transaction: input.transaction });

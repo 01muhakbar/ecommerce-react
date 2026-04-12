@@ -409,6 +409,7 @@ async function mutateSellerFulfillment(input: {
   courierCode?: string;
   courierService?: string;
   trackingNumber?: string;
+  shippingFee?: number;
   expectedStatus?: number;
   expectedStatuses?: number[];
 }) {
@@ -421,6 +422,7 @@ async function mutateSellerFulfillment(input: {
         courierCode: input.courierCode,
         courierService: input.courierService,
         trackingNumber: input.trackingNumber,
+        shippingFee: input.shippingFee,
       }),
     }
   );
@@ -433,6 +435,12 @@ async function mutateSellerFulfillment(input: {
     assertStatus(response, input.expectedStatus || 200, `${input.action} mutation`);
   }
   return response;
+}
+
+async function fetchPublicTracking(client: CookieClient, invoiceNo: string, label: string) {
+  const response = await client.request(`/api/store/orders/${encodeURIComponent(invoiceNo)}`);
+  assertStatus(response, 200, label);
+  return response.body?.data ?? null;
 }
 
 async function mutateAdminShipmentCorrection(input: {
@@ -903,6 +911,43 @@ async function run() {
           action: "MARK_PROCESSING",
           expectedStatuses: [200, 409],
         });
+        const deliveredBeforeShipped = await mutateSellerFulfillment({
+          client: sellerClientOne,
+          storeId: storeOne.id,
+          suborderId: groupOne.suborderId,
+          action: "MARK_DELIVERED",
+          expectedStatus: 409,
+        });
+        assert.equal(
+          String(deliveredBeforeShipped.body?.code || "").toUpperCase(),
+          "INVALID_FULFILLMENT_TRANSITION",
+          "seller should not be able to mark delivered before shipment is dispatched"
+        );
+        const shippedWithoutTracking = await mutateSellerFulfillment({
+          client: sellerClientOne,
+          storeId: storeOne.id,
+          suborderId: groupOne.suborderId,
+          action: "MARK_SHIPPED",
+          expectedStatus: 409,
+        });
+        assert.equal(
+          String(shippedWithoutTracking.body?.code || "").toUpperCase(),
+          "TRACKING_NUMBER_REQUIRED",
+          "seller should not be able to mark shipped without tracking number"
+        );
+        const shippedWithoutCourier = await mutateSellerFulfillment({
+          client: sellerClientOne,
+          storeId: storeOne.id,
+          suborderId: groupOne.suborderId,
+          action: "MARK_SHIPPED",
+          trackingNumber: "JNE-SMOKE-NO-COURIER",
+          expectedStatus: 409,
+        });
+        assert.equal(
+          String(shippedWithoutCourier.body?.code || "").toUpperCase(),
+          "COURIER_DETAILS_REQUIRED",
+          "seller should not be able to mark shipped without courier identity"
+        );
         await mutateSellerFulfillment({
           client: sellerClientOne,
           storeId: storeOne.id,
@@ -911,7 +956,60 @@ async function run() {
           courierCode: "JNE",
           courierService: "REG",
           trackingNumber: "JNE-SMOKE-001",
+          shippingFee: 18000,
         });
+        const partialSuborders = await loadOrderSuborders(scenario.orderId);
+        const partialReadModel = buildOrderShippingReadModel(partialSuborders);
+        const partialOrder = await Order.findByPk(scenario.orderId, {
+          attributes: ["id", "status", "shippingAmount"],
+        });
+        const partialShippedSuborder = partialSuborders.find(
+          (suborder: any) => toNumber(suborder.getDataValue("id"), 0) === groupOne.suborderId
+        );
+        const untouchedPartialSuborder = partialSuborders.find(
+          (suborder: any) => toNumber(suborder.getDataValue("id"), 0) === groupTwo.suborderId
+        );
+        assert.equal(
+          String(partialOrder?.getDataValue("status") || ""),
+          "processing",
+          "parent order should remain processing while only some suborders are shipped"
+        );
+        assert.equal(
+          toNumber(partialShippedSuborder?.getDataValue("shippingAmount"), 0),
+          18000,
+          "mark shipped should sync seller shipping fee to the suborder"
+        );
+        assert.equal(
+          toNumber(partialOrder?.getDataValue("shippingAmount"), 0),
+          toNumber(partialShippedSuborder?.getDataValue("shippingAmount"), 0) +
+            toNumber(untouchedPartialSuborder?.getDataValue("shippingAmount"), 0),
+          "parent order shippingAmount should aggregate current suborder shipping amounts"
+        );
+        assert.equal(
+          partialReadModel.shippingStatus,
+          "PROCESSING",
+          "order shipping aggregate should stay processing while shipment is only partial"
+        );
+        assert.equal(
+          String(partialReadModel.aggregateStateCode || ""),
+          "PARTIALLY_SHIPPED",
+          "order shipping aggregate should expose partial-shipped state"
+        );
+        assert.equal(
+          Boolean(partialReadModel.shipmentAuditMeta?.partiallyShipped),
+          true,
+          "shipment audit meta should flag partially shipped parent state"
+        );
+        const publicTrackingAfterShippingFeeSync = await fetchPublicTracking(
+          buyerClient,
+          scenario.invoiceNo,
+          "partial public tracking after seller shipping fee sync"
+        );
+        assert.equal(
+          toNumber(publicTrackingAfterShippingFeeSync?.shipping, 0),
+          toNumber(partialOrder?.getDataValue("shippingAmount"), 0),
+          "public invoice should expose synced aggregated shipping amount"
+        );
         await mutateSellerFulfillment({
           client: sellerClientOne,
           storeId: storeOne.id,

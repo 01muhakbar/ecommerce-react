@@ -70,6 +70,11 @@ select {
 }
 
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm;
+  }
+
   header,
   nav,
   footer,
@@ -113,12 +118,17 @@ select {
   }
 
   body.order-print-mode .order-print-root {
-    max-width: none !important;
+    max-width: 100% !important;
     padding: 0 !important;
+    margin: 0 auto !important;
   }
 
   body.order-print-mode .order-print-root a {
     text-decoration: none !important;
+  }
+
+  body.order-print-mode .order-print-root > *:not(.print-area) {
+    display: none !important;
   }
 
   body.order-print-mode .order-print-root .rounded-2xl,
@@ -130,6 +140,155 @@ select {
   body.order-print-mode .order-print-root .shadow-lg,
   body.order-print-mode .order-print-root .shadow-2xl {
     box-shadow: none !important;
+  }
+
+  body.order-print-mode .order-print-root .print-area {
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    font-size: 11px !important;
+    line-height: 1.35 !important;
+  }
+
+  body.order-print-mode .order-print-root .print-area .bg-slate-100\/60 {
+    background: #ffffff !important;
+  }
+
+  body.order-print-mode .order-print-root .print-area .rounded-3xl {
+    border-radius: 0 !important;
+  }
+
+  body.order-print-mode .order-print-root .print-area .px-4,
+  body.order-print-mode .order-print-root .print-area .sm\:px-6,
+  body.order-print-mode .order-print-root .print-area .lg\:px-8 {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  body.order-print-mode .order-print-root .print-area .py-5,
+  body.order-print-mode .order-print-root .print-area .sm\:py-6,
+  body.order-print-mode .order-print-root .print-area .lg\:py-8 {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
+  body.order-print-mode .order-print-root .print-area .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  body.order-print-mode .order-print-root .print-area table {
+    width: 100% !important;
+  }
+
+  body.order-print-mode .order-print-root .invoice-hero {
+    padding-top: 0 !important;
+    padding-bottom: 10px !important;
+  }
+
+  body.order-print-mode .order-print-root .invoice-print-header {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: flex-start !important;
+    justify-content: space-between !important;
+    gap: 12px !important;
+  }
+
+  body.order-print-mode .order-print-root .invoice-platform-logo {
+    max-width: 120px !important;
+    max-height: 42px !important;
+  }
+
+  body.order-print-mode .order-print-root .invoice-title {
+    font-size: 24px !important;
+    line-height: 1.1 !important;
+  }
+
+  body.order-print-mode .order-print-root .invoice-status-row,
+  body.order-print-mode .order-print-root .invoice-ref {
+    margin-top: 8px !important;
+  }
+
+  body.order-print-mode .order-print-root .invoice-status-badge {
+    padding: 2px 8px !important;
+    font-size: 10px !important;
+  }
+
+  body.order-print-mode .order-print-root .invoice-seller-branding {
+    max-width: 180px !important;
+    text-align: right !important;
+  }
+
+  body.order-print-mode .order-print-root .invoice-seller-logo-strip {
+    justify-content: flex-end !important;
+    gap: 8px !important;
+  }
+
+  body.order-print-mode .order-print-root .invoice-seller-logo-box {
+    width: 48px !important;
+    height: 48px !important;
+    border-radius: 12px !important;
+  }
+
+  body.order-print-mode .order-print-root .invoice-meta-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+    margin-top: 12px !important;
+    padding-top: 12px !important;
+  }
+
+  body.order-print-mode .order-print-root .invoice-meta-card {
+    padding: 10px !important;
+    min-height: 0 !important;
+  }
+
+  body.order-print-mode .order-print-root .invoice-items-section {
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+  }
+
+  body.order-print-mode .order-print-root .invoice-items-mobile {
+    display: none !important;
+  }
+
+  body.order-print-mode .order-print-root .invoice-items-table {
+    display: block !important;
+  }
+
+  body.order-print-mode .order-print-root .invoice-items-table th,
+  body.order-print-mode .order-print-root .invoice-items-table td {
+    padding: 8px !important;
+    font-size: 10px !important;
+    line-height: 1.3 !important;
+  }
+
+  body.order-print-mode .order-print-root .invoice-items-table img {
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  body.order-print-mode .order-print-root .invoice-summary-panel {
+    padding-top: 12px !important;
+    padding-bottom: 12px !important;
+    background: #ffffff !important;
+  }
+
+  body.order-print-mode .order-print-root .invoice-summary-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  body.order-print-mode .order-print-root .invoice-summary-card,
+  body.order-print-mode .order-print-root .invoice-total-card {
+    padding: 10px !important;
+  }
+
+  body.order-print-mode .order-print-root .invoice-total-card p:last-child {
+    margin-top: 8px !important;
+    font-size: 24px !important;
+    line-height: 1.1 !important;
   }
 
   body.order-print-mode .order-print-root table,

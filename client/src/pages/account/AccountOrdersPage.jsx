@@ -151,7 +151,6 @@ export default function AccountOrdersPage() {
                   "METHOD",
                   "STATUS",
                   "SHIPPING",
-                  "SHIPPING COST",
                   "TOTAL",
                   "ACTION",
                 ].map((label) => (
@@ -164,7 +163,7 @@ export default function AccountOrdersPage() {
             <tbody className="animate-pulse">
               {Array.from({ length: 5 }).map((_, idx) => (
                 <tr key={`skeleton-${idx}`} className="border-t border-slate-100">
-                  {Array.from({ length: 8 }).map((__, cellIdx) => (
+                  {Array.from({ length: 7 }).map((__, cellIdx) => (
                     <td key={cellIdx} className="px-5 py-4">
                       <div className="h-3 w-full rounded bg-slate-100" />
                     </td>
@@ -209,7 +208,6 @@ export default function AccountOrdersPage() {
                   <th className="px-5 py-4 font-semibold">METHOD</th>
                   <th className="px-5 py-4 font-semibold">STATUS</th>
                   <th className="px-5 py-4 font-semibold">SHIPPING</th>
-                  <th className="px-5 py-4 font-semibold">SHIPPING COST</th>
                   <th className="px-5 py-4 font-semibold">TOTAL</th>
                   <th className="px-5 py-4 text-right font-semibold">ACTION</th>
                 </tr>
@@ -219,10 +217,8 @@ export default function AccountOrdersPage() {
                   const publicOrderRef = getPublicOrderRef(order);
                   const trackingPath = buildPublicOrderTrackingPath(publicOrderRef);
                   const statusUI = getStatusUI(order);
-                  const shippingProvider =
-                    order.shippingProvider || order.shipping?.provider || "-";
-                  const shippingCostRaw =
-                    order.shippingCost ?? order.shipping?.cost ?? order.deliveryFee ?? null;
+                  const shippingAmount =
+                    order.shipping ?? order.shippingAmount ?? order.deliveryFee ?? null;
                   const totalAmount = order.totalAmount ?? order.total ?? 0;
                   const paymentMethod = order.paymentMethod || order.method || "COD";
                   const paymentEntry = order.paymentEntry || null;
@@ -273,10 +269,9 @@ export default function AccountOrdersPage() {
                           ) : null}
                         </div>
                       </td>
-                      <td className="px-5 py-4 text-slate-700">{shippingProvider}</td>
                       <td className="px-5 py-4 text-slate-700">
-                        {shippingCostRaw != null && shippingCostRaw !== ""
-                          ? money(shippingCostRaw)
+                        {shippingAmount != null && shippingAmount !== ""
+                          ? money(shippingAmount)
                           : "-"}
                       </td>
                       <td className="px-5 py-4 font-semibold text-slate-900">

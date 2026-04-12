@@ -241,9 +241,9 @@ export const recalculateParentOrderFulfillmentStatus = async (
     };
   }
 
-  const currentRank = ORDER_STATUS_PROGRESS_RANK[currentStatus] ?? 0;
-  const derivedRank = ORDER_STATUS_PROGRESS_RANK[derivedStatus] ?? 0;
-  const nextStatus = derivedRank > currentRank ? derivedStatus : currentStatus;
+  // Non-final parent orders must stay synchronized with the current suborder truth.
+  // Only final order states remain sticky.
+  const nextStatus = derivedStatus;
 
   if (nextStatus !== currentStatus) {
     await order.update(

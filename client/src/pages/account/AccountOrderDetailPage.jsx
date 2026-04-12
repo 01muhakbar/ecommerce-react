@@ -20,6 +20,7 @@ import {
 import { getOrderTruthStatus } from "../../utils/orderTruth.js";
 import { ENABLE_MULTISTORE_SHIPMENT_MVP } from "../../config/featureFlags.js";
 import { normalizeShipmentList } from "../../utils/shipmentReadModel.ts";
+import { getBuyerShipmentPresentation } from "../../utils/buyerShipmentPresentation.js";
 import {
   getSplitOperationalPayment,
   getSplitOperationalShipment,
@@ -298,11 +299,17 @@ export default function AccountOrderDetailPage() {
               : "This buyer lane reads the same shipment truth exposed to seller and admin."}
           </p>
           <div className="mt-4 space-y-3">
-            {shipments.map((shipment) => (
-              <div
-                key={shipment.shipmentId || `shipment-${shipment.suborderId || shipment.storeId || shipment.storeName}`}
-                className="rounded-xl border border-slate-200 bg-slate-50 p-4"
-              >
+            {shipments.map((shipment) => {
+              const buyerShipment = getBuyerShipmentPresentation(
+                shipment.shipmentStatus,
+                shipment.shipmentStatusMeta
+              );
+
+              return (
+                <div
+                  key={shipment.shipmentId || `shipment-${shipment.suborderId || shipment.storeId || shipment.storeName}`}
+                  className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="font-semibold text-slate-900">
@@ -314,10 +321,10 @@ export default function AccountOrderDetailPage() {
                   </div>
                   <span
                     className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${statusStyles(
-                      shipment.shipmentStatusMeta?.tone || shipment.shipmentStatus
+                      buyerShipment.tone || shipment.shipmentStatus
                     )}`}
                   >
-                    {shipment.shipmentStatusMeta?.label || shipment.shipmentStatus}
+                    {buyerShipment.label}
                   </span>
                 </div>
                 <div className="mt-3 grid gap-2 text-sm text-slate-600 md:grid-cols-2">
@@ -341,7 +348,7 @@ export default function AccountOrderDetailPage() {
                   </div>
                 </div>
                 <p className="mt-3 text-sm text-slate-500">
-                  {shipment.shipmentStatusMeta?.description ||
+                  {buyerShipment.description ||
                     "Shipment summary is available for this store shipment."}
                 </p>
                 {shipment.compatibilityMatchesStorage === false ? (
@@ -377,8 +384,9 @@ export default function AccountOrderDetailPage() {
                     ))}
                   </div>
                 ) : null}
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         </div>
       ) : null}
@@ -409,6 +417,18 @@ export default function AccountOrderDetailPage() {
                 const splitPayment = getSplitOperationalPayment(group);
                 const splitShipment = getSplitOperationalShipment(group);
                 const groupStatusSummary = getSplitOperationalStatusSummary(group);
+                const buyerShipment = getBuyerShipmentPresentation(
+                  splitShipment.status,
+                  splitShipment.statusMeta
+                );
+                const groupUsesShipmentLane =
+                  String(groupStatusSummary?.lane || "").trim().toUpperCase() === "SHIPMENT";
+                const groupStatusLabel = groupUsesShipmentLane
+                  ? buyerShipment.label
+                  : groupStatusSummary?.label;
+                const groupStatusDescription = groupUsesShipmentLane
+                  ? buyerShipment.description
+                  : groupStatusSummary?.description;
                 return (
                   <div
                     key={`${group.suborderId || group.storeId || group.storeName}`}
@@ -434,8 +454,8 @@ export default function AccountOrderDetailPage() {
                           ) : null}
                           <PaymentStatusBadge
                             status={splitShipment.status}
-                            label={splitShipment.statusMeta?.label}
-                            tone={splitShipment.statusMeta?.tone}
+                            label={buyerShipment.label}
+                            tone={buyerShipment.tone}
                             prefix="Shipment"
                           />
                           {group.payment?.proof?.reviewStatus ? (
@@ -459,8 +479,8 @@ export default function AccountOrderDetailPage() {
                         <p className="font-semibold text-slate-900">{money(group.totalAmount)}</p>
                         <p>
                           Status:{" "}
-                          {groupStatusSummary?.label ||
-                            splitShipment.statusMeta?.label ||
+                          {groupStatusLabel ||
+                            buyerShipment.label ||
                             group.fulfillmentStatusMeta?.label ||
                             group.fulfillmentStatus}
                         </p>
@@ -490,7 +510,8 @@ export default function AccountOrderDetailPage() {
                           {group.payment?.accountName || group.accountName || "-"}
                         </p>
                         <p className="mt-2 leading-6">
-                          {groupStatusSummary?.description ||
+                          {groupStatusDescription ||
+                            buyerShipment.description ||
                             group.payment?.instructionText ||
                             group.paymentInstruction ||
                             "Per-store payment instructions are available on the payment page."}

@@ -8413,8 +8413,8 @@ export default function StoreCustomizationPage() {
                               Storefront Crop Preview
                             </p>
                             <p className="mt-1 text-xs text-slate-500">
-                              This left area is reserved for slider title, description, and button on
-                              the storefront.
+                              Custom slider images now render full-width on the storefront. This
+                              preview shows the approximate overlay content area.
                             </p>
                           </div>
                           {activeMainSliderItem.imageDataUrl ? (
@@ -8441,10 +8441,9 @@ export default function StoreCustomizationPage() {
                               Upload a slider image to preview the storefront crop.
                             </div>
                           )}
-                          <div className="pointer-events-none absolute inset-y-0 left-0 w-[42%] bg-[linear-gradient(90deg,rgba(246,250,255,0.96)_0%,rgba(246,250,255,0.90)_56%,rgba(246,250,255,0.32)_100%)]" />
-                          <div className="pointer-events-none absolute inset-y-3 left-3 w-[34%] rounded-xl border border-dashed border-slate-300/80 bg-white/20" />
-                          <div className="pointer-events-none absolute left-5 top-5 rounded-full bg-white/85 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-sm">
-                            Safe Text Area
+                          <div className="pointer-events-none absolute left-3 top-3 w-[34%] rounded-xl border border-white/80 bg-white/72 px-3 py-3 shadow-sm backdrop-blur-[6px]" />
+                          <div className="pointer-events-none absolute left-5 top-5 rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-sm">
+                            Content Overlay
                           </div>
                         </div>
                       </div>

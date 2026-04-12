@@ -77,6 +77,23 @@ export default function HomeHeroBanners({
     options.autoplayDelaySeconds,
     5
   );
+  const contentWrapClass = showArrows
+    ? "relative z-10 flex h-full max-w-full items-center pb-11 pl-16 pr-16 pt-6 sm:pb-13 sm:pl-20 sm:pr-20 sm:pt-8 lg:pb-14 lg:pl-24 lg:pr-24 lg:pt-10"
+    : "relative z-10 flex h-full max-w-full items-center pb-11 pl-4 pr-4 pt-6 sm:pb-13 sm:pl-6 sm:pr-6 sm:pt-8 lg:pb-14 lg:pl-8 lg:pr-8 lg:pt-10";
+  const defaultContentClass = showArrows
+    ? "max-w-[58%] sm:max-w-[52%] lg:max-w-[46%] xl:max-w-[44%]"
+    : "max-w-[72%] sm:max-w-[62%] lg:max-w-[60%] xl:max-w-[58%]";
+  const customImageContentShellClass = hasCustomImage
+    ? showArrows
+      ? "max-w-[16rem] sm:max-w-[20rem] lg:max-w-[24rem] xl:max-w-[25rem]"
+      : "max-w-[min(100%,31rem)]"
+    : "";
+  const titleClassName = showArrows
+    ? "max-w-[16ch] overflow-hidden text-[clamp(1.55rem,2.4vw,2.8rem)] font-extrabold leading-[1.04] tracking-[-0.035em] text-slate-900 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3]"
+    : "max-w-[20ch] overflow-hidden text-[clamp(1.75rem,2.85vw,3.1rem)] font-extrabold leading-[1.02] tracking-[-0.035em] text-slate-900 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3]";
+  const descriptionClassName = showArrows
+    ? "mt-3 max-w-[32ch] overflow-hidden text-[12px] leading-[1.6] text-slate-600 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] sm:max-w-[34ch] sm:text-[13px] sm:leading-[1.65] lg:mt-3.5 lg:max-w-[36ch] lg:text-[0.98rem] lg:leading-[1.58]"
+    : "mt-3 max-w-[42ch] overflow-hidden text-[13px] leading-[1.65] text-slate-600 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] sm:max-w-[42ch] sm:text-[14px] sm:leading-6 lg:mt-3.5 lg:max-w-[40ch] lg:text-[clamp(0.96rem,1.08vw,1.08rem)] lg:leading-[1.58]";
   const goToPrevSlide = () => {
     if (safeSlides.length <= 1) return;
     setActiveSlide?.((slideIndex - 1 + safeSlides.length) % safeSlides.length);
@@ -85,7 +102,7 @@ export default function HomeHeroBanners({
     if (safeSlides.length <= 1) return;
     setActiveSlide?.((slideIndex + 1) % safeSlides.length);
   };
-  const ctaClassName = `inline-flex min-h-10 w-fit max-w-[260px] items-center justify-center rounded-full bg-emerald-600 px-5 py-2.5 text-center text-[13px] font-semibold leading-tight whitespace-normal break-words text-white shadow-[0_10px_20px_-14px_rgba(5,150,105,0.85)] transition hover:bg-emerald-700 sm:min-h-11 sm:max-w-[300px] sm:px-6 sm:text-[14px] lg:min-h-[50px] lg:max-w-[360px] lg:px-7 lg:text-[14px] ${
+  const ctaClassName = `inline-flex min-h-10 w-fit max-w-[220px] items-center justify-center rounded-full bg-emerald-600 px-4 py-2.5 text-center text-[12px] font-semibold leading-tight whitespace-normal break-words text-white shadow-[0_10px_20px_-14px_rgba(5,150,105,0.85)] transition hover:bg-emerald-700 sm:min-h-11 sm:max-w-[260px] sm:px-5 sm:text-[13px] lg:min-h-[48px] lg:max-w-[300px] lg:px-6 lg:text-[13px] ${
     hasDescription ? "mt-4 sm:mt-5 lg:mt-5" : "mt-3 sm:mt-4 lg:mt-4"
   }`;
 
@@ -124,19 +141,21 @@ export default function HomeHeroBanners({
           <div
             className={`absolute inset-0 ${
               hasCustomImage
-                ? "bg-[linear-gradient(90deg,rgba(246,250,255,0.96)_0%,rgba(246,250,255,0.90)_32%,rgba(246,250,255,0.60)_48%,rgba(246,250,255,0.0)_70%)]"
+                ? "bg-transparent"
                 : "bg-gradient-to-r from-[#eaf2f7] via-[#eaf2f7]/96 to-transparent"
             }`}
           />
         ) : null}
-        <div className="pointer-events-none absolute -left-8 top-9 h-36 w-36 rounded-full bg-white/65 blur-3xl sm:h-48 sm:w-48" />
+        {!hasCustomImage ? (
+          <div className="pointer-events-none absolute -left-8 top-9 h-36 w-36 rounded-full bg-white/65 blur-3xl sm:h-48 sm:w-48" />
+        ) : null}
         {showArrows && safeSlides.length > 1 ? (
           <>
             <button
               type="button"
               onClick={goToPrevSlide}
               aria-label="Previous slide"
-              className="absolute left-3 top-1/2 z-20 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/40 bg-white/85 text-slate-700 shadow-sm transition hover:bg-white sm:left-4 lg:left-5"
+              className="absolute left-2 top-1/2 z-20 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/40 bg-white/85 text-slate-700 shadow-sm transition hover:bg-white sm:left-3 lg:left-4"
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
@@ -144,41 +163,49 @@ export default function HomeHeroBanners({
               type="button"
               onClick={goToNextSlide}
               aria-label="Next slide"
-              className="absolute right-3 top-1/2 z-20 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/40 bg-white/85 text-slate-700 shadow-sm transition hover:bg-white sm:right-4"
+              className="absolute right-2 top-1/2 z-20 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/40 bg-white/85 text-slate-700 shadow-sm transition hover:bg-white sm:right-3 lg:right-4"
             >
               <ChevronRight className="h-5 w-5" />
             </button>
           </>
         ) : null}
 
-        <div className="relative z-10 flex h-full max-w-[72%] flex-col justify-center pb-11 pl-10 pr-5 pt-6 sm:max-w-[62%] sm:pb-13 sm:pl-12 sm:pr-8 sm:pt-8 lg:max-w-[60%] lg:pb-14 lg:pl-[4.25rem] lg:pr-10 lg:pt-10 xl:max-w-[58%]">
-          <h1 className="max-w-[20ch] overflow-hidden text-[clamp(1.75rem,2.85vw,3.1rem)] font-extrabold leading-[1.02] tracking-[-0.035em] text-slate-900 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3]">
-            {displaySlide.title}
-          </h1>
-          {heroSubtitle ? (
-            <p className="mt-3 max-w-[42ch] overflow-hidden text-[13px] leading-[1.65] text-slate-600 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] sm:max-w-[42ch] sm:text-[14px] sm:leading-6 lg:mt-3.5 lg:max-w-[40ch] lg:text-[clamp(0.96rem,1.08vw,1.08rem)] lg:leading-[1.58]">
-              {heroSubtitle}
-            </p>
-          ) : null}
+        <div className={contentWrapClass}>
+          <div
+            className={
+              hasCustomImage
+                ? customImageContentShellClass
+                : defaultContentClass
+            }
+          >
+            <h1 className={titleClassName}>
+              {displaySlide.title}
+            </h1>
+            {heroSubtitle ? (
+              <p className={descriptionClassName}>
+                {heroSubtitle}
+              </p>
+            ) : null}
 
-          {hasCta && ctaIsExternal ? (
-            <a
-              href={ctaLink}
-              target="_blank"
-              rel="noreferrer"
-              className={ctaClassName}
-            >
-              {ctaLabel}
-            </a>
-          ) : null}
-          {hasCta && !ctaIsExternal ? (
-            <Link
-              to={ctaLink}
-              className={ctaClassName}
-            >
-              {ctaLabel}
-            </Link>
-          ) : null}
+            {hasCta && ctaIsExternal ? (
+              <a
+                href={ctaLink}
+                target="_blank"
+                rel="noreferrer"
+                className={ctaClassName}
+              >
+                {ctaLabel}
+              </a>
+            ) : null}
+            {hasCta && !ctaIsExternal ? (
+              <Link
+                to={ctaLink}
+                className={ctaClassName}
+              >
+                {ctaLabel}
+              </Link>
+            ) : null}
+          </div>
         </div>
 
         {showDots ? (

@@ -179,7 +179,8 @@ const resolveBuyerPaymentStep = (status) => {
   if (code === "PAID") {
     return {
       title: "Payment received",
-      detail: "Seller has approved this payment. The store split is now ready for processing.",
+      detail:
+        "Seller has approved this payment. The store split is now preparing for shipment and waiting for seller packing.",
       tone: "emerald",
       Icon: CheckCircle2,
     };
@@ -437,6 +438,39 @@ function PaymentProgressBar({ progress }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function SummaryMetricCard({
+  eyebrow,
+  value,
+  helper = null,
+  tone = "slate",
+  featured = false,
+}) {
+  const toneClass =
+    tone === "emerald"
+      ? "border-emerald-200 bg-emerald-50"
+      : tone === "sky"
+        ? "border-sky-200 bg-sky-50"
+        : tone === "amber"
+          ? "border-amber-200 bg-amber-50"
+          : "border-slate-200 bg-white/80";
+
+  return (
+    <div
+      className={`rounded-[24px] border px-4 py-4 shadow-sm backdrop-blur ${toneClass} ${
+        featured ? "lg:min-h-[152px]" : ""
+      }`}
+    >
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+        {eyebrow}
+      </p>
+      <p className={`mt-3 font-semibold tracking-tight text-slate-900 ${featured ? "text-3xl" : "text-xl"}`}>
+        {value}
+      </p>
+      {helper ? <p className="mt-2 text-sm leading-6 text-slate-500">{helper}</p> : null}
     </div>
   );
 }
@@ -839,13 +873,17 @@ function PaymentGroupCard({
     readModel.statusMeta?.label ||
     currentStatus;
   const StepIcon = step.Icon;
+  const paymentAmount = payment?.amount || group.totalAmount;
+  const paymentReference = payment?.internalReference || "-";
+  const paymentMerchant = payment?.merchantName || group.merchantName || "-";
+  const paymentAccountLabel = payment?.accountName || group.accountName || "-";
 
   return (
-    <section className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+    <section className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm ring-1 ring-slate-100/80 sm:p-6">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_220px] xl:items-start">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-lg font-semibold text-slate-900">{group.storeName}</h2>
+            <h2 className="text-xl font-semibold tracking-tight text-slate-900">{group.storeName}</h2>
             <PaymentStatusBadge
               status={operationalSummary?.code || group.paymentStatus}
               label={operationalSummary?.label || group.paymentStatusMeta?.label}
@@ -868,7 +906,7 @@ function PaymentGroupCard({
               <ProofReviewBadge status={payment.proof.reviewStatus} prefix="Proof" />
             ) : null}
           </div>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-2 text-sm text-slate-500">
             Suborder {group.suborderNumber || "-"} • Shipment{" "}
             {operationalShipment.statusMeta?.label ||
               operationalShipment.status ||
@@ -880,19 +918,20 @@ function PaymentGroupCard({
           ) : null}
           {group.warning ? <p className="mt-2 text-sm text-amber-700">{group.warning}</p> : null}
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right">
+        <div className="rounded-[24px] border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-4 py-4 text-left shadow-sm xl:text-right">
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
             Store Split Total
           </p>
-          <p className="mt-2 text-xl font-semibold text-slate-900">
-            {formatCurrency(group.totalAmount)}
+          <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+            {formatCurrency(paymentAmount)}
           </p>
+          <p className="mt-2 text-xs text-slate-500">Keep the transfer amount exact for this split.</p>
         </div>
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[1.02fr_0.98fr]">
+      <div className="mt-5 grid gap-5 2xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
         <div className="space-y-4">
-          <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-4">
+          <div className="rounded-[30px] border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-sky-50/40 p-4 sm:p-5">
             <div className="flex items-start gap-3">
               <span
                 className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${stepToneClass(step.tone)}`}
@@ -908,47 +947,56 @@ function PaymentGroupCard({
               </div>
             </div>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
-              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+            <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="rounded-[28px] border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                   Amount to Pay
                 </p>
-                <p className="mt-2 text-3xl font-semibold text-slate-900">
-                  {formatCurrency(payment?.amount || group.totalAmount)}
+                <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+                  {formatCurrency(paymentAmount)}
                 </p>
                 <p className="mt-1 text-sm text-slate-500">
                   Pay exactly this amount for {group.storeName}.
                 </p>
 
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <div className={`rounded-2xl border px-3 py-3 ${expiryMeta.cardClass}`}>
+                <div className="mt-5 grid gap-3 md:grid-cols-2">
+                  <div className={`rounded-[22px] border px-4 py-4 ${expiryMeta.cardClass}`}>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                       Time Remaining
                     </p>
-                    <p className={`mt-2 text-lg font-semibold ${expiryMeta.textClass}`}>{countdown}</p>
+                    <p className={`mt-2 text-2xl font-semibold ${expiryMeta.textClass}`}>{countdown}</p>
                     <p className="mt-1 text-xs text-slate-500">
                       Deadline {formatDateTime(readModel.expiresAt)}
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+                  <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                      Reference
+                      Destination
                     </p>
-                    <p className="mt-2 break-all text-sm font-semibold text-slate-900">
-                      {payment?.internalReference || "-"}
+                    <p className="mt-2 text-base font-semibold text-slate-900">
+                      {payment?.paymentType || group.paymentMethod || "-"}
                     </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {payment?.merchantName || group.merchantName || "-"}
-                    </p>
+                    <p className="mt-1 text-xs text-slate-500">{paymentMerchant}</p>
+                    <p className="mt-1 text-xs text-slate-500">{paymentAccountLabel}</p>
                   </div>
+                </div>
+
+                <div className="mt-3">
+                  <PaymentDetailField
+                    label="Reference"
+                    value={paymentReference}
+                    mono
+                    copyKey={`reference-${payment?.id || group.suborderId}`}
+                    copiedKey={copiedPaymentId}
+                    onCopyValue={onCopyAmount}
+                    helper="Use this reference if you need to match payment and proof review."
+                  />
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() =>
-                      onCopyAmount(payment?.id || group.suborderId, payment?.amount || group.totalAmount)
-                    }
+                    onClick={() => onCopyAmount(payment?.id || group.suborderId, paymentAmount)}
                     className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                   >
                     <Copy className="h-4 w-4" />
@@ -963,8 +1011,8 @@ function PaymentGroupCard({
                           onOpenQrPreview({
                             paymentId: payment.id,
                             storeName: group.storeName,
-                            amount: payment.amount || group.totalAmount,
-                            reference: payment.internalReference || "-",
+                            amount: paymentAmount,
+                            reference: paymentReference,
                             qrImageUrl: payment.qrImageUrl,
                           })
                         }
@@ -1011,8 +1059,8 @@ function PaymentGroupCard({
                         onOpenCancel({
                           paymentId: payment.id,
                           storeName: group.storeName,
-                          amount: payment.amount || group.totalAmount,
-                          reference: payment.internalReference || "-",
+                          amount: paymentAmount,
+                          reference: paymentReference,
                         })
                       }
                       className="inline-flex h-11 items-center justify-center rounded-full border border-rose-200 px-5 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
@@ -1027,13 +1075,13 @@ function PaymentGroupCard({
                 ) : null}
 
                 {expiryMeta.message ? (
-                  <div className={`mt-3 rounded-2xl border px-4 py-3 text-sm ${expiryMeta.cardClass} ${expiryMeta.textClass}`}>
+                  <div className={`mt-3 rounded-[22px] border px-4 py-3 text-sm ${expiryMeta.cardClass} ${expiryMeta.textClass}`}>
                     {expiryMeta.message}
                   </div>
                 ) : null}
               </div>
 
-              <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white">
+              <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
                 {payment?.qrImageUrl ? (
                   <button
                     type="button"
@@ -1041,17 +1089,17 @@ function PaymentGroupCard({
                       onOpenQrPreview({
                         paymentId: payment.id,
                         storeName: group.storeName,
-                        amount: payment.amount || group.totalAmount,
-                        reference: payment.internalReference || "-",
+                        amount: paymentAmount,
+                        reference: paymentReference,
                         qrImageUrl: payment.qrImageUrl,
                       })
                     }
-                    className="block w-full bg-slate-50 p-4 transition hover:bg-slate-100"
+                    className="block w-full bg-gradient-to-br from-slate-50 to-white p-5 transition hover:bg-slate-50"
                   >
                     <img
                       src={payment.qrImageUrl}
                       alt={`QRIS ${group.storeName}`}
-                      className="mx-auto max-h-64 w-full object-contain"
+                      className="mx-auto max-h-72 w-full object-contain"
                     />
                     <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">
                       <Expand className="h-3.5 w-3.5" />
@@ -1070,7 +1118,7 @@ function PaymentGroupCard({
               <PaymentProgressBar progress={progress} />
             </div>
 
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-600">
+            <div className="mt-4 rounded-[24px] border border-slate-200 bg-white px-4 py-4 text-sm leading-6 text-slate-600 shadow-sm">
               {payment?.instructionText ||
                 group.paymentInstruction ||
                 "Use this QRIS destination for the matching store only, then submit proof from the same payment card."}
@@ -1078,13 +1126,13 @@ function PaymentGroupCard({
           </div>
         </div>
         <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Items</p>
             <div className="mt-3 space-y-3">
               {group.items.map((item) => (
                 <div
                   key={`${group.suborderId || group.storeId}-${item.productId}`}
-                  className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm"
+                  className="flex items-center justify-between gap-3 rounded-[22px] border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm"
                 >
                   <div>
                     <p className="font-semibold text-slate-900">{item.productName}</p>
@@ -1099,62 +1147,52 @@ function PaymentGroupCard({
           </div>
 
           <div className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Subtotal</p>
               <p className="mt-1 text-sm font-semibold text-slate-900">
                 {formatCurrency(group.subtotalAmount)}
               </p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Shipping</p>
               <p className="mt-1 text-sm font-semibold text-slate-900">
                 {formatCurrency(group.shippingAmount)}
               </p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Payment Amount
               </p>
               <p className="mt-1 text-sm font-semibold text-slate-900">
-                {formatCurrency(payment?.amount || group.totalAmount)}
+                {formatCurrency(paymentAmount)}
               </p>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Payment Details
             </p>
-            <div className="mt-3 space-y-2 text-sm text-slate-600">
-              <div className="flex items-start justify-between gap-3">
-                <span>Reference</span>
-                <span className="max-w-[16rem] break-all text-right font-medium text-slate-900">
-                  {payment?.internalReference || "-"}
-                </span>
-              </div>
-              <div className="flex items-start justify-between gap-3">
-                <span>Type</span>
-                <span className="text-right font-medium text-slate-900">
-                  {payment?.paymentType || group.paymentMethod || "-"}
-                </span>
-              </div>
-              <div className="flex items-start justify-between gap-3">
-                <span>Merchant</span>
-                <span className="text-right font-medium text-slate-900">
-                  {payment?.merchantName || group.merchantName || "-"}
-                </span>
-              </div>
-              <div className="flex items-start justify-between gap-3">
-                <span>Account Label</span>
-                <span className="text-right font-medium text-slate-900">
-                  {payment?.accountName || group.accountName || "-"}
-                </span>
-              </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <PaymentDetailField
+                label="Reference"
+                value={paymentReference}
+                mono
+                copyKey={`sidebar-reference-${payment?.id || group.suborderId}`}
+                copiedKey={copiedPaymentId}
+                onCopyValue={onCopyAmount}
+              />
+              <PaymentDetailField
+                label="Type"
+                value={payment?.paymentType || group.paymentMethod || "-"}
+              />
+              <PaymentDetailField label="Merchant" value={paymentMerchant} />
+              <PaymentDetailField label="Account Label" value={paymentAccountLabel} />
             </div>
           </div>
 
           {payment?.proof ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+            <div className="rounded-[28px] border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
               <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
                 Submitted Proof
               </p>
@@ -1198,32 +1236,32 @@ function PaymentGroupCard({
           ) : null}
 
           {!payment?.id ? (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <div className="rounded-[24px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               Payment record is not available for this group yet.
             </div>
           ) : null}
 
           {payment?.id && canSubmitProof && !isProofIntentActive ? (
-            <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+            <div className="rounded-[24px] border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
               Finish the transfer for <span className="font-semibold">{group.storeName}</span>, then tap{" "}
               <span className="font-semibold">I have transferred</span> to open the confirmation form.
             </div>
           ) : null}
 
           {payment?.id && operationalSummary?.code === "EXPIRED" ? (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <div className="rounded-[24px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
               The payment deadline for this store has expired. New proof submission is blocked.
             </div>
           ) : null}
 
           {payment?.id && operationalSummary?.code === "FAILED" ? (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <div className="rounded-[24px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
               This transaction is already closed by the latest backend payment state. Transfer and proof actions are no longer available for this store split.
             </div>
           ) : null}
 
           {payment?.id && operationalSummary?.code === "CANCELLED" ? (
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
               This transaction was cancelled. Transfer and proof actions are no longer available for this payment.
             </div>
           ) : null}
@@ -1234,7 +1272,7 @@ function PaymentGroupCard({
           operationalSummary?.code !== "EXPIRED" &&
           operationalSummary?.code !== "FAILED" &&
           operationalSummary?.code !== "CANCELLED" ? (
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
               {submitProofAction?.reason ||
                 operationalSummary?.description ||
                 operationalBridge.shipmentBlockedReason ||
@@ -1351,8 +1389,8 @@ export default function AccountOrderPaymentPage() {
   const handleSubmitProof = async (paymentId, payload) =>
     proofMutation.mutateAsync({ paymentId, payload });
 
-  const handleCopyAmount = async (paymentId, amount) => {
-    const ok = await copyText(String(Number(amount || 0)));
+  const handleCopyAmount = async (paymentId, value) => {
+    const ok = await copyText(String(value ?? "").trim());
     setCopiedPaymentId(ok ? paymentId : null);
     if (ok) {
       window.setTimeout(() => {
@@ -1463,85 +1501,86 @@ export default function AccountOrderPaymentPage() {
       ) : null}
 
       <section className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-          <div className="max-w-2xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-              Order Payment
-            </p>
-            <h1 className="mt-2 text-2xl font-bold text-slate-900 sm:text-3xl">
-              {order.invoiceNo || order.ref}
-            </h1>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <CheckoutModeBadge mode={order.checkoutMode} />
-              <PaymentStatusBadge
-                status={order.paymentStatus}
-                label={order.paymentStatusMeta?.label}
-                tone={order.paymentStatusMeta?.tone}
-                prefix="Parent"
+        <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-emerald-50/50 p-5 shadow-sm sm:p-6">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)] xl:items-start">
+            <div className="max-w-3xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                Order Payment
+              </p>
+              <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
+                {order.invoiceNo || order.ref}
+              </h1>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <CheckoutModeBadge mode={order.checkoutMode} />
+                <PaymentStatusBadge
+                  status={order.paymentStatus}
+                  label={order.paymentStatusMeta?.label}
+                  tone={order.paymentStatusMeta?.tone}
+                  prefix="Parent"
+                />
+              </div>
+              <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-600 sm:text-[15px]">
+                {order.checkoutMode === "MULTI_STORE"
+                  ? "This order is split by store. Pay each store total from its own panel so seller review, shipment readiness, and proof tracking stay aligned."
+                  : "Use the store payment panel below to pay the exact amount, then submit proof from the same section."}
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <SummaryMetricCard
+                eyebrow="Grand Total"
+                value={formatCurrency(order.summary.grandTotal)}
+                helper="Total buyer obligation for this order."
+                tone="emerald"
+                featured
+              />
+              <SummaryMetricCard
+                eyebrow="Open Payment Deadline"
+                value={
+                  groupedStats.earliestOpenExpiresAt
+                    ? formatCountdown(groupedStats.earliestOpenExpiresAt, now)
+                    : "No open payment"
+                }
+                helper={
+                  groupedStats.earliestOpenExpiresAt
+                    ? formatDateTime(groupedStats.earliestOpenExpiresAt)
+                    : "All store splits are already closed, confirmed, or waiting review."
+                }
+                tone={groupedStats.earliestOpenExpiresAt ? "sky" : "slate"}
+              />
+              <SummaryMetricCard
+                eyebrow="Store Groups"
+                value={String(groups.length)}
+                helper={groupedStats.summaryText}
+              />
+              <SummaryMetricCard
+                eyebrow="Order Created"
+                value={formatDateTime(order.createdAt)}
+                helper="Latest parent order timestamp."
               />
             </div>
-            <p className="mt-4 max-w-xl text-sm leading-6 text-slate-600">
-              {order.checkoutMode === "MULTI_STORE"
-                ? "This order is split by store. Pay each store total from its own panel so seller review and status tracking stay consistent."
-                : "Pay the exact store amount below, then continue with proof submission from the same panel."}
-            </p>
           </div>
-          <div className="grid w-full gap-3 sm:grid-cols-3 lg:max-w-xl">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                Grand Total
-              </p>
-              <p className="mt-2 text-lg font-semibold text-slate-900">
-                {formatCurrency(order.summary.grandTotal)}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                Open Payment Deadline
-              </p>
-              <p className="mt-2 text-lg font-semibold text-slate-900">
-                {groupedStats.earliestOpenExpiresAt
-                  ? formatCountdown(groupedStats.earliestOpenExpiresAt, now)
-                  : "No open payment"}
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                {groupedStats.earliestOpenExpiresAt
-                  ? formatDateTime(groupedStats.earliestOpenExpiresAt)
-                  : "All store splits are already closed, confirmed, or waiting review."}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                Store Groups
-              </p>
-              <p className="mt-2 text-lg font-semibold text-slate-900">{groups.length}</p>
-              <p className="mt-1 text-xs text-slate-500">
-                {groupedStats.summaryText}
-              </p>
-            </div>
-          </div>
-        </div>
 
-        <div className="mt-5 grid gap-3 md:grid-cols-4">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Items</p>
-            <p className="mt-1 text-sm font-semibold text-slate-900">{order.summary.totalItems}</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Subtotal</p>
-            <p className="mt-1 text-sm font-semibold text-slate-900">
-              {formatCurrency(order.summary.subtotalAmount)}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Shipping</p>
-            <p className="mt-1 text-sm font-semibold text-slate-900">
-              {formatCurrency(order.summary.shippingAmount)}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Created</p>
-            <p className="mt-1 text-sm font-semibold text-slate-900">{formatDateTime(order.createdAt)}</p>
+          <div className="mt-5 grid gap-3 md:grid-cols-4">
+            <div className="rounded-[22px] border border-slate-200 bg-white/80 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Items</p>
+              <p className="mt-1 text-sm font-semibold text-slate-900">{order.summary.totalItems}</p>
+            </div>
+            <div className="rounded-[22px] border border-slate-200 bg-white/80 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Subtotal</p>
+              <p className="mt-1 text-sm font-semibold text-slate-900">
+                {formatCurrency(order.summary.subtotalAmount)}
+              </p>
+            </div>
+            <div className="rounded-[22px] border border-slate-200 bg-white/80 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Shipping</p>
+              <p className="mt-1 text-sm font-semibold text-slate-900">
+                {formatCurrency(order.summary.shippingAmount)}
+              </p>
+            </div>
+            <div className="rounded-[22px] border border-slate-200 bg-white/80 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Created</p>
+              <p className="mt-1 text-sm font-semibold text-slate-900">{formatDateTime(order.createdAt)}</p>
+            </div>
           </div>
         </div>
       </section>

@@ -214,8 +214,18 @@ export default function SellerStoreProfilePage() {
             hint:
               "Seller-managed store summary. This now feeds public store identity and the fallback body for microsite rich-about when customization content is empty.",
           },
-          { key: "logoUrl", label: "Logo URL", type: "url" },
-          { key: "bannerUrl", label: "Banner URL", type: "url" },
+          {
+            key: "logoUrl",
+            label: "Logo URL",
+            type: "text",
+            hint: "Accepts uploaded `/uploads/...` paths from Profile Image or an absolute image URL.",
+          },
+          {
+            key: "bannerUrl",
+            label: "Banner URL",
+            type: "text",
+            hint: "Accepts uploaded `/uploads/...` paths or an absolute image URL.",
+          },
         ],
       },
       {
