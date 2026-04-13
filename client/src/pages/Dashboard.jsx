@@ -239,16 +239,6 @@ export default function Dashboard() {
     toast("Not implemented yet");
   };
 
-  const breakdowns = useMemo(() => {
-    if (summary?.today || summary?.yesterday) {
-      return {
-        today: { byMethod: summary?.today?.byMethod || {} },
-        yesterday: { byMethod: summary?.yesterday?.byMethod || {} },
-      };
-    }
-    return {};
-  }, [summary]);
-
   const kpiItems = useMemo(() => {
     const todayTotal = Number(summary?.today?.total) || 0;
     const yesterdayTotal = Number(summary?.yesterday?.total) || 0;
@@ -323,11 +313,16 @@ export default function Dashboard() {
     });
   }, [recentOrders, formatDateTime, formatMoney]);
   return (
-    <div className="dashboard">
+    <div className="dashboard dashboard--admin">
+      <section className="dashboard-shell-header">
+        <div className="dashboard-shell-header__copy">
+          <h1>Dashboard Overview</h1>
+        </div>
+      </section>
+
       <KPIOverviewCards
         items={isLoadingSummary || summaryError ? statCards : kpiItems}
         labelMap={statLabelMap}
-        breakdowns={breakdowns}
         formatMoney={formatMoney}
       />
 
@@ -336,6 +331,7 @@ export default function Dashboard() {
         labelMap={statusLabelMap}
         pendingAmount={pendingAmountValue}
         formatMoney={formatMoney}
+        iconStyle="admin-acuan"
       />
 
       <div className="dashboard-charts">

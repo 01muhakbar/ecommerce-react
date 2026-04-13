@@ -5,6 +5,9 @@ const EMPTY_BRANDING = {
   clientLogoUrl: "",
   adminLogoUrl: "",
   sellerLogoUrl: "",
+  adminLoginHeroUrl: "",
+  adminForgotPasswordHeroUrl: "",
+  adminCreateAccountHeroUrl: "",
   workspaceBrandName: "TP PRENEURS",
 };
 

@@ -15,12 +15,15 @@ import {
   TicketPercent,
   WalletCards,
 } from "lucide-react";
+import KPIOverviewCards from "../../components/dashboard/KPIOverviewCards.jsx";
+import OrderStatusCards from "../../components/dashboard/OrderStatusCards.jsx";
 import {
   getSellerAnalyticsSummary,
   getSellerFinanceSummary,
   getSellerWorkspaceReadiness,
 } from "../../api/sellerWorkspace.ts";
 import { getSellerProductAuthoringMeta } from "../../api/sellerProducts.ts";
+import { getSellerSuborders } from "../../api/sellerOrders.ts";
 import {
   SellerWorkspaceBadge,
   SellerWorkspaceDetailItem,
@@ -33,14 +36,39 @@ import {
 import { formatCurrency } from "../../utils/format.js";
 import { useSellerWorkspaceRoute } from "../../utils/sellerWorkspaceRoute.js";
 import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
+import "../Dashboard.css";
+import WeeklySalesCard from "../../components/dashboard/WeeklySalesCard.jsx";
+import BestSellingCard from "../../components/dashboard/BestSellingCard.jsx";
 
 const joinClassNames = (...items) => items.filter(Boolean).join(" ");
+const SELLER_WEEKLY_WINDOW_DAYS = 7;
+const SELLER_WEEKLY_QUERY_LIMIT = 200;
+const SELLER_PAID_PAYMENT_CODES = new Set(["PAID"]);
+const SELLER_SHORT_DAY_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+});
 
 const heroPrimaryButtonClass =
   "inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-white px-3.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-100";
 
 const heroSecondaryButtonClass =
   "inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-3.5 text-sm font-semibold text-white transition hover:bg-white/15";
+
+const SELLER_OVERVIEW_LABEL_MAP = {
+  today: "Paid Revenue",
+  yesterday: "Eligible Paid Gross",
+  "this-month": "Completed Revenue",
+  "last-month": "In-Flight Revenue",
+  "all-time": "Average Order Value",
+};
+
+const SELLER_OVERVIEW_STATUS_LABEL_MAP = {
+  total: "Total Orders",
+  pending: "Awaiting Review",
+  processing: "Processing / Shipped",
+  completed: "Orders Delivered",
+};
 
 const priorityToneClass = (tone) =>
   tone === "emerald"
@@ -61,6 +89,68 @@ const routeByLane = (workspaceRoutes, lane) => {
   if (lane === "COUPONS") return workspaceRoutes.coupons();
   if (lane === "STORE_PROFILE") return workspaceRoutes.storeProfile();
   return workspaceRoutes.home();
+};
+
+const toDateKey = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const normalized = new Date(date);
+  normalized.setHours(0, 0, 0, 0);
+  return normalized.toISOString().slice(0, 10);
+};
+
+const getRecentDayBuckets = (days = SELLER_WEEKLY_WINDOW_DAYS) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return Array.from({ length: days }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() - (days - 1 - index));
+    return {
+      key: date.toISOString().slice(0, 10),
+      label: SELLER_SHORT_DAY_FORMATTER.format(date),
+    };
+  });
+};
+
+const buildSellerWeeklyTrendSeries = (items = []) => {
+  const buckets = getRecentDayBuckets();
+  const salesByDay = new Map(buckets.map((bucket) => [bucket.key, 0]));
+  const ordersByDay = new Map(buckets.map((bucket) => [bucket.key, 0]));
+
+  items.forEach((item) => {
+    const createdKey = toDateKey(item?.createdAt || item?.order?.createdAt);
+    if (createdKey && ordersByDay.has(createdKey)) {
+      ordersByDay.set(createdKey, Number(ordersByDay.get(createdKey) || 0) + 1);
+    }
+
+    const paymentCode = String(item?.paymentSummary?.status || item?.paymentStatus || "")
+      .trim()
+      .toUpperCase();
+    if (!SELLER_PAID_PAYMENT_CODES.has(paymentCode)) return;
+
+    const paidKey = toDateKey(item?.paymentSummary?.paidAt || item?.paidAt || item?.createdAt);
+    if (paidKey && salesByDay.has(paidKey)) {
+      salesByDay.set(
+        paidKey,
+        Number(salesByDay.get(paidKey) || 0) + Number(item?.totalAmount || 0)
+      );
+    }
+  });
+
+  return {
+    sales: buckets.map((bucket) => ({
+      name: bucket.key,
+      label: bucket.label,
+      value: Number(salesByDay.get(bucket.key) || 0),
+    })),
+    orders: buckets.map((bucket) => ({
+      name: bucket.key,
+      label: bucket.label,
+      value: Number(ordersByDay.get(bucket.key) || 0),
+    })),
+  };
 };
 
 const getRoleFocusLabel = ({
@@ -378,6 +468,17 @@ export default function SellerWorkspaceHome() {
     retry: false,
   });
 
+  const weeklySalesQuery = useQuery({
+    queryKey: ["seller", "workspace", "weekly-sales-panel", storeId],
+    queryFn: () =>
+      getSellerSuborders(storeId, {
+        page: 1,
+        limit: SELLER_WEEKLY_QUERY_LIMIT,
+      }),
+    enabled: Boolean(storeId) && canViewOrders,
+    retry: false,
+  });
+
   const productAuthoringQuery = useQuery({
     queryKey: ["seller", "workspace", "product-authoring-meta", storeId],
     queryFn: () => getSellerProductAuthoringMeta(storeId),
@@ -435,6 +536,7 @@ export default function SellerWorkspaceHome() {
   const analyticsInsights = Array.isArray(analytics?.insights) ? analytics.insights : [];
   const couponAttributionReadiness = analytics?.couponAttributionReadiness;
   const backendActions = Array.isArray(summary?.nextActions) ? summary.nextActions : [];
+  const weeklyPanelItems = Array.isArray(weeklySalesQuery.data?.items) ? weeklySalesQuery.data.items : [];
   const primaryFocus = getPrimaryFocus({
     canViewOrders,
     canViewPaymentReview,
@@ -510,6 +612,178 @@ export default function SellerWorkspaceHome() {
     workspaceRoutes,
   ]);
 
+  const sellerOverviewPrimaryItems = useMemo(
+    () => [
+      {
+        id: "today",
+        label: "Paid Revenue",
+        variant: "teal",
+        icon: WalletCards,
+        value: analyticsRevenueSnapshot?.paidGrossAmount || 0,
+        displayValue: analyticsQuery.isLoading
+          ? "..."
+          : analyticsQuery.isError
+            ? "Unavailable"
+            : analyticsRevenueSnapshot?.visible
+              ? undefined
+              : "Limited",
+      },
+      {
+        id: "yesterday",
+        label: "Eligible Paid Gross",
+        variant: "orange",
+        icon: CreditCard,
+        value: eligiblePaidSummary?.grossAmount || 0,
+        displayValue: analyticsQuery.isLoading
+          ? "..."
+          : eligiblePaidSummary?.visible
+            ? undefined
+            : canViewOrders
+              ? formatCurrency(eligiblePaidSummary?.grossAmount || 0)
+              : "Limited",
+      },
+      {
+        id: "this-month",
+        label: "Completed Revenue",
+        variant: "blue",
+        icon: BadgeCheck,
+        value: analyticsRevenueSnapshot?.completedGrossAmount || 0,
+        displayValue: analyticsQuery.isLoading
+          ? "..."
+          : analyticsQuery.isError
+            ? "Unavailable"
+            : analyticsRevenueSnapshot?.visible
+              ? undefined
+              : "Limited",
+      },
+      {
+        id: "last-month",
+        label: "In-Flight Revenue",
+        variant: "teal-light",
+        icon: ShoppingBag,
+        value: analyticsRevenueSnapshot?.processingGrossAmount || 0,
+        displayValue: analyticsQuery.isLoading
+          ? "..."
+          : analyticsQuery.isError
+            ? "Unavailable"
+            : analyticsRevenueSnapshot?.visible
+              ? undefined
+              : "Limited",
+      },
+      {
+        id: "all-time",
+        label: "Average Order Value",
+        variant: "green",
+        icon: BarChart3,
+        value: analyticsRevenueSnapshot?.averageOrderValue || 0,
+        displayValue: analyticsQuery.isLoading
+          ? "..."
+          : analyticsQuery.isError
+            ? "Unavailable"
+            : analyticsRevenueSnapshot?.visible
+              ? undefined
+              : "Limited",
+      },
+    ],
+    [
+      analyticsQuery.isError,
+      analyticsQuery.isLoading,
+      analyticsRevenueSnapshot,
+      canViewOrders,
+      eligiblePaidSummary,
+    ]
+  );
+
+  const sellerOverviewStatusItems = useMemo(
+    () => [
+      {
+        id: "total",
+        label: "Total Orders",
+        count: analyticsQuery.isLoading
+          ? "..."
+          : analyticsQuery.isError
+            ? "—"
+            : analyticsOrderSnapshot?.visible
+              ? String(analyticsOrderSnapshot.totalOrders || 0)
+              : "—",
+      },
+      {
+        id: "pending",
+        label: "Awaiting Review",
+        count: financeSummaryQuery.isLoading
+          ? "..."
+          : canViewPaymentReview
+            ? String(paymentReviewCounts?.awaitingReview || 0)
+            : "—",
+      },
+      {
+        id: "processing",
+        label: "Processing / Shipped",
+        count: analyticsQuery.isLoading
+          ? "..."
+          : analyticsQuery.isError
+            ? "—"
+            : analyticsOrderSnapshot?.visible
+              ? String(analyticsOrderSnapshot.processingOrders || 0)
+              : "—",
+      },
+      {
+        id: "completed",
+        label: "Orders Delivered",
+        count: analyticsQuery.isLoading
+          ? "..."
+          : analyticsQuery.isError
+            ? "—"
+            : analyticsOrderSnapshot?.visible
+              ? String(analyticsOrderSnapshot.completedOrders || 0)
+              : "—",
+      },
+    ],
+    [
+      analyticsOrderSnapshot,
+      analyticsQuery.isError,
+      analyticsQuery.isLoading,
+      canViewPaymentReview,
+      financeSummaryQuery.isLoading,
+      paymentReviewCounts,
+    ]
+  );
+
+  const sellerWeeklySeries = useMemo(
+    () => buildSellerWeeklyTrendSeries(weeklyPanelItems),
+    [weeklyPanelItems]
+  );
+
+  const sellerBestSellingItems = useMemo(
+    () =>
+      analyticsProductSnapshot?.visible
+        ? (analyticsProductSnapshot.topProducts || []).slice(0, 5).map((product) => ({
+            name: product.name || `Product #${product.productId || "-"}`,
+            value: Number(product.qtySold || 0),
+            revenue: Number(product.revenueAmount || 0),
+          }))
+        : [],
+    [analyticsProductSnapshot]
+  );
+
+  const sellerWeeklySalesError = !canViewOrders
+    ? "Weekly sales follow seller order visibility."
+    : weeklySalesQuery.isError
+      ? getSellerRequestErrorMessage(weeklySalesQuery.error, {
+          permissionMessage: "Weekly sales are outside the current seller role.",
+          fallbackMessage: "Failed to load weekly sales.",
+        })
+      : "";
+
+  const sellerBestSellingError = analyticsQuery.isError
+    ? getSellerRequestErrorMessage(analyticsQuery.error, {
+        permissionMessage: "Best selling products are outside the current seller role.",
+        fallbackMessage: "Failed to load best selling products.",
+      })
+    : !analyticsProductSnapshot?.visible
+      ? "Best selling products follow seller catalog visibility."
+      : "";
+
   if (!canViewStore) {
     return (
       <SellerWorkspaceStatePanel
@@ -555,6 +829,41 @@ export default function SellerWorkspaceHome() {
 
   return (
     <div className="space-y-5">
+      <section className="dashboard dashboard--seller">
+        <div className="dashboard-shell-header">
+          <div className="dashboard-shell-header__copy">
+            <h1>Dashboard Overview</h1>
+          </div>
+        </div>
+
+        <KPIOverviewCards
+          items={sellerOverviewPrimaryItems}
+          labelMap={SELLER_OVERVIEW_LABEL_MAP}
+          formatMoney={formatCurrency}
+        />
+
+        <OrderStatusCards
+          items={sellerOverviewStatusItems}
+          labelMap={SELLER_OVERVIEW_STATUS_LABEL_MAP}
+          iconStyle="admin-acuan"
+        />
+      </section>
+
+      <section className="dashboard-charts seller-analytics-panels">
+        <WeeklySalesCard
+          salesData={sellerWeeklySeries.sales}
+          ordersData={sellerWeeklySeries.orders}
+          isLoading={weeklySalesQuery.isLoading}
+          error={sellerWeeklySalesError}
+          formatMoney={formatCurrency}
+        />
+        <BestSellingCard
+          items={sellerBestSellingItems}
+          isLoading={analyticsQuery.isLoading}
+          error={sellerBestSellingError}
+        />
+      </section>
+
       <section className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
         <SellerWorkspacePanel className="overflow-hidden border-slate-900 bg-[linear-gradient(135deg,#0f172a_0%,#111827_52%,#164e63_100%)] px-4 py-4 text-white sm:px-5">
           <div className="flex h-full flex-col justify-between gap-5">
@@ -809,77 +1118,6 @@ export default function SellerWorkspaceHome() {
             })}
           </div>
         </SellerWorkspaceSectionCard>
-      </section>
-
-      <section className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-4">
-        <SellerWorkspaceStatCard
-          label="Payment Setup"
-          value={
-            paymentChecklist
-              ? paymentChecklist.status?.label
-              : paymentReadiness?.visible
-                ? paymentReadiness.label
-                : canViewPaymentProfile
-                  ? "Not ready"
-                  : "Role limited"
-          }
-          hint={
-            paymentChecklist
-              ? paymentChecklist.status?.description
-              : canViewPaymentProfile
-                ? paymentReadiness?.visible
-                  ? paymentReadiness.description
-                  : "Payment setup details are limited to finance-capable roles."
-              : "Payment setup details are limited to finance-capable roles."
-          }
-          Icon={CreditCard}
-          tone={paymentChecklist?.status?.tone || (paymentReadiness?.visible ? paymentReadiness.tone : "stone")}
-        />
-        <SellerWorkspaceStatCard
-          label="Awaiting Review"
-          value={String(paymentReviewCounts?.awaitingReview || 0)}
-          hint={
-            canViewPaymentReview
-              ? paymentReviewCounts?.hint ||
-                ((paymentReviewCounts?.awaitingReview || 0) > 0
-                  ? "Buyer payment proofs still need review."
-                  : "Nothing is waiting for payment review right now.")
-              : "Payment review counts are not part of this role."
-          }
-          Icon={BadgeCheck}
-          tone={(paymentReviewCounts?.awaitingReview || 0) > 0 ? "amber" : "stone"}
-        />
-        <SellerWorkspaceStatCard
-          label="Paid Store Splits"
-          value={String(suborderSummary?.paidCount || 0)}
-          hint={
-            canViewOrders
-              ? suborderSummary?.hint ||
-                "Store-owned suborders already marked as paid. Exception counts stay outside this snapshot."
-              : "Order payment signals are not part of this role."
-          }
-          Icon={ShoppingBag}
-          tone={
-            (suborderSummary?.exceptionCount || 0) > 0
-              ? "amber"
-              : (suborderSummary?.paidCount || 0) > 0
-                ? "sky"
-                : "stone"
-          }
-        />
-        <SellerWorkspaceStatCard
-          label="Eligible Paid Gross"
-          value={formatCurrency(eligiblePaidSummary?.grossAmount || 0)}
-          hint={
-            canViewOrders
-              ? eligiblePaidSummary?.boundaryNote ||
-                eligiblePaidSummary?.hint ||
-                "A quick paid-order snapshot, not a payout total."
-              : "This estimate only appears for roles with order visibility."
-          }
-          Icon={WalletCards}
-          tone={(eligiblePaidSummary?.count || 0) > 0 ? "sky" : "stone"}
-        />
       </section>
 
       <section className="space-y-5">

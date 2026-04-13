@@ -7,6 +7,10 @@ import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { Op } from "sequelize";
 import { config as loadEnv } from "dotenv";
+import {
+  getSplitOperationalPayment,
+  getSplitOperationalStatusSummary,
+} from "../../client/src/utils/splitOperationalTruth.ts";
 
 const APP_HOST = "127.0.0.1";
 const API_PORT = Number(
@@ -511,7 +515,8 @@ function stripCheckoutPreviewMeta(preview: any) {
 
 function getSellerStatusLabel(detail: any) {
   return String(
-    detail?.contract?.statusSummary?.label ||
+    getSplitOperationalStatusSummary(detail)?.label ||
+      detail?.contract?.statusSummary?.label ||
       detail?.readModel?.primaryStatus?.label ||
       detail?.fulfillmentStatusMeta?.label ||
       detail?.fulfillmentStatus ||
@@ -521,7 +526,8 @@ function getSellerStatusLabel(detail: any) {
 
 function getSellerPaymentLabel(detail: any) {
   return String(
-    detail?.contract?.paymentStatusMeta?.label ||
+    getSplitOperationalPayment(detail)?.statusMeta?.label ||
+      detail?.contract?.paymentStatusMeta?.label ||
       detail?.readModel?.paymentState?.label ||
       detail?.paymentStatusMeta?.label ||
       detail?.paymentStatus ||
@@ -933,8 +939,8 @@ async function runScenario(browser: any) {
     );
     await waitForAllTexts(sellerPage, [
       expectedSuborderNumber,
-      `Store split ${expectedSellerPaymentLabel}`,
-      `Seller ${expectedSellerStatusLabel}`,
+      `Payment ${expectedSellerPaymentLabel}`,
+      `Operational ${expectedSellerStatusLabel}`,
       "Persisted shipment truth for this store split.",
       "Persisted shipment",
     ]);

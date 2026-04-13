@@ -12,6 +12,7 @@ import {
   getWorkspaceLogoUrl,
   hasCustomBrandingLogo,
 } from "../lib/branding.js";
+import adminLoginHero from "../assets/admin-login-hero.jpg";
 
 const DEFAULT_SETTINGS = {
   imagesPerProduct: "12",
@@ -46,6 +47,9 @@ const DEFAULT_BRANDING_SETTINGS = {
   clientLogoUrl: "",
   adminLogoUrl: "",
   sellerLogoUrl: "",
+  adminLoginHeroUrl: "",
+  adminForgotPasswordHeroUrl: "",
+  adminCreateAccountHeroUrl: "",
   workspaceBrandName: "TP PRENEURS",
 };
 
@@ -56,22 +60,55 @@ const BRANDING_ITEMS = [
     key: "client",
     field: "clientLogoUrl",
     label: "Client Logo",
-    helper: "Digunakan di storefront.",
+    helper: "Logo untuk area toko yang dilihat pelanggan.",
     previewClass: "aspect-[3.4/1] rounded-2xl",
+    previewImageClass: "object-contain",
+    assetType: "logo",
   },
   {
     key: "admin",
     field: "adminLogoUrl",
     label: "Admin Logo",
-    helper: "Digunakan di Admin Workspace.",
+    helper: "Logo utama untuk area Admin Workspace.",
     previewClass: "aspect-square rounded-2xl",
+    previewImageClass: "object-contain",
+    assetType: "logo",
   },
   {
     key: "seller",
     field: "sellerLogoUrl",
     label: "Seller Logo",
-    helper: "Digunakan di Seller Workspace.",
+    helper: "Logo utama untuk area Seller Workspace.",
     previewClass: "aspect-square rounded-2xl",
+    previewImageClass: "object-contain",
+    assetType: "logo",
+  },
+  {
+    key: "admin-login-hero",
+    field: "adminLoginHeroUrl",
+    label: "Admin Login Hero",
+    helper: "Gambar besar di sisi kiri halaman login admin.",
+    previewClass: "aspect-[4/5] rounded-2xl",
+    previewImageClass: "object-cover",
+    assetType: "hero",
+  },
+  {
+    key: "admin-forgot-password-hero",
+    field: "adminForgotPasswordHeroUrl",
+    label: "Forgot Password Hero",
+    helper: "Gambar besar di sisi kiri halaman lupa password admin.",
+    previewClass: "aspect-[4/5] rounded-2xl",
+    previewImageClass: "object-cover",
+    assetType: "hero",
+  },
+  {
+    key: "admin-create-account-hero",
+    field: "adminCreateAccountHeroUrl",
+    label: "Create Account Hero",
+    helper: "Gambar besar di sisi kiri halaman buat akun admin.",
+    previewClass: "aspect-[4/5] rounded-2xl",
+    previewImageClass: "object-cover",
+    assetType: "hero",
   },
 ];
 
@@ -193,6 +230,9 @@ const normalizeBrandingSettings = (settings) => {
     clientLogoUrl: toStringValue(branding.clientLogoUrl),
     adminLogoUrl: toStringValue(branding.adminLogoUrl),
     sellerLogoUrl: toStringValue(branding.sellerLogoUrl),
+    adminLoginHeroUrl: toStringValue(branding.adminLoginHeroUrl),
+    adminForgotPasswordHeroUrl: toStringValue(branding.adminForgotPasswordHeroUrl),
+    adminCreateAccountHeroUrl: toStringValue(branding.adminCreateAccountHeroUrl),
     workspaceBrandName: toStringValue(
       branding.workspaceBrandName,
       DEFAULT_BRANDING_SETTINGS.workspaceBrandName
@@ -270,7 +310,9 @@ function BrandingCard({
 }) {
   const hasCustomLogo = hasCustomBrandingLogo(logoUrl);
   const previewSrc =
-    item.key === "client"
+    item.assetType === "hero"
+      ? resolveAssetUrl(logoUrl) || adminLoginHero
+      : item.key === "client"
       ? resolveAssetUrl(logoUrl)
       : getWorkspaceLogoUrl(item.key, logoUrl);
 
@@ -279,7 +321,6 @@ function BrandingCard({
       <div className="flex flex-col gap-4">
         <div>
           <p className="text-sm font-semibold text-slate-800">{item.label}</p>
-          <p className="mt-1 text-xs leading-5 text-slate-500">{item.helper}</p>
         </div>
 
         <div
@@ -289,7 +330,7 @@ function BrandingCard({
             <img
               src={previewSrc}
               alt={`${item.label} preview`}
-              className="h-full w-full object-contain"
+              className={`h-full w-full ${item.previewImageClass || "object-contain"}`}
             />
           ) : (
             <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
@@ -299,9 +340,6 @@ function BrandingCard({
         </div>
 
         <div className="space-y-2">
-          <p className="text-xs text-slate-500">
-            {hasCustomLogo ? "Current source: custom upload" : "Current source: fallback"}
-          </p>
           <label className="inline-flex h-10 cursor-pointer items-center justify-center rounded-lg border border-emerald-200 bg-white px-4 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50">
             <input
               type="file"
@@ -310,7 +348,15 @@ function BrandingCard({
               disabled={isUploading}
               onChange={(event) => onFileChange(item, event)}
             />
-            {isUploading ? "Uploading..." : hasCustomLogo ? "Replace Logo" : "Upload Logo"}
+            {isUploading
+              ? "Uploading..."
+              : hasCustomLogo
+                ? item.assetType === "hero"
+                  ? "Replace Image"
+                  : "Replace Logo"
+                : item.assetType === "hero"
+                  ? "Upload Image"
+                  : "Upload Logo"}
           </label>
         </div>
       </div>
@@ -588,7 +634,7 @@ export default function Settings() {
                       Workspace Brand Text
                     </span>
                     <p className="mt-1 text-xs leading-5 text-slate-500">
-                      Teks ini dipakai untuk judul brand di sidebar Admin dan Seller.
+                      Nama brand ini tampil di sidebar Admin dan Seller.
                     </p>
                     <input
                       type="text"
@@ -611,13 +657,14 @@ export default function Settings() {
                   disabled={isSavingBrandingText}
                   className="h-10 min-w-[170px] rounded-lg bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isSavingBrandingText ? "Updating..." : "Update Brand Text"}
+                  {isSavingBrandingText ? "Updating..." : "Update Brand Name"}
                 </button>
               </div>
             </div>
             <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              Uploads here replace the current branding source immediately for Client, Admin, and
-              Seller shells. Admin and Seller logos render inside a square frame automatically.
+              Upload gambar di bawah untuk mengganti logo workspace dan gambar besar di halaman
+              login admin. Perubahan akan langsung dipakai setelah upload berhasil. Gunakan file
+              PNG, JPG, atau WEBP dengan ukuran maksimal 1MB.
             </div>
             {brandingFeedback ? (
               <div className={`${brandingStatusBoxClass} mb-4`}>{brandingFeedback.message}</div>

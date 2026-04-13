@@ -94,6 +94,8 @@ export default function Navbar({
   onToggleTheme,
   isSidebarCollapsed = false,
   onToggleSidebar,
+  isSearchPaletteOpen = false,
+  onOpenSearchPalette,
 }) {
   const { pathname } = useLocation();
   const pageTitle = pageTitleFromPath(pathname);
@@ -194,6 +196,11 @@ export default function Navbar({
   const chipText = selectedLanguage
     ? `${selectedLanguage.flag || selectedLanguage.isoCode.toUpperCase()} ${selectedLanguage.name.toUpperCase()}`
     : "GB ENGLISH";
+  const searchShortcut =
+    typeof navigator !== "undefined" &&
+    /mac|iphone|ipad|ipod/i.test(navigator.platform || navigator.userAgent)
+      ? "⌘K"
+      : "Ctrl K";
 
   const handleLanguageSelect = (language) => {
     const nextValue = {
@@ -227,18 +234,25 @@ export default function Navbar({
           <p className="navbar__eyebrow">Admin Panel</p>
           <p className="navbar__page-title">{pageTitle}</p>
         </div>
-        <div className="navbar__search-shell" role="search" aria-label="Admin search">
+        <button
+          type="button"
+          className={`navbar__search-shell navbar__search-trigger ${
+            isSearchPaletteOpen ? "is-open" : ""
+          }`}
+          aria-label="Open admin search"
+          aria-haspopup="dialog"
+          aria-expanded={isSearchPaletteOpen}
+          onClick={onOpenSearchPalette}
+          onFocus={onOpenSearchPalette}
+        >
           <Search size={16} className="navbar__search-icon" />
-          <input
-            type="search"
-            value=""
-            readOnly
-            tabIndex={-1}
-            aria-label="Admin search placeholder"
-            placeholder={`Search inside ${pageTitle.toLowerCase()}...`}
-            className="navbar__search-input"
-          />
-        </div>
+          <span className="navbar__search-input">
+            Search inside {pageTitle.toLowerCase()}...
+          </span>
+          <span className="navbar__search-shortcut" aria-hidden="true">
+            {searchShortcut}
+          </span>
+        </button>
       </div>
       <div className="navbar__actions">
         <div className="navbar__cluster">

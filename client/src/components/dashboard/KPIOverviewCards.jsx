@@ -1,18 +1,24 @@
-import { CreditCard, Layers, ShoppingCart } from "lucide-react";
+import {
+  Archive,
+  CalendarDays,
+  Clock3,
+  ShoppingBag,
+  TrendingUp,
+  Layers3,
+} from "lucide-react";
 import { formatCurrency } from "../../utils/format.js";
 
 const ICON_MAP = {
-  today: Layers,
-  yesterday: Layers,
-  "this-month": ShoppingCart,
-  "last-month": CreditCard,
-  "all-time": CreditCard,
+  today: ShoppingBag,
+  yesterday: Archive,
+  "this-month": CalendarDays,
+  "last-month": Clock3,
+  "all-time": TrendingUp,
 };
 
 export default function KPIOverviewCards({
   items,
   labelMap,
-  breakdowns,
   formatMoney,
 }) {
   return (
@@ -24,64 +30,22 @@ export default function KPIOverviewCards({
           (typeof formatMoney === "function"
             ? formatMoney(item.value)
             : formatCurrency(item.value));
-        const breakdown = breakdowns[item.id];
-        const Icon = ICON_MAP[item.id] || Layers;
-        const valueClass =
-          item.id === "all-time" ? "kpi-card__value--wide" : "";
-        const byMethod =
-          breakdown?.byMethod && typeof breakdown.byMethod === "object"
-            ? breakdown.byMethod
-            : breakdown && typeof breakdown === "object"
-              ? breakdown
-              : null;
-        const methodEntries = byMethod
-          ? Object.entries(byMethod).filter(([, value]) => Number(value) > 0)
-          : [];
-        const methodList = methodEntries.slice(0, 3);
+        const Icon = item.icon || ICON_MAP[item.id] || Layers3;
+        const isWideValue = String(value).length >= 11;
+        const valueClass = isWideValue ? "kpi-card__value--wide" : "";
 
         return (
           <div key={item.id} className={`kpi-card kpi-card--${item.variant}`}>
-            <div className="kpi-card__top">
-              <div className="kpi-card__icon" aria-hidden="true">
-                <Icon size={22} strokeWidth={2} />
-              </div>
-              <div className="kpi-card__tag">Top metric</div>
+            <div className="kpi-card__icon" aria-hidden="true">
+              <Icon size={18} strokeWidth={1.9} />
             </div>
-            <div className="kpi-card__title">{title}</div>
             <div
               className={`kpi-card__value ${valueClass}`}
-              title={item.id === "all-time" ? String(value) : undefined}
+              title={isWideValue ? String(value) : undefined}
             >
               {value}
             </div>
-            <div className="kpi-card__caption">
-              {item.id === "all-time"
-                ? "Lifetime revenue"
-                : item.id === "this-month" || item.id === "last-month"
-                  ? "Sales performance"
-                  : "Daily order volume"}
-            </div>
-            {byMethod ? (
-              <div className="kpi-card__breakdown">
-                {methodList.length === 0 ? (
-                  <div>
-                    <span>—</span>
-                    <strong>—</strong>
-                  </div>
-                ) : (
-                  methodList.map(([method, value]) => (
-                    <div key={method}>
-                      <span>{method}</span>
-                      <strong>
-                        {typeof formatMoney === "function"
-                          ? formatMoney(Number(value) || 0)
-                          : formatCurrency(Number(value) || 0)}
-                      </strong>
-                    </div>
-                  ))
-                )}
-              </div>
-            ) : null}
+            <div className="kpi-card__title">{title}</div>
           </div>
         );
       })}

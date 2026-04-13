@@ -28,7 +28,7 @@
     "qa:mvf:order-payment": "pnpm --filter server smoke:order-payment",
     "qa:mvf:store-readiness": "pnpm --filter server smoke:store-readiness",
     "qa:mvf:visibility:frontend": "tsx ./tools/qa/mvf-visibility-frontend.ts",
-    "qa:staging:core": "pnpm -F server build && pnpm -F client build && pnpm -F server smoke:product-visibility && pnpm -F server smoke:store-readiness && pnpm -F server smoke:order-payment && pnpm -F server smoke:shipment-regression && pnpm -F server smoke:stripe-webhook && pnpm qa:mvf:visibility:frontend",
+    "qa:staging:core": "pnpm -F server build && pnpm -F client build && pnpm -F server smoke:auth-session-invalidation && pnpm -F server smoke:auth-rate-limit && pnpm -F server smoke:admin-public-auth && pnpm -F server smoke:product-visibility && pnpm -F server smoke:store-readiness && pnpm -F server smoke:order-payment && pnpm -F server smoke:shipment-regression && pnpm -F server smoke:stripe-webhook && pnpm qa:mvf:visibility:frontend",
     "qa:public-release": "tsx ./tools/qa/public-release-smoke.ts",
     "qa:e2e:truth": "tsx ./tools/qa/e2e-truth-smoke.ts",
     "qa:e2e:shipment-reconciliation": "tsx ./tools/qa/shipment-reconciliation-smoke.ts",

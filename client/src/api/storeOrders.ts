@@ -1,8 +1,4 @@
 import { api } from "./axios";
-import type { StoreShippingDetails } from "./store.types.ts";
-
-export type { StoreShippingDetails } from "./store.types.ts";
-
 // Active storefront checkout must use preview/createMultiStoreCheckoutOrder from public/storeCheckout.ts.
 // The legacy single-order createStoreOrder client has been removed to keep new consumers on the
 // backend-driven checkout gate and shared order/payment contract.
@@ -10,7 +6,6 @@ export type { StoreShippingDetails } from "./store.types.ts";
 export const fetchStoreOrder = async (ref: string) => {
   const { data } = await api.get<{
     data: {
-      id: number;
       ref: string;
       invoiceNo?: string | null;
       status: string;
@@ -25,20 +20,22 @@ export const fetchStoreOrder = async (ref: string) => {
         isFinal?: boolean;
       } | null;
       latestTrackingEvent?: {
-        eventId?: number | null;
         status?: string | null;
+        statusMeta?: {
+          code?: string;
+          label?: string;
+          tone?: string;
+          description?: string | null;
+          isFinal?: boolean;
+        } | null;
         note?: string | null;
         happenedAt?: string | null;
       } | null;
       hasActiveShipment?: boolean;
       hasTrackingNumber?: boolean;
       shipments?: Array<{
-        shipmentId?: number | null;
-        suborderId?: number | null;
         suborderNumber?: string | null;
-        storeId?: number | null;
         storeName?: string | null;
-        storeSlug?: string | null;
         shipmentStatus?: string | null;
         shipmentStatusMeta?: {
           code?: string;
@@ -53,16 +50,20 @@ export const fetchStoreOrder = async (ref: string) => {
         estimatedDelivery?: string | null;
         shippingFee?: number;
         shipmentItems?: Array<{
-          id?: number | null;
-          productId?: number | null;
           productName?: string;
           qty?: number;
           price?: number;
           lineTotal?: number;
         }>;
         trackingEvents?: Array<{
-          eventId?: number | null;
           status?: string | null;
+          statusMeta?: {
+            code?: string;
+            label?: string;
+            tone?: string;
+            description?: string | null;
+            isFinal?: boolean;
+          } | null;
           note?: string | null;
           happenedAt?: string | null;
         }>;
@@ -91,6 +92,15 @@ export const fetchStoreOrder = async (ref: string) => {
           description?: string;
           isFinal?: boolean;
         };
+        paymentActionability?: {
+          code?: string;
+          label?: string;
+          tone?: string;
+          description?: string;
+          isFinal?: boolean;
+          canPay?: boolean;
+          visible?: boolean;
+        };
         availableActions?: Array<{
           code?: string;
           label?: string;
@@ -103,15 +113,15 @@ export const fetchStoreOrder = async (ref: string) => {
       discount?: number;
       tax?: number;
       shipping?: number;
-      couponCode?: string | null;
       createdAt: string;
-      customerName?: string | null;
-      customerPhone?: string | null;
-      customerAddress?: string | null;
-      shippingDetails?: StoreShippingDetails | null;
+      customer?: {
+        name?: string | null;
+        email?: string | null;
+        phone?: string | null;
+        address?: string | null;
+        masked?: boolean;
+      } | null;
       items: Array<{
-        id: number;
-        productId: number;
         name: string;
         imageUrl?: string | null;
         quantity: number;
@@ -119,11 +129,8 @@ export const fetchStoreOrder = async (ref: string) => {
         lineTotal: number;
       }>;
       storeSplits?: Array<{
-        suborderId?: number | null;
         suborderNumber?: string | null;
-        storeId?: number | null;
         storeName?: string | null;
-        storeSlug?: string | null;
         storeLogoUrl?: string | null;
         totalAmount?: number;
         paymentStatus?: string | null;
@@ -137,14 +144,39 @@ export const fetchStoreOrder = async (ref: string) => {
           description?: string | null;
         } | null;
         latestTrackingEvent?: {
-          eventId?: number | null;
           status?: string | null;
+          statusMeta?: {
+            code?: string;
+            label?: string;
+            tone?: string;
+            description?: string | null;
+          } | null;
           note?: string | null;
           happenedAt?: string | null;
         } | null;
         hasActiveShipment?: boolean;
         hasTrackingNumber?: boolean;
-        shipments?: Array<Record<string, any>>;
+        operationalTruth?: Record<string, any> | null;
+        paymentReadModel?: {
+          status?: string | null;
+          statusMeta?: Record<string, any> | null;
+          settlementStatus?: string | null;
+          settlementStatusMeta?: Record<string, any> | null;
+        } | null;
+        payment?: {
+          status?: string | null;
+          statusMeta?: Record<string, any> | null;
+          displayStatus?: string | null;
+          displayStatusMeta?: Record<string, any> | null;
+          expiresAt?: string | null;
+          paidAt?: string | null;
+        } | null;
+        contract?: {
+          orderStatus?: string | null;
+          paymentStatus?: string | null;
+          statusSummary?: Record<string, any> | null;
+          paymentStatusMeta?: Record<string, any> | null;
+        } | null;
       }>;
     };
   }>(`/store/orders/${encodeURIComponent(ref)}`);

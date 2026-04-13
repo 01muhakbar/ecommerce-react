@@ -23,6 +23,7 @@ import {
   Search,
   ShoppingBag,
   Store,
+  TicketPercent,
   Truck,
   UserRound,
   Users,
@@ -486,7 +487,7 @@ function SellerSidebar({
 
   const navSections = [
     {
-      title: "Overview",
+      title: "General",
       items: [
         {
           label: "Overview",
@@ -519,24 +520,21 @@ function SellerSidebar({
       ],
     },
     {
-      title: "Commerce",
+      title: "Catalog",
       items: [
         {
-          label: "Catalog",
+          label: "Products",
           to: sellerRoutes.catalog(),
           Icon: Package,
           enabled: hasPermission("PRODUCT_VIEW"),
           implemented: true,
-          children: [
-            {
-              label: "Products",
-              to: sellerRoutes.catalog(),
-            },
-            {
-              label: "Coupons",
-              to: sellerRoutes.coupons(),
-            },
-          ],
+        },
+        {
+          label: "Coupons",
+          to: sellerRoutes.coupons(),
+          Icon: TicketPercent,
+          enabled: hasPermission("PRODUCT_VIEW"),
+          implemented: true,
         },
       ],
     },
@@ -601,15 +599,15 @@ function SellerSidebar({
     <aside
       className={joinClassNames(
         "flex w-full flex-col transition-[width] duration-200 lg:sticky lg:top-0 lg:h-screen lg:max-h-screen lg:self-start lg:overflow-hidden",
-        isDark ? "border-r border-slate-800 bg-slate-950" : "border-r border-slate-200 bg-white",
-        collapsed ? "lg:w-[94px]" : "lg:w-[266px]"
+        isDark ? "border-r border-slate-800 bg-slate-950" : "border-r border-slate-200 bg-slate-50",
+        collapsed ? "lg:w-[86px]" : "lg:w-[252px]"
       )}
     >
       <div
         className={joinClassNames(
-          "border-b py-4",
-          isDark ? "border-slate-800" : "border-slate-100",
-          collapsed ? "px-3" : "px-4"
+          "border-b py-3",
+          isDark ? "border-slate-800" : "border-slate-200",
+          collapsed ? "px-2.5" : "px-3.5"
         )}
       >
         <WorkspaceSidebarBrand
@@ -620,15 +618,15 @@ function SellerSidebar({
         />
         {collapsed ? (
           <div
-            className="mt-3 flex justify-center"
+            className="mt-2.5 flex justify-center"
             title={sellerContext?.store?.name || "Seller Workspace"}
           >
             <div
               className={joinClassNames(
-                "flex h-10 w-10 items-center justify-center rounded-2xl border text-sm font-semibold",
+                "flex h-9 w-9 items-center justify-center rounded-xl border text-sm font-semibold",
                 isDark
                   ? "border-slate-700 bg-slate-900 text-slate-100"
-                  : "border-slate-200 bg-slate-50 text-slate-700"
+                  : "border-slate-200 bg-white text-slate-700"
               )}
             >
               {(sellerContext?.store?.name || "S").trim().charAt(0).toUpperCase()}
@@ -637,15 +635,15 @@ function SellerSidebar({
         ) : (
           <div
             className={joinClassNames(
-              "mt-3 rounded-xl border px-3 py-3",
+              "mt-2.5 rounded-xl border px-3 py-2.5",
               isDark
                 ? "border-slate-700 bg-slate-900"
-                : "border-slate-200 bg-slate-50"
+                : "border-slate-200 bg-white"
             )}
           >
             <p
               className={joinClassNames(
-                "text-xs font-semibold uppercase tracking-wide",
+                "text-[10px] font-semibold uppercase tracking-[0.16em]",
                 isDark ? "text-slate-400" : "text-slate-500"
               )}
             >
@@ -653,22 +651,27 @@ function SellerSidebar({
             </p>
             <p
               className={joinClassNames(
-                "mt-2 truncate text-sm font-semibold",
+                "mt-1.5 truncate text-sm font-semibold",
                 isDark ? "text-slate-50" : "text-slate-900"
               )}
             >
               {sellerContext?.store?.name || "Seller Workspace"}
             </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <SellerWorkspaceBadge label={sellerContext?.store?.slug || "store"} />
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
+              <SellerWorkspaceBadge
+                label={sellerContext?.store?.slug || "store"}
+                className="!px-2 !py-0.5 !text-[10px]"
+              />
               <SellerWorkspaceBadge
                 label={sellerContext?.store?.status || "ACTIVE"}
                 tone="emerald"
+                className="!px-2 !py-0.5 !text-[10px]"
               />
               {shippingSetupStatus ? (
                 <SellerWorkspaceBadge
                   label={`Shipping ${shippingSetupStatus.label || "Unavailable"}`}
                   tone={shippingSetupStatus.tone || "stone"}
+                  className="!px-2 !py-0.5 !text-[10px]"
                 />
               ) : null}
             </div>
@@ -678,35 +681,35 @@ function SellerSidebar({
 
       <nav
         className={joinClassNames(
-          "flex-1 space-y-3 overflow-y-auto py-3.5",
-          collapsed ? "px-2" : "px-3"
+          "flex-1 overflow-y-auto py-2.5",
+          collapsed ? "px-1.5" : "px-2.5"
         )}
         aria-label="Seller sidebar"
       >
         {navSections.map((section) => (
-          <div key={section.title}>
+          <div key={section.title} className="mb-3 last:mb-0">
             {collapsed ? null : (
               <p
                 className={joinClassNames(
-                  "mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.14em]",
+                  "mb-1.5 px-2 text-[9px] font-semibold uppercase tracking-[0.18em]",
                   isDark ? "text-slate-400" : "text-slate-400"
                 )}
               >
                 {section.title}
               </p>
             )}
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {section.items.map((item) =>
                 item.implemented ? (
                   item.children?.length && !collapsed ? (
                     <div key={item.label} className="space-y-1">
                       <div
                         className={joinClassNames(
-                          "group relative flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition",
+                          "group relative flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] transition",
                           item.children.some((child) => isPathActive(child.to))
                             ? isDark
-                              ? "bg-[#052e25] text-white shadow-[inset_0_0_0_1px_rgba(16,185,129,0.18)]"
-                              : "bg-emerald-50 text-teal-700 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.12)]"
+                              ? "bg-[#052e25] text-white shadow-[inset_0_0_0_1px_rgba(16,185,129,0.14)]"
+                              : "bg-emerald-50 text-teal-700 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.09)]"
                             : isDark
                               ? "text-slate-100"
                               : "text-slate-600"
@@ -714,7 +717,7 @@ function SellerSidebar({
                       >
                         <span
                           className={joinClassNames(
-                            "absolute inset-y-1.5 left-0 w-[3px] rounded-full",
+                            "absolute inset-y-1.5 left-0 w-[2px] rounded-full",
                             item.children.some((child) => isPathActive(child.to))
                               ? "bg-emerald-500"
                               : "bg-transparent"
@@ -723,7 +726,7 @@ function SellerSidebar({
                         />
                         <span
                           className={joinClassNames(
-                            "flex h-8 w-8 items-center justify-center rounded-xl transition",
+                            "flex h-7 w-7 items-center justify-center rounded-lg transition",
                             item.children.some((child) => isPathActive(child.to))
                               ? isDark
                                 ? "bg-emerald-950 text-emerald-200"
@@ -753,7 +756,7 @@ function SellerSidebar({
                         </span>
                         <ChevronRight
                           className={joinClassNames(
-                            "h-4 w-4 transition",
+                            "h-3.5 w-3.5 transition",
                             item.children.some((child) => isPathActive(child.to))
                               ? isDark
                                 ? "rotate-90 text-emerald-200"
@@ -767,7 +770,7 @@ function SellerSidebar({
 
                       <div
                         className={joinClassNames(
-                          "ml-[2.9rem] space-y-1 border-l pl-3",
+                          "ml-[2.35rem] space-y-0.5 border-l pl-2.5",
                           isDark ? "border-slate-800" : "border-slate-200"
                         )}
                       >
@@ -778,7 +781,7 @@ function SellerSidebar({
                             end={child.to === sellerRoutes.catalog()}
                             className={({ isActive }) =>
                               joinClassNames(
-                                "group flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition",
+                                "group flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[12.5px] transition",
                                 isActive
                                   ? isDark
                                     ? "bg-[#052e25] font-semibold text-white"
@@ -793,7 +796,7 @@ function SellerSidebar({
                               <>
                                 <span
                                   className={joinClassNames(
-                                    "h-1.5 w-1.5 rounded-full",
+                                    "h-1 w-1 rounded-full",
                                     isActive
                                       ? "bg-emerald-300"
                                       : isDark
@@ -830,12 +833,12 @@ function SellerSidebar({
                       title={collapsed ? item.label : undefined}
                         className={({ isActive }) =>
                           joinClassNames(
-                            "group relative flex items-center rounded-xl py-2 text-sm transition",
-                            collapsed ? "justify-center px-2" : "gap-3 px-3",
+                            "group relative flex items-center rounded-lg py-1.5 text-[13px] transition",
+                            collapsed ? "justify-center px-1.5" : "gap-2.5 px-2.5",
                             isActive
                               ? isDark
-                              ? "bg-[#052e25] text-white shadow-[inset_0_0_0_1px_rgba(16,185,129,0.18)]"
-                              : "bg-emerald-50 text-teal-700 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.12)]"
+                              ? "bg-[#052e25] text-white shadow-[inset_0_0_0_1px_rgba(16,185,129,0.14)]"
+                              : "bg-emerald-50 text-teal-700 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.09)]"
                             : isDark
                               ? "text-slate-100 hover:bg-slate-800 hover:text-white"
                               : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
@@ -846,14 +849,14 @@ function SellerSidebar({
                         <>
                           <span
                             className={joinClassNames(
-                              "absolute inset-y-1.5 left-0 w-[3px] rounded-full",
+                              "absolute inset-y-1.5 left-0 w-[2px] rounded-full",
                               isActive ? "bg-emerald-500" : "bg-transparent"
                             )}
                             aria-hidden="true"
                           />
                           <span
                             className={joinClassNames(
-                              "flex h-8 w-8 items-center justify-center rounded-xl transition",
+                              "flex h-7 w-7 items-center justify-center rounded-lg transition",
                               isActive
                                 ? isDark
                                   ? "bg-emerald-950 text-emerald-200"
@@ -887,13 +890,14 @@ function SellerSidebar({
                                       <SellerWorkspaceBadge
                                         label={item.badge.label}
                                         tone={item.badge.tone}
+                                        className="!px-2 !py-0.5 !text-[10px]"
                                       />
                                     </span>
                                   ) : null}
                                 {item.meta ? (
                                   <span
                                     className={joinClassNames(
-                                      "block truncate text-xs",
+                                      "block truncate text-[11px]",
                                       isDark ? "text-slate-400" : "text-slate-400"
                                     )}
                                   >
@@ -903,7 +907,7 @@ function SellerSidebar({
                               </span>
                               <ChevronRight
                                 className={joinClassNames(
-                                  "h-4 w-4 transition",
+                                  "h-3.5 w-3.5 transition",
                                   isActive
                                     ? isDark
                                       ? "text-emerald-200"
@@ -924,18 +928,18 @@ function SellerSidebar({
                     key={item.label}
                     title={collapsed ? item.label : undefined}
                     className={joinClassNames(
-                      "rounded-xl border border-dashed py-2",
+                      "rounded-lg border border-dashed py-1.5",
                       isDark
                         ? "border-slate-700 bg-slate-900 text-slate-400"
                         : "border-slate-200 bg-slate-50 text-slate-500",
                       collapsed
-                        ? "flex items-center justify-center px-2"
-                        : "flex items-center gap-3 px-3"
+                        ? "flex items-center justify-center px-1.5"
+                        : "flex items-center gap-2.5 px-2.5"
                     )}
                   >
                     <span
                       className={joinClassNames(
-                        "flex h-8 w-8 items-center justify-center rounded-xl",
+                        "flex h-7 w-7 items-center justify-center rounded-lg",
                         isDark ? "bg-slate-800 text-slate-500" : "bg-white text-slate-400"
                       )}
                     >
@@ -944,12 +948,12 @@ function SellerSidebar({
                     {collapsed ? null : (
                       <>
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-semibold">{item.label}</span>
+                          <span className="block truncate text-[13px] font-semibold">{item.label}</span>
                           {item.meta ? (
-                            <span className="block truncate text-xs text-slate-400">{item.meta}</span>
+                            <span className="block truncate text-[11px] text-slate-400">{item.meta}</span>
                           ) : null}
                         </span>
-                        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
                           Soon
                         </span>
                       </>
@@ -964,9 +968,9 @@ function SellerSidebar({
 
       <div
         className={joinClassNames(
-          "mt-auto border-t py-3.5",
-          isDark ? "border-slate-800" : "border-slate-100",
-          collapsed ? "px-3" : "px-4"
+          "mt-auto border-t py-2.5",
+          isDark ? "border-slate-800" : "border-slate-200",
+          collapsed ? "px-2.5" : "px-3.5"
         )}
       >
         <button
@@ -974,14 +978,14 @@ function SellerSidebar({
           onClick={() => void onLogout?.()}
           title={collapsed ? "Log Out" : undefined}
           className={joinClassNames(
-            "inline-flex w-full items-center justify-center rounded-xl border text-sm font-semibold transition",
-            collapsed ? "h-11 px-0" : "h-12 gap-2.5 px-4",
+            "inline-flex w-full items-center justify-center rounded-lg border text-sm font-semibold transition",
+            collapsed ? "h-10 px-0" : "h-9 gap-2 px-3",
             isDark
-              ? "border-emerald-900 bg-[#052e25] text-emerald-200 hover:bg-[#064e3b]"
-              : "border-emerald-600 bg-emerald-500 text-white hover:bg-emerald-600"
+              ? "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800"
+              : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900"
           )}
         >
-          <LogOut className="h-[18px] w-[18px]" />
+          <LogOut className="h-4 w-4" />
           {collapsed ? null : <span>Log Out</span>}
         </button>
       </div>
@@ -1316,7 +1320,7 @@ export default function SellerLayout() {
 
       <div
         className={`layout__content flex min-w-0 flex-1 flex-col ${
-          isDark ? "bg-slate-950" : "bg-slate-100"
+          isDark ? "bg-slate-950" : "bg-transparent"
         }`}
       >
         <header className="navbar">
@@ -1410,62 +1414,8 @@ export default function SellerLayout() {
           </div>
         </header>
 
-        <main className="w-full px-4 py-5 sm:px-6 sm:py-5">
-          <div className="mx-auto w-full max-w-[1280px] space-y-4">
-            <SellerWorkspacePanel
-              className={joinClassNames(
-                "px-4 py-3.5 sm:px-5",
-                isDark
-                  ? "!border-slate-800 !bg-slate-900/92 !shadow-[inset_0_1px_0_rgba(148,163,184,0.05)]"
-                  : ""
-              )}
-            >
-              <div className="flex flex-col gap-2.5 lg:flex-row lg:items-end lg:justify-between">
-                <div>
-                  <p
-                    className={joinClassNames(
-                      "text-[11px] font-semibold uppercase tracking-wide",
-                      isDark ? "text-slate-400" : "text-slate-500"
-                    )}
-                  >
-                    Workspace Context
-                  </p>
-                  <h1
-                    className={joinClassNames(
-                      "mt-1.5 text-[1.5rem] font-semibold tracking-tight",
-                      isDark ? "text-slate-50" : "text-slate-900"
-                    )}
-                  >
-                    {sellerContext?.store?.name || "Store"}
-                  </h1>
-                  <p
-                    className={joinClassNames(
-                      "mt-1 text-sm leading-5",
-                      isDark ? "text-slate-300" : "text-slate-500"
-                    )}
-                  >
-                    {pageMeta.subtitle}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <SellerWorkspaceBadge
-                    label={sellerContext?.store?.slug || "store"}
-                    className={
-                      isDark ? "!border-slate-700 !bg-slate-800 !text-slate-200" : ""
-                    }
-                  />
-                  <SellerWorkspaceBadge
-                    label={canonicalStoreId ? `Store #${canonicalStoreId}` : "Store"}
-                    className={
-                      isDark
-                        ? "!border-slate-700 !bg-slate-800 !text-slate-200"
-                        : "bg-slate-50"
-                    }
-                  />
-                </div>
-              </div>
-            </SellerWorkspacePanel>
-
+        <main className="w-full px-4 py-4 sm:px-5 sm:py-4">
+          <div className="mx-auto w-full max-w-[1300px] space-y-4">
             <Outlet context={contextValue} />
           </div>
         </main>

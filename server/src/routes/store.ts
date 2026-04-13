@@ -288,6 +288,320 @@ const buildBuyerOrderContractPayload = (input: {
   };
 };
 
+const PUBLIC_ORDER_REF_PATTERN = /^(?=.{8,120}$)(?=.*[A-Z])[A-Z0-9][A-Z0-9_-]*$/;
+
+const normalizePublicTrackingRef = (value: unknown) =>
+  String(value || "")
+    .trim()
+    .toUpperCase();
+
+const isValidPublicTrackingRef = (value: string) =>
+  Boolean(value) && !/^\d+$/.test(value) && PUBLIC_ORDER_REF_PATTERN.test(value);
+
+const maskWord = (value: unknown) => {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "";
+  if (normalized.length <= 1) return "*";
+  return normalized[0] + "*".repeat(Math.min(Math.max(normalized.length - 1, 1), 4));
+};
+
+const maskName = (value: unknown) => {
+  const normalized = String(value || "")
+    .trim()
+    .replace(/\s+/g, " ");
+  if (!normalized) return null;
+  return normalized
+    .split(" ")
+    .filter(Boolean)
+    .map(maskWord)
+    .join(" ");
+};
+
+const maskEmail = (value: unknown) => {
+  const normalized = String(value || "").trim();
+  if (!normalized || !normalized.includes("@")) return null;
+  const [localPart, ...domainParts] = normalized.split("@");
+  const domain = domainParts.join("@").trim();
+  if (!localPart || !domain) return null;
+  const visibleLocal = localPart.slice(0, 1);
+  const maskedLocal = `${visibleLocal}${"*".repeat(Math.min(Math.max(localPart.length - 1, 3), 6))}`;
+  return `${maskedLocal}@${domain}`;
+};
+
+const maskPhone = (value: unknown) => {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (!digits) return null;
+  if (digits.length <= 4) return `${digits[0] || "*"}***`;
+  const start = digits.slice(0, Math.min(2, digits.length));
+  const end = digits.slice(-2);
+  const maskLength = Math.max(digits.length - start.length - end.length, 4);
+  return `${start}${"*".repeat(maskLength)}${end}`;
+};
+
+const maskPostalCode = (value: unknown) => {
+  const normalized = String(value || "").trim();
+  if (!normalized) return null;
+  if (normalized.length <= 2) return "**";
+  return `${normalized.slice(0, 2)}${"*".repeat(Math.max(normalized.length - 2, 2))}`;
+};
+
+const maskStreetLabel = (value: unknown) => {
+  const normalized = String(value || "")
+    .trim()
+    .replace(/\s+/g, " ");
+  if (!normalized) return null;
+  return normalized
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => {
+      if (/^\d+[A-Z0-9-]*$/i.test(part)) return "*".repeat(Math.max(part.length, 2));
+      return maskWord(part);
+    })
+    .join(" ");
+};
+
+const maskAddress = (shippingDetails: Record<string, any> | null, fallback: unknown) => {
+  if (shippingDetails) {
+    const segments = [
+      [maskStreetLabel(shippingDetails.streetName), shippingDetails.houseNumber ? `No. ${"*".repeat(Math.max(String(shippingDetails.houseNumber).trim().length, 2))}` : null]
+        .filter(Boolean)
+        .join(" ")
+        .trim() || null,
+      shippingDetails.district ? String(shippingDetails.district).trim() : null,
+      shippingDetails.city ? String(shippingDetails.city).trim() : null,
+      shippingDetails.province ? String(shippingDetails.province).trim() : null,
+      maskPostalCode(shippingDetails.postalCode),
+    ].filter(Boolean);
+    return segments.length > 0 ? segments.join(", ") : null;
+  }
+
+  const normalized = String(fallback || "")
+    .trim()
+    .replace(/\s+/g, " ");
+  if (!normalized) return null;
+  const parts = normalized.split(",").map((part) => part.trim()).filter(Boolean);
+  if (parts.length === 0) return null;
+  const [first, ...rest] = parts;
+  const tail = rest.slice(-3);
+  return [maskStreetLabel(first), ...tail].filter(Boolean).join(", ");
+};
+
+const sanitizePublicTrackingEvent = (event: any) => {
+  if (!event || typeof event !== "object") return null;
+  const statusMeta =
+    event.statusMeta && typeof event.statusMeta === "object" ? event.statusMeta : null;
+  return {
+    status: String(event.status || event.eventType || "").trim().toUpperCase() || null,
+    statusMeta,
+    note: String(event.note || event.eventDescription || "").trim() || null,
+    happenedAt: event.happenedAt || event.occurredAt || event.createdAt || null,
+  };
+};
+
+const sanitizePublicShipment = (shipment: any) => {
+  if (!shipment || typeof shipment !== "object") return null;
+  return {
+    suborderNumber: shipment.suborderNumber ? String(shipment.suborderNumber) : null,
+    storeName: shipment.storeName ? String(shipment.storeName) : null,
+    shipmentStatus: shipment.shipmentStatus ? String(shipment.shipmentStatus) : null,
+    shipmentStatusMeta:
+      shipment.shipmentStatusMeta && typeof shipment.shipmentStatusMeta === "object"
+        ? shipment.shipmentStatusMeta
+        : null,
+    courierCode: shipment.courierCode ? String(shipment.courierCode) : null,
+    courierService: shipment.courierService ? String(shipment.courierService) : null,
+    trackingNumber: shipment.trackingNumber ? String(shipment.trackingNumber) : null,
+    estimatedDelivery: shipment.estimatedDelivery || null,
+    shippingFee: Number(shipment.shippingFee || 0),
+    shipmentItems: Array.isArray(shipment.shipmentItems)
+      ? shipment.shipmentItems.map((item: any) => ({
+          productName: String(item?.productName || "Item"),
+          qty: Number(item?.qty || 0),
+          price: Number(item?.price || 0),
+          lineTotal: Number(item?.lineTotal || 0),
+        }))
+      : [],
+    trackingEvents: Array.isArray(shipment.trackingEvents)
+      ? shipment.trackingEvents.map(sanitizePublicTrackingEvent).filter(Boolean)
+      : [],
+    latestTrackingEvent: sanitizePublicTrackingEvent(shipment.latestTrackingEvent),
+    hasTrackingNumber: Boolean(shipment.hasTrackingNumber),
+    hasActiveShipment: Boolean(shipment.hasActiveShipment),
+    usedLegacyFallback: Boolean(shipment.usedLegacyFallback),
+    trackingEventCount: Number(shipment.trackingEventCount || 0),
+    incompleteTrackingData: Boolean(shipment.incompleteTrackingData),
+  };
+};
+
+const sanitizePublicOperationalTruth = (truth: any) => {
+  if (!truth || typeof truth !== "object") return null;
+  const payment = truth.payment && typeof truth.payment === "object" ? truth.payment : null;
+  const shipment = truth.shipment && typeof truth.shipment === "object" ? truth.shipment : null;
+  const bridge = truth.bridge && typeof truth.bridge === "object" ? truth.bridge : null;
+  const summary = truth.statusSummary && typeof truth.statusSummary === "object" ? truth.statusSummary : null;
+  const finality = truth.finality && typeof truth.finality === "object" ? truth.finality : null;
+  return {
+    payment: payment
+      ? {
+          status: String(payment.status || "").trim().toUpperCase() || null,
+          statusMeta:
+            payment.statusMeta && typeof payment.statusMeta === "object" ? payment.statusMeta : null,
+          isFinal: Boolean(payment.isFinal),
+          isFinalNegative: Boolean(payment.isFinalNegative),
+        }
+      : null,
+    shipment: shipment
+      ? {
+          status: String(shipment.status || "").trim().toUpperCase() || null,
+          statusMeta:
+            shipment.statusMeta && typeof shipment.statusMeta === "object"
+              ? shipment.statusMeta
+              : null,
+          isFinal: Boolean(shipment.isFinal),
+          isFinalNegative: Boolean(shipment.isFinalNegative),
+          blockedReason: String(shipment.blockedReason || "").trim() || null,
+          usedLegacyFallback: Boolean(shipment.usedLegacyFallback),
+          hasPersistedShipment: Boolean(shipment.hasPersistedShipment),
+        }
+      : null,
+    bridge: bridge
+      ? {
+          paymentToShipment: String(bridge.paymentToShipment || "").trim().toUpperCase() || null,
+          currentLane: String(bridge.currentLane || "").trim().toUpperCase() || null,
+          shipmentBlocked: Boolean(bridge.shipmentBlocked),
+          shipmentBlockedReason: String(bridge.shipmentBlockedReason || "").trim() || null,
+        }
+      : null,
+    statusSummary: summary,
+    finality: finality
+      ? {
+          isFinal: Boolean(finality.isFinal),
+          isFinalNegative: Boolean(finality.isFinalNegative),
+        }
+      : null,
+  };
+};
+
+const sanitizePublicStoreSplit = (split: any) => {
+  if (!split || typeof split !== "object") return null;
+  const payment = split.payment && typeof split.payment === "object" ? split.payment : null;
+  const contract = split.contract && typeof split.contract === "object" ? split.contract : null;
+  const paymentReadModel =
+    split.paymentReadModel && typeof split.paymentReadModel === "object"
+      ? split.paymentReadModel
+      : null;
+  return {
+    suborderNumber: split.suborderNumber ? String(split.suborderNumber) : null,
+    storeName: split.storeName ? String(split.storeName) : null,
+    storeLogoUrl: split.storeLogoUrl ? String(split.storeLogoUrl) : null,
+    totalAmount: Number(split.totalAmount || 0),
+    paymentStatus: split.paymentStatus ? String(split.paymentStatus) : null,
+    paymentStatusMeta:
+      split.paymentStatusMeta && typeof split.paymentStatusMeta === "object"
+        ? split.paymentStatusMeta
+        : null,
+    fulfillmentStatus: split.fulfillmentStatus ? String(split.fulfillmentStatus) : null,
+    fulfillmentStatusMeta:
+      split.fulfillmentStatusMeta && typeof split.fulfillmentStatusMeta === "object"
+        ? split.fulfillmentStatusMeta
+        : null,
+    shipmentCount: Number(split.shipmentCount || 0),
+    shippingStatus: split.shippingStatus ? String(split.shippingStatus) : null,
+    shippingStatusMeta:
+      split.shippingStatusMeta && typeof split.shippingStatusMeta === "object"
+        ? split.shippingStatusMeta
+        : null,
+    latestTrackingEvent: sanitizePublicTrackingEvent(split.latestTrackingEvent),
+    hasActiveShipment: Boolean(split.hasActiveShipment),
+    hasTrackingNumber: Boolean(split.hasTrackingNumber),
+    usedLegacyFallback: Boolean(split.usedLegacyFallback),
+    operationalTruth: sanitizePublicOperationalTruth(split.operationalTruth),
+    paymentReadModel: paymentReadModel
+      ? {
+          status: paymentReadModel.status ? String(paymentReadModel.status) : null,
+          statusMeta:
+            paymentReadModel.statusMeta && typeof paymentReadModel.statusMeta === "object"
+              ? paymentReadModel.statusMeta
+              : null,
+          settlementStatus:
+            paymentReadModel.settlementStatus
+              ? String(paymentReadModel.settlementStatus)
+              : null,
+          settlementStatusMeta:
+            paymentReadModel.settlementStatusMeta &&
+            typeof paymentReadModel.settlementStatusMeta === "object"
+              ? paymentReadModel.settlementStatusMeta
+              : null,
+        }
+      : null,
+    payment: payment
+      ? {
+          status: payment.status ? String(payment.status) : null,
+          statusMeta:
+            payment.statusMeta && typeof payment.statusMeta === "object"
+              ? payment.statusMeta
+              : null,
+          displayStatus: payment.displayStatus ? String(payment.displayStatus) : null,
+          displayStatusMeta:
+            payment.displayStatusMeta && typeof payment.displayStatusMeta === "object"
+              ? payment.displayStatusMeta
+              : null,
+          expiresAt: payment.expiresAt || null,
+          paidAt: payment.paidAt || null,
+        }
+      : null,
+    contract: contract
+      ? {
+          orderStatus: contract.orderStatus ? String(contract.orderStatus) : null,
+          paymentStatus: contract.paymentStatus ? String(contract.paymentStatus) : null,
+          statusSummary:
+            contract.statusSummary && typeof contract.statusSummary === "object"
+              ? contract.statusSummary
+              : null,
+          paymentStatusMeta:
+            contract.paymentStatusMeta && typeof contract.paymentStatusMeta === "object"
+              ? contract.paymentStatusMeta
+              : null,
+        }
+      : null,
+  };
+};
+
+const sanitizePublicContract = (contract: any) => {
+  if (!contract || typeof contract !== "object") return null;
+  const actions = Array.isArray(contract.availableActions)
+    ? contract.availableActions
+        .filter((action: any) =>
+          ["CONTINUE_PAYMENT", "CONTINUE_STRIPE_PAYMENT"].includes(
+            String(action?.code || "").trim().toUpperCase()
+          )
+        )
+        .map((action: any) => ({
+          code: String(action.code || "").trim().toUpperCase() || null,
+          label: String(action.label || "").trim() || null,
+          enabled: action.enabled !== false,
+          reason: String(action.reason || "").trim() || null,
+          targetPath: action.targetPath ? String(action.targetPath) : null,
+        }))
+    : [];
+
+  return {
+    statusSummary:
+      contract.statusSummary && typeof contract.statusSummary === "object"
+        ? contract.statusSummary
+        : null,
+    paymentStatusMeta:
+      contract.paymentStatusMeta && typeof contract.paymentStatusMeta === "object"
+        ? contract.paymentStatusMeta
+        : null,
+    paymentActionability:
+      contract.paymentActionability && typeof contract.paymentActionability === "object"
+        ? contract.paymentActionability
+        : null,
+    availableActions: actions,
+  };
+};
+
 const loadStoreOrderForStripe = async (invoiceNo: string, userId: number) =>
   Order.findOne({
     where: {
@@ -1588,34 +1902,28 @@ router.put(
   }
 );
 
-// GET /api/store/orders/:ref (account session required)
+// GET /api/store/orders/:ref (public invoice tracking)
 router.get(
   "/orders/:ref",
-  protect,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = getAuthUserId(req, res);
-      if (!userId) return;
-
-      const refParam = String(req.params.ref || "").trim();
+      const refParam = normalizePublicTrackingRef(req.params.ref);
       if (!refParam) {
         return res.status(400).json({ message: "Invalid order reference." });
       }
 
       // Public tracking must use the external invoice reference only.
-      // Internal numeric order ids stay out of the public lookup lane.
-      if (/^\d+$/.test(refParam)) {
+      // Internal numeric order ids and malformed refs stay out of the public lookup lane.
+      if (!isValidPublicTrackingRef(refParam)) {
         return res.status(400).json({
           message: "Order tracking requires a public invoice reference.",
         });
       }
 
-      const where = {
-        [Op.and]: [
-          { userId },
-          sequelize.where(sequelize.col("invoice_no"), refParam),
-        ],
-      } as any;
+      const where = sequelize.where(
+        sequelize.fn("UPPER", sequelize.col("invoice_no")),
+        refParam
+      );
 
       const order = await Order.findOne({
         where,
@@ -1810,6 +2118,12 @@ router.get(
         (order as any).created_at ??
         order.get?.("created_at") ??
         null;
+      const customerEmail =
+        (order as any).customerEmail ??
+        order.get?.("customerEmail") ??
+        (order as any).customer_email ??
+        order.get?.("customer_email") ??
+        null;
 
       const [rows] = await sequelize.query(
         "SELECT oi.product_id, oi.quantity, oi.price, p.name, p.promo_image_path AS promoImagePath FROM orderitems oi LEFT JOIN products p ON p.id=oi.product_id WHERE oi.order_id = ?",
@@ -1821,7 +2135,6 @@ router.get(
         const quantity = Number(r.quantity || 0);
         const price = Number(r.price || 0);
         return {
-          productId,
           name: r.name ?? `Product #${productId || "-"}`,
           imageUrl: normalizeUploadsUrl(r.promoImagePath ?? null),
           quantity,
@@ -1838,7 +2151,7 @@ router.get(
       const shippingReadModel = buildOrderShippingReadModel(
         Array.isArray((order as any).suborders) ? (order as any).suborders : []
       );
-      const storeSplits = Array.isArray((order as any).suborders)
+      const rawStoreSplits = Array.isArray((order as any).suborders)
         ? [...((order as any).suborders as any[])].map((suborder: any) => {
             const store =
               suborder?.store ??
@@ -1938,6 +2251,9 @@ router.get(
             };
           })
         : [];
+      const storeSplits = rawStoreSplits
+        .map(sanitizePublicStoreSplit)
+        .filter(Boolean);
       const contract = buildBuyerOrderContractPayload({
         orderStatus: status,
         paymentStatus:
@@ -1952,19 +2268,28 @@ router.get(
             .trim() || "UNPAID",
         paymentMethod,
         displayStatuses: storeSplits.map(
-          (split) => split.payment?.displayStatus || split.paymentStatus
+          (split: any) => split?.payment?.displayStatus || split?.paymentStatus
         ),
-        fulfillmentStatuses: storeSplits.map((split) => split.fulfillmentStatus),
+        fulfillmentStatuses: storeSplits.map((split: any) => split?.fulfillmentStatus),
       });
       const paymentEntry = buildBuyerPaymentEntryWithTargetPath(
         Number(order.id),
-        storeSplits.map((split) => split.payment?.displayStatus || split.paymentStatus)
+        rawStoreSplits.map((split) => split.payment?.displayStatus || split.paymentStatus)
       );
+      const maskedCustomer = {
+        name: maskName(customerName ?? shippingDetails?.fullName ?? null),
+        email: maskEmail(customerEmail),
+        phone: maskPhone(customerPhone ?? shippingDetails?.phoneNumber ?? null),
+        address: maskAddress(shippingDetails, customerAddress),
+        masked: true,
+      };
+      const publicShipments = Array.isArray(shippingReadModel.shipments)
+        ? shippingReadModel.shipments.map(sanitizePublicShipment).filter(Boolean)
+        : [];
 
       return res.json({
         data: {
-          id: Number(order.id),
-          ref: invoiceNo || String(order.id),
+          ref: invoiceNo || refParam,
           invoiceNo,
           checkoutMode:
             String(
@@ -2006,24 +2331,20 @@ router.get(
           shipmentCount: shippingReadModel.shipmentCount,
           shippingStatus: shippingReadModel.shippingStatus,
           shippingStatusMeta: shippingReadModel.shippingStatusMeta,
-          latestTrackingEvent: shippingReadModel.latestTrackingEvent,
+          latestTrackingEvent: sanitizePublicTrackingEvent(
+            shippingReadModel.latestTrackingEvent
+          ),
           hasActiveShipment: shippingReadModel.hasActiveShipment,
           hasTrackingNumber: shippingReadModel.hasTrackingNumber,
           usedLegacyFallback: shippingReadModel.usedLegacyFallback,
-          shipmentAuditMeta: shippingReadModel.shipmentAuditMeta,
-          suborderShipmentSummary: shippingReadModel.suborderShipmentSummary,
-          shipments: shippingReadModel.shipments,
-          couponCode: (order as any).couponCode ?? null,
+          shipments: publicShipments,
           paymentMethod,
           paymentEntry,
           createdAt,
-          shippingDetails,
-          customerName,
-          customerPhone,
-          customerAddress,
+          customer: maskedCustomer,
           items,
           storeSplits,
-          contract,
+          contract: sanitizePublicContract(contract),
         },
       });
     } catch (error) {

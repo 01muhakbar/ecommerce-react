@@ -7,11 +7,12 @@ import PasswordVisibilityButton from "../../components/auth/PasswordVisibilityBu
 import PasswordStrengthIndicator from "../../components/auth/PasswordStrengthIndicator.jsx";
 import { getRetryAfterSeconds } from "../../utils/authRateLimit.js";
 import {
-  PASSWORD_CONFIRM_HELPER,
-  PASSWORD_RULES_HELPER,
   buildCooldownButtonLabel,
   buildRetryAfterMessage,
 } from "../../utils/authUi.js";
+import adminLoginHero from "../../assets/admin-login-hero.jpg";
+import useStoreBranding from "../../hooks/useStoreBranding.js";
+import { resolveAssetUrl } from "../../lib/assetUrl.js";
 
 const toFieldErrors = (error) => {
   const flattened =
@@ -27,6 +28,7 @@ const firstFieldError = (fieldErrors, key) =>
 
 export default function AdminCreateAccountPage() {
   const startedAtRef = useRef(Date.now());
+  const { branding } = useStoreBranding();
   const statusRef = useRef(null);
   const fieldRefs = useRef({
     name: null,
@@ -120,183 +122,232 @@ export default function AdminCreateAccountPage() {
       setIsSubmitting(false);
     }
   };
+  const heroSrc = resolveAssetUrl(branding?.adminCreateAccountHeroUrl) || adminLoginHero;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-      <section className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-900">Create Staff Account</h1>
-        <p className="mt-2 text-sm text-slate-500">
-          Accounts created here always start as <span className="font-semibold text-slate-700">Staff</span>, stay locked until the verification email is completed, and require Admin Workspace approval before sign-in.
-        </p>
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef2f7_100%)] px-4 py-3 sm:px-6 sm:py-4 lg:px-8 lg:py-3">
+      <div className="mx-auto flex min-h-[calc(100vh-1.5rem)] max-w-5xl items-center justify-center">
+        <section className="grid w-full overflow-hidden rounded-[32px] border border-white/70 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.12)] lg:h-[calc(100vh-1.5rem)] lg:max-h-[640px] lg:grid-cols-[1.08fr_0.92fr]">
+          <div className="relative min-h-[220px] bg-slate-200 sm:min-h-[300px] lg:min-h-0">
+            <img
+              src={heroSrc}
+              alt="Admin workspace account creation preview"
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.08)_0%,rgba(15,23,42,0.48)_100%)]" />
+          </div>
 
-        <AuthNotice
-          id="admin-create-account-status"
-          tone={statusTone}
-          live={statusTone === "error" ? "assertive" : "polite"}
-          focusRef={statusRef}
-          className="mt-4"
-        >
-          {statusMessage}
-        </AuthNotice>
+          <div className="flex items-center bg-white lg:overflow-y-auto">
+            <div className="w-full px-6 py-6 sm:px-8 sm:py-7 lg:px-9 lg:pt-12 lg:pb-6">
+              <div className="mx-auto max-w-[400px]">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-teal-700">
+                  Staff Signup
+                </p>
+                <h1 className="mt-1.5 text-[2rem] font-semibold tracking-tight text-slate-950">
+                  Create account
+                </h1>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          <div className="hidden" aria-hidden="true">
-            <label htmlFor="admin-create-account-company">Company</label>
-            <input
-              id="admin-create-account-company"
-              type="text"
-              tabIndex={-1}
-              autoComplete="off"
-              value={form.honeypot}
-              onChange={(event) => setField("honeypot", event.target.value)}
-            />
-          </div>
-          <div>
-            <label htmlFor="admin-create-account-name" className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-              Full name
-            </label>
-            <input
-              id="admin-create-account-name"
-              ref={(node) => {
-                fieldRefs.current.name = node;
-              }}
-              type="text"
-              value={form.name}
-              onChange={(event) => setField("name", event.target.value)}
-              className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm"
-              placeholder="Your full name"
-              required
-            />
-            {firstFieldError(fieldErrors, "name") ? (
-              <p className="mt-2 text-xs text-rose-600">{firstFieldError(fieldErrors, "name")}</p>
-            ) : null}
-          </div>
-          <div>
-            <label htmlFor="admin-create-account-email" className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-              Email
-            </label>
-            <input
-              id="admin-create-account-email"
-              ref={(node) => {
-                fieldRefs.current.email = node;
-              }}
-              type="email"
-              value={form.email}
-              onChange={(event) => setField("email", event.target.value)}
-              className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm"
-              placeholder="staff@example.com"
-              autoComplete="email"
-              required
-            />
-            {firstFieldError(fieldErrors, "email") ? (
-              <p className="mt-2 text-xs text-rose-600">{firstFieldError(fieldErrors, "email")}</p>
-            ) : null}
-          </div>
-          <div>
-            <label htmlFor="admin-create-account-phone" className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-              WhatsApp / phone number
-            </label>
-            <input
-              id="admin-create-account-phone"
-              ref={(node) => {
-                fieldRefs.current.phoneNumber = node;
-              }}
-              type="tel"
-              value={form.phoneNumber}
-              onChange={(event) => setField("phoneNumber", event.target.value)}
-              className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm"
-              placeholder="+62 812 3456 7890"
-              autoComplete="tel"
-              required
-            />
-            {firstFieldError(fieldErrors, "phoneNumber") ? (
-              <p className="mt-2 text-xs text-rose-600">
-                {firstFieldError(fieldErrors, "phoneNumber")}
-              </p>
-            ) : (
-              <p className="mt-2 text-xs text-slate-500">
-                Use an active number for account recovery and workspace contact.
-              </p>
-            )}
-          </div>
-          <div>
-            <label htmlFor="admin-create-account-password" className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-              Password
-            </label>
-            <div className="relative mt-2">
-              <input
-                id="admin-create-account-password"
-                ref={(node) => {
-                  fieldRefs.current.password = node;
-                }}
-                type={showPassword ? "text" : "password"}
-                value={form.password}
-                onChange={(event) => setField("password", event.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-4 py-2 pr-14 text-sm"
-                placeholder="••••••••"
-                autoComplete="new-password"
-                required
-              />
-              <PasswordVisibilityButton
-                visible={showPassword}
-                onToggle={() => setShowPassword((prev) => !prev)}
-              />
+                <AuthNotice
+                  id="admin-create-account-status"
+                  tone={statusTone}
+                  live={statusTone === "error" ? "assertive" : "polite"}
+                  focusRef={statusRef}
+                  className="mt-3 rounded-2xl px-3 py-2 text-xs"
+                >
+                  {statusMessage}
+                </AuthNotice>
+
+                <form onSubmit={handleSubmit} className="mt-4 space-y-3.5">
+                  <div className="hidden" aria-hidden="true">
+                    <label htmlFor="admin-create-account-company">Company</label>
+                    <input
+                      id="admin-create-account-company"
+                      type="text"
+                      tabIndex={-1}
+                      autoComplete="off"
+                      value={form.honeypot}
+                      onChange={(event) => setField("honeypot", event.target.value)}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <label
+                        htmlFor="admin-create-account-name"
+                        className="text-sm font-medium text-slate-700"
+                      >
+                        Name
+                      </label>
+                      <input
+                        id="admin-create-account-name"
+                        ref={(node) => {
+                          fieldRefs.current.name = node;
+                        }}
+                        type="text"
+                        value={form.name}
+                        onChange={(event) => setField("name", event.target.value)}
+                        className="mt-1.5 h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 transition placeholder:text-slate-400 focus:border-teal-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-teal-500/10"
+                        placeholder="Your full name"
+                        required
+                      />
+                      {firstFieldError(fieldErrors, "name") ? (
+                        <p className="mt-1.5 text-xs leading-5 text-rose-600">
+                          {firstFieldError(fieldErrors, "name")}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="admin-create-account-email"
+                        className="text-sm font-medium text-slate-700"
+                      >
+                        Email
+                      </label>
+                      <input
+                        id="admin-create-account-email"
+                        ref={(node) => {
+                          fieldRefs.current.email = node;
+                        }}
+                        type="email"
+                        value={form.email}
+                        onChange={(event) => setField("email", event.target.value)}
+                        className="mt-1.5 h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 transition placeholder:text-slate-400 focus:border-teal-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-teal-500/10"
+                        placeholder="staff@example.com"
+                        autoComplete="email"
+                        required
+                      />
+                      {firstFieldError(fieldErrors, "email") ? (
+                        <p className="mt-1.5 text-xs leading-5 text-rose-600">
+                          {firstFieldError(fieldErrors, "email")}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="admin-create-account-phone"
+                      className="text-sm font-medium text-slate-700"
+                    >
+                      WhatsApp / phone number
+                    </label>
+                    <input
+                      id="admin-create-account-phone"
+                      ref={(node) => {
+                        fieldRefs.current.phoneNumber = node;
+                      }}
+                      type="tel"
+                      value={form.phoneNumber}
+                      onChange={(event) => setField("phoneNumber", event.target.value)}
+                      className="mt-1.5 h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 transition placeholder:text-slate-400 focus:border-teal-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-teal-500/10"
+                      placeholder="+62 812 3456 7890"
+                      autoComplete="tel"
+                      required
+                    />
+                    {firstFieldError(fieldErrors, "phoneNumber") && (
+                      <p className="mt-1.5 text-xs leading-5 text-rose-600">
+                        {firstFieldError(fieldErrors, "phoneNumber")}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="admin-create-account-password"
+                      className="text-sm font-medium text-slate-700"
+                    >
+                      Password
+                    </label>
+                    <div className="relative mt-2">
+                      <input
+                        id="admin-create-account-password"
+                        ref={(node) => {
+                          fieldRefs.current.password = node;
+                        }}
+                        type={showPassword ? "text" : "password"}
+                        value={form.password}
+                        onChange={(event) => setField("password", event.target.value)}
+                        className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 pr-14 text-sm text-slate-900 transition placeholder:text-slate-400 focus:border-teal-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-teal-500/10"
+                        placeholder="••••••••"
+                        autoComplete="new-password"
+                        required
+                      />
+                      <PasswordVisibilityButton
+                        visible={showPassword}
+                        onToggle={() => setShowPassword((prev) => !prev)}
+                      />
+                    </div>
+                    <PasswordStrengthIndicator password={form.password} />
+                    {firstFieldError(fieldErrors, "password") ? (
+                      <p className="mt-1.5 text-xs leading-5 text-rose-600">
+                        {firstFieldError(fieldErrors, "password")}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="admin-create-account-password-confirm"
+                      className="text-sm font-medium text-slate-700"
+                    >
+                      Confirm password
+                    </label>
+                    <div className="relative mt-1.5">
+                      <input
+                        id="admin-create-account-password-confirm"
+                        ref={(node) => {
+                          fieldRefs.current.passwordConfirm = node;
+                        }}
+                        type={showPasswordConfirm ? "text" : "password"}
+                        value={form.passwordConfirm}
+                        onChange={(event) => setField("passwordConfirm", event.target.value)}
+                        className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 pr-14 text-sm text-slate-900 transition placeholder:text-slate-400 focus:border-teal-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-teal-500/10"
+                        placeholder="Repeat your password"
+                        autoComplete="new-password"
+                        required
+                      />
+                      <PasswordVisibilityButton
+                        visible={showPasswordConfirm}
+                        onToggle={() => setShowPasswordConfirm((prev) => !prev)}
+                        labelShow="Show password confirmation"
+                        labelHide="Hide password confirmation"
+                      />
+                    </div>
+                    {firstFieldError(fieldErrors, "passwordConfirm") ? (
+                      <p className="mt-1.5 text-xs leading-5 text-rose-600">
+                        {firstFieldError(fieldErrors, "passwordConfirm")}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || cooldownSeconds > 0}
+                    className="w-full rounded-2xl bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-teal-500/70"
+                  >
+                    {isSubmitting
+                      ? "Creating account..."
+                      : buildCooldownButtonLabel(cooldownSeconds, "Create account")}
+                  </button>
+                </form>
+
+                <div className="mt-4 border-t border-slate-200 pt-3">
+                  <p className="text-sm text-slate-500">
+                    Already have an account?{" "}
+                    <Link
+                      to="/admin/login"
+                      className="font-semibold text-teal-700 transition hover:text-teal-800 hover:underline"
+                    >
+                      Login
+                    </Link>
+                  </p>
+                </div>
+              </div>
             </div>
-            <p className="mt-2 text-xs text-slate-500">{PASSWORD_RULES_HELPER}</p>
-            <PasswordStrengthIndicator password={form.password} />
-            {firstFieldError(fieldErrors, "password") ? (
-              <p className="mt-2 text-xs text-rose-600">{firstFieldError(fieldErrors, "password")}</p>
-            ) : null}
           </div>
-          <div>
-            <label htmlFor="admin-create-account-password-confirm" className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-              Confirm password
-            </label>
-            <div className="relative mt-2">
-              <input
-                id="admin-create-account-password-confirm"
-                ref={(node) => {
-                  fieldRefs.current.passwordConfirm = node;
-                }}
-                type={showPasswordConfirm ? "text" : "password"}
-                value={form.passwordConfirm}
-                onChange={(event) => setField("passwordConfirm", event.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-4 py-2 pr-14 text-sm"
-                placeholder="Repeat your password"
-                autoComplete="new-password"
-                required
-              />
-              <PasswordVisibilityButton
-                visible={showPasswordConfirm}
-                onToggle={() => setShowPasswordConfirm((prev) => !prev)}
-                labelShow="Show password confirmation"
-                labelHide="Hide password confirmation"
-              />
-            </div>
-            <p className="mt-2 text-xs text-slate-500">{PASSWORD_CONFIRM_HELPER}</p>
-            {firstFieldError(fieldErrors, "passwordConfirm") ? (
-              <p className="mt-2 text-xs text-rose-600">{firstFieldError(fieldErrors, "passwordConfirm")}</p>
-            ) : null}
-          </div>
-
-          <button
-            type="submit"
-            disabled={isSubmitting || cooldownSeconds > 0}
-            className="w-full rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
-          >
-            {isSubmitting
-              ? "Creating account..."
-              : buildCooldownButtonLabel(cooldownSeconds, "Create account")}
-          </button>
-        </form>
-
-        <p className="mt-4 text-sm text-slate-500">
-          Already verified?{" "}
-          <Link to="/admin/login" className="font-semibold text-slate-900 hover:underline">
-            Back to admin login
-          </Link>
-        </p>
-      </section>
+        </section>
+      </div>
     </div>
   );
 }

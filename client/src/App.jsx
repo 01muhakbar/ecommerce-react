@@ -289,9 +289,9 @@ export default function App() {
             <Route path="product/:slug" element={<StoreProductDetailPage />} />
             <Route path="cart" element={<StoreCartPage />} />
             <Route path="checkout" element={<CheckoutPage />} />
+            <Route path="order/:ref" element={<StoreOrderTrackingPage />} />
             <Route element={<AccountGuard />}>
               <Route path="checkout/success" element={<StoreCheckoutSuccessPage />} />
-              <Route path="order/:ref" element={<StoreOrderTrackingPage />} />
             </Route>
             <Route path="about-us" element={<StoreAboutUsPage />} />
             <Route path="privacy-policy" element={<StorePrivacyPolicyPage />} />

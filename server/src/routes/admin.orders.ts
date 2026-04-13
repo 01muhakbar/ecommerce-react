@@ -838,6 +838,39 @@ router.get("/", requireStaffOrAdmin, async (req, res) => {
         const rawOrderStatus = String(getAttr(orderRow, "status") || "pending");
         const paymentStatus =
           String(getAttr(orderRow, "paymentStatus") || "").toUpperCase().trim() || "UNPAID";
+        const suborders = await Suborder.findAll({
+          where: { orderId: id },
+          attributes: ["id", "paymentStatus", "fulfillmentStatus"],
+          include: [
+            {
+              model: Shipment,
+              as: "shipment",
+              required: false,
+              include: [
+                {
+                  model: TrackingEvent,
+                  as: "trackingEvents",
+                  attributes: [
+                    "id",
+                    "shipmentId",
+                    "eventType",
+                    "eventLabel",
+                    "eventDescription",
+                    "occurredAt",
+                    "source",
+                    "actorType",
+                    "actorId",
+                    "metadata",
+                    "createdAt",
+                  ],
+                  required: false,
+                },
+              ],
+            } as any,
+          ],
+          order: [["id", "ASC"]],
+        });
+        const shippingReadModel = buildOrderShippingReadModel(suborders);
         const contract = await buildAdminContractForOrder({
           orderId: id,
           orderStatus: rawOrderStatus,
@@ -855,6 +888,7 @@ router.get("/", requireStaffOrAdmin, async (req, res) => {
           orderTime: getAttr(orderRow, "createdAt"),
           createdAt: getAttr(orderRow, "createdAt"),
           customerName,
+          customerEmail: customer?.email ?? null,
           customerPhone:
             getAttr(orderRow, "customerPhone") ??
             getAttr(orderRow, "shippingPhone") ??
@@ -868,6 +902,14 @@ router.get("/", requireStaffOrAdmin, async (req, res) => {
           status: toUiStatus(rawOrderStatus),
           paymentStatus,
           paymentStatusMeta: buildPaymentStatusMeta(paymentStatus),
+          shippingStatus: shippingReadModel.shippingStatus,
+          shippingStatusMeta: shippingReadModel.shippingStatusMeta,
+          latestTrackingEvent: shippingReadModel.latestTrackingEvent,
+          hasActiveShipment: shippingReadModel.hasActiveShipment,
+          hasTrackingNumber: shippingReadModel.hasTrackingNumber,
+          usedLegacyFallback: shippingReadModel.usedLegacyFallback,
+          shipmentAuditMeta: shippingReadModel.shipmentAuditMeta,
+          suborderShipmentSummary: shippingReadModel.suborderShipmentSummary,
           contract,
         };
       })

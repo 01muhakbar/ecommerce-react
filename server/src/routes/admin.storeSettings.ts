@@ -19,13 +19,23 @@ const BRANDING_TARGET_FIELD_BY_KEY = {
   client: "clientLogoUrl",
   admin: "adminLogoUrl",
   seller: "sellerLogoUrl",
+  "admin-login-hero": "adminLoginHeroUrl",
+  "admin-forgot-password-hero": "adminForgotPasswordHeroUrl",
+  "admin-create-account-hero": "adminCreateAccountHeroUrl",
 } as const;
 
 type BrandingTarget = keyof typeof BRANDING_TARGET_FIELD_BY_KEY;
 
 const normalizeBrandingTarget = (value: unknown): BrandingTarget | null => {
   const normalized = String(value ?? "").trim().toLowerCase();
-  if (normalized === "client" || normalized === "admin" || normalized === "seller") {
+  if (
+    normalized === "client" ||
+    normalized === "admin" ||
+    normalized === "seller" ||
+    normalized === "admin-login-hero" ||
+    normalized === "admin-forgot-password-hero" ||
+    normalized === "admin-create-account-hero"
+  ) {
     return normalized;
   }
   return null;

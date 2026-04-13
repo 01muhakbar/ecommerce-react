@@ -229,6 +229,21 @@ const main = async () => {
   try {
     await waitForHealth(() => serverExitCode);
     if (!SKIP_APP_SMOKES) {
+      await runCommand(
+        "auth session invalidation smoke",
+        ["-F", "server", "smoke:auth-session-invalidation"],
+        productionEnv
+      );
+      await runCommand(
+        "auth rate limit smoke",
+        ["-F", "server", "smoke:auth-rate-limit"],
+        productionEnv
+      );
+      await runCommand(
+        "admin public auth smoke",
+        ["-F", "server", "smoke:admin-public-auth"],
+        productionEnv
+      );
       await runCommand("store readiness smoke", ["-F", "server", "smoke:store-readiness"], productionEnv);
       await runCommand(
         "product visibility smoke",

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import Sidebar from "../Layout/Sidebar.jsx";
 import Navbar from "../Layout/Navbar.jsx";
+import AdminSearchPalette from "../admin/AdminSearchPalette.jsx";
 import useStoredBoolean from "../../hooks/useStoredBoolean.js";
 import "../Layout/MainLayout.css";
 
@@ -16,6 +17,7 @@ const readStoredTheme = () => {
 
 export default function AdminLayout() {
   const [theme, setTheme] = useState(readStoredTheme);
+  const [searchPaletteOpen, setSearchPaletteOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useStoredBoolean(
     ADMIN_SIDEBAR_COLLAPSED_KEY,
     false
@@ -31,6 +33,18 @@ export default function AdminLayout() {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   };
 
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "k") {
+        return;
+      }
+      event.preventDefault();
+      setSearchPaletteOpen(true);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   return (
     <div
       className={`layout admin-shell ${isDark ? "admin-theme-dark dark" : "admin-theme-light"}`}
@@ -44,11 +58,17 @@ export default function AdminLayout() {
           onToggleTheme={handleToggleTheme}
           isSidebarCollapsed={sidebarCollapsed}
           onToggleSidebar={() => setSidebarCollapsed((prev) => !prev)}
+          isSearchPaletteOpen={searchPaletteOpen}
+          onOpenSearchPalette={() => setSearchPaletteOpen(true)}
         />
         <main className="layout__page admin-page-shell">
           <Outlet />
         </main>
       </div>
+      <AdminSearchPalette
+        open={searchPaletteOpen}
+        onClose={() => setSearchPaletteOpen(false)}
+      />
     </div>
   );
 }

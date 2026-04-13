@@ -2,71 +2,9 @@ import { useEffect, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../../auth/useAuth.js";
-import { can } from "../../constants/permissions.js";
 import WorkspaceSidebarBrand from "../workspace/WorkspaceSidebarBrand.jsx";
+import { getAllowedAdminNavigation, matchesRoute } from "./adminNavigation.jsx";
 import "./Sidebar.css";
-
-const IconGrid = (props) => (
-  <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
-    <rect x="3" y="3" width="7" height="7" rx="2" />
-    <rect x="14" y="3" width="7" height="7" rx="2" />
-    <rect x="3" y="14" width="7" height="7" rx="2" />
-    <rect x="14" y="14" width="7" height="7" rx="2" />
-  </svg>
-);
-
-const IconBoxes = (props) => (
-  <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
-    <path d="M4 7l8-4 8 4-8 4-8-4Z" />
-    <path d="M4 7v10l8 4 8-4V7" />
-    <path d="M12 11v10" />
-  </svg>
-);
-
-const IconUsers = (props) => (
-  <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
-    <circle cx="9" cy="8" r="3" />
-    <circle cx="17" cy="9" r="2.5" />
-    <path d="M4 19c0-3 3-5 6-5s6 2 6 5" />
-    <path d="M14 19c0-2.2 2.2-4 5-4" />
-  </svg>
-);
-
-const IconReceipt = (props) => (
-  <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
-    <path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z" />
-    <path d="M9 7h6M9 11h6M9 15h4" />
-  </svg>
-);
-
-const IconStaff = (props) => (
-  <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
-    <circle cx="12" cy="8" r="3.2" />
-    <path d="M4 20c0-4 4-6 8-6s8 2 8 6" />
-  </svg>
-);
-
-const IconSettings = (props) => (
-  <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
-    <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
-    <path d="M19.4 15a7.9 7.9 0 0 0 .1-2l2-1.6-2-3.4-2.4.7a8 8 0 0 0-1.7-1l-.4-2.5H10l-.4 2.5a8 8 0 0 0-1.7 1l-2.4-.7-2 3.4 2 1.6a7.9 7.9 0 0 0 .1 2l-2 1.6 2 3.4 2.4-.7a8 8 0 0 0 1.7 1l.4 2.5h4l.4-2.5a8 8 0 0 0 1.7-1l2.4.7 2-3.4-2-1.6Z" />
-  </svg>
-);
-
-const IconGlobe = (props) => (
-  <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
-    <circle cx="12" cy="12" r="9" />
-    <path d="M3 12h18M12 3c2.5 2.5 4 5.7 4 9s-1.5 6.5-4 9c-2.5-2.5-4-5.7-4-9s1.5-6.5 4-9Z" />
-  </svg>
-);
-
-const IconStore = (props) => (
-  <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
-    <path d="M4 7h16l-1.5 5H5.5L4 7Z" />
-    <path d="M6 12v8h12v-8" />
-    <path d="M9 12v8M15 12v8" />
-  </svg>
-);
 
 const ChevronDown = (props) => (
   <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
@@ -89,124 +27,12 @@ const IconLogout = (props) => (
   </svg>
 );
 
-const MENU = [
-  {
-    section: "Overview",
-    label: "Dashboard",
-    to: "/admin",
-    icon: IconGrid,
-    perm: "DASHBOARD_VIEW",
-  },
-  {
-    section: "Commerce",
-    label: "Catalog",
-    icon: IconBoxes,
-    hasCaret: true,
-    children: [
-      { label: "Products", to: "/admin/catalog/products", perm: "PRODUCTS_VIEW" },
-      { label: "Categories", to: "/admin/catalog/categories", perm: "CATEGORIES_CRUD" },
-      { label: "Attributes", to: "/admin/catalog/attributes", perm: "ATTRIBUTES_CRUD" },
-      { label: "Coupons", to: "/admin/catalog/coupons", perm: "COUPONS_CRUD" },
-    ],
-  },
-  {
-    section: "Commerce",
-    label: "Customers",
-    to: "/admin/customers",
-    icon: IconUsers,
-    perm: "CUSTOMERS_VIEW",
-  },
-  {
-    section: "Commerce",
-    label: "Orders",
-    to: "/admin/orders",
-    icon: IconReceipt,
-    perm: "ORDERS_VIEW",
-  },
-  {
-    section: "Workspace",
-    label: "All Accounts",
-    to: "/admin/all-accounts",
-    icon: IconStaff,
-    perm: "STAFF_MANAGE",
-  },
-  {
-    section: "Workspace",
-    label: "Settings",
-    to: "/admin/settings",
-    icon: IconSettings,
-    perm: "SETTINGS_MANAGE",
-  },
-  {
-    section: "Workspace",
-    label: "International",
-    icon: IconGlobe,
-    hasCaret: true,
-    children: [
-      { label: "Languages", to: "/admin/international/languages", perm: "SETTINGS_MANAGE" },
-      { label: "Currencies", to: "/admin/international/currencies", perm: "SETTINGS_MANAGE" },
-    ],
-  },
-  {
-    section: "Workspace",
-    label: "Online Store",
-    icon: IconStore,
-    hasCaret: true,
-    children: [
-      { label: "View Store", to: "/", perm: "DASHBOARD_VIEW" },
-      {
-        label: "Store Customization",
-        to: "/admin/store/customization",
-        perm: "SETTINGS_MANAGE",
-      },
-      {
-        label: "Store Profile",
-        to: "/admin/online-store/store-profile",
-        perm: "SETTINGS_MANAGE",
-      },
-      {
-        label: "Store Settings",
-        to: "/admin/store/store-settings",
-        perm: "SETTINGS_MANAGE",
-      },
-      {
-        label: "Store Payment",
-        to: "/admin/store/payment-profiles",
-        perm: "SETTINGS_MANAGE",
-      },
-      {
-        label: "Payment Audit",
-        to: "/admin/online-store/payment-audit",
-        perm: "DASHBOARD_VIEW",
-      },
-      {
-        label: "Shipping Reconciliation",
-        to: "/admin/online-store/shipping-reconciliation",
-        perm: "DASHBOARD_VIEW",
-      },
-      {
-        label: "Store Applications",
-        to: "/admin/store/applications",
-        perm: "STORE_APPLICATIONS_REVIEW",
-      },
-    ],
-  },
-];
-
-const matchesRoute = (targetPath, currentPath) => {
-  if (!targetPath) return false;
-  if (targetPath === currentPath) return true;
-  if (targetPath === "/") return currentPath === "/";
-  return currentPath.startsWith(`${targetPath}/`);
-};
-
 export default function Sidebar({ collapsed = false }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const queryClient = useQueryClient();
   const [openMenus, setOpenMenus] = useState({
-    Catalog: true,
     International:
       pathname.startsWith("/admin/international/languages") ||
       pathname.startsWith("/admin/international/currencies") ||
@@ -258,18 +84,7 @@ export default function Sidebar({ collapsed = false }) {
     navigate("/admin/login", { replace: true });
   };
 
-  const allowedMenu = MENU.map((item) => {
-    if (!item.children) {
-      return item.perm ? (can(user, item.perm) ? item : null) : item;
-    }
-    const children = item.children.filter((child) =>
-      child.perm ? can(user, child.perm) : true
-    );
-    if (children.length === 0) {
-      return null;
-    }
-    return { ...item, children };
-  }).filter(Boolean);
+  const allowedMenu = getAllowedAdminNavigation(user);
 
   return (
     <aside className={`sidebar ${collapsed ? "is-collapsed" : ""}`}>
@@ -285,6 +100,7 @@ export default function Sidebar({ collapsed = false }) {
       <nav className="sidebar__menu" aria-label="Sidebar">
         {allowedMenu.map((item, index) => {
           const hasChildren = Array.isArray(item.children);
+          const isDisabled = item.disabled === true;
           const isOpen = !!openMenus[item.label];
           const canToggle = item.hasCaret && hasChildren;
           const hasActiveChild = hasChildren
@@ -298,7 +114,7 @@ export default function Sidebar({ collapsed = false }) {
               {showSectionTitle ? (
                 <p className="sidebar__section-title">{item.section}</p>
               ) : null}
-              {item.to && !hasChildren ? (
+              {item.to && !hasChildren && !isDisabled ? (
                 <NavLink
                   to={item.to}
                   end={item.to === "/admin"}
@@ -312,7 +128,7 @@ export default function Sidebar({ collapsed = false }) {
                   </span>
                   <span className="sidebar__label">{item.label}</span>
                 </NavLink>
-              ) : (
+              ) : hasChildren ? (
                 <button
                   type="button"
                   className={`sidebar__link sidebar__link--button ${
@@ -332,6 +148,17 @@ export default function Sidebar({ collapsed = false }) {
                     </span>
                   ) : null}
                 </button>
+              ) : (
+                <div
+                  className="sidebar__link is-disabled"
+                  title={collapsed ? item.label : "Coming soon"}
+                  aria-disabled="true"
+                >
+                  <span className="sidebar__icon">
+                    <item.icon className="sidebar__icon-svg" />
+                  </span>
+                  <span className="sidebar__label">{item.label}</span>
+                </div>
               )}
 
               {hasChildren && isOpen ? (

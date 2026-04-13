@@ -38,6 +38,9 @@ export const DEFAULT_STORE_SETTINGS = {
     clientLogoUrl: "",
     adminLogoUrl: "",
     sellerLogoUrl: "",
+    adminLoginHeroUrl: "",
+    adminForgotPasswordHeroUrl: "",
+    adminCreateAccountHeroUrl: "",
     workspaceBrandName: "TP PRENEURS",
   },
 };
@@ -275,6 +278,18 @@ export const sanitizeStoreSettings = (rawData: unknown) => {
       clientLogoUrl: toText(brandingSource.clientLogoUrl, defaults.branding.clientLogoUrl),
       adminLogoUrl: toText(brandingSource.adminLogoUrl, defaults.branding.adminLogoUrl),
       sellerLogoUrl: toText(brandingSource.sellerLogoUrl, defaults.branding.sellerLogoUrl),
+      adminLoginHeroUrl: toText(
+        brandingSource.adminLoginHeroUrl,
+        defaults.branding.adminLoginHeroUrl
+      ),
+      adminForgotPasswordHeroUrl: toText(
+        brandingSource.adminForgotPasswordHeroUrl,
+        defaults.branding.adminForgotPasswordHeroUrl
+      ),
+      adminCreateAccountHeroUrl: toText(
+        brandingSource.adminCreateAccountHeroUrl,
+        defaults.branding.adminCreateAccountHeroUrl
+      ),
       workspaceBrandName: toText(
         brandingSource.workspaceBrandName,
         defaults.branding.workspaceBrandName
@@ -727,6 +742,9 @@ export const buildStoreSettingsContracts = (rawSettings: unknown) => {
           clientLogoUrl: toText(settings.branding.clientLogoUrl, ""),
           adminLogoUrl: toText(settings.branding.adminLogoUrl, ""),
           sellerLogoUrl: toText(settings.branding.sellerLogoUrl, ""),
+          adminLoginHeroUrl: toText(settings.branding.adminLoginHeroUrl, ""),
+          adminForgotPasswordHeroUrl: toText(settings.branding.adminForgotPasswordHeroUrl, ""),
+          adminCreateAccountHeroUrl: toText(settings.branding.adminCreateAccountHeroUrl, ""),
           workspaceBrandName: toText(settings.branding.workspaceBrandName, "TP PRENEURS"),
         },
       },

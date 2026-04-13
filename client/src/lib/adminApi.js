@@ -321,8 +321,19 @@ const normalizeOrdersList = (payload, params = {}) => {
     invoiceNo: order.invoiceNo || order.invoice_no || order.invoice || order.ref || null,
     createdAt: order.createdAt || order.created_at || null,
     totalAmount: Number(order.totalAmount || order.total || order.total_amount || 0),
+    customerEmail: order.customerEmail || order.customer?.email || null,
     paymentMethod: order.paymentMethod || order.method || null,
     paymentStatusMeta: order.paymentStatusMeta || null,
+    shippingStatus: order.shippingStatus || null,
+    shippingStatusMeta: order.shippingStatusMeta || null,
+    latestTrackingEvent: order.latestTrackingEvent || null,
+    hasActiveShipment: Boolean(order.hasActiveShipment),
+    hasTrackingNumber: Boolean(order.hasTrackingNumber),
+    usedLegacyFallback: Boolean(order.usedLegacyFallback),
+    shipmentAuditMeta: order.shipmentAuditMeta || null,
+    suborderShipmentSummary: Array.isArray(order.suborderShipmentSummary)
+      ? order.suborderShipmentSummary
+      : [],
     contract: order.contract || null,
   }));
 

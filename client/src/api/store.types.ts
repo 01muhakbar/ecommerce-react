@@ -375,6 +375,9 @@ export type PublicStoreSettings = {
     clientLogoUrl: string;
     adminLogoUrl: string;
     sellerLogoUrl: string;
+    adminLoginHeroUrl: string;
+    adminForgotPasswordHeroUrl: string;
+    adminCreateAccountHeroUrl: string;
     workspaceBrandName: string;
   };
 };

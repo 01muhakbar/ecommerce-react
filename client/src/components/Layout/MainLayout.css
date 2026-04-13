@@ -5,7 +5,7 @@
 }
 
 .admin-shell {
-  background: #f3f4f6;
+  background: #f6f8fb;
 }
 
 .layout__content {
@@ -17,7 +17,7 @@
 }
 
 .admin-content {
-  background: #f3f4f6;
+  background: transparent;
 }
 
 .layout__page {
@@ -30,6 +30,11 @@
 
 .admin-page-shell {
   width: 100%;
+}
+
+.admin-shell .layout__page {
+  max-width: 1300px;
+  padding: 14px 16px 28px;
 }
 
 /* Keep card rhythm consistent across admin pages without changing page logic. */
@@ -114,5 +119,9 @@
 @media (max-width: 1024px) {
   .layout__page {
     padding: 20px 16px 24px;
+  }
+
+  .admin-shell .layout__page {
+    padding: 12px 12px 22px;
   }
 }

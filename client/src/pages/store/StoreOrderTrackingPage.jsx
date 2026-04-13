@@ -85,6 +85,59 @@ const getInitials = (value, fallback = "TP") => {
     .join("");
 };
 
+const maskWord = (value) => {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "";
+  if (normalized.length <= 1) return "*";
+  return normalized[0] + "*".repeat(Math.min(Math.max(normalized.length - 1, 1), 4));
+};
+
+const maskName = (value) => {
+  const normalized = String(value || "")
+    .trim()
+    .replace(/\s+/g, " ");
+  if (!normalized) return null;
+  return normalized
+    .split(" ")
+    .filter(Boolean)
+    .map(maskWord)
+    .join(" ");
+};
+
+const maskEmail = (value) => {
+  const normalized = String(value || "").trim();
+  if (!normalized || !normalized.includes("@")) return null;
+  const [localPart, ...domainParts] = normalized.split("@");
+  const domain = domainParts.join("@").trim();
+  if (!localPart || !domain) return null;
+  return `${localPart.slice(0, 1)}${"*".repeat(Math.min(Math.max(localPart.length - 1, 3), 6))}@${domain}`;
+};
+
+const maskPhone = (value) => {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (!digits) return null;
+  if (digits.length <= 4) return `${digits[0] || "*"}***`;
+  const start = digits.slice(0, Math.min(2, digits.length));
+  const end = digits.slice(-2);
+  return `${start}${"*".repeat(Math.max(digits.length - start.length - end.length, 4))}${end}`;
+};
+
+const maskAddress = (value) => {
+  const normalized = String(value || "")
+    .trim()
+    .replace(/\s+/g, " ");
+  if (!normalized) return null;
+  const parts = normalized.split(",").map((part) => part.trim()).filter(Boolean);
+  if (parts.length === 0) return null;
+  const [first, ...rest] = parts;
+  const maskedFirst = first
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => (/^\d+[A-Z0-9-]*$/i.test(part) ? "*".repeat(Math.max(part.length, 2)) : maskWord(part)))
+    .join(" ");
+  return [maskedFirst, ...rest].filter(Boolean).join(", ");
+};
+
 const getToneBadgeClass = (tone) => {
   const value = String(tone || "").trim().toLowerCase();
   if (value === "amber") return "border-amber-200 bg-amber-50 text-amber-700";
@@ -539,13 +592,17 @@ export default function StoreOrderTrackingPage() {
     orderRefParam
   );
   const createdAt = order?.createdAt || order?.created_at || order?.orderTime || null;
-  const customer = order?.customer || order?.user || {};
+  const customer = order?.customer && typeof order.customer === "object" ? order.customer : {};
   const customerName =
-    order?.customerName || customer.name || order?.userName || customer.email || "Customer";
-  const customerEmail = order?.customerEmail || customer.email || order?.email || "-";
-  const customerPhone = order?.customerPhone || customer.phone || order?.phone || "-";
+    maskName(customer.name || order?.customerName || order?.userName) ||
+    maskEmail(customer.email || order?.customerEmail || order?.email) ||
+    "Customer";
+  const customerEmail =
+    maskEmail(customer.email || order?.customerEmail || order?.email) || "-";
+  const customerPhone =
+    maskPhone(customer.phone || order?.customerPhone || order?.phone) || "-";
   const customerAddress =
-    order?.customerAddress || customer.address || order?.shippingAddress || "-";
+    maskAddress(customer.address || order?.customerAddress || order?.shippingAddress) || "-";
   const paymentMethod = order?.paymentMethod || order?.method || "-";
   const contract = order?.contract || null;
   const statusSummary = getOrderContractSummary(contract);
