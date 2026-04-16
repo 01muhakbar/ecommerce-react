@@ -975,7 +975,6 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
     );
   }
 
-  const storeSlug = sellerContext?.store?.slug || "store";
   const selectedCategoryCount = selectedCategories.length;
   const isPublished = Boolean(
     productQuery.data?.published ??
@@ -992,13 +991,6 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
       : isPublished
         ? "Published but blocked"
         : "Hidden from storefront");
-  const publishTone = isStorefrontVisible
-    ? "emerald"
-    : isPublished
-      ? "amber"
-      : publishing?.canPublish
-      ? "sky"
-      : "amber";
   const saveActionLabel = mutation.isPending
     ? isEditMode
       ? "Saving..."
@@ -1019,33 +1011,10 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
       <div className="ml-auto max-w-[1080px] rounded-[28px] bg-white">
         <div className="border-b border-slate-200/80 px-4 py-4 md:px-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                <span>Seller</span>
-                <span>/</span>
-                <span>Catalog</span>
-                <span>/</span>
-                <span>{isEditMode ? "Edit" : "Add"}</span>
-                <span>/</span>
-                <span>{storeSlug}</span>
-              </div>
-              <div>
-                <h1 className="text-2xl font-semibold text-slate-900 md:text-3xl">
-                  {isEditMode ? "Edit Product" : "Add Product"}
-                </h1>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <DrawerChip
-                    icon={isEditMode ? Pencil : Plus}
-                    label={isEditMode ? "Edit mode" : "Create mode"}
-                    tone="emerald"
-                  />
-                  <DrawerChip
-                    icon={isStorefrontVisible ? Eye : EyeOff}
-                    label={isEditMode ? visibilityLabel : "Hidden from storefront"}
-                    tone={publishTone}
-                  />
-                </div>
-              </div>
+            <div>
+              <h1 className="text-2xl font-semibold text-slate-900 md:text-3xl">
+                {isEditMode ? "Edit Product" : "Add Product"}
+              </h1>
             </div>
 
             <div className="flex items-center gap-2 self-start">
@@ -1105,7 +1074,6 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
           <section className="space-y-5">
             <div className="border border-slate-200/70 bg-white px-4 py-5 md:px-5">
               <form className="space-y-5" onSubmit={handleSubmit}>
-                <FormSectionLabel eyebrow="Identity" title="Basic Info" />
                 <ProductField
                   label="Name"
                   icon={FileText}

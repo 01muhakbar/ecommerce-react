@@ -38,6 +38,7 @@ export interface ProductAttributes {
   preOrder?: boolean;
   preorderDays?: number;
   youtubeLink?: string;
+  seo?: any;
   variations?: any;
   wholesale?: any;
   createdAt?: Date;
@@ -102,6 +103,7 @@ class Product
   declare preOrder?: boolean;
   declare preorderDays?: number;
   declare youtubeLink?: string;
+  declare seo?: any;
   declare variations?: any;
   declare wholesale?: any;
   declare readonly createdAt: Date;
@@ -171,6 +173,7 @@ class Product
         },
         preorderDays: { type: DataTypes.INTEGER, allowNull: true },
         youtubeLink: { type: DataTypes.STRING(255), allowNull: true },
+        seo: { type: DataTypes.JSON, allowNull: true },
         variations: { type: DataTypes.JSON, allowNull: true },
         wholesale: { type: DataTypes.JSON, allowNull: true },
         promoImagePath: { type: DataTypes.STRING(255), allowNull: true },

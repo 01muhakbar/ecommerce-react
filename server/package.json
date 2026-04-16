@@ -51,6 +51,8 @@
     "smoke:currencies-delete": "tsx src/scripts/smokeCurrenciesDelete.ts",
     "smoke:store-settings": "tsx src/scripts/smokeStoreSettings.ts",
     "smoke:admin-store-payment-profiles": "tsx src/scripts/smokeAdminStorePaymentProfiles.ts",
+    "smoke:admin-product-variation-validation": "tsx src/scripts/smokeAdminProductVariationValidation.ts",
+    "smoke:admin-product-seo": "tsx src/scripts/smokeAdminProductSeo.ts",
     "smoke:store-readiness": "tsx src/scripts/smokeStoreReadiness.ts",
     "smoke:store-application": "tsx src/scripts/smokeStoreApplication.ts",
     "smoke:store-application-activation": "tsx src/scripts/smokeStoreOnboardingActivation.ts",

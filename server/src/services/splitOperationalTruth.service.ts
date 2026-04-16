@@ -13,6 +13,11 @@ const PAYMENT_ACTION_REQUIRED = new Set(["UNPAID", "CREATED", "REJECTED"]);
 const PAYMENT_UNDER_REVIEW = new Set(["PENDING_CONFIRMATION"]);
 const PAYMENT_FINAL_NEGATIVE = new Set(["FAILED", "EXPIRED", "CANCELLED"]);
 const SHIPMENT_FINAL_NEGATIVE = new Set(["RETURNED", "CANCELLED"]);
+const AGGREGATE_SHIPMENT_PROGRESS = new Set(["READY_TO_FULFILL", "PROCESSING", "PACKED"]);
+const AGGREGATE_SHIPMENT_DELIVERY = new Set(["SHIPPED", "IN_TRANSIT", "OUT_FOR_DELIVERY"]);
+
+const asObject = (value: unknown) =>
+  value && typeof value === "object" ? (value as Record<string, any>) : null;
 
 const normalizeActions = (actions: unknown, fallbackScope: string) =>
   (Array.isArray(actions) ? actions : [])
@@ -234,5 +239,139 @@ export const buildSplitOperationalTruth = (input: {
         .filter((action) => action.enabled).length,
     },
     statusSummary,
+  };
+};
+
+export const buildBuyerAggregateStatusSummary = (
+  splits: unknown[],
+  fallbackSummary?: unknown
+) => {
+  const normalizedFallback = asObject(fallbackSummary);
+  const entries = (Array.isArray(splits) ? splits : [])
+    .map((split) => {
+      const truth = asObject(asObject(split)?.operationalTruth);
+      const summary = asObject(truth?.statusSummary);
+      if (!summary) return null;
+
+      const finality = asObject(truth?.finality);
+      return {
+        code: normalizeUpper(summary.code),
+        lane: normalizeUpper(summary.lane),
+        label: String(summary.label || "").trim() || null,
+        tone: String(summary.tone || "").trim() || null,
+        description: String(summary.description || "").trim() || null,
+        isFinal: Boolean(summary.isFinal),
+        isFinalNegative: Boolean(finality?.isFinalNegative),
+      };
+    })
+    .filter(Boolean) as Array<{
+    code: string;
+    lane: string;
+    label: string | null;
+    tone: string | null;
+    description: string | null;
+    isFinal: boolean;
+    isFinalNegative: boolean;
+  }>;
+
+  if (entries.length === 0) return normalizedFallback;
+
+  const awaitingPaymentCount = entries.filter((entry) => entry.code === "AWAITING_PAYMENT").length;
+  if (awaitingPaymentCount > 0) {
+    return {
+      code: "AWAITING_PAYMENT",
+      label: "Split Payment Required",
+      tone: "amber",
+      description: `Complete payment for ${awaitingPaymentCount} store split${
+        awaitingPaymentCount === 1 ? "" : "s"
+      } before shipment can continue.`,
+      isFinal: false,
+    };
+  }
+
+  const underReviewCount = entries.filter((entry) => entry.code === "UNDER_REVIEW").length;
+  if (underReviewCount > 0) {
+    return {
+      code: "UNDER_REVIEW",
+      label: "Split Payment Under Review",
+      tone: "amber",
+      description: `${underReviewCount} store split payment${
+        underReviewCount === 1 ? " is" : "s are"
+      } still under backend review.`,
+      isFinal: false,
+    };
+  }
+
+  const finalNegativeEntries = entries.filter((entry) => entry.isFinalNegative);
+  if (finalNegativeEntries.length > 0) {
+    const allFinalNegative = finalNegativeEntries.length === entries.length;
+    const uniqueCodes = Array.from(new Set(finalNegativeEntries.map((entry) => entry.code)));
+    const sharedEntry = uniqueCodes.length === 1 ? finalNegativeEntries[0] : null;
+
+    if (sharedEntry && allFinalNegative) {
+      return {
+        code: sharedEntry.code,
+        label: sharedEntry.label || sharedEntry.code,
+        tone: sharedEntry.tone || "rose",
+        description:
+          sharedEntry.description ||
+          "Every store split is already closed in the same final state.",
+        isFinal: true,
+      };
+    }
+
+    return {
+      code: allFinalNegative ? "FINAL_NEGATIVE" : "MIXED_EXCEPTION",
+      label: allFinalNegative ? "Order Closed" : "Order Needs Attention",
+      tone: "rose",
+      description: allFinalNegative
+        ? "Every store split is already closed or failed. Check the latest split-level status before taking the next step."
+        : `${finalNegativeEntries.length} store split${
+            finalNegativeEntries.length === 1 ? " is" : "s are"
+          } already closed or failed. Check the latest split-level status before taking the next step.`,
+      isFinal: allFinalNegative,
+    };
+  }
+
+  const shipmentEntries = entries.filter((entry) => entry.lane === "SHIPMENT");
+  if (shipmentEntries.length > 0) {
+    if (shipmentEntries.every((entry) => entry.code === "DELIVERED" && entry.isFinal)) {
+      return {
+        code: "DELIVERED",
+        label: "Delivered",
+        tone: "emerald",
+        description: "Every active store split has already been delivered.",
+        isFinal: true,
+      };
+    }
+
+    if (shipmentEntries.some((entry) => AGGREGATE_SHIPMENT_DELIVERY.has(entry.code))) {
+      return {
+        code: "IN_DELIVERY",
+        label: "On delivery",
+        tone: "indigo",
+        description: "At least one store split is already on the delivery lane.",
+        isFinal: false,
+      };
+    }
+
+    if (shipmentEntries.some((entry) => AGGREGATE_SHIPMENT_PROGRESS.has(entry.code))) {
+      return {
+        code: "IN_PROGRESS",
+        label: "In progress",
+        tone: "sky",
+        description: "Payment is settled and seller fulfillment is already moving on at least one store split.",
+        isFinal: false,
+      };
+    }
+  }
+
+  return normalizedFallback ?? {
+    code: entries[0].code || "PENDING",
+    label: entries[0].label || "Pending",
+    tone: entries[0].tone || "amber",
+    description:
+      entries[0].description || "Order is waiting for the next buyer or seller action.",
+    isFinal: Boolean(entries[0].isFinal),
   };
 };

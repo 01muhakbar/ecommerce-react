@@ -1,10 +1,19 @@
 import { Router, Request, Response, NextFunction } from "express";
-import { Op } from "sequelize";
+import { Op, QueryTypes } from "sequelize";
 import { z } from "zod";
 import multer from "multer";
 import { requireAdmin, requireStaffOrAdmin } from "../middleware/requireRole.js";
 import { Product } from "../models/Product.js";
-import { Category, ProductCategory, Store, sequelize } from "../models/index.js";
+import {
+  CartItem,
+  Category,
+  OrderItem,
+  ProductCategory,
+  ProductReview,
+  Store,
+  SuborderItem,
+  sequelize,
+} from "../models/index.js";
 import { buildProductVisibilitySnapshot } from "../services/productVisibility.js";
 import { buildPublicStoreOperationalReadiness } from "../services/sharedContracts/publicStoreIdentity.js";
 import { STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES } from "../services/sharedContracts/storePaymentProfileCompat.js";
@@ -30,6 +39,23 @@ const parseOptionalPositiveId = (value: unknown) => {
   if (value === null || typeof value === "undefined" || value === "") return null;
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+};
+const normalizePositiveIdList = (value: unknown): number[] => {
+  const input = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split(",")
+      : typeof value === "number"
+        ? [value]
+        : [];
+
+  return Array.from(
+    new Set(
+      input
+        .map((entry) => parseOptionalPositiveId(entry))
+        .filter((entry): entry is number => entry !== null)
+    )
+  );
 };
 const normalizeCategoryIdsInput = (value: unknown) => {
   if (!Array.isArray(value)) return undefined;
@@ -118,6 +144,139 @@ const tryParseJson = (value: string) => {
     return { ok: false as const, value: null };
   }
 };
+const normalizeAdminJsonValue = (value: unknown) => {
+  if (value === null || typeof value === "undefined") return null;
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    if (!normalized || isMalformedLiteral(normalized)) return null;
+    const parsed = tryParseJson(normalized);
+    return parsed.ok ? parsed.value : normalized;
+  }
+  return value;
+};
+export type AdminProductSeo = {
+  metaTitle: string;
+  metaDescription: string;
+  keywords: string[];
+  ogImageUrl: string;
+};
+
+const createEmptyAdminProductSeo = (): AdminProductSeo => ({
+  metaTitle: "",
+  metaDescription: "",
+  keywords: [],
+  ogImageUrl: "",
+});
+
+const isValidAdminProductSeoOgImageUrl = (value: string) =>
+  /^https?:\/\//i.test(value) || value.startsWith("/");
+
+export const sanitizeAdminProductSeo = (value: unknown): AdminProductSeo | null => {
+  const normalizedValue = normalizeAdminJsonValue(value);
+  if (normalizedValue === null || typeof normalizedValue === "undefined") return null;
+  if (!normalizedValue || typeof normalizedValue !== "object" || Array.isArray(normalizedValue)) {
+    throw createCategoryContractError("seo must be an object or null.");
+  }
+
+  const raw = normalizedValue as Record<string, unknown>;
+  const metaTitle = String(raw.metaTitle ?? "").trim();
+  const metaDescription = String(raw.metaDescription ?? "").trim();
+  const ogImageUrl = String(raw.ogImageUrl ?? "").trim();
+  const keywordsRaw = raw.keywords;
+
+  if (metaTitle.length > 255) {
+    throw createCategoryContractError("seo.metaTitle must be 255 characters or fewer.");
+  }
+  if (metaDescription.length > 1000) {
+    throw createCategoryContractError("seo.metaDescription must be 1000 characters or fewer.");
+  }
+  if (ogImageUrl.length > 2048) {
+    throw createCategoryContractError("seo.ogImageUrl must be 2048 characters or fewer.");
+  }
+  if (ogImageUrl && !isValidAdminProductSeoOgImageUrl(ogImageUrl)) {
+    throw createCategoryContractError(
+      "seo.ogImageUrl must be an absolute http(s) URL or a local path starting with /."
+    );
+  }
+
+  if (typeof keywordsRaw !== "undefined" && !Array.isArray(keywordsRaw)) {
+    throw createCategoryContractError("seo.keywords must be an array of strings.");
+  }
+
+  const keywords: string[] = [];
+  const seenKeywords = new Set<string>();
+  for (const entry of Array.isArray(keywordsRaw) ? keywordsRaw : []) {
+    if (typeof entry !== "string") {
+      throw createCategoryContractError("seo.keywords must contain only strings.");
+    }
+    const keyword = entry.trim();
+    if (!keyword) continue;
+    if (keyword.length > 100) {
+      throw createCategoryContractError("seo.keywords entries must be 100 characters or fewer.");
+    }
+    const dedupeKey = keyword.toLowerCase();
+    if (seenKeywords.has(dedupeKey)) continue;
+    seenKeywords.add(dedupeKey);
+    keywords.push(keyword);
+  }
+
+  if (keywords.length > 30) {
+    throw createCategoryContractError("seo.keywords must contain 30 entries or fewer.");
+  }
+
+  if (!metaTitle && !metaDescription && keywords.length === 0 && !ogImageUrl) {
+    return null;
+  }
+
+  return {
+    metaTitle,
+    metaDescription,
+    keywords,
+    ogImageUrl,
+  };
+};
+
+export const normalizeAdminProductSeoResponse = (value: unknown): AdminProductSeo => {
+  const normalizedValue = normalizeAdminJsonValue(value);
+  if (!normalizedValue || typeof normalizedValue !== "object" || Array.isArray(normalizedValue)) {
+    return createEmptyAdminProductSeo();
+  }
+
+  const raw = normalizedValue as Record<string, unknown>;
+  const metaTitle = String(raw.metaTitle ?? "").trim();
+  const metaDescription = String(raw.metaDescription ?? "").trim();
+  const ogImageUrlRaw = String(raw.ogImageUrl ?? "").trim();
+  const ogImageUrl = isValidAdminProductSeoOgImageUrl(ogImageUrlRaw) ? ogImageUrlRaw : "";
+  const keywords: string[] = [];
+  const seenKeywords = new Set<string>();
+
+  for (const entry of Array.isArray(raw.keywords) ? raw.keywords : []) {
+    if (typeof entry !== "string") continue;
+    const keyword = entry.trim();
+    if (!keyword) continue;
+    const dedupeKey = keyword.toLowerCase();
+    if (seenKeywords.has(dedupeKey)) continue;
+    seenKeywords.add(dedupeKey);
+    keywords.push(keyword);
+  }
+
+  return {
+    metaTitle,
+    metaDescription,
+    keywords,
+    ogImageUrl,
+  };
+};
+
+export const mergeAdminProductSeoInput = (existingSeo: unknown, seoPatch: unknown) => {
+  if (seoPatch === null) return null;
+  if (!seoPatch || typeof seoPatch !== "object" || Array.isArray(seoPatch)) return seoPatch;
+  return {
+    ...normalizeAdminProductSeoResponse(existingSeo),
+    ...(seoPatch as Record<string, unknown>),
+  };
+};
+
 const normalizeAdminProductTags = (value: unknown): string[] => {
   const result: string[] = [];
   const seen = new Set<string>();
@@ -289,6 +448,626 @@ const normalizeAdminSellerSubmissionFilter = (value: unknown) => {
   if (normalized === "review_queue") return "review_queue";
   return null;
 };
+const normalizeAdminInventoryFilter = (value: unknown) => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "selling") return "selling";
+  if (normalized === "out_of_stock") return "out_of_stock";
+  return null;
+};
+const normalizeAdminProductSort = (value: unknown) => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "price_asc") return "price_asc";
+  if (normalized === "price_desc") return "price_desc";
+  if (normalized === "date_updated") return "date_updated";
+  return "date_added";
+};
+const normalizeAdminVariationCompareKey = (value: unknown) =>
+  String(value ?? "")
+    .trim()
+    .toLowerCase();
+const buildAdminVariationCombination = (
+  selections: Array<{ value: string }>
+) => selections.map((entry) => entry.value).filter(Boolean).join(" / ");
+const buildAdminVariationCombinationKey = (
+  selections: Array<{ attributeId: number; valueId: number | string | null; value: string }>
+) =>
+  selections
+    .map((entry) => `${entry.attributeId}:${String(entry.valueId ?? entry.value).trim().toLowerCase()}`)
+    .join("|");
+const buildAdminSqlInClause = (values: number[]) => values.map(() => "?").join(", ");
+
+type AdminVariationAttributeRow = {
+  id: number;
+  name: string;
+  displayName: string | null;
+};
+
+type AdminVariationValueRow = {
+  id: number;
+  attributeId: number;
+  value: string;
+};
+
+const loadAdminVariationDomainSnapshot = async (
+  attributeIds: number[],
+  referencedValueIds: number[] = []
+) => {
+  if (!attributeIds.length) {
+    return {
+      attributeById: new Map<number, AdminVariationAttributeRow>(),
+      valueById: new Map<number, AdminVariationValueRow>(),
+      valuesByAttributeId: new Map<
+        number,
+        {
+          byId: Map<number, AdminVariationValueRow>;
+          byValue: Map<string, AdminVariationValueRow>;
+        }
+      >(),
+    };
+  }
+
+  const inClause = buildAdminSqlInClause(attributeIds);
+  const normalizedReferencedValueIds = Array.from(
+    new Set(referencedValueIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))
+  );
+  const valueWhereClauses = [`attribute_id IN (${inClause})`];
+  const valueReplacements: number[] = [...attributeIds];
+  if (normalizedReferencedValueIds.length > 0) {
+    valueWhereClauses.push(`id IN (${buildAdminSqlInClause(normalizedReferencedValueIds)})`);
+    valueReplacements.push(...normalizedReferencedValueIds);
+  }
+  const [attributeRows, valueRows] = await Promise.all([
+    sequelize.query<AdminVariationAttributeRow>(
+      `
+        SELECT id, name, display_name AS displayName
+        FROM attributes
+        WHERE id IN (${inClause})
+      `,
+      {
+        replacements: attributeIds,
+        type: QueryTypes.SELECT,
+      }
+    ),
+    sequelize.query<AdminVariationValueRow>(
+      `
+        SELECT id, attribute_id AS attributeId, value
+        FROM attribute_values
+        WHERE ${valueWhereClauses.join(" OR ")}
+      `,
+      {
+        replacements: valueReplacements,
+        type: QueryTypes.SELECT,
+      }
+    ),
+  ]);
+
+  const attributeById = new Map<number, AdminVariationAttributeRow>();
+  attributeRows.forEach((row) => {
+    attributeById.set(Number(row.id), {
+      id: Number(row.id),
+      name: String(row.name || "").trim(),
+      displayName: asOptionalString(row.displayName),
+    });
+  });
+
+  const valueById = new Map<number, AdminVariationValueRow>();
+  const valuesByAttributeId = new Map<
+    number,
+    {
+      byId: Map<number, AdminVariationValueRow>;
+      byValue: Map<string, AdminVariationValueRow>;
+    }
+  >();
+
+  valueRows.forEach((row) => {
+    const normalizedRow: AdminVariationValueRow = {
+      id: Number(row.id),
+      attributeId: Number(row.attributeId),
+      value: String(row.value || "").trim(),
+    };
+    valueById.set(normalizedRow.id, normalizedRow);
+    const current =
+      valuesByAttributeId.get(normalizedRow.attributeId) || {
+        byId: new Map<number, AdminVariationValueRow>(),
+        byValue: new Map<string, AdminVariationValueRow>(),
+      };
+    current.byId.set(normalizedRow.id, normalizedRow);
+    current.byValue.set(normalizeAdminVariationCompareKey(normalizedRow.value), normalizedRow);
+    valuesByAttributeId.set(normalizedRow.attributeId, current);
+  });
+
+  return {
+    attributeById,
+    valueById,
+    valuesByAttributeId,
+  };
+};
+
+const resolveAdminVariationAttributeName = (row: AdminVariationAttributeRow) =>
+  String(row.displayName || row.name || "").trim();
+
+const resolveAdminVariationValueRow = (input: {
+  attributeId: number;
+  attributeName: string;
+  candidateId: unknown;
+  candidateValue: unknown;
+  valueById: Map<number, AdminVariationValueRow>;
+  valuesByAttributeId: Map<
+    number,
+    {
+      byId: Map<number, AdminVariationValueRow>;
+      byValue: Map<string, AdminVariationValueRow>;
+    }
+  >;
+  path: string;
+}) => {
+  const candidateId = parseOptionalPositiveId(input.candidateId);
+  const candidateValue = asOptionalString(input.candidateValue);
+  const attributeValues = input.valuesByAttributeId.get(input.attributeId);
+
+  if (candidateId) {
+    const match = input.valueById.get(candidateId);
+    if (!match) {
+      throw createCategoryContractError(
+        `${input.path} references unknown value id ${candidateId}.`
+      );
+    }
+    if (Number(match.attributeId) !== Number(input.attributeId)) {
+      throw createCategoryContractError(
+        `${input.path} value id ${candidateId} does not belong to attribute ${input.attributeName}.`
+      );
+    }
+    if (
+      candidateValue &&
+      normalizeAdminVariationCompareKey(candidateValue) !==
+        normalizeAdminVariationCompareKey(match.value)
+    ) {
+      throw createCategoryContractError(
+        `${input.path} value "${candidateValue}" does not match value id ${candidateId}.`
+      );
+    }
+    return match;
+  }
+
+  if (!candidateValue) {
+    throw createCategoryContractError(
+      `${input.path} requires a valid value id or value label.`
+    );
+  }
+
+  const match = attributeValues?.byValue.get(
+    normalizeAdminVariationCompareKey(candidateValue)
+  );
+  if (!match) {
+    throw createCategoryContractError(
+      `${input.path} value "${candidateValue}" does not belong to attribute ${input.attributeName}.`
+    );
+  }
+  return match;
+};
+
+const sanitizeAdminProductVariations = async (value: unknown) => {
+  if (value === null || typeof value === "undefined") return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw createCategoryContractError("variations must be an object.");
+  }
+
+  const raw = value as Record<string, any>;
+  const hasVariants = Boolean(raw.hasVariants);
+  if (!hasVariants) return null;
+
+  const selectedAttributesInput = Array.isArray(raw.selectedAttributes) ? raw.selectedAttributes : [];
+  if (selectedAttributesInput.length === 0) {
+    throw createCategoryContractError(
+      "variations.selectedAttributes must contain at least one attribute when hasVariants is true."
+    );
+  }
+
+  const requestedAttributeIds: number[] = [];
+  const seenSelectedAttributeIds = new Set<number>();
+  selectedAttributesInput.forEach((entry, index) => {
+    const id = parseOptionalPositiveId(entry?.id);
+    if (!id) {
+      throw createCategoryContractError(
+        `variations.selectedAttributes[${index}] has an invalid attribute id.`
+      );
+    }
+    if (seenSelectedAttributeIds.has(id)) {
+      throw createCategoryContractError(
+        `variations.selectedAttributes contains duplicate attribute id ${id}.`
+      );
+    }
+    seenSelectedAttributeIds.add(id);
+    requestedAttributeIds.push(id);
+  });
+
+  const referencedValueIds = Array.from(
+    new Set(
+      [
+        ...(Array.isArray(raw.selectedAttributeValues) ? raw.selectedAttributeValues : []).flatMap(
+          (entry: any) =>
+            (Array.isArray(entry?.values) ? entry.values : [])
+              .map((item: any) => parseOptionalPositiveId(item?.id))
+              .filter((item: number | null): item is number => item !== null)
+        ),
+        ...(Array.isArray(raw.variants) ? raw.variants : []).flatMap((entry: any) =>
+          (Array.isArray(entry?.selections) ? entry.selections : [])
+            .map((selection: any) => parseOptionalPositiveId(selection?.valueId))
+            .filter((item: number | null): item is number => item !== null)
+        ),
+      ].map((id) => Number(id))
+    )
+  );
+
+  const { attributeById, valueById, valuesByAttributeId } =
+    await loadAdminVariationDomainSnapshot(requestedAttributeIds, referencedValueIds);
+
+  const missingAttributeIds = requestedAttributeIds.filter((id) => !attributeById.has(id));
+  if (missingAttributeIds.length > 0) {
+    throw createCategoryContractError(
+      `variations.selectedAttributes references unknown attribute ids: ${missingAttributeIds.join(", ")}.`
+    );
+  }
+
+  const selectedAttributes = requestedAttributeIds.map((id) => {
+    const attribute = attributeById.get(id)!;
+    return {
+      id,
+      name: resolveAdminVariationAttributeName(attribute),
+    };
+  });
+  const selectedAttributeIds = new Set(selectedAttributes.map((entry) => entry.id));
+  const selectedAttributeOrder = new Map(selectedAttributes.map((entry, index) => [entry.id, index]));
+
+  const selectedAttributeValuesInput = Array.isArray(raw.selectedAttributeValues)
+    ? raw.selectedAttributeValues
+    : [];
+  if (selectedAttributeValuesInput.length === 0) {
+    throw createCategoryContractError(
+      "variations.selectedAttributeValues must contain at least one entry when hasVariants is true."
+    );
+  }
+
+  const selectedAttributeValuesByAttributeId = new Map<
+    number,
+    {
+      attributeId: number;
+      values: Array<{ id: number; label: string; value: string }>;
+    }
+  >();
+
+  selectedAttributeValuesInput.forEach((entry, index) => {
+    const attributeId = parseOptionalPositiveId(entry?.attributeId);
+    if (!attributeId || !selectedAttributeIds.has(attributeId)) {
+      throw createCategoryContractError(
+        `variations.selectedAttributeValues[${index}] references an invalid selected attribute.`
+      );
+    }
+    if (selectedAttributeValuesByAttributeId.has(attributeId)) {
+      throw createCategoryContractError(
+        `variations.selectedAttributeValues contains duplicate entries for attribute id ${attributeId}.`
+      );
+    }
+
+    const attributeName = selectedAttributes.find((item) => item.id === attributeId)?.name || `#${attributeId}`;
+    const rawValues = Array.isArray(entry?.values) ? entry.values : [];
+    if (rawValues.length === 0) {
+      throw createCategoryContractError(
+        `variations.selectedAttributeValues[${index}] must include at least one value.`
+      );
+    }
+
+    const seenValueIds = new Set<number>();
+    const values = rawValues.map((item: any, valueIndex: number) => {
+      const resolved = resolveAdminVariationValueRow({
+        attributeId,
+        attributeName,
+        candidateId: item?.id,
+        candidateValue: item?.value ?? item?.label,
+        valueById,
+        valuesByAttributeId,
+        path: `variations.selectedAttributeValues[${index}].values[${valueIndex}]`,
+      });
+      if (seenValueIds.has(resolved.id)) {
+        throw createCategoryContractError(
+          `variations.selectedAttributeValues[${index}] contains duplicate value "${resolved.value}".`
+        );
+      }
+      seenValueIds.add(resolved.id);
+      return {
+        id: resolved.id,
+        label: resolved.value,
+        value: resolved.value,
+      };
+    });
+
+    selectedAttributeValuesByAttributeId.set(attributeId, {
+      attributeId,
+      values,
+    });
+  });
+
+  const missingSelectedValueAttributes = selectedAttributes
+    .map((entry) => entry.id)
+    .filter((attributeId) => !selectedAttributeValuesByAttributeId.has(attributeId));
+  if (missingSelectedValueAttributes.length > 0) {
+    throw createCategoryContractError(
+      `variations.selectedAttributeValues must include values for every selected attribute. Missing: ${missingSelectedValueAttributes.join(", ")}.`
+    );
+  }
+
+  const selectedAttributeValues = selectedAttributes.map((attribute) =>
+    selectedAttributeValuesByAttributeId.get(attribute.id)!
+  );
+  const selectedValueIdsByAttributeId = new Map(
+    selectedAttributeValues.map((entry) => [
+      entry.attributeId,
+      new Set(entry.values.map((value) => Number(value.id))),
+    ])
+  );
+
+  const seenVariantKeys = new Set<string>();
+  const variantsInput = Array.isArray(raw.variants) ? raw.variants : [];
+  if (variantsInput.length === 0) {
+    throw createCategoryContractError(
+      "variations.variants must contain at least one variant when hasVariants is true."
+    );
+  }
+
+  const variants = variantsInput
+    .map((entry, index) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+        throw createCategoryContractError(`variations.variants[${index}] must be an object.`);
+      }
+
+      const providedCombination = asOptionalString(entry.combination);
+      const providedCombinationKey = asOptionalString(entry.combinationKey);
+      if (!providedCombination || !providedCombinationKey) {
+        throw createCategoryContractError(
+          `variations.variants[${index}] requires combination and combinationKey.`
+        );
+      }
+
+      const rawSelections = Array.isArray(entry.selections) ? entry.selections : [];
+      if (rawSelections.length === 0) {
+        throw createCategoryContractError(
+          `variations.variants[${index}].selections must contain one value per selected attribute.`
+        );
+      }
+
+      const selectionByAttributeId = new Map<
+        number,
+        {
+          attributeId: number;
+          attributeName: string;
+          valueId: number;
+          value: string;
+        }
+      >();
+
+      rawSelections
+        .map((selection: any, selectionIndex: number) => {
+          const attributeId = parseOptionalPositiveId(selection?.attributeId);
+          if (!attributeId || !selectedAttributeIds.has(attributeId)) {
+            throw createCategoryContractError(
+              `variations.variants[${index}].selections[${selectionIndex}] references an invalid selected attribute.`
+            );
+          }
+          if (selectionByAttributeId.has(attributeId)) {
+            throw createCategoryContractError(
+              `variations.variants[${index}] contains duplicate selections for attribute id ${attributeId}.`
+            );
+          }
+
+          const attributeName =
+            selectedAttributes.find((item) => item.id === attributeId)?.name || `#${attributeId}`;
+          const resolvedValue = resolveAdminVariationValueRow({
+            attributeId,
+            attributeName,
+            candidateId: selection?.valueId,
+            candidateValue: selection?.value,
+            valueById,
+            valuesByAttributeId,
+            path: `variations.variants[${index}].selections[${selectionIndex}]`,
+          });
+
+          if (!selectedValueIdsByAttributeId.get(attributeId)?.has(resolvedValue.id)) {
+            throw createCategoryContractError(
+              `variations.variants[${index}].selections[${selectionIndex}] uses value "${resolvedValue.value}" outside the selected values for attribute ${attributeName}.`
+            );
+          }
+
+          selectionByAttributeId.set(attributeId, {
+            attributeId,
+            attributeName,
+            valueId: resolvedValue.id,
+            value: resolvedValue.value,
+          });
+        })
+        .filter(Boolean);
+
+      if (selectionByAttributeId.size !== selectedAttributes.length) {
+        throw createCategoryContractError(
+          `variations.variants[${index}].selections must include exactly one value for each selected attribute.`
+        );
+      }
+
+      const selections = selectedAttributes
+        .slice()
+        .sort(
+          (left, right) =>
+            (selectedAttributeOrder.get(left.id) ?? 0) - (selectedAttributeOrder.get(right.id) ?? 0)
+        )
+        .map((attribute) => {
+          const selection = selectionByAttributeId.get(attribute.id);
+          if (!selection) {
+            throw createCategoryContractError(
+              `variations.variants[${index}].selections is missing attribute ${attribute.name}.`
+            );
+          }
+          return selection;
+        });
+
+      const combination = buildAdminVariationCombination(selections);
+      const combinationKey = buildAdminVariationCombinationKey(selections);
+      if (providedCombination !== combination) {
+        throw createCategoryContractError(
+          `variations.variants[${index}].combination does not match the selected attribute values.`
+        );
+      }
+      if (providedCombinationKey !== combinationKey) {
+        throw createCategoryContractError(
+          `variations.variants[${index}].combinationKey does not match the selected attribute values.`
+        );
+      }
+      if (seenVariantKeys.has(combinationKey)) {
+        throw createCategoryContractError(
+          `Duplicate variation combination "${combination}" is not allowed.`
+        );
+      }
+      seenVariantKeys.add(combinationKey);
+
+      const price =
+        entry.price === null || typeof entry.price === "undefined" || entry.price === ""
+          ? null
+          : toNumber(entry.price, Number.NaN);
+      if (price !== null && !Number.isFinite(price)) {
+        throw createCategoryContractError(`variations.variants[${index}].price must be a valid number.`);
+      }
+
+      const salePrice =
+        entry.salePrice === null || typeof entry.salePrice === "undefined" || entry.salePrice === ""
+          ? null
+          : toNumber(entry.salePrice, Number.NaN);
+      if (salePrice !== null && !Number.isFinite(salePrice)) {
+        throw createCategoryContractError(
+          `variations.variants[${index}].salePrice must be a valid number.`
+        );
+      }
+      if (price !== null && salePrice !== null && salePrice > price) {
+        throw createCategoryContractError(
+          `variations.variants[${index}].salePrice cannot be greater than price.`
+        );
+      }
+
+      const quantity =
+        entry.quantity === null || typeof entry.quantity === "undefined" || entry.quantity === ""
+          ? null
+          : Math.round(toNumber(entry.quantity, Number.NaN));
+      if (quantity !== null && (!Number.isFinite(quantity) || quantity < 0)) {
+        throw createCategoryContractError(
+          `variations.variants[${index}].quantity must be a valid non-negative integer.`
+        );
+      }
+
+      return {
+        id: asOptionalString(entry.id) ?? `variant-${index + 1}`,
+        combination,
+        combinationKey,
+        selections,
+        sku: asOptionalString(entry.sku),
+        barcode: asOptionalString(entry.barcode),
+        price,
+        salePrice,
+        quantity,
+        image: normalizeUploadsUrl(entry.image),
+      };
+    })
+    .filter(Boolean);
+
+  return {
+    hasVariants: true,
+    selectedAttributes,
+    selectedAttributeValues,
+    variants,
+  };
+};
+const csvEscape = (value: unknown) => {
+  const text = String(value ?? "");
+  if (!/[",\r\n]/.test(text)) return text;
+  return `"${text.replace(/"/g, '""')}"`;
+};
+const csvRow = (values: unknown[]) => values.map((value) => csvEscape(value)).join(",");
+
+const resolveReferencedProductIds = async (productIds: number[]) => {
+  if (!productIds.length) return [];
+
+  const [orderRefs, suborderRefs, reviewRefs] = await Promise.all([
+    OrderItem.findAll({
+      where: { productId: { [Op.in]: productIds } } as any,
+      attributes: ["productId"],
+      group: ["productId"],
+      raw: true,
+    }),
+    SuborderItem.findAll({
+      where: { productId: { [Op.in]: productIds } } as any,
+      attributes: ["productId"],
+      group: ["productId"],
+      raw: true,
+    }),
+    ProductReview.findAll({
+      where: { productId: { [Op.in]: productIds } } as any,
+      attributes: ["productId"],
+      group: ["productId"],
+      raw: true,
+    }),
+  ]);
+
+  return Array.from(
+    new Set(
+      [...orderRefs, ...suborderRefs, ...reviewRefs]
+        .map((entry: any) => Number(entry?.productId))
+        .filter((value) => Number.isInteger(value) && value > 0)
+    )
+  );
+};
+
+const deleteProductsSafely = async (productIds: number[]) => {
+  const uniqueIds = Array.from(new Set(productIds.filter((value) => Number.isInteger(value) && value > 0)));
+  if (!uniqueIds.length) {
+    return {
+      affected: 0,
+      blockedIds: [],
+    };
+  }
+
+  const blockedIds = await resolveReferencedProductIds(uniqueIds);
+  const deletableIds = uniqueIds.filter((id) => !blockedIds.includes(id));
+
+  if (!deletableIds.length) {
+    return {
+      affected: 0,
+      blockedIds,
+    };
+  }
+
+  const affected = await sequelize.transaction(async (transaction) => {
+    await ProductCategory.destroy({
+      where: { productId: { [Op.in]: deletableIds } } as any,
+      transaction,
+    });
+    await CartItem.destroy({
+      where: { productId: { [Op.in]: deletableIds } } as any,
+      transaction,
+    });
+    return Product.destroy({
+      where: { id: { [Op.in]: deletableIds } } as any,
+      transaction,
+    });
+  });
+
+  return {
+    affected,
+    blockedIds,
+  };
+};
+
+const isSuperAdminRequest = (req: Request) => {
+  const normalized = String((req as any).user?.role || "")
+    .trim()
+    .toLowerCase();
+  return ["super_admin", "superadmin", "super-admin", "super admin"].includes(normalized);
+};
 
 const getPlainAttr = (entity: any, key: string) =>
   entity?.get ? entity.get(key) : entity?.[key];
@@ -307,6 +1086,37 @@ const buildClearedSellerSubmissionPatch = () => ({
   sellerRevisionRequestedByUserId: null,
   sellerRevisionNote: null,
 });
+
+const archiveProductsSafely = async (productIds: number[]) => {
+  const uniqueIds = Array.from(
+    new Set(productIds.filter((value) => Number.isInteger(value) && value > 0))
+  );
+  if (!uniqueIds.length) {
+    return {
+      affected: 0,
+      archivedIds: [],
+    };
+  }
+
+  await sequelize.transaction(async (transaction) => {
+    await Product.update(
+      {
+        isPublished: false,
+        status: "inactive",
+        ...buildClearedSellerSubmissionPatch(),
+      } as any,
+      {
+        where: { id: { [Op.in]: uniqueIds } } as any,
+        transaction,
+      }
+    );
+  });
+
+  return {
+    affected: uniqueIds.length,
+    archivedIds: uniqueIds,
+  };
+};
 
 const resolveAdminPublishGate = (plain: any) => {
   const submissionStatus = normalizeSellerSubmissionStatus(plain?.sellerSubmissionStatus);
@@ -459,31 +1269,84 @@ const normalizeImportedSalePrice = (salePrice: unknown, basePrice: number) => {
   }
   return parsed;
 };
-const buildProductsWhere = (query: Request["query"]) => {
+const buildProductsWhere = (
+  query: Request["query"],
+  options: { includeSellerSubmission?: boolean } = {}
+) => {
+  const includeSellerSubmission = options.includeSellerSubmission !== false;
   const q = String(asSingle(query.q) ?? "").trim();
   const categoryIdParam = String(asSingle(query.categoryId) ?? "").trim();
-  const sellerSubmissionFilter = normalizeAdminSellerSubmissionFilter(
-    asSingle(query.sellerSubmissionStatus)
+  const categoryIds = Array.from(
+    new Set([
+      ...normalizePositiveIdList(query.categoryIds),
+      ...normalizePositiveIdList(query.categories),
+      ...normalizePositiveIdList(categoryIdParam),
+    ])
   );
-  const where: any = {};
-  const categoryFilterId = parseOptionalPositiveId(categoryIdParam);
+  const sellerSubmissionFilter = includeSellerSubmission
+    ? normalizeAdminSellerSubmissionFilter(asSingle(query.sellerSubmissionStatus))
+    : null;
+  const publishedFilter = toBooleanOrUndefined(asSingle(query.published));
+  const inventoryStatusFilter = normalizeAdminInventoryFilter(
+    asSingle(query.inventoryStatus) ?? asSingle(query.status)
+  );
+  const sort = normalizeAdminProductSort(asSingle(query.sort));
+  const andConditions: any[] = [];
 
   if (q) {
-    where[Op.or] = [
+    andConditions.push({
+      [Op.or]: [
       { name: { [Op.like]: `%${q}%` } },
       { slug: { [Op.like]: `%${q}%` } },
-    ];
+      ],
+    });
+  }
+
+  if (categoryIds.length > 0) {
+    const idsCsv = categoryIds.join(",");
+    andConditions.push({
+      [Op.or]: [
+        { categoryId: { [Op.in]: categoryIds } },
+        { defaultCategoryId: { [Op.in]: categoryIds } },
+        sequelize.literal(
+          `EXISTS (SELECT 1 FROM product_categories pc WHERE pc.product_id = Product.id AND pc.category_id IN (${idsCsv}))`
+        ),
+      ],
+    });
+  }
+
+  if (typeof publishedFilter === "boolean") {
+    andConditions.push({ isPublished: publishedFilter });
+  }
+
+  if (inventoryStatusFilter === "selling") {
+    andConditions.push({ stock: { [Op.gt]: 0 } });
+  } else if (inventoryStatusFilter === "out_of_stock") {
+    andConditions.push({ stock: { [Op.lte]: 0 } });
   }
 
   if (sellerSubmissionFilter === "submitted" || sellerSubmissionFilter === "needs_revision") {
-    where.sellerSubmissionStatus = sellerSubmissionFilter;
+    andConditions.push({ sellerSubmissionStatus: sellerSubmissionFilter });
   } else if (sellerSubmissionFilter === "review_queue") {
-    where.sellerSubmissionStatus = {
-      [Op.in]: ["submitted", "needs_revision"],
-    };
+    andConditions.push({
+      sellerSubmissionStatus: {
+        [Op.in]: ["submitted", "needs_revision"],
+      },
+    });
   }
 
-  return { where, q, categoryIdParam, categoryFilterId, sellerSubmissionFilter };
+  const where = andConditions.length > 0 ? { [Op.and]: andConditions } : {};
+
+  return {
+    where,
+    q,
+    categoryIdParam,
+    categoryIds,
+    sellerSubmissionFilter,
+    publishedFilter,
+    inventoryStatusFilter,
+    sort,
+  };
 };
 
 const toAdminCategorySummary = (category: any) => {
@@ -550,7 +1413,7 @@ const loadAdminStoreOperationalReadinessByIds = async (storeIds: number[]) => {
   );
 };
 
-const buildAdminProductIncludes = (categoryFilterId?: number | null) => [
+const buildAdminProductIncludes = () => [
   {
     model: Store,
     as: "store",
@@ -586,10 +1449,16 @@ const buildAdminProductIncludes = (categoryFilterId?: number | null) => [
     as: "categories",
     attributes: ["id", "name", "code", "parentId"],
     through: { attributes: [] },
-    required: Boolean(categoryFilterId),
-    ...(categoryFilterId ? { where: { id: categoryFilterId } } : {}),
+    required: false,
   },
 ];
+
+const buildAdminProductsOrder = (sort: string) => {
+  if (sort === "price_asc") return [["price", "ASC"]] as any;
+  if (sort === "price_desc") return [["price", "DESC"]] as any;
+  if (sort === "date_updated") return [["updatedAt", "DESC"]] as any;
+  return [["createdAt", "DESC"]] as any;
+};
 
 const createCategoryContractError = (message: string) => {
   const error = new Error(message) as Error & { status?: number };
@@ -799,6 +1668,8 @@ const toAdminProductDetail = (product: any, storeOperationalReadiness: any = nul
   const imageUrl = normalizeUploadsUrl(plain?.promoImagePath) || imagePaths[0] || null;
   const priceFields = resolveAdminPriceFields(plain);
   const tags = normalizeAdminProductTags(plain?.tags);
+  const seo = normalizeAdminProductSeoResponse(plain?.seo);
+  const variations = normalizeAdminJsonValue(plain?.variations);
   const published =
     typeof plain?.published !== "undefined"
       ? Boolean(plain.published)
@@ -838,6 +1709,8 @@ const toAdminProductDetail = (product: any, storeOperationalReadiness: any = nul
     imagePaths:
       imageUrl && !imagePaths.includes(imageUrl) ? [imageUrl, ...imagePaths] : imagePaths,
     tags,
+    seo,
+    variations,
     createdAt: plain?.createdAt ?? null,
     updatedAt: plain?.updatedAt ?? null,
   };
@@ -873,7 +1746,65 @@ const toAdminProductExportItem = (product: any) => {
     imageUrl: detail.imageUrl,
     imagePaths: detail.imagePaths,
     tags: detail.tags,
+    seo: detail.seo,
+    createdAt: detail.createdAt,
+    updatedAt: detail.updatedAt,
   };
+};
+
+const buildAdminProductsCsv = (rows: any[]) => {
+  const header = csvRow([
+    "id",
+    "name",
+    "slug",
+    "category",
+    "categories",
+    "price",
+    "sale_price",
+    "stock",
+    "inventory_status",
+    "published",
+    "lifecycle_status",
+    "seller_submission_status",
+    "created_at",
+    "updated_at",
+  ]);
+
+  const lines = rows.map((row) => {
+    const item = toAdminProductExportItem(row);
+    const stock = Number(item.stock || 0);
+    return csvRow([
+      item.id,
+      item.name,
+      item.slug,
+      item.category?.name ?? item.defaultCategory?.name ?? "",
+      item.categories.map((category: any) => category?.name).filter(Boolean).join(" | "),
+      item.price ?? "",
+      item.salePrice ?? "",
+      stock,
+      stock > 0 ? "selling" : "out_of_stock",
+      item.published ? "published" : "unpublished",
+      item.status ?? "",
+      item.sellerSubmission?.status ?? "none",
+      item.createdAt ? new Date(item.createdAt).toISOString() : "",
+      item.updatedAt ? new Date(item.updatedAt).toISOString() : "",
+    ]);
+  });
+
+  return [header, ...lines].join("\n");
+};
+
+const buildUniqueProductSlug = async (baseValue: string) => {
+  const normalizedBase = slugify(baseValue) || `product-copy-${Date.now()}`;
+  let candidate = normalizedBase;
+  let suffix = 2;
+
+  while (true) {
+    const existingCount = await Product.count({ where: { slug: candidate } as any });
+    if (existingCount === 0) return candidate;
+    candidate = `${normalizedBase}-${suffix}`;
+    suffix += 1;
+  }
 };
 
 const resolveImportCategoryId = async (input: {
@@ -1160,6 +2091,8 @@ const createSchema = z.object({
   tags: z.array(z.string()).optional(),
   imageUrl: z.string().max(255).optional().nullable(),
   imageUrls: z.array(z.string().max(255)).optional(),
+  seo: z.unknown().nullable().optional(),
+  variations: z.unknown().nullable().optional(),
 });
 
 const updateSchema = createSchema.partial();
@@ -1188,11 +2121,12 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
       50,
       Math.max(1, parseInt(String(req.query.limit || req.query.pageSize || "10"), 10))
     );
-    const { where, categoryFilterId, sellerSubmissionFilter } = buildProductsWhere(req.query);
+    const { where, sellerSubmissionFilter, sort } = buildProductsWhere(req.query);
+    const { where: reviewQueueWhere } = buildProductsWhere(req.query, {
+      includeSellerSubmission: false,
+    });
 
     const offset = (page - 1) * limit;
-    const reviewQueueWhere = { ...where };
-    delete reviewQueueWhere.sellerSubmissionStatus;
 
     const [reviewSubmittedCount, reviewNeedsRevisionCount, { rows, count }] = await Promise.all([
       Product.count({
@@ -1200,7 +2134,7 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
           ...reviewQueueWhere,
           sellerSubmissionStatus: "submitted",
         } as any,
-        include: buildAdminProductIncludes(categoryFilterId),
+        include: buildAdminProductIncludes(),
         distinct: true,
         col: "id",
       }),
@@ -1209,7 +2143,7 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
           ...reviewQueueWhere,
           sellerSubmissionStatus: "needs_revision",
         } as any,
-        include: buildAdminProductIncludes(categoryFilterId),
+        include: buildAdminProductIncludes(),
         distinct: true,
         col: "id",
       }),
@@ -1250,11 +2184,11 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
             "reviewCount",
           ],
         ],
-        include: buildAdminProductIncludes(categoryFilterId),
+        include: buildAdminProductIncludes(),
         distinct: true,
         limit,
         offset,
-        order: [["createdAt", "DESC"]],
+        order: buildAdminProductsOrder(sort),
       }),
     ]);
     const storeReadinessById = await loadAdminStoreOperationalReadinessByIds(
@@ -1288,8 +2222,20 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
 
 router.get("/export", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { where, q, categoryIdParam, categoryFilterId, sellerSubmissionFilter } =
-      buildProductsWhere(req.query);
+    const format =
+      String(asSingle(req.query.format) || "json").trim().toLowerCase() === "csv"
+        ? "csv"
+        : "json";
+    const {
+      where,
+      q,
+      categoryIdParam,
+      categoryIds,
+      sellerSubmissionFilter,
+      publishedFilter,
+      inventoryStatusFilter,
+      sort,
+    } = buildProductsWhere(req.query);
     const rows = await Product.findAll({
       where,
       attributes: [
@@ -1318,9 +2264,20 @@ router.get("/export", async (req: Request, res: Response, next: NextFunction) =>
         "createdAt",
         "updatedAt",
       ],
-      include: buildAdminProductIncludes(categoryFilterId),
-      order: [["createdAt", "DESC"]],
+      include: buildAdminProductIncludes(),
+      order: buildAdminProductsOrder(sort),
     });
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    if (format === "csv") {
+      const csv = `\uFEFF${buildAdminProductsCsv(rows)}`;
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="products-export-${timestamp}.csv"`
+      );
+      return res.status(200).send(csv);
+    }
 
     const payload = {
       format: "admin-products.v1",
@@ -1329,18 +2286,21 @@ router.get("/export", async (req: Request, res: Response, next: NextFunction) =>
       filters: {
         q: q || null,
         categoryId: categoryIdParam || null,
+        categoryIds,
         sellerSubmissionStatus: sellerSubmissionFilter || null,
+        published: typeof publishedFilter === "boolean" ? publishedFilter : null,
+        inventoryStatus: inventoryStatusFilter || null,
+        sort,
       },
       items: rows.map(toAdminProductExportItem),
     };
 
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     res.setHeader("Content-Type", "application/json; charset=utf-8");
     res.setHeader(
       "Content-Disposition",
       `attachment; filename="products-export-${timestamp}.json"`
     );
-    res.send(JSON.stringify(payload, null, 2));
+    return res.send(JSON.stringify(payload, null, 2));
   } catch (err) {
     next(err);
   }
@@ -1388,7 +2348,7 @@ router.post(
           const row = normalizeImportProductRow(rawRow);
           const existing = await Product.findOne({
             where: { slug: row.slug } as any,
-            include: buildAdminProductIncludes(null),
+            include: buildAdminProductIncludes(),
           });
           const basePrice =
             typeof row.price !== "undefined"
@@ -1522,7 +2482,44 @@ router.post(
       let affected = 0;
 
       if (action === "delete") {
-        affected = await Product.destroy({ where: { id: { [Op.in]: uniqueIds } } as any });
+        const actorIsSuperAdmin = isSuperAdminRequest(req);
+        const deletion = await deleteProductsSafely(uniqueIds);
+        affected = deletion.affected;
+
+        if (deletion.blockedIds.length > 0) {
+          if (actorIsSuperAdmin) {
+            const archiveResult = await archiveProductsSafely(deletion.blockedIds);
+            return res.json({
+              success: true,
+              affected,
+              archived: archiveResult.affected,
+              archivedIds: archiveResult.archivedIds,
+              mode:
+                archiveResult.affected > 0
+                  ? affected > 0
+                    ? "delete_and_archive"
+                    : "archive_only"
+                  : "delete",
+            });
+          }
+
+          const blockedLabel =
+            deletion.blockedIds.length === 1
+              ? `Product #${deletion.blockedIds[0]} is`
+              : `${deletion.blockedIds.length} selected products are`;
+          const deletedLabel =
+            deletion.affected > 0
+              ? `${deletion.affected} product(s) deleted. `
+              : "";
+          const message = `${deletedLabel}${blockedLabel} already used in orders, reviews, or suborders and cannot be deleted.`;
+
+          return res.status(409).json({
+            success: false,
+            message,
+            affected,
+            blockedIds: deletion.blockedIds,
+          });
+        }
       } else {
         const nextPublished = action === "publish";
         if (nextPublished) {
@@ -1556,6 +2553,118 @@ router.post(
   }
 );
 
+router.post(
+  "/:id/duplicate",
+  requireAdmin,
+  async (req: Request<{ id: string }>, res: Response, next: NextFunction) => {
+    try {
+      const idNum = parseId(req.params.id);
+      if (!idNum) return res.status(400).json({ message: "Invalid id" });
+
+      const product = await Product.findByPk(idNum, {
+        include: buildAdminProductIncludes(),
+      });
+      if (!product) return res.status(404).json({ message: "Not found" });
+
+      const plain = product.get ? product.get({ plain: true }) : product;
+      const priceFields = resolveAdminPriceFields(plain);
+      const sourceCategoryIds = resolveProductSelectedCategories(plain)
+        .map((category: any) => Number(category?.id))
+        .filter((value: number) => Number.isInteger(value) && value > 0);
+      const defaultCategoryId =
+        parseOptionalPositiveId(plain?.defaultCategoryId) ??
+        parseOptionalPositiveId(plain?.categoryId);
+      const nextCategoryIds =
+        sourceCategoryIds.length > 0
+          ? sourceCategoryIds
+          : defaultCategoryId
+            ? [defaultCategoryId]
+            : [];
+      const nextDefaultCategoryId =
+        defaultCategoryId && nextCategoryIds.includes(defaultCategoryId)
+          ? defaultCategoryId
+          : nextCategoryIds[0] ?? null;
+      const nextSlug = await buildUniqueProductSlug(
+        `${String(plain?.slug || plain?.name || `product-${idNum}`).trim()}-copy`
+      );
+      const duplicateOwnerId = Number((req as any).user?.id || 0) || Number(plain?.userId || 0);
+      const imagePaths = normalizeImagePathList(plain?.imagePaths);
+      const promoImagePath =
+        normalizeUploadsUrl(plain?.promoImagePath) || imagePaths[0] || null;
+
+      const duplicated = await sequelize.transaction(async (transaction) => {
+        const created = await Product.create(
+          {
+            name: `${String(plain?.name || `Product ${idNum}`).trim()} (Copy)`,
+            slug: nextSlug,
+            sku: null,
+            barcode: null,
+            price: priceFields.price,
+            salePrice: priceFields.salePrice,
+            stock: Number(plain?.stock || 0),
+            userId: duplicateOwnerId,
+            storeId: null,
+            categoryId: nextDefaultCategoryId,
+            defaultCategoryId: nextDefaultCategoryId,
+            status: String(plain?.status || "draft").trim().toLowerCase() || "draft",
+            isPublished: false,
+            sellerSubmissionStatus: "none",
+            sellerSubmittedAt: null,
+            sellerSubmittedByUserId: null,
+            sellerRevisionRequestedAt: null,
+            sellerRevisionRequestedByUserId: null,
+            sellerRevisionNote: null,
+            description: plain?.description ?? null,
+            promoImagePath,
+            imagePaths,
+            tags: plain?.tags ?? [],
+            seo: plain?.seo ?? null,
+            weight: plain?.weight ?? null,
+            notes: plain?.notes ?? null,
+            parentSku: plain?.parentSku ?? null,
+            condition: plain?.condition ?? null,
+            length: plain?.length ?? null,
+            width: plain?.width ?? null,
+            height: plain?.height ?? null,
+            dangerousProduct: Boolean(plain?.dangerousProduct),
+            preOrder: Boolean(plain?.preOrder),
+            preorderDays: plain?.preorderDays ?? null,
+            youtubeLink: plain?.youtubeLink ?? null,
+            variations: plain?.variations ?? null,
+            wholesale: plain?.wholesale ?? null,
+          } as any,
+          { transaction }
+        );
+
+        if (nextCategoryIds.length > 0) {
+          await syncProductCategoryAssignments(
+            Number((created as any).id),
+            nextCategoryIds,
+            transaction
+          );
+        }
+
+        return Product.findByPk(Number((created as any).id), {
+          include: buildAdminProductIncludes(),
+          transaction,
+        });
+      });
+
+      const storeReadinessById = await loadAdminStoreOperationalReadinessByIds([
+        getAdminProductStoreId(duplicated),
+      ]);
+      return res.status(201).json({
+        data: toAdminProductDetail(
+          duplicated,
+          storeReadinessById.get(getAdminProductStoreId(duplicated)) || null
+        ),
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 // GET /api/admin/products/:id
 router.get(
   "/:id",
@@ -1564,7 +2673,7 @@ router.get(
       const idNum = parseId(String(asSingle(req.params.id) ?? ""));
       if (!idNum) return res.status(400).json({ success: false, message: "Invalid id" });
       const p = await Product.findByPk(idNum, {
-        include: buildAdminProductIncludes(null),
+        include: buildAdminProductIncludes(),
       });
       if (!p) return res.status(404).json({ success: false, message: "Not found" });
       const storeReadinessById = await loadAdminStoreOperationalReadinessByIds([
@@ -1589,6 +2698,8 @@ router.post(
     try {
       const body = createSchema.parse(req.body);
       const categorySelection = await resolveCategorySelection(body, { mode: "create" });
+      const seo = sanitizeAdminProductSeo(body.seo);
+      const variations = await sanitizeAdminProductVariations(body.variations);
       const name = body.name.trim();
       const slug = body.slug ? slugify(body.slug) : slugify(name);
       const imageUrls = body.imageUrls?.length
@@ -1610,8 +2721,10 @@ router.post(
             sku: body.sku ?? null,
             barcode: body.barcode ?? null,
             tags: body.tags ?? [],
+            seo,
             promoImagePath: imageUrls[0] || null,
             imagePaths: imageUrls,
+            variations,
             status: body.status || "active",
             userId: (req as any).user?.id ?? 0,
             isPublished: body.published ?? true,
@@ -1628,7 +2741,7 @@ router.post(
         }
 
         return Product.findByPk(Number((nextProduct as any).id), {
-          include: buildAdminProductIncludes(null),
+          include: buildAdminProductIncludes(),
           transaction,
         });
       });
@@ -1665,13 +2778,21 @@ router.patch(
       const idNum = parseId(id);
       if (!idNum) return res.status(400).json({ message: "Invalid id" });
       const body = updateSchema.parse(req.body);
+      const variations =
+        typeof body.variations !== "undefined"
+          ? await sanitizeAdminProductVariations(body.variations)
+          : undefined;
 
       const product = await Product.findByPk(idNum, {
-        include: buildAdminProductIncludes(null),
+        include: buildAdminProductIncludes(),
       });
       if (!product) {
         return res.status(404).json({ message: "Not found" });
       }
+      const seo =
+        typeof body.seo !== "undefined"
+          ? sanitizeAdminProductSeo(mergeAdminProductSeoInput((product as any).get?.("seo"), body.seo))
+          : undefined;
       const existingCategoryIds = resolveProductSelectedCategories(product).map((category: any) =>
         Number(category.id)
       );
@@ -1699,6 +2820,8 @@ router.patch(
       if (body.sku !== undefined) patch.sku = body.sku || null;
       if (body.barcode !== undefined) patch.barcode = body.barcode || null;
       if (body.tags !== undefined) patch.tags = body.tags;
+      if (typeof seo !== "undefined") patch.seo = seo;
+      if (typeof variations !== "undefined") patch.variations = variations;
       if (body.imageUrls !== undefined) {
         patch.imagePaths = body.imageUrls;
         patch.promoImagePath = body.imageUrls?.[0] || null;
@@ -1733,7 +2856,7 @@ router.patch(
           );
         }
         return Product.findByPk(idNum, {
-          include: buildAdminProductIncludes(null),
+          include: buildAdminProductIncludes(),
           transaction,
         });
       });
@@ -1768,7 +2891,7 @@ router.patch(
 
       const { note } = requestRevisionSchema.parse(req.body);
       const product = await Product.findByPk(idNum, {
-        include: buildAdminProductIncludes(null),
+        include: buildAdminProductIncludes(),
       });
       if (!product) return res.status(404).json({ message: "Not found" });
 
@@ -1794,7 +2917,7 @@ router.patch(
         );
 
         return Product.findByPk(idNum, {
-          include: buildAdminProductIncludes(null),
+          include: buildAdminProductIncludes(),
           transaction,
         });
       });
@@ -1871,7 +2994,29 @@ router.delete(
       if (!idNum) return res.status(400).json({ message: "Invalid id" });
       const product = await Product.findByPk(idNum);
       if (!product) return res.status(404).json({ message: "Not found" });
-      await product.destroy();
+      const deletion = await deleteProductsSafely([idNum]);
+      if (deletion.blockedIds.length > 0) {
+        if (isSuperAdminRequest(req)) {
+          const archiveResult = await archiveProductsSafely([idNum]);
+          return res.json({
+            ok: true,
+            archived: true,
+            archivedCount: archiveResult.affected,
+            archivedIds: archiveResult.archivedIds,
+            message:
+              "This product is already used in transaction history, so it was hidden from the catalog instead of being deleted.",
+          });
+        }
+        return res.status(409).json({
+          message:
+            "This product is already used in orders, reviews, or suborders and cannot be deleted.",
+        });
+      }
+      if (deletion.affected <= 0) {
+        return res.status(409).json({
+          message: "Delete failed. Please try again.",
+        });
+      }
       return res.json({ ok: true });
     } catch (err) {
       next(err);

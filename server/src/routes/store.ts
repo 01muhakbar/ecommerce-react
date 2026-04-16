@@ -56,7 +56,10 @@ import {
   buildSellerSuborderContract,
 } from "../services/orderLifecycleContract.service.js";
 import { buildOrderShippingReadModel } from "../services/orderShippingReadModel.service.js";
-import { buildSplitOperationalTruth } from "../services/splitOperationalTruth.service.js";
+import {
+  buildBuyerAggregateStatusSummary,
+  buildSplitOperationalTruth,
+} from "../services/splitOperationalTruth.service.js";
 import { getDefaultAddressByUser } from "../services/userAddress.service.js";
 import { protect } from "../middleware/authMiddleware.js";
 import { STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES } from "../services/sharedContracts/storePaymentProfileCompat.js";
@@ -263,6 +266,7 @@ const buildBuyerOrderContractPayload = (input: {
   paymentMethod?: unknown;
   displayStatuses?: unknown[];
   fulfillmentStatuses?: unknown[];
+  statusSummaryOverride?: unknown;
 }) => {
   const contract = buildBuyerOrderContract({
     orderStatus: input.orderStatus,
@@ -274,6 +278,11 @@ const buildBuyerOrderContractPayload = (input: {
 
   return {
     ...contract,
+    statusSummary:
+      (input.statusSummaryOverride &&
+      typeof input.statusSummaryOverride === "object"
+        ? input.statusSummaryOverride
+        : null) || contract.statusSummary,
     availableActions: contract.availableActions.map((action) =>
       action.code === "CONTINUE_PAYMENT" || action.code === "CONTINUE_STRIPE_PAYMENT"
         ? {
@@ -1521,10 +1530,13 @@ router.get(
               s.store_id AS storeId,
               st.name AS storeName,
               s.payment_status AS suborderPaymentStatus,
+              s.fulfillment_status AS fulfillmentStatus,
               p.status AS paymentStatus,
-              p.expires_at AS paymentExpiresAt
+              p.expires_at AS paymentExpiresAt,
+              sh.status AS shipmentStatus
             FROM suborders s
             LEFT JOIN payments p ON p.suborder_id = s.id
+            LEFT JOIN shipments sh ON sh.suborder_id = s.id
             LEFT JOIN stores st ON st.id = s.store_id
             WHERE s.order_id IN (${placeholders})
             ORDER BY s.order_id ASC, s.id ASC
@@ -1538,16 +1550,41 @@ router.get(
         for (const row of paymentRows) {
           const orderId = Number((row as any)?.orderId ?? 0);
           if (!Number.isFinite(orderId) || orderId <= 0) continue;
+          const suborderPaymentStatus = String((row as any)?.suborderPaymentStatus || "UNPAID")
+            .trim()
+            .toUpperCase();
+          const paymentReadModel = buildGroupedPaymentReadModel({
+            paymentStatus: (row as any)?.paymentStatus || "CREATED",
+            suborderPaymentStatus,
+            expiresAt: (row as any)?.paymentExpiresAt ?? null,
+            hasPaymentRecord: Boolean((row as any)?.paymentStatus),
+            missingPaymentReason: "Payment record not found for this suborder.",
+          });
           const displayStatus = resolveBuyerFacingPaymentStatus({
             paymentStatus: (row as any)?.paymentStatus,
-            suborderPaymentStatus: (row as any)?.suborderPaymentStatus,
+            suborderPaymentStatus,
             expiresAt: (row as any)?.paymentExpiresAt ?? null,
+          });
+          const operationalTruth = buildSplitOperationalTruth({
+            paymentStatus: suborderPaymentStatus,
+            paymentReadModel,
+            shipmentReadModel: (row as any)?.shipmentStatus
+              ? {
+                  shippingStatus: (row as any)?.shipmentStatus,
+                  hasPersistedShipment: true,
+                  usedLegacyFallback: false,
+                }
+              : null,
           });
           const current = paymentGroupsByOrderId.get(orderId) ?? [];
           current.push({
             storeId: Number((row as any)?.storeId ?? 0) || null,
             storeName: String((row as any)?.storeName || "").trim() || null,
             displayStatus,
+            fulfillmentStatus:
+              String((row as any)?.fulfillmentStatus || "UNFULFILLED").trim().toUpperCase() ||
+              "UNFULFILLED",
+            operationalTruth,
           });
           paymentGroupsByOrderId.set(orderId, current);
         }
@@ -1561,6 +1598,7 @@ router.get(
           const orderId = Number(row.id ?? 0);
           const paymentGroups = paymentGroupsByOrderId.get(orderId) ?? [];
           const displayStatuses = paymentGroups.map((group: any) => group.displayStatus);
+          const aggregateStatusSummary = buildBuyerAggregateStatusSummary(paymentGroups);
           const paymentEntry = buildBuyerPaymentEntryWithTargetPath(orderId, displayStatuses);
           const contract = buildBuyerOrderContractPayload({
             orderId,
@@ -1568,7 +1606,8 @@ router.get(
             paymentStatus: row.payment_status ?? row.paymentStatus ?? "UNPAID",
             paymentMethod: row.payment_method ?? row.paymentMethod ?? null,
             displayStatuses,
-            fulfillmentStatuses: [],
+            fulfillmentStatuses: paymentGroups.map((group: any) => group.fulfillmentStatus),
+            statusSummaryOverride: aggregateStatusSummary,
           });
           return {
             id: row.id,
@@ -1761,12 +1800,35 @@ router.get(
           expiresAt: payment?.expiresAt ?? suborder?.expiresAt ?? null,
         });
       });
+      const shippingReadModel = buildOrderShippingReadModel(paymentGroups);
+      const aggregateStatusSummary = buildBuyerAggregateStatusSummary(
+        paymentGroups.map((suborder: any) => {
+          const payment = Array.isArray(suborder?.payments) ? suborder.payments[0] : null;
+          const paymentStatus =
+            String(suborder?.paymentStatus || "UNPAID").trim().toUpperCase() || "UNPAID";
+          const paymentReadModel = buildGroupedPaymentReadModel({
+            paymentStatus: payment?.status || "CREATED",
+            suborderPaymentStatus: paymentStatus,
+            expiresAt: payment?.expiresAt ?? suborder?.expiresAt ?? null,
+            hasPaymentRecord: Boolean(payment),
+            missingPaymentReason: "Payment record not found for this suborder.",
+          });
+          const shippingSummary =
+            shippingReadModel.suborders.get(Number(suborder?.id || 0)) ?? null;
+          return {
+            operationalTruth: buildSplitOperationalTruth({
+              paymentStatus,
+              paymentReadModel,
+              shipmentReadModel: shippingSummary,
+            }),
+          };
+        })
+      );
       const paymentEntryWithPath = buildBuyerPaymentEntryWithTargetPath(orderId, displayStatuses);
       const subtotal = items.reduce(
         (sum: number, item: any) => sum + Number(item.lineTotal || 0),
         0
       );
-      const shippingReadModel = buildOrderShippingReadModel(paymentGroups);
       const amounts = resolveOrderAmountSnapshot(order, subtotal);
       const tax = 0;
       const contract = buildBuyerOrderContractPayload({
@@ -1779,6 +1841,7 @@ router.get(
         paymentMethod: order.paymentMethod ?? "COD",
         displayStatuses,
         fulfillmentStatuses: paymentGroups.map((suborder: any) => suborder?.fulfillmentStatus),
+        statusSummaryOverride: aggregateStatusSummary,
       });
 
       return res.json({
@@ -2263,14 +2326,15 @@ router.get(
               (order as any).payment_status ??
               order.get?.("payment_status") ??
               "UNPAID"
-          )
-            .toUpperCase()
-            .trim() || "UNPAID",
+            )
+              .toUpperCase()
+              .trim() || "UNPAID",
         paymentMethod,
         displayStatuses: storeSplits.map(
           (split: any) => split?.payment?.displayStatus || split?.paymentStatus
         ),
         fulfillmentStatuses: storeSplits.map((split: any) => split?.fulfillmentStatus),
+        statusSummaryOverride: buildBuyerAggregateStatusSummary(rawStoreSplits),
       });
       const paymentEntry = buildBuyerPaymentEntryWithTargetPath(
         Number(order.id),

@@ -1503,11 +1503,11 @@ export default function AccountOrderPaymentPage() {
       <section className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-emerald-50/50 p-5 shadow-sm sm:p-6">
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)] xl:items-start">
-            <div className="max-w-3xl">
+            <div className="min-w-0 max-w-3xl">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
                 Order Payment
               </p>
-              <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
+              <h1 className="mt-2 max-w-full break-words text-3xl font-extrabold leading-tight tracking-tight text-slate-900 [overflow-wrap:anywhere] sm:text-4xl">
                 {order.invoiceNo || order.ref}
               </h1>
               <div className="mt-4 flex flex-wrap items-center gap-2">

@@ -44,6 +44,7 @@ import {
   getSplitOperationalStatusSummary,
   isSplitOperationallyFinal,
 } from "../../utils/splitOperationalTruth.ts";
+import { getSplitAttentionStatus } from "../../utils/splitOrderAggregateTruth.js";
 import { resolveAssetUrl } from "../../lib/assetUrl.js";
 
 const formatDate = (value) => {
@@ -182,38 +183,6 @@ const getSplitPresentation = (split) => {
     paymentLabel: normalizeLabel(payment?.statusMeta?.label, payment?.status || "UNPAID"),
     paymentTone: payment?.statusMeta?.tone || "slate",
   };
-};
-
-const summarizeBuyerSplitTruth = (storeSplits) => {
-  const summary = {
-    awaitingPaymentCount: 0,
-    underReviewCount: 0,
-    shipmentLaneCount: 0,
-    finalNegativeCount: 0,
-  };
-
-  (Array.isArray(storeSplits) ? storeSplits : []).forEach((split) => {
-    const splitSummary = getSplitOperationalStatusSummary(split);
-    const code = String(splitSummary?.code || "").trim().toUpperCase();
-    const lane = String(splitSummary?.lane || "").trim().toUpperCase();
-    if (code === "AWAITING_PAYMENT") {
-      summary.awaitingPaymentCount += 1;
-      return;
-    }
-    if (code === "UNDER_REVIEW") {
-      summary.underReviewCount += 1;
-      return;
-    }
-    if (Boolean(splitSummary?.isFinal) && ["FAILED", "EXPIRED", "CANCELLED", "RETURNED", "FAILED_DELIVERY"].includes(code)) {
-      summary.finalNegativeCount += 1;
-      return;
-    }
-    if (lane === "SHIPMENT") {
-      summary.shipmentLaneCount += 1;
-    }
-  });
-
-  return summary;
 };
 
 const normalizeTrackingPayload = (response) =>
@@ -376,6 +345,57 @@ const getTrackingPresentation = (order) => {
       ? "Use the latest contract status above as the source of truth for the next action."
       : "",
   };
+};
+
+const getSplitAwareTrackingPresentation = (splitAttentionStatus) => {
+  if (!splitAttentionStatus) return null;
+
+  if (splitAttentionStatus.code === "AWAITING_PAYMENT") {
+    return {
+      stepIndex: 0,
+      title: "Complete payment to continue this order",
+      description: splitAttentionStatus.description,
+      isStopped: false,
+      stoppedTitle: "",
+      stoppedDescription: "",
+    };
+  }
+
+  if (splitAttentionStatus.code === "UNDER_REVIEW") {
+    return {
+      stepIndex: 0,
+      title: "Payment is under review",
+      description: splitAttentionStatus.description,
+      isStopped: false,
+      stoppedTitle: "",
+      stoppedDescription: "",
+    };
+  }
+
+  if (splitAttentionStatus.code === "FINAL_NEGATIVE") {
+    return {
+      stepIndex: 0,
+      title: "This order needs seller follow-up",
+      description: splitAttentionStatus.description,
+      isStopped: true,
+      stoppedTitle: "This order is already closed on every store split",
+      stoppedDescription:
+        "Use the split cards below as the source of truth for the latest closed or failed state.",
+    };
+  }
+
+  if (splitAttentionStatus.code === "MIXED_EXCEPTION") {
+    return {
+      stepIndex: 0,
+      title: "Some seller splits need attention",
+      description: splitAttentionStatus.description,
+      isStopped: false,
+      stoppedTitle: "",
+      stoppedDescription: "",
+    };
+  }
+
+  return null;
 };
 
 export default function StoreOrderTrackingPage() {
@@ -629,7 +649,14 @@ export default function StoreOrderTrackingPage() {
   const items = order?.items || order?.orderItems || order?.products || [];
   const storeSplits = Array.isArray(order?.storeSplits) ? order.storeSplits : [];
   const shipments = normalizeShipmentList(order?.shipments);
-  const splitTruthSummary = summarizeBuyerSplitTruth(storeSplits);
+  const splitAttentionStatus = getSplitAttentionStatus(storeSplits);
+  const splitTruthSummary = splitAttentionStatus || {
+    totalCount: 0,
+    awaitingPaymentCount: 0,
+    underReviewCount: 0,
+    shipmentLaneCount: 0,
+    finalNegativeCount: 0,
+  };
   const brandingSettings = brandingSettingsQuery.data?.data?.storeSettings?.branding ?? {};
   const platformBrandName =
     String(brandingSettings?.workspaceBrandName || "").trim() || "TP PRENEURS";
@@ -657,8 +684,10 @@ export default function StoreOrderTrackingPage() {
   const discount = order?.discount ?? order?.discountAmount ?? order?.discountTotal ?? 0;
   const totalAmount = order?.totalAmount ?? order?.total ?? order?.grandTotal ?? 0;
   const truthStatus = getOrderTruthStatus(order);
-  const trackingPresentation = getTrackingPresentation(order);
-  const statusLabel = truthStatus.label;
+  const trackingPresentation =
+    getSplitAwareTrackingPresentation(splitAttentionStatus) || getTrackingPresentation(order);
+  const statusLabel = splitAttentionStatus?.label || truthStatus.label;
+  const statusTone = splitAttentionStatus?.tone || truthStatus.tone;
   const trackingStepIndex = trackingPresentation.stepIndex;
   const trackingSummary = {
     title: trackingPresentation.title,
@@ -1132,7 +1161,7 @@ export default function StoreOrderTrackingPage() {
                 <span>Status:</span>
                 <span
                     className={`invoice-status-badge inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getToneBadgeClass(
-                    truthStatus.tone || statusSummary?.tone
+                    statusTone || statusSummary?.tone
                   )}`}
                 >
                   {statusLabel}

@@ -42,6 +42,9 @@ const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
 const AdminProductsPage = lazy(() => import("./pages/admin/Products.jsx"));
 const AdminProductForm = lazy(() => import("./pages/admin/ProductForm.jsx"));
 const AdminOrdersPage = lazy(() => import("./pages/admin/Orders.jsx"));
+const AdminNotificationsPage = lazy(() =>
+  import("./pages/admin/AdminNotificationsPage.jsx")
+);
 const Customers = lazy(() => import("./pages/Customers.jsx"));
 const Settings = lazy(() => import("./pages/Settings.jsx"));
 const AdminOrderDetail = lazy(() => import("./pages/admin/OrderDetail.jsx"));
@@ -457,6 +460,14 @@ export default function App() {
                 element={
                   <RequirePerm perm="ORDERS_VIEW">
                     <AdminOrdersPage />
+                  </RequirePerm>
+                }
+              />
+              <Route
+                path="notifications"
+                element={
+                  <RequirePerm perm="DASHBOARD_VIEW">
+                    <AdminNotificationsPage />
                   </RequirePerm>
                 }
               />

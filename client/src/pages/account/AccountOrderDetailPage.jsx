@@ -27,6 +27,7 @@ import {
   getSplitOperationalStatusSummary,
   isSplitOperationallyFinal,
 } from "../../utils/splitOperationalTruth.ts";
+import { getSplitAttentionStatus } from "../../utils/splitOrderAggregateTruth.js";
 import {
   UiEmptyState,
   UiErrorState,
@@ -187,8 +188,11 @@ export default function AccountOrderDetailPage() {
     effectiveContract ? { ...order, contract: effectiveContract } : order
   );
   const shipments = normalizeShipmentList(groupedOrder?.shipments || order.shipments);
-  const statusLabel = truthStatus.label || statusSummary?.label || order.status;
-  const statusTone = truthStatus.tone || statusSummary?.tone || order.status;
+  const splitAttentionStatus = getSplitAttentionStatus(groupedOrder?.groups || []);
+  const statusLabel =
+    splitAttentionStatus?.label || truthStatus.label || statusSummary?.label || order.status;
+  const statusTone =
+    splitAttentionStatus?.tone || truthStatus.tone || statusSummary?.tone || order.status;
 
   return (
     <div className="space-y-6">
@@ -199,6 +203,11 @@ export default function AccountOrderDetailPage() {
             {orderRef}
           </h2>
           <p className="text-xs text-slate-500">Placed {formatDate(order.createdAt)}</p>
+          {splitAttentionStatus?.description ? (
+            <p className="mt-2 max-w-2xl text-xs text-slate-500">
+              {splitAttentionStatus.description}
+            </p>
+          ) : null}
           <div className="mt-2">
             <CheckoutModeBadge mode={order.checkoutMode || groupedOrder?.checkoutMode} />
           </div>

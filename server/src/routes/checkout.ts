@@ -56,7 +56,10 @@ import {
   STORE_PAYMENT_PROFILE_CHECKOUT_ATTRIBUTES,
 } from "../services/sharedContracts/storePaymentProfileCompat.js";
 import { buildPublicStoreOperationalReadiness } from "../services/sharedContracts/publicStoreIdentity.js";
-import { buildSplitOperationalTruth } from "../services/splitOperationalTruth.service.js";
+import {
+  buildBuyerAggregateStatusSummary,
+  buildSplitOperationalTruth,
+} from "../services/splitOperationalTruth.service.js";
 import {
   buildStorePaymentProfileActivityMeta,
   buildStorePaymentProfileVerificationMeta,
@@ -1309,6 +1312,7 @@ const serializeSplitOrder = (order: any) => {
     fulfillmentStatuses: groups.map((group: any) => group.fulfillmentStatus),
     availableActions: [],
   });
+  const aggregateStatusSummary = buildBuyerAggregateStatusSummary(groups, contract.statusSummary);
   const orderId = toNumber(getAttr(order, "id"));
   const paymentEntryBase = buildBuyerOrderPaymentEntry(
     groups.map((group: any) => group.paymentReadModel?.status || group.paymentStatus)
@@ -1339,7 +1343,12 @@ const serializeSplitOrder = (order: any) => {
     suborderShipmentSummary: shippingReadModel.suborderShipmentSummary,
     shipments: shippingReadModel.shipments,
     summary,
-    contract,
+    contract: aggregateStatusSummary
+      ? {
+          ...contract,
+          statusSummary: aggregateStatusSummary,
+        }
+      : contract,
     paymentEntry,
     groups,
   };

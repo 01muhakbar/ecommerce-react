@@ -51,6 +51,7 @@ const pageTitleFromPath = (pathname) => {
   ) {
     return "Products";
   }
+  if (pathname.startsWith("/admin/notifications")) return "Notifications";
   if (pathname.startsWith("/admin/orders")) return "Orders";
   if (pathname.startsWith("/admin/customers")) return "Customers";
   if (
@@ -230,10 +231,6 @@ export default function Navbar({
         >
           <Menu className="navbar__menu-icon" />
         </button>
-        <div className="navbar__title-block">
-          <p className="navbar__eyebrow">Admin Panel</p>
-          <p className="navbar__page-title">{pageTitle}</p>
-        </div>
         <button
           type="button"
           className={`navbar__search-shell navbar__search-trigger ${

@@ -45,7 +45,7 @@ const toLabel = (type) => {
   return type;
 };
 
-const PAGE_LIMIT = 10;
+const PAGE_LIMIT = 5;
 const NOTIFICATION_TYPE_OPTIONS = [
   { value: "ORDER_CREATED", label: "Order Created" },
   { value: "ORDER_STATUS_CHANGED", label: "Order Status Changed" },
@@ -95,6 +95,17 @@ const buildNotificationTargetUrl = (item) => {
 
 const isNewTabIntent = (event) =>
   Boolean(event?.ctrlKey || event?.metaKey || event?.button === 1 || event?.which === 2);
+
+const getNotificationAvatarLabel = (item) => {
+  const title = String(item?.title || "").trim();
+  if (title) {
+    const parts = title.split(/\s+/).filter(Boolean).slice(0, 2);
+    if (parts.length > 0) {
+      return parts.map((part) => part.charAt(0).toUpperCase()).join("");
+    }
+  }
+  return "AD";
+};
 
 export default function AdminNotifications({
   open = false,
@@ -417,11 +428,9 @@ export default function AdminNotifications({
     }
   };
 
-  const handleLoadMore = async () => {
-    if (isMutating || isLoadingMore || loading || !hasMore) return;
-    const nextOffset = offset + PAGE_LIMIT;
-    await loadNotificationsPage({ nextOffset, append: true, withLoading: false });
-    await loadUnreadCount();
+  const handleShowAllNotifications = () => {
+    if (open) onToggle?.();
+    navigate("/admin/notifications");
   };
 
   const handleTogglePreferenceType = (type) => {
@@ -479,79 +488,21 @@ export default function AdminNotifications({
       {open ? (
         <div className="navbar__notify-menu" role="menu">
           <div className="navbar__notify-head">
-            <p>Notifications</p>
-            <span>{unreadCount} unread</span>
-          </div>
-          <div className="px-4 pt-2 text-[11px] font-medium text-slate-400">
-            Realtime: {realtimeStatus === "connected" ? "Connected" : "Disconnected"}
-          </div>
-          <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-slate-100">
-            <button
-              type="button"
-              onClick={handleMarkAllRead}
-              disabled={isMutating || loading || items.length === 0 || unreadCount === 0}
-              className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Mark all as read
-            </button>
-            <button
-              type="button"
-              onClick={handleClearAll}
-              disabled={isMutating || loading || items.length === 0}
-              className="inline-flex h-7 items-center justify-center rounded-md border border-rose-200 bg-rose-50 px-2 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Clear all
-            </button>
-            <button
-              type="button"
-              onClick={() => setPreferencesOpen((previous) => !previous)}
-              disabled={isLoadingPreferences || isSavingPreferences}
-              className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Preferences ({enabledTypes.length})
-            </button>
-          </div>
-          {preferencesOpen ? (
-            <div className="border-b border-slate-100 px-4 py-3 space-y-2">
-              <p className="text-xs font-semibold text-slate-700">
-                Notification Preferences
-              </p>
-              {isLoadingPreferences ? (
-                <p className="text-xs text-slate-500">Loading preferences...</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {NOTIFICATION_TYPE_OPTIONS.map((option) => (
-                    <label
-                      key={option.value}
-                      className="flex cursor-pointer items-center gap-2 text-xs text-slate-600"
-                    >
-                      <input
-                        type="checkbox"
-                        className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                        checked={draftEnabledTypes.includes(option.value)}
-                        onChange={() => handleTogglePreferenceType(option.value)}
-                        disabled={isSavingPreferences}
-                      />
-                      <span>{option.label}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
-              {preferencesError ? (
-                <p className="text-xs text-rose-600">{preferencesError}</p>
-              ) : null}
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={handleSavePreferences}
-                  disabled={isSavingPreferences || isLoadingPreferences}
-                  className="inline-flex h-7 items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 px-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isSavingPreferences ? "Saving..." : "Save"}
-                </button>
-              </div>
+            <div>
+              <p>Notifications</p>
+              <span>{unreadCount} unread</span>
             </div>
-          ) : null}
+            {unreadCount > 0 ? (
+              <button
+                type="button"
+                onClick={handleMarkAllRead}
+                disabled={isMutating || loading || items.length === 0 || unreadCount === 0}
+                className="navbar__notify-head-action"
+              >
+                Mark all
+              </button>
+            ) : null}
+          </div>
 
           {loading ? <p className="navbar__notify-empty">Loading notifications...</p> : null}
           {!loading && error ? <p className="navbar__notify-empty">{error}</p> : null}
@@ -566,6 +517,9 @@ export default function AdminNotifications({
                   key={item.id}
                   className={`navbar__notify-item ${item.isRead ? "" : "is-unread"}`.trim()}
                 >
+                  <div className="navbar__notify-avatar" aria-hidden="true">
+                    {getNotificationAvatarLabel(item)}
+                  </div>
                   <div
                     className="navbar__notify-main"
                     role="button"
@@ -597,35 +551,40 @@ export default function AdminNotifications({
                       <span className="navbar__notify-time">
                         {formatNotificationTimestamp(item.createdAt)}
                       </span>
-                      {!item.isRead ? <span className="navbar__notify-dot" /> : null}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className="navbar__notify-delete"
-                    aria-label="Delete notification"
-                    disabled={isMutating}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      handleDelete(item.id);
-                    }}
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  <div className="navbar__notify-side">
+                    <span
+                      className={`navbar__notify-dot ${item.isRead ? "is-read" : ""}`}
+                      aria-hidden="true"
+                    />
+                    <button
+                      type="button"
+                      className="navbar__notify-delete"
+                      aria-label="Delete notification"
+                      disabled={isMutating}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        handleDelete(item.id);
+                      }}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           ) : null}
           {!loading && !error && items.length > 0 ? (
-            <div className="border-t border-slate-100 px-4 py-2">
+            <div className="navbar__notify-footer">
               <button
                 type="button"
-                onClick={handleLoadMore}
-                disabled={!hasMore || isLoadingMore || isMutating}
-                className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={handleShowAllNotifications}
+                disabled={isMutating}
+                className="navbar__notify-footer-action"
               >
-                {isLoadingMore ? "Loading..." : hasMore ? "Load more" : "No more notifications"}
+                Show all notifications
               </button>
             </div>
           ) : null}

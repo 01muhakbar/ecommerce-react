@@ -162,13 +162,31 @@ export const createAdminProduct = async (payload) => {
 };
 
 export const exportAdminProducts = async (params = {}) => {
-  const query = new URLSearchParams(
-    Object.entries({
-      q: params?.q || undefined,
-      categoryId: params?.categoryId || undefined,
-      sellerSubmissionStatus: params?.sellerSubmissionStatus || undefined,
-    }).filter(([, value]) => value !== undefined && value !== null && value !== "")
-  ).toString();
+  const queryParams = new URLSearchParams();
+  const categoryIds = Array.isArray(params?.categoryIds)
+    ? params.categoryIds
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0)
+    : [];
+
+  if (params?.q) queryParams.set("q", String(params.q));
+  if (params?.categoryId) queryParams.set("categoryId", String(params.categoryId));
+  categoryIds.forEach((categoryId) => {
+    queryParams.append("categoryIds", String(categoryId));
+  });
+  if (params?.sellerSubmissionStatus) {
+    queryParams.set("sellerSubmissionStatus", String(params.sellerSubmissionStatus));
+  }
+  if (params?.sort) queryParams.set("sort", String(params.sort));
+  if (typeof params?.published === "boolean") {
+    queryParams.set("published", String(params.published));
+  }
+  if (params?.inventoryStatus) {
+    queryParams.set("inventoryStatus", String(params.inventoryStatus));
+  }
+  if (params?.format) queryParams.set("format", String(params.format));
+
+  const query = queryParams.toString();
   const endpoint = query ? `/api/admin/products/export?${query}` : "/api/admin/products/export";
   const response = await fetch(endpoint, { credentials: "include" });
 
@@ -203,6 +221,11 @@ export const updateAdminProductPublished = async (id, published) => {
   const { data } = await adminApi.patch(`/admin/products/${id}/published`, {
     published: Boolean(published),
   });
+  return data;
+};
+
+export const duplicateAdminProduct = async (id) => {
+  const { data } = await adminApi.post(`/admin/products/${id}/duplicate`);
   return data;
 };
 
@@ -612,6 +635,11 @@ export const bulkAdminCoupons = async (action, ids) => {
 
 export const fetchAdminAttributes = async () => {
   const { data } = await adminApi.get("/admin/attributes");
+  return data;
+};
+
+export const fetchAdminAttributeValues = async (attributeId) => {
+  const { data } = await adminApi.get(`/admin/attributes/${attributeId}/values`);
   return data;
 };
 
