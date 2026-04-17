@@ -50,7 +50,25 @@ const stashPendingAdd = (payload: {
   productId: number;
   qty: number;
   nonce?: string;
-  snapshot?: { name?: string; price?: number; imageUrl?: string | null };
+  snapshot?: {
+    name?: string;
+    price?: number;
+    imageUrl?: string | null;
+    variantKey?: string | null;
+    variantLabel?: string | null;
+    variantSelections?: Array<{
+      attributeId: number;
+      attributeName?: string;
+      valueId?: number | null;
+      value: string;
+    }>;
+    variantSku?: string | null;
+    variantBarcode?: string | null;
+    variantPrice?: number | null;
+    variantSalePrice?: number | null;
+    variantImage?: string | null;
+    stock?: number | null;
+  };
   from?: string;
 }) => {
   try {
@@ -63,22 +81,83 @@ const stashPendingAdd = (payload: {
 };
 
 type NormalizedCartProduct = {
+  lineId: string;
+  cartItemId: number | null;
   productId: number;
   name: string;
   price: number;
   image: string | null;
   quantity: number;
   stock?: number;
+  variantKey?: string | null;
+  variantLabel?: string | null;
+  variantSelections?: Array<{
+    attributeId: number;
+    attributeName?: string;
+    valueId?: number | null;
+    value: string;
+  }>;
+  variantSku?: string | null;
+  variantBarcode?: string | null;
+};
+
+const buildLineId = (productId: number, variantKey?: string | null) =>
+  `${productId}:${String(variantKey || "").trim().toLowerCase() || "base"}`;
+
+const normalizeVariantSelections = (value: unknown) =>
+  Array.isArray(value)
+    ? value
+        .map((entry: any) => {
+          const attributeId = Number(entry?.attributeId);
+          const valueText = String(entry?.value || "").trim();
+          if (!Number.isInteger(attributeId) || attributeId <= 0 || !valueText) return null;
+          return {
+            attributeId,
+            attributeName: String(entry?.attributeName || "").trim() || undefined,
+            valueId: entry?.valueId ?? null,
+            value: valueText,
+          };
+        })
+        .filter(Boolean)
+    : [];
+
+const resolveCartMutationTarget = (target: any) => {
+  if (typeof target === "number") {
+    const productId = Number(target);
+    if (!Number.isFinite(productId) || productId <= 0) return null;
+    return {
+      productId,
+      cartItemId: null,
+      lineId: buildLineId(productId, null),
+      variantKey: null,
+    };
+  }
+  if (!target || typeof target !== "object") return null;
+  const productId = Number(target?.productId ?? target?.id ?? target?.product?.id);
+  const cartItemId = Number(target?.cartItemId ?? target?.cartItem?.id);
+  const variantKey = String(target?.variantKey || "").trim() || null;
+  const explicitLineId = String(target?.lineId || "").trim();
+  const lineId =
+    explicitLineId || (Number.isFinite(productId) && productId > 0 ? buildLineId(productId, variantKey) : "");
+  if ((!Number.isFinite(productId) || productId <= 0) && (!Number.isFinite(cartItemId) || cartItemId <= 0)) {
+    return null;
+  }
+  return {
+    productId: Number.isFinite(productId) && productId > 0 ? productId : null,
+    cartItemId: Number.isFinite(cartItemId) && cartItemId > 0 ? cartItemId : null,
+    lineId: lineId || null,
+    variantKey,
+  };
 };
 
 export const normalizeCartProducts = (cart: any): NormalizedCartProduct[] => {
   const items = cart?.Products ?? [];
   return (Array.isArray(items) ? items : [])
     .map((product: any) => {
+      const cartItem = product?.CartItem ?? product?.CartItems ?? product?.cartItem ?? null;
       const productId = Number(product?.id ?? product?.productId);
       const quantity = Number(
-        product?.CartItem?.quantity ??
-          product?.CartItems?.quantity ??
+        cartItem?.quantity ??
           product?.quantity ??
           product?.qty ??
           0
@@ -86,7 +165,15 @@ export const normalizeCartProducts = (cart: any): NormalizedCartProduct[] => {
       if (!Number.isFinite(productId) || productId <= 0 || quantity <= 0) {
         return null;
       }
+      const cartItemId = Number(cartItem?.id ?? product?.cartItemId);
+      const variantKey = String(cartItem?.variantKey || product?.variantKey || "").trim() || null;
+      const variantLabel =
+        String(cartItem?.variantLabel || product?.variantLabel || "").trim() || null;
+      const variantSelections = normalizeVariantSelections(
+        cartItem?.variantSelections ?? product?.variantSelections
+      );
       const image =
+        cartItem?.variantImageSnapshot ??
         product?.imageUrl ??
         product?.image ??
         product?.promoImagePath ??
@@ -96,12 +183,27 @@ export const normalizeCartProducts = (cart: any): NormalizedCartProduct[] => {
       const stockValue = Number(product?.stock ?? product?.availableStock);
       const stock = Number.isFinite(stockValue) && stockValue >= 0 ? stockValue : undefined;
       return {
+        lineId: buildLineId(productId, variantKey),
+        cartItemId: Number.isFinite(cartItemId) ? cartItemId : null,
         productId,
         name: rawName || `Product #${productId}`,
-        price: Number(product?.price ?? product?.salePrice ?? 0),
+        price: Number(
+          cartItem?.unitSalePriceSnapshot ??
+            cartItem?.unitPriceSnapshot ??
+            product?.price ??
+            product?.salePrice ??
+            0
+        ),
         image,
         quantity,
         stock,
+        variantKey,
+        variantLabel,
+        variantSelections,
+        variantSku:
+          String(cartItem?.variantSkuSnapshot || product?.sku || "").trim() || null,
+        variantBarcode:
+          String(cartItem?.variantBarcodeSnapshot || product?.barcode || "").trim() || null,
       } as NormalizedCartProduct;
     })
     .filter((item): item is NormalizedCartProduct => Boolean(item));
@@ -112,11 +214,19 @@ export const getCount = (cart: any) =>
 
 const toStoreItems = (items: NormalizedCartProduct[]) =>
   items.map((item) => ({
+    lineId: item.lineId,
+    cartItemId: item.cartItemId,
     productId: item.productId,
     name: item.name,
     price: item.price,
     imageUrl: item.image,
     qty: item.quantity,
+    stock: item.stock,
+    variantKey: item.variantKey ?? null,
+    variantLabel: item.variantLabel ?? null,
+    variantSelections: item.variantSelections ?? [],
+    variantSku: item.variantSku ?? null,
+    variantBarcode: item.variantBarcode ?? null,
   }));
 
 const buildFallbackCart = (storeItems: any[]) => ({
@@ -125,19 +235,54 @@ const buildFallbackCart = (storeItems: any[]) => ({
     name: item.name,
     price: item.price,
     imageUrl: item.imageUrl ?? null,
-    CartItem: { quantity: item.qty },
+    CartItem: {
+      id: item.cartItemId ?? null,
+      quantity: item.qty,
+      variantKey: item.variantKey ?? null,
+      variantLabel: item.variantLabel ?? null,
+      variantSelections: item.variantSelections ?? [],
+      variantSkuSnapshot: item.variantSku ?? null,
+      variantBarcodeSnapshot: item.variantBarcode ?? null,
+    },
   })),
 });
 
 const buildGuestCart = (
-  items: { productId: number; qty: number; name?: string; price?: number; imageUrl?: string | null }[]
+  items: {
+    lineId?: string;
+    productId: number;
+    qty: number;
+    name?: string;
+    price?: number;
+    imageUrl?: string | null;
+    stock?: number | null;
+    variantKey?: string | null;
+    variantLabel?: string | null;
+    variantSelections?: Array<{
+      attributeId: number;
+      attributeName?: string;
+      valueId?: number | null;
+      value: string;
+    }>;
+    variantSku?: string | null;
+    variantBarcode?: string | null;
+  }[]
 ) => ({
   Products: (items || []).map((item) => ({
     id: item.productId,
     name: item.name?.trim() || `Product #${item.productId}`,
     price: Number.isFinite(Number(item.price)) ? Number(item.price) : 0,
     imageUrl: item.imageUrl ?? null,
-    CartItem: { quantity: item.qty },
+    stock: item.stock ?? undefined,
+    CartItem: {
+      id: null,
+      quantity: item.qty,
+      variantKey: item.variantKey ?? null,
+      variantLabel: item.variantLabel ?? null,
+      variantSelections: item.variantSelections ?? [],
+      variantSkuSnapshot: item.variantSku ?? null,
+      variantBarcodeSnapshot: item.variantBarcode ?? null,
+    },
   })),
 });
 
@@ -166,11 +311,11 @@ export function useCart() {
     () =>
       (Array.isArray(storeItems) ? storeItems : [])
         .map((item) => {
-          const productId = Number(item?.productId);
+          const lineId = String(item?.lineId || buildLineId(Number(item?.productId), item?.variantKey));
           const qty = Math.max(0, Number(item?.qty ?? 0));
-          return `${productId}:${qty}`;
+          return `${lineId}:${qty}`;
         })
-        .filter((value) => !value.startsWith("NaN:"))
+        .filter((value) => !value.startsWith(":"))
         .sort()
         .join("|"),
     [storeItems]
@@ -180,7 +325,7 @@ export function useCart() {
   const rawSignature = useMemo(
     () =>
       rawNormalizedItems
-        .map((item) => `${item.productId}:${item.quantity}`)
+        .map((item) => `${item.lineId}:${item.quantity}`)
         .sort()
         .join("|"),
     [rawNormalizedItems]
@@ -230,8 +375,9 @@ export function useCart() {
       applyGuestItems(guestItems);
       return;
     }
-    const fallbackItems = (Array.isArray(storeItems) ? storeItems : [])
+      const fallbackItems = (Array.isArray(storeItems) ? storeItems : [])
       .map((item) => ({
+        lineId: typeof item?.lineId === "string" ? item.lineId : undefined,
         productId: Number(item?.productId),
         qty: Math.max(1, Number(item?.qty ?? 1)),
         name: typeof item?.name === "string" ? item.name : undefined,
@@ -239,6 +385,24 @@ export function useCart() {
         imageUrl:
           typeof item?.imageUrl === "string" || item?.imageUrl === null
             ? item.imageUrl
+            : undefined,
+        stock: Number.isFinite(Number(item?.stock)) ? Number(item.stock) : undefined,
+        variantKey:
+          typeof item?.variantKey === "string" || item?.variantKey === null
+            ? item.variantKey ?? null
+            : undefined,
+        variantLabel:
+          typeof item?.variantLabel === "string" || item?.variantLabel === null
+            ? item.variantLabel ?? null
+            : undefined,
+        variantSelections: Array.isArray(item?.variantSelections) ? item.variantSelections : undefined,
+        variantSku:
+          typeof item?.variantSku === "string" || item?.variantSku === null
+            ? item.variantSku ?? null
+            : undefined,
+        variantBarcode:
+          typeof item?.variantBarcode === "string" || item?.variantBarcode === null
+            ? item.variantBarcode ?? null
             : undefined,
       }))
       .filter(
@@ -302,7 +466,25 @@ export function useCart() {
     async (
       productId: number,
       qty = 1,
-      snapshot?: { name?: string; price?: number; imageUrl?: string | null }
+      snapshot?: {
+        name?: string;
+        price?: number;
+        imageUrl?: string | null;
+        variantKey?: string | null;
+        variantLabel?: string | null;
+        variantSelections?: Array<{
+          attributeId: number;
+          attributeName?: string;
+          valueId?: number | null;
+          value: string;
+        }>;
+        variantSku?: string | null;
+        variantBarcode?: string | null;
+        variantPrice?: number | null;
+        variantSalePrice?: number | null;
+        variantImage?: string | null;
+        stock?: number | null;
+      }
     ) => {
       const id = Number(productId);
       const safeQty = Math.max(1, Number(qty) || 1);
@@ -311,13 +493,13 @@ export function useCart() {
       setIsLoading(true);
       setError(null);
       if (mode !== "remote") {
-        addGuestItemSnapshot(id, safeQty, snapshot);
+        addGuestItemSnapshot(id, safeQty, snapshot as any);
         refreshGuest();
         setIsLoading(false);
         return;
       }
       try {
-        await cartApi.addToCart(id, safeQty);
+        await cartApi.addToCart(id, safeQty, snapshot);
         setMode("remote");
         await refreshCart(false);
       } catch (err: any) {
@@ -349,25 +531,42 @@ export function useCart() {
   );
 
   const update = useCallback(
-    async (productId: number, qty: number) => {
-      const id = Number(productId);
+    async (target: any, qty: number) => {
+      const resolved = resolveCartMutationTarget(target);
       const safeQty = Math.max(0, Number(qty) || 0);
-      if (!Number.isFinite(id) || id <= 0) return;
+      if (!resolved) return;
       setIsLoading(true);
       setError(null);
       if (mode !== "remote") {
-        updateGuestItem(id, safeQty);
+        updateGuestItem(
+          {
+            lineId: resolved.lineId ?? undefined,
+            productId: resolved.productId ?? undefined,
+            variantKey: resolved.variantKey,
+          },
+          safeQty
+        );
         refreshGuest();
         setIsLoading(false);
         return;
       }
       try {
-        await cartApi.setCartItemQty(id, safeQty);
+        await cartApi.setCartItemQty(
+          Number(resolved.cartItemId ?? resolved.productId),
+          safeQty
+        );
         setMode("remote");
         await refreshCart(false);
       } catch (err: any) {
         if (isUnauthorized(err)) {
-          updateGuestItem(id, safeQty);
+          updateGuestItem(
+            {
+              lineId: resolved.lineId ?? undefined,
+              productId: resolved.productId ?? undefined,
+              variantKey: resolved.variantKey,
+            },
+            safeQty
+          );
           setMode("guest");
           writeRemoteHint(false);
           refreshGuest();
@@ -382,24 +581,32 @@ export function useCart() {
   );
 
   const remove = useCallback(
-    async (productId: number) => {
-      const id = Number(productId);
-      if (!Number.isFinite(id) || id <= 0) return;
+    async (target: any) => {
+      const resolved = resolveCartMutationTarget(target);
+      if (!resolved) return;
       setIsLoading(true);
       setError(null);
       if (mode !== "remote") {
-        removeGuestItem(id);
+        removeGuestItem({
+          lineId: resolved.lineId ?? undefined,
+          productId: resolved.productId ?? undefined,
+          variantKey: resolved.variantKey,
+        });
         refreshGuest();
         setIsLoading(false);
         return;
       }
       try {
-        await cartApi.removeFromCart(id);
+        await cartApi.removeFromCart(Number(resolved.cartItemId ?? resolved.productId));
         setMode("remote");
         await refreshCart(false);
       } catch (err: any) {
         if (isUnauthorized(err)) {
-          removeGuestItem(id);
+          removeGuestItem({
+            lineId: resolved.lineId ?? undefined,
+            productId: resolved.productId ?? undefined,
+            variantKey: resolved.variantKey,
+          });
           setMode("guest");
           writeRemoteHint(false);
           refreshGuest();
@@ -428,6 +635,7 @@ export function useCart() {
   return {
     cart,
     items,
+    hasVariantItems: items.some((item) => Boolean(item.variantKey)),
     count,
     subtotal,
     hasHydrated,

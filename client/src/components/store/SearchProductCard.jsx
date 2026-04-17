@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useCart } from "../../hooks/useCart.ts";
 import { formatCurrency } from "../../utils/format.js";
 import { resolveProductImageUrl } from "../../utils/productImage.js";
+import { productHasVariantSelections } from "../../utils/publicProductVariations.js";
 
 export default function SearchProductCard({ product, variant = "grid" }) {
   const navigate = useNavigate();
@@ -45,6 +46,7 @@ export default function SearchProductCard({ product, variant = "grid" }) {
     ? null
     : purchaseState?.label || (isOutOfStock ? "Out of stock" : "Unavailable");
   const isListVariant = variant === "list";
+  const hasVariants = productHasVariantSelections(product?.variations);
 
   useEffect(() => {
     setImageSrc(resolvedImage);
@@ -67,6 +69,10 @@ export default function SearchProductCard({ product, variant = "grid" }) {
   const handleAdd = (event) => {
     event.preventDefault();
     event.stopPropagation();
+    if (hasVariants) {
+      openProduct();
+      return;
+    }
     if (isAdding || !isPurchasable) return;
     setIsAdding(true);
     add(product?.id, 1, {
@@ -149,10 +155,14 @@ export default function SearchProductCard({ product, variant = "grid" }) {
             <button
               type="button"
               aria-label={
-                !isPurchasable ? `${productName} is unavailable` : `Add ${productName} to cart`
+                hasVariants
+                  ? `Select ${productName} options on the product page`
+                  : !isPurchasable
+                    ? `${productName} is unavailable`
+                    : `Add ${productName} to cart`
               }
               onClick={handleAdd}
-              disabled={isAdding || isLoading || !isPurchasable}
+              disabled={isAdding || isLoading || !isPurchasable || hasVariants}
               className="absolute bottom-3 right-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 sm:h-10 sm:w-10"
             >
               {!isPurchasable ? (

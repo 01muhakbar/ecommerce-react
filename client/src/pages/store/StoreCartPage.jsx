@@ -17,8 +17,17 @@ export function StoreCartDrawer({
 }) {
   const navigate = useNavigate();
   const closeButtonRef = useRef(null);
-  const { items, subtotal, hasHydrated, isLoading, error, update, remove, refreshCart } =
-    useCart();
+  const {
+    items,
+    subtotal,
+    hasHydrated,
+    isLoading,
+    error,
+    update,
+    remove,
+    refreshCart,
+    hasVariantItems,
+  } = useCart();
   const hasItems = items.length > 0;
   const isInitialSyncing = hasHydrated && isLoading && !hasItems;
   const showSkeleton = !hasHydrated || isInitialSyncing;
@@ -80,9 +89,15 @@ export function StoreCartDrawer({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [handleClose, isOpen]);
 
-  const resolveProductId = (item) => {
-    const id = Number(item?.productId ?? item?.id ?? item?.product?.id);
-    return Number.isFinite(id) && id > 0 ? id : null;
+  const resolveCartTarget = (item) => {
+    const cartItemId = Number(item?.cartItemId);
+    const productId = Number(item?.productId ?? item?.id ?? item?.product?.id);
+    return {
+      lineId: item?.lineId,
+      cartItemId: Number.isFinite(cartItemId) && cartItemId > 0 ? cartItemId : null,
+      productId: Number.isFinite(productId) && productId > 0 ? productId : null,
+      variantKey: item?.variantKey ?? null,
+    };
   };
 
   const handleContinueShopping = () => {
@@ -199,20 +214,20 @@ export function StoreCartDrawer({
                   </div>
                 ) : null}
                 {items.map((item) => {
-                  const rowProductId = resolveProductId(item);
+                  const rowTarget = resolveCartTarget(item);
                   const quantity = Math.max(1, Number(item.quantity) || 1);
                   const price = Number(item.price) || 0;
                   const stockValue = Number(item.stock);
                   const stock =
                     Number.isFinite(stockValue) && stockValue >= 0 ? stockValue : null;
-                  const isDecrementDisabled = isLoading || !rowProductId;
+                  const isDecrementDisabled = isLoading || !rowTarget.productId;
                   const isIncrementDisabled =
                     isLoading ||
-                    !rowProductId ||
+                    !rowTarget.productId ||
                     (stock !== null ? quantity >= stock : false);
                   return (
                     <article
-                      key={rowProductId ?? item.name}
+                      key={item.lineId ?? rowTarget.productId ?? item.name}
                       className="rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_8px_20px_rgba(15,23,42,0.06)]"
                     >
                       <div className="flex items-start gap-3 sm:gap-4">
@@ -232,6 +247,11 @@ export function StoreCartDrawer({
                           <p className="line-clamp-2 text-[13px] font-semibold leading-tight text-slate-900 sm:text-sm">
                             {item.name}
                           </p>
+                          {item.variantLabel ? (
+                            <p className="mt-1 text-[11px] font-medium text-slate-500">
+                              Variant {item.variantLabel}
+                            </p>
+                          ) : null}
                           <p className="mt-1 text-[11px] text-slate-500">
                             Unit {formatCurrency(price)}
                           </p>
@@ -243,10 +263,10 @@ export function StoreCartDrawer({
                         <div className="ml-1 flex shrink-0 flex-col items-end gap-2.5">
                           <button
                             type="button"
-                            disabled={isLoading || !rowProductId}
+                            disabled={isLoading || !rowTarget.productId}
                             onClick={() => {
-                              if (!rowProductId) return;
-                              remove(rowProductId);
+                              if (!rowTarget.productId) return;
+                              remove(rowTarget);
                             }}
                             aria-label={`Remove ${item.name}`}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-full text-rose-500 transition hover:bg-rose-50 hover:text-rose-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200 disabled:cursor-not-allowed disabled:opacity-45"
@@ -258,12 +278,12 @@ export function StoreCartDrawer({
                               type="button"
                               disabled={isDecrementDisabled}
                               onClick={() => {
-                                if (!rowProductId) return;
+                                if (!rowTarget.productId) return;
                                 if (quantity <= 1) {
-                                  remove(rowProductId);
+                                  remove(rowTarget);
                                   return;
                                 }
-                                update(rowProductId, quantity - 1);
+                                update(rowTarget, quantity - 1);
                               }}
                               className="inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold text-slate-700 transition hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 disabled:cursor-not-allowed disabled:opacity-40"
                             >
@@ -276,11 +296,11 @@ export function StoreCartDrawer({
                               type="button"
                               disabled={isIncrementDisabled}
                               onClick={() => {
-                                if (!rowProductId) return;
+                                if (!rowTarget.productId) return;
                                 const nextQty =
                                   stock !== null ? Math.min(stock, quantity + 1) : quantity + 1;
                                 if (nextQty > quantity) {
-                                  update(rowProductId, nextQty);
+                                  update(rowTarget, nextQty);
                                 }
                               }}
                               className="inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold text-slate-700 transition hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 disabled:cursor-not-allowed disabled:opacity-40"
@@ -338,12 +358,22 @@ export function StoreCartDrawer({
             </div>
             <div className="mt-3.5 space-y-2.5">
               {hasItems ? (
-                <Link
-                  to="/checkout"
-                  className="inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white shadow-[0_10px_18px_rgba(5,150,105,0.3)] transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
-                >
-                  Proceed to Checkout
-                </Link>
+                hasVariantItems ? (
+                  <button
+                    type="button"
+                    disabled
+                    className="inline-flex h-12 w-full items-center justify-center rounded-full bg-amber-300 px-4 text-sm font-semibold text-white"
+                  >
+                    Variant Checkout Coming Next Phase
+                  </button>
+                ) : (
+                  <Link
+                    to="/checkout"
+                    className="inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white shadow-[0_10px_18px_rgba(5,150,105,0.3)] transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+                  >
+                    Proceed to Checkout
+                  </Link>
+                )
               ) : (
                 <button
                   type="button"
@@ -378,8 +408,17 @@ export function StoreCartDrawer({
 }
 
 export default function StoreCartPage() {
-  const { items, subtotal, hasHydrated, isLoading, error, update, remove, refreshCart } =
-    useCart();
+  const {
+    items,
+    subtotal,
+    hasHydrated,
+    isLoading,
+    error,
+    update,
+    remove,
+    refreshCart,
+    hasVariantItems,
+  } = useCart();
   const hasItems = items.length > 0;
   const isInitialSyncing = hasHydrated && isLoading && !hasItems;
   const showSkeleton = !hasHydrated || isInitialSyncing;
@@ -403,9 +442,15 @@ export default function StoreCartPage() {
     }
   }, [error, hasHydrated, refreshCart]);
 
-  const resolveProductId = (item) => {
-    const id = Number(item?.productId ?? item?.id ?? item?.product?.id);
-    return Number.isFinite(id) && id > 0 ? id : null;
+  const resolveCartTarget = (item) => {
+    const cartItemId = Number(item?.cartItemId);
+    const productId = Number(item?.productId ?? item?.id ?? item?.product?.id);
+    return {
+      lineId: item?.lineId,
+      cartItemId: Number.isFinite(cartItemId) && cartItemId > 0 ? cartItemId : null,
+      productId: Number.isFinite(productId) && productId > 0 ? productId : null,
+      variantKey: item?.variantKey ?? null,
+    };
   };
 
   return (
@@ -490,20 +535,20 @@ export default function StoreCartPage() {
             ) : null}
 
             {items.map((item) => {
-              const rowProductId = resolveProductId(item);
+              const rowTarget = resolveCartTarget(item);
               const quantity = Math.max(1, Number(item.quantity) || 1);
               const price = Number(item.price) || 0;
               const stockValue = Number(item.stock);
               const stock =
                 Number.isFinite(stockValue) && stockValue >= 0 ? stockValue : null;
-              const isDecrementDisabled = isLoading || !rowProductId;
+              const isDecrementDisabled = isLoading || !rowTarget.productId;
               const isIncrementDisabled =
                 isLoading ||
-                !rowProductId ||
+                !rowTarget.productId ||
                 (stock !== null ? quantity >= stock : false);
               return (
                 <article
-                  key={rowProductId ?? item.name}
+                  key={item.lineId ?? rowTarget.productId ?? item.name}
                   className="rounded-3xl border border-slate-200 bg-white p-3.5 shadow-[0_10px_24px_rgba(15,23,42,0.06)] sm:p-4"
                 >
                   <div className="flex items-start gap-3 sm:gap-4">
@@ -523,6 +568,11 @@ export default function StoreCartPage() {
                       <p className="line-clamp-2 text-sm font-semibold leading-tight text-slate-900 sm:text-[15px]">
                         {item.name}
                       </p>
+                      {item.variantLabel ? (
+                        <p className="mt-1 text-xs font-medium text-slate-500">
+                          Variant {item.variantLabel}
+                        </p>
+                      ) : null}
                       <p className="mt-1 text-xs text-slate-400">
                         Item Price {formatCurrency(price)}
                       </p>
@@ -537,10 +587,10 @@ export default function StoreCartPage() {
                     <div className="ml-1 flex shrink-0 flex-col items-end gap-3">
                       <button
                         type="button"
-                        disabled={isLoading || !rowProductId}
+                        disabled={isLoading || !rowTarget.productId}
                         onClick={() => {
-                          if (!rowProductId) return;
-                          remove(rowProductId);
+                          if (!rowTarget.productId) return;
+                          remove(rowTarget);
                         }}
                         aria-label={`Remove ${item.name}`}
                         className="inline-flex h-8 w-8 items-center justify-center rounded-full text-rose-500 transition hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-45"
@@ -552,12 +602,12 @@ export default function StoreCartPage() {
                           type="button"
                           disabled={isDecrementDisabled}
                           onClick={() => {
-                            if (!rowProductId) return;
+                            if (!rowTarget.productId) return;
                             if (quantity <= 1) {
-                              remove(rowProductId);
+                              remove(rowTarget);
                               return;
                             }
-                            update(rowProductId, quantity - 1);
+                            update(rowTarget, quantity - 1);
                           }}
                           className="inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                         >
@@ -570,11 +620,11 @@ export default function StoreCartPage() {
                           type="button"
                           disabled={isIncrementDisabled}
                           onClick={() => {
-                            if (!rowProductId) return;
+                            if (!rowTarget.productId) return;
                             const nextQty =
                               stock !== null ? Math.min(stock, quantity + 1) : quantity + 1;
                             if (nextQty > quantity) {
-                              update(rowProductId, nextQty);
+                              update(rowTarget, nextQty);
                             }
                           }}
                           className="inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
@@ -647,16 +697,33 @@ export default function StoreCartPage() {
                   <span className="font-medium text-slate-500">{taxLabel}</span>
                 </div>
               </div>
-              <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-                Proceed to checkout to confirm shipping, payment method, and the final order
-                total.
-              </div>
-              <Link
-                to="/checkout"
-                className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-5 text-sm font-semibold text-white shadow-[0_14px_26px_rgba(5,150,105,0.26)] transition hover:bg-emerald-700"
+              <div
+                className={`mt-4 rounded-2xl px-4 py-3 text-sm ${
+                  hasVariantItems
+                    ? "border border-amber-200 bg-amber-50 text-amber-900"
+                    : "border border-emerald-100 bg-emerald-50 text-emerald-900"
+                }`}
               >
-                Proceed to Checkout
-              </Link>
+                {hasVariantItems
+                  ? "Variant cart items are already locked in the cart. Checkout hardening is the next phase before these lines can proceed safely."
+                  : "Proceed to checkout to confirm shipping, payment method, and the final order total."}
+              </div>
+              {hasVariantItems ? (
+                <button
+                  type="button"
+                  disabled
+                  className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-full bg-amber-300 px-5 text-sm font-semibold text-white"
+                >
+                  Variant Checkout Coming Next Phase
+                </button>
+              ) : (
+                <Link
+                  to="/checkout"
+                  className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-5 text-sm font-semibold text-white shadow-[0_14px_26px_rgba(5,150,105,0.26)] transition hover:bg-emerald-700"
+                >
+                  Proceed to Checkout
+                </Link>
+              )}
               <Link
                 to="/"
                 className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-full border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:border-slate-400"

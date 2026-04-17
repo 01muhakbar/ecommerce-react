@@ -38,11 +38,68 @@ export const normalizeRemoteCartToItems = (remotePayload: any): CartItem[] => {
         product?.promoImagePath ||
         (Array.isArray(product?.imagePaths) ? product.imagePaths[0] : null);
       return {
+        lineId:
+          typeof product?.lineId === "string"
+            ? product.lineId
+            : `${productId}:${String(
+                product?.CartItem?.variantKey ??
+                  product?.cartItem?.variantKey ??
+                  product?.variantKey ??
+                  ""
+              )
+                .trim()
+                .toLowerCase() || "base"}`,
+        cartItemId: Number(
+          product?.CartItem?.id ?? product?.cartItem?.id ?? product?.cartItemId ?? 0
+        ) || null,
         productId,
         name: product?.name || product?.productName || "",
-        price: Number(product?.price ?? product?.salePrice ?? 0),
+        price: Number(
+          product?.CartItem?.unitSalePriceSnapshot ??
+            product?.cartItem?.unitSalePriceSnapshot ??
+            product?.CartItem?.unitPriceSnapshot ??
+            product?.cartItem?.unitPriceSnapshot ??
+            product?.price ??
+            product?.salePrice ??
+            0
+        ),
         imageUrl: normalizeImageUrl(rawImage),
         qty,
+        stock:
+          product?.stock !== undefined && product?.stock !== null ? Number(product.stock) : undefined,
+        variantKey:
+          String(
+            product?.CartItem?.variantKey ??
+              product?.cartItem?.variantKey ??
+              product?.variantKey ??
+              ""
+          ).trim() || null,
+        variantLabel:
+          String(
+            product?.CartItem?.variantLabel ??
+              product?.cartItem?.variantLabel ??
+              product?.variantLabel ??
+              ""
+          ).trim() || null,
+        variantSelections: Array.isArray(
+          product?.CartItem?.variantSelections ?? product?.cartItem?.variantSelections
+        )
+          ? product?.CartItem?.variantSelections ?? product?.cartItem?.variantSelections
+          : [],
+        variantSku:
+          String(
+            product?.CartItem?.variantSkuSnapshot ??
+              product?.cartItem?.variantSkuSnapshot ??
+              product?.variantSku ??
+              ""
+          ).trim() || null,
+        variantBarcode:
+          String(
+            product?.CartItem?.variantBarcodeSnapshot ??
+              product?.cartItem?.variantBarcodeSnapshot ??
+              product?.variantBarcode ??
+              ""
+          ).trim() || null,
       } as CartItem;
     })
     .filter((item: CartItem | null): item is CartItem => Boolean(item));
@@ -65,7 +122,10 @@ export const mergeGuestItemsToRemote = async (
     if (!Number.isFinite(productId) || productId <= 0 || qty <= 0) {
       continue;
     }
-    await cartApi.addToCart(productId, qty);
+    await cartApi.addToCart(productId, qty, {
+      variantKey: item?.variantKey ?? null,
+      variantSelections: Array.isArray(item?.variantSelections) ? item.variantSelections : [],
+    });
   }
 };
 

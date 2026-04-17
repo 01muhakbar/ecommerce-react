@@ -244,12 +244,237 @@ const PAYMENT_EXPIRY_MINUTES = 240;
 type ShippingDetailsSnapshot = z.infer<typeof shippingDetailsSchema>;
 
 const getAttr = (row: any, key: string) =>
-  row?.getDataValue?.(key) ?? row?.get?.(key) ?? row?.dataValues?.[key];
+  row?.getDataValue?.(key) ?? row?.get?.(key) ?? row?.dataValues?.[key] ?? row?.[key];
 
 const toNumber = (value: any, fallback = 0) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 };
+
+const CHECKOUT_CART_ITEM_VARIANT_FIELD_COLUMN_MAP = {
+  variantKey: "variant_key",
+  variantLabel: "variant_label",
+  variantSelections: "variant_selections",
+  variantSkuSnapshot: "variant_sku_snapshot",
+  variantBarcodeSnapshot: "variant_barcode_snapshot",
+  unitPriceSnapshot: "unit_price_snapshot",
+  unitSalePriceSnapshot: "unit_sale_price_snapshot",
+  variantImageSnapshot: "variant_image_snapshot",
+} as const;
+
+const ORDER_ITEM_VARIANT_FIELD_COLUMN_MAP = {
+  variantKey: "variantKey",
+  variantLabel: "variantLabel",
+  variantSelections: "variantSelections",
+  skuSnapshot: "skuSnapshot",
+  barcodeSnapshot: "barcodeSnapshot",
+  imageSnapshot: "imageSnapshot",
+} as const;
+
+const SUBORDER_ITEM_VARIANT_FIELD_COLUMN_MAP = {
+  variantKey: "variant_key",
+  variantLabel: "variant_label",
+  variantSelections: "variant_selections",
+  barcodeSnapshot: "barcode_snapshot",
+  imageSnapshot: "image_snapshot",
+} as const;
+
+const CHECKOUT_CART_ITEM_VARIANT_FIELDS = Object.keys(
+  CHECKOUT_CART_ITEM_VARIANT_FIELD_COLUMN_MAP
+) as Array<keyof typeof CHECKOUT_CART_ITEM_VARIANT_FIELD_COLUMN_MAP>;
+const ORDER_ITEM_VARIANT_FIELDS = Object.keys(
+  ORDER_ITEM_VARIANT_FIELD_COLUMN_MAP
+) as Array<keyof typeof ORDER_ITEM_VARIANT_FIELD_COLUMN_MAP>;
+const SUBORDER_ITEM_VARIANT_FIELDS = Object.keys(
+  SUBORDER_ITEM_VARIANT_FIELD_COLUMN_MAP
+) as Array<keyof typeof SUBORDER_ITEM_VARIANT_FIELD_COLUMN_MAP>;
+
+let checkoutCartItemVariantFieldSupportPromise: Promise<
+  Set<keyof typeof CHECKOUT_CART_ITEM_VARIANT_FIELD_COLUMN_MAP>
+> | null = null;
+let orderItemVariantFieldSupportPromise: Promise<
+  Set<keyof typeof ORDER_ITEM_VARIANT_FIELD_COLUMN_MAP>
+> | null = null;
+let suborderItemVariantFieldSupportPromise: Promise<
+  Set<keyof typeof SUBORDER_ITEM_VARIANT_FIELD_COLUMN_MAP>
+> | null = null;
+
+const normalizeJsonValue = (value: unknown) => {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+};
+
+const normalizeVariantSelectionCompareKey = (selection: any) =>
+  `${Number(selection?.attributeId) || 0}:${String(selection?.valueId ?? selection?.value ?? "")
+    .trim()
+    .toLowerCase()}`;
+
+const buildVariantCombinationKey = (selections: any[]) =>
+  (Array.isArray(selections) ? selections : [])
+    .map(normalizeVariantSelectionCompareKey)
+    .join("|");
+
+const normalizeVariantSelections = (value: unknown) =>
+  Array.isArray(value)
+    ? value
+        .map((entry: any) => {
+          const attributeId = Number(entry?.attributeId);
+          const valueText = String(entry?.value || "").trim();
+          if (!Number.isInteger(attributeId) || attributeId <= 0 || !valueText) return null;
+          return {
+            attributeId,
+            attributeName: String(entry?.attributeName || "").trim() || undefined,
+            valueId: entry?.valueId ?? null,
+            value: valueText,
+          };
+        })
+        .filter(Boolean)
+    : [];
+
+const normalizeProductVariationState = (value: unknown) => {
+  const normalized = normalizeJsonValue(value);
+  if (!normalized || typeof normalized !== "object") {
+    return { hasVariants: false, variants: [] as any[] };
+  }
+
+  const raw = Array.isArray(normalized)
+    ? { hasVariants: normalized.length > 0, variants: normalized }
+    : (normalized as Record<string, any>);
+
+  const variants = (Array.isArray(raw?.variants) ? raw.variants : [])
+    .map((entry: any, index: number) => {
+      const selections = normalizeVariantSelections(entry?.selections).map((selection: any) => ({
+        ...selection,
+        attributeName: String(selection?.attributeName || "").trim(),
+      }));
+      const combination = String(entry?.combination || "").trim();
+      const combinationKey = String(
+        entry?.combinationKey || buildVariantCombinationKey(selections)
+      ).trim();
+      if (!combination || !combinationKey || selections.length === 0) return null;
+
+      const quantityRaw = entry?.quantity;
+      return {
+        id: String(entry?.id || `variant-${index + 1}`),
+        combination,
+        combinationKey,
+        selections,
+        sku: String(entry?.sku || "").trim() || null,
+        barcode: String(entry?.barcode || "").trim() || null,
+        price:
+          entry?.price === null || typeof entry?.price === "undefined" || entry?.price === ""
+            ? null
+            : Number(entry.price),
+        salePrice:
+          entry?.salePrice === null || typeof entry?.salePrice === "undefined" || entry?.salePrice === ""
+            ? null
+            : Number(entry.salePrice),
+        quantity:
+          quantityRaw === null || typeof quantityRaw === "undefined" || quantityRaw === ""
+            ? null
+            : Math.max(0, Math.round(Number(quantityRaw))),
+        image: normalizeUploadsUrl(entry?.image ? String(entry.image) : null),
+      };
+    })
+    .filter(Boolean);
+
+  return {
+    hasVariants: Boolean(raw?.hasVariants) || variants.length > 0,
+    variants,
+  };
+};
+
+const resolveVariantUnitPrice = (variant: any, product: any) => {
+  const variantPrice = toNumber(variant?.price, 0);
+  const variantSalePrice = toNumber(variant?.salePrice, 0);
+  if (variantSalePrice > 0 && variantSalePrice < variantPrice) {
+    return {
+      unitPrice: variantSalePrice,
+      unitOriginalPrice: variantPrice,
+    };
+  }
+
+  const fallbackOriginal = variantPrice > 0 ? variantPrice : toNumber(getAttr(product, "price"), 0);
+  return {
+    unitPrice: fallbackOriginal,
+    unitOriginalPrice: fallbackOriginal,
+  };
+};
+
+const resolveTableColumnSupport = async <
+  TField extends string,
+  TMap extends Record<TField, string>,
+>(
+  tableNames: string[],
+  fieldColumnMap: TMap,
+  supportedFields: TField[]
+) => {
+  const queryInterface = sequelize.getQueryInterface();
+  let description: Record<string, any> = {};
+  for (const tableName of tableNames) {
+    try {
+      description = (await queryInterface.describeTable(tableName)) as Record<string, any>;
+      break;
+    } catch {
+      description = {};
+    }
+  }
+  const columns = new Set(Object.keys(description || {}));
+  return new Set(
+    supportedFields.filter((field) => columns.has(fieldColumnMap[field]))
+  );
+};
+
+const getCheckoutCartItemSupportedVariantFields = async () => {
+  if (!checkoutCartItemVariantFieldSupportPromise) {
+    checkoutCartItemVariantFieldSupportPromise = resolveTableColumnSupport(
+      ["cart_items", "CartItems"],
+      CHECKOUT_CART_ITEM_VARIANT_FIELD_COLUMN_MAP,
+      CHECKOUT_CART_ITEM_VARIANT_FIELDS
+    );
+  }
+  return checkoutCartItemVariantFieldSupportPromise;
+};
+
+const getOrderItemSupportedVariantFields = async () => {
+  if (!orderItemVariantFieldSupportPromise) {
+    orderItemVariantFieldSupportPromise = resolveTableColumnSupport(
+      ["OrderItems", "order_items"],
+      ORDER_ITEM_VARIANT_FIELD_COLUMN_MAP,
+      ORDER_ITEM_VARIANT_FIELDS
+    );
+  }
+  return orderItemVariantFieldSupportPromise;
+};
+
+const getSuborderItemSupportedVariantFields = async () => {
+  if (!suborderItemVariantFieldSupportPromise) {
+    suborderItemVariantFieldSupportPromise = resolveTableColumnSupport(
+      ["suborder_items", "SuborderItems"],
+      SUBORDER_ITEM_VARIANT_FIELD_COLUMN_MAP,
+      SUBORDER_ITEM_VARIANT_FIELDS
+    );
+  }
+  return suborderItemVariantFieldSupportPromise;
+};
+
+const buildSupportedSnapshotFields = <TField extends string>(
+  snapshot: Record<string, any>,
+  supportedFields: Set<TField>,
+  fields: readonly TField[]
+) =>
+  fields.reduce((acc, field) => {
+    if (supportedFields.has(field)) {
+      acc[field] = snapshot[field];
+    }
+    return acc;
+  }, {} as Record<string, any>);
 
 const normalizeUploadsUrl = (value?: string | null) => {
   if (!value) return null;
@@ -325,6 +550,17 @@ const getProductImage = (product: any) => {
   return null;
 };
 
+const getProductImageList = (product: any) => {
+  const rawImages = normalizeJsonValue(getAttr(product, "imagePaths"));
+  if (Array.isArray(rawImages)) {
+    return rawImages
+      .map((entry) => normalizeUploadsUrl(String(entry || "")))
+      .filter(Boolean) as string[];
+  }
+  const primary = getProductImage(product);
+  return primary ? [primary] : [];
+};
+
 const getProductUnitPrice = (product: any) => {
   const rawSalePrice = toNumber(getAttr(product, "salePrice"), 0);
   const rawPrice = toNumber(getAttr(product, "price"), 0);
@@ -356,6 +592,85 @@ const buildPublicProductWhere = (extraWhere: Record<string, any> = {}) => ({
   isPublished: true,
   sellerSubmissionStatus: "none",
 });
+
+const buildCheckoutLineId = (productId: number, variantKey?: string | null) =>
+  `${productId}:${String(variantKey || "").trim().toLowerCase() || "base"}`;
+
+const cloneCheckoutProductForCartItem = (product: any, cartItem: any) => {
+  const plain =
+    typeof product?.get === "function" ? product.get({ plain: true }) : { ...(product || {}) };
+  plain.CartItem = cartItem ?? null;
+  return plain;
+};
+
+const resolveCheckoutCartLineSnapshot = (product: any) => {
+  const productId = toNumber(getAttr(product, "id"), 0);
+  const cartItem = product?.CartItem ?? product?.cartItem ?? null;
+  const variantKey = String(cartItem?.variantKey || "").trim() || null;
+  const variantSelections = normalizeVariantSelections(
+    normalizeJsonValue(cartItem?.variantSelections)
+  );
+  const variationState = normalizeProductVariationState(getAttr(product, "variations"));
+  const selectedVariant = variationState.hasVariants
+    ? variationState.variants.find(
+        (entry: any) =>
+          String(entry?.combinationKey || "").trim().toLowerCase() ===
+            String(variantKey || "").trim().toLowerCase() ||
+          (variantSelections.length > 0 &&
+            String(entry?.combinationKey || "").trim().toLowerCase() ===
+              buildVariantCombinationKey(variantSelections).toLowerCase())
+      ) || null
+    : null;
+  const hasVariantSelection = Boolean(variantKey) || variantSelections.length > 0;
+
+  if (variationState.hasVariants && !selectedVariant) {
+    return {
+      lineId: buildCheckoutLineId(productId, variantKey),
+      cartItemId: toNumber(cartItem?.id, 0) || null,
+      variantKey,
+      variantSelections,
+      invalidReason: hasVariantSelection ? "PRODUCT_VARIANT_MISSING" : "PRODUCT_VARIANT_REQUIRED",
+    };
+  }
+
+  const variantSnapshot = selectedVariant
+    ? resolveVariantUnitPrice(selectedVariant, product)
+    : {
+        unitPrice: toNumber(
+          cartItem?.unitSalePriceSnapshot ?? cartItem?.unitPriceSnapshot ?? getProductUnitPrice(product),
+          0
+        ),
+        unitOriginalPrice: toNumber(
+          cartItem?.unitPriceSnapshot ?? getAttr(product, "price"),
+          0
+        ),
+      };
+
+  return {
+    lineId: buildCheckoutLineId(productId, variantKey),
+    cartItemId: toNumber(cartItem?.id, 0) || null,
+    variantKey,
+    variantLabel:
+      String(cartItem?.variantLabel || selectedVariant?.combination || "").trim() || null,
+    variantSelections:
+      variantSelections.length > 0 ? variantSelections : selectedVariant?.selections ?? [],
+    sku: String(selectedVariant?.sku || cartItem?.variantSkuSnapshot || getAttr(product, "sku") || "").trim() || null,
+    barcode:
+      String(selectedVariant?.barcode || cartItem?.variantBarcodeSnapshot || "").trim() || null,
+    image:
+      normalizeUploadsUrl(
+        selectedVariant?.image || cartItem?.variantImageSnapshot || getProductImageList(product)[0] || null
+      ),
+    unitPrice: variantSnapshot.unitPrice,
+    unitOriginalPrice: variantSnapshot.unitOriginalPrice,
+    stock:
+      selectedVariant && Number.isFinite(Number(selectedVariant?.quantity))
+        ? Math.max(0, Math.round(Number(selectedVariant.quantity)))
+        : Math.max(0, toNumber(getAttr(product, "stock"), 0)),
+    invalidReason: null,
+    hasVariants: variationState.hasVariants,
+  };
+};
 
 const getAuthUser = (req: any) => {
   const userId = Number(req?.user?.id);
@@ -414,56 +729,169 @@ const buildPaymentExpiry = () => {
   return expiresAt;
 };
 
-const buildCartInclude = (includePaymentMedia = false) => [
-  {
-    model: Product,
-    as: "Products",
+const buildCheckoutCartProductSnapshot = (product: any, cartItem: any) => {
+  const snapshot = {
+    id: toNumber(getAttr(cartItem, "id"), 0) || null,
+    quantity: toNumber(getAttr(cartItem, "quantity"), 0),
+    variantKey: String(getAttr(cartItem, "variantKey") || "").trim() || null,
+    variantLabel: String(getAttr(cartItem, "variantLabel") || "").trim() || null,
+    variantSelections: Array.isArray(normalizeJsonValue(getAttr(cartItem, "variantSelections")))
+      ? normalizeJsonValue(getAttr(cartItem, "variantSelections"))
+      : [],
+    variantSkuSnapshot: String(getAttr(cartItem, "variantSkuSnapshot") || "").trim() || null,
+    variantBarcodeSnapshot:
+      String(getAttr(cartItem, "variantBarcodeSnapshot") || "").trim() || null,
+    unitPriceSnapshot: getAttr(cartItem, "unitPriceSnapshot"),
+    unitSalePriceSnapshot: getAttr(cartItem, "unitSalePriceSnapshot"),
+    variantImageSnapshot:
+      normalizeUploadsUrl(String(getAttr(cartItem, "variantImageSnapshot") || "").trim() || null),
+  };
+
+  if (!product) return null;
+  product.setDataValue?.("CartItem", snapshot);
+  (product as any).CartItem = snapshot;
+  return product;
+};
+
+const buildCartInclude = async (includePaymentMedia = false) => {
+  const supportedCartItemFields = await getCheckoutCartItemSupportedVariantFields();
+  return [
+    {
+      model: Product,
+      as: "Products",
+      attributes: [
+        "id",
+        "name",
+        "slug",
+        "sku",
+        "price",
+        "salePrice",
+        "promoImagePath",
+        "imagePaths",
+        "storeId",
+        "stock",
+        "status",
+        "isPublished",
+        "sellerSubmissionStatus",
+        "userId",
+        "categoryId",
+        "variations",
+      ],
+      through: {
+        attributes: [
+          "id",
+          "quantity",
+          ...CHECKOUT_CART_ITEM_VARIANT_FIELDS.filter((field) =>
+            supportedCartItemFields.has(field)
+          ),
+        ],
+      },
+      include: [
+        {
+          model: Category,
+          as: "category",
+          attributes: ["id", "name", "code"],
+        },
+        {
+          model: Store,
+          as: "store",
+          attributes: ["id", "activeStorePaymentProfileId", "name", "slug", "status"],
+          include: [
+            {
+              model: StorePaymentProfile,
+              as: "paymentProfile",
+              attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+              required: false,
+            },
+            {
+              model: StorePaymentProfile,
+              as: "activePaymentProfile",
+              attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+              required: false,
+            },
+          ],
+        },
+      ],
+    },
+  ];
+};
+
+const loadCheckoutCartProducts = async (
+  cartId: number,
+  transaction?: any,
+  includePaymentMedia = false
+) => {
+  const supportedCartItemFields = await getCheckoutCartItemSupportedVariantFields();
+  const rows = await CartItem.findAll({
+    where: { cartId },
     attributes: [
       "id",
-      "name",
-      "slug",
-      "sku",
-      "price",
-      "salePrice",
-      "promoImagePath",
-      "imagePaths",
-      "storeId",
-      "stock",
-      "status",
-      "isPublished",
-      "sellerSubmissionStatus",
-      "userId",
-      "categoryId",
+      "productId",
+      "quantity",
+      ...CHECKOUT_CART_ITEM_VARIANT_FIELDS.filter((field) =>
+        supportedCartItemFields.has(field)
+      ),
     ],
-    through: { attributes: ["quantity"] },
     include: [
       {
-        model: Category,
-        as: "category",
-        attributes: ["id", "name", "code"],
-      },
-      {
-        model: Store,
-        as: "store",
-        attributes: ["id", "activeStorePaymentProfileId", "name", "slug", "status"],
+        model: Product,
+        attributes: [
+          "id",
+          "name",
+          "slug",
+          "sku",
+          "price",
+          "salePrice",
+          "promoImagePath",
+          "imagePaths",
+          "storeId",
+          "stock",
+          "status",
+          "isPublished",
+          "sellerSubmissionStatus",
+          "userId",
+          "categoryId",
+          "variations",
+        ],
+        required: true,
         include: [
           {
-            model: StorePaymentProfile,
-            as: "paymentProfile",
-            attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
-            required: false,
+            model: Category,
+            as: "category",
+            attributes: ["id", "name", "code"],
           },
           {
-            model: StorePaymentProfile,
-            as: "activePaymentProfile",
-            attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
-            required: false,
+            model: Store,
+            as: "store",
+            attributes: ["id", "activeStorePaymentProfileId", "name", "slug", "status"],
+            include: [
+              {
+                model: StorePaymentProfile,
+                as: "paymentProfile",
+                attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+                required: false,
+              },
+              {
+                model: StorePaymentProfile,
+                as: "activePaymentProfile",
+                attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+                required: false,
+              },
+            ],
           },
         ],
       },
     ],
-  },
-];
+    transaction,
+    order: [["id", "ASC"]],
+  });
+
+  return rows
+    .map((row: any) =>
+      buildCheckoutCartProductSnapshot(row?.Product ?? row?.product ?? null, row)
+    )
+    .filter(Boolean);
+};
 
 const findCartForUser = async (
   userId: number,
@@ -473,11 +901,19 @@ const findCartForUser = async (
 ) => {
   const where: Record<string, any> = { userId };
   if (cartId) where.id = cartId;
-  return Cart.findOne({
+  const cart = await Cart.findOne({
     where,
-    include: buildCartInclude(includePaymentMedia),
     transaction,
+    lock: transaction?.LOCK?.UPDATE,
   });
+  if (!cart) return null;
+  const resolvedCartId = toNumber(getAttr(cart, "id"), 0);
+  const products =
+    resolvedCartId > 0
+      ? await loadCheckoutCartProducts(resolvedCartId, transaction, includePaymentMedia)
+      : [];
+  (cart as any).Products = products;
+  return cart;
 };
 
 const loadCheckoutStoreSnapshots = async (storeIds: number[], transaction?: any) => {
@@ -549,6 +985,8 @@ const serializePreviewGroup = (group: any) => ({
   paymentInstruction: group.paymentInstruction,
   warning: group.warning,
   items: group.items.map((item: any) => ({
+    lineId: item.lineId,
+    cartItemId: item.cartItemId,
     productId: item.productId,
     productName: item.productName,
     slug: item.slug,
@@ -557,6 +995,11 @@ const serializePreviewGroup = (group: any) => ({
     lineTotal: item.lineTotal,
     image: item.image,
     stock: item.stock,
+    sku: item.sku,
+    barcode: item.barcode,
+    variantKey: item.variantKey,
+    variantLabel: item.variantLabel,
+    variantSelections: item.variantSelections ?? [],
     category: item.category,
   })),
 });
@@ -568,6 +1011,8 @@ const buildInvalidCheckoutItem = (
 ) => {
   const productId = toNumber(getAttr(product, "id"));
   return {
+    lineId: buildCheckoutLineId(productId, product?.CartItem?.variantKey ?? null),
+    cartItemId: toNumber(product?.CartItem?.id, 0) || null,
     productId,
     productName: String(getAttr(product, "name") || `Product #${productId}`),
     reason,
@@ -588,8 +1033,9 @@ const prepareCartGroups = (cartItems: any[]) => {
     const productId = toNumber(getAttr(product, "id"));
     const storeId = toNumber(getAttr(product, "storeId"));
     const quantity = toNumber(product?.CartItem?.quantity, 0);
-    const stock = toNumber(getAttr(product, "stock"));
-    const unitPrice = getProductUnitPrice(product);
+    const lineSnapshot = resolveCheckoutCartLineSnapshot(product);
+    const stock = Math.max(0, toNumber(lineSnapshot.stock, 0));
+    const unitPrice = Math.max(0, toNumber(lineSnapshot.unitPrice, 0));
     const lineTotal = unitPrice * quantity;
 
     if (!isStorefrontProductVisible(product)) {
@@ -603,6 +1049,19 @@ const prepareCartGroups = (cartItems: any[]) => {
 
     if (!storeId) {
       invalidItems.push(buildInvalidCheckoutItem(product, "PRODUCT_STORE_UNMAPPED"));
+      continue;
+    }
+
+    if (lineSnapshot.invalidReason) {
+      invalidItems.push({
+        ...buildInvalidCheckoutItem(product, lineSnapshot.invalidReason, {
+          available: stock,
+          requested: quantity,
+        }),
+        lineId: lineSnapshot.lineId,
+        cartItemId: lineSnapshot.cartItemId,
+        variantKey: lineSnapshot.variantKey,
+      });
       continue;
     }
 
@@ -671,15 +1130,22 @@ const prepareCartGroups = (cartItems: any[]) => {
     group.subtotalAmount += lineTotal;
     group.items.push({
       product,
+      lineId: lineSnapshot.lineId,
+      cartItemId: lineSnapshot.cartItemId,
       productId,
       productName: String(getAttr(product, "name") || `Product #${productId}`),
       slug: String(getAttr(product, "slug") || ""),
-      sku: getAttr(product, "sku") ? String(getAttr(product, "sku")) : null,
+      sku: lineSnapshot.sku,
+      barcode: lineSnapshot.barcode,
       qty: quantity,
       price: unitPrice,
+      originalPrice: Math.max(0, toNumber(lineSnapshot.unitOriginalPrice, unitPrice)),
       lineTotal,
-      image: getProductImage(product),
+      image: lineSnapshot.image,
       stock,
+      variantKey: lineSnapshot.variantKey,
+      variantLabel: lineSnapshot.variantLabel,
+      variantSelections: lineSnapshot.variantSelections ?? [],
       category: product?.category
         ? {
             id: toNumber(product.category.id),
@@ -728,10 +1194,12 @@ const prepareCartGroups = (cartItems: any[]) => {
 };
 
 const buildCheckoutProductRequestMap = (groups: any[]) => {
-  const requestedByProductId = new Map<
-    number,
+  const requestedByProductLine = new Map<
+    string,
     {
       product: any;
+      productId: number;
+      variantKey: string | null;
       requested: number;
       productName: string;
     }
@@ -741,16 +1209,20 @@ const buildCheckoutProductRequestMap = (groups: any[]) => {
     for (const item of Array.isArray(group?.items) ? group.items : []) {
       const productId = toNumber(item?.productId, 0);
       if (!Number.isFinite(productId) || productId <= 0) continue;
-      const current = requestedByProductId.get(productId);
-      requestedByProductId.set(productId, {
+      const variantKey = String(item?.variantKey || "").trim() || null;
+      const lineKey = buildCheckoutLineId(productId, variantKey);
+      const current = requestedByProductLine.get(lineKey);
+      requestedByProductLine.set(lineKey, {
         product: item?.product ?? current?.product ?? null,
+        productId,
+        variantKey,
         requested: toNumber(current?.requested, 0) + Math.max(0, toNumber(item?.qty, 0)),
         productName: String(item?.productName || current?.productName || `Product #${productId}`),
       });
     }
   }
 
-  return requestedByProductId;
+  return requestedByProductLine;
 };
 
 const lockVisibleProductsForCheckout = async (
@@ -779,6 +1251,7 @@ const lockVisibleProductsForCheckout = async (
       "sellerSubmissionStatus",
       "userId",
       "categoryId",
+      "variations",
     ],
     include: [
       {
@@ -856,7 +1329,18 @@ const loadOrderWithSplitRelations = async (lookup: string | number, transaction?
       {
         model: OrderItem,
         as: "items",
-        attributes: ["id", "productId", "quantity", "price"],
+        attributes: [
+          "id",
+          "productId",
+          "quantity",
+          "price",
+          "variantKey",
+          "variantLabel",
+          "variantSelections",
+          "skuSnapshot",
+          "barcodeSnapshot",
+          "imageSnapshot",
+        ],
         include: [
           {
             model: Product,
@@ -918,6 +1402,11 @@ const loadOrderWithSplitRelations = async (lookup: string | number, transaction?
               "storeId",
               "productNameSnapshot",
               "skuSnapshot",
+              "variantKey",
+              "variantLabel",
+              "variantSelections",
+              "barcodeSnapshot",
+              "imageSnapshot",
               "priceSnapshot",
               "qty",
               "totalPrice",
@@ -1140,6 +1629,14 @@ const serializeSplitOrder = (order: any) => {
             qty: toNumber(getAttr(item, "quantity")),
             price: toNumber(getAttr(item, "price")),
             lineTotal: toNumber(getAttr(item, "price")) * toNumber(getAttr(item, "quantity")),
+            variantKey: String(getAttr(item, "variantKey") || "").trim() || null,
+            variantLabel: String(getAttr(item, "variantLabel") || "").trim() || null,
+            variantSelections: Array.isArray(normalizeJsonValue(getAttr(item, "variantSelections")))
+              ? normalizeJsonValue(getAttr(item, "variantSelections"))
+              : [],
+            sku: String(getAttr(item, "skuSnapshot") || "").trim() || null,
+            barcode: String(getAttr(item, "barcodeSnapshot") || "").trim() || null,
+            image: normalizeUploadsUrl(getAttr(item, "imageSnapshot") || null),
           })),
           payment: null,
           contract: buildSellerSuborderContract({
@@ -1254,6 +1751,14 @@ const serializeSplitOrder = (order: any) => {
         qty: toNumber(getAttr(item, "qty")),
         price: toNumber(getAttr(item, "priceSnapshot")),
         lineTotal: toNumber(getAttr(item, "totalPrice")),
+        variantKey: String(getAttr(item, "variantKey") || "").trim() || null,
+        variantLabel: String(getAttr(item, "variantLabel") || "").trim() || null,
+        variantSelections: Array.isArray(normalizeJsonValue(getAttr(item, "variantSelections")))
+          ? normalizeJsonValue(getAttr(item, "variantSelections"))
+          : [],
+        sku: String(getAttr(item, "skuSnapshot") || "").trim() || null,
+        barcode: String(getAttr(item, "barcodeSnapshot") || "").trim() || null,
+        image: normalizeUploadsUrl(getAttr(item, "imageSnapshot") || null),
       })),
       payment: payment
         ? {
@@ -1579,10 +2084,7 @@ router.post("/create-multi-store", async (req, res) => {
             .filter((id: number): id is number => Number.isFinite(id) && id > 0)
         )
       ) as number[];
-      const lockedProductsById = await lockVisibleProductsForCheckout(
-        requestedProductIds,
-        tx
-      );
+      const lockedProductsById = await lockVisibleProductsForCheckout(requestedProductIds, tx);
       const missingLockedItems: any[] = [];
       const lockedCartItems = cartItems
         .map((item: any) => {
@@ -1592,9 +2094,7 @@ router.post("/create-multi-store", async (req, res) => {
             missingLockedItems.push(buildInvalidCheckoutItem(item, "PRODUCT_NOT_PUBLIC"));
             return null;
           }
-          lockedProduct.setDataValue?.("CartItem", item?.CartItem ?? null);
-          (lockedProduct as any).CartItem = item?.CartItem ?? null;
-          return lockedProduct;
+          return cloneCheckoutProductForCartItem(lockedProduct, item?.CartItem ?? null);
         })
         .filter(Boolean);
 
@@ -1636,19 +2136,21 @@ router.post("/create-multi-store", async (req, res) => {
         });
       }
 
-      const requestedByProductId = buildCheckoutProductRequestMap(prepared.groups);
-      for (const [productId, entry] of requestedByProductId.entries()) {
-        const currentStock = toNumber(getAttr(entry.product, "stock"), 0);
+      const requestedByProductLine = buildCheckoutProductRequestMap(prepared.groups);
+      for (const [, entry] of requestedByProductLine.entries()) {
+        const lineSnapshot = resolveCheckoutCartLineSnapshot(entry.product);
+        const currentStock = Math.max(0, toNumber(lineSnapshot.stock, 0));
         if (currentStock < entry.requested) {
           await tx.rollback();
           return res.status(409).json({
             success: false,
             message: "Insufficient stock",
             data: {
-              productId,
+              productId: entry.productId,
               name: entry.productName,
               available: currentStock,
               requested: entry.requested,
+              variantKey: entry.variantKey,
             },
           });
         }
@@ -1784,12 +2286,26 @@ router.post("/create-multi-store", async (req, res) => {
         { transaction: tx }
       );
 
+      const supportedOrderItemVariantFields = await getOrderItemSupportedVariantFields();
+      const supportedSuborderItemVariantFields = await getSuborderItemSupportedVariantFields();
       const flatOrderItems = prepared.groups.flatMap((group: any) =>
         group.items.map((item: any) => ({
           orderId: parentOrder.id,
           productId: item.productId,
           quantity: item.qty,
           price: item.price,
+          ...buildSupportedSnapshotFields(
+            {
+              variantKey: item.variantKey,
+              variantLabel: item.variantLabel,
+              variantSelections: item.variantSelections ?? [],
+              skuSnapshot: item.sku,
+              barcodeSnapshot: item.barcode,
+              imageSnapshot: item.image,
+            },
+            supportedOrderItemVariantFields,
+            ORDER_ITEM_VARIANT_FIELDS
+          ),
         }))
       );
       await OrderItem.bulkCreate(flatOrderItems as any, { transaction: tx });
@@ -1852,6 +2368,17 @@ router.post("/create-multi-store", async (req, res) => {
             priceSnapshot: item.price,
             qty: item.qty,
             totalPrice: item.lineTotal,
+            ...buildSupportedSnapshotFields(
+              {
+                variantKey: item.variantKey,
+                variantLabel: item.variantLabel,
+                variantSelections: item.variantSelections ?? [],
+                barcodeSnapshot: item.barcode,
+                imageSnapshot: item.image,
+              },
+              supportedSuborderItemVariantFields,
+              SUBORDER_ITEM_VARIANT_FIELDS
+            ),
           })) as any,
           { transaction: tx }
         );
@@ -1914,11 +2441,35 @@ router.post("/create-multi-store", async (req, res) => {
         });
       }
 
-      for (const [productId, entry] of requestedByProductId.entries()) {
-        const product = entry.product ?? lockedProductsById.get(productId) ?? null;
+      for (const [, entry] of requestedByProductLine.entries()) {
+        const product = lockedProductsById.get(entry.productId) ?? entry.product ?? null;
         if (!product) continue;
         const currentStock = toNumber(getAttr(product, "stock"), 0);
         product.set("stock", Math.max(0, currentStock - entry.requested));
+        if (entry.variantKey) {
+          const variationState = normalizeProductVariationState(getAttr(product, "variations"));
+          if (variationState.hasVariants) {
+            const nextVariants = variationState.variants.map((variant: any) => {
+              if (
+                String(variant?.combinationKey || "").trim().toLowerCase() !==
+                String(entry.variantKey || "").trim().toLowerCase()
+              ) {
+                return variant;
+              }
+              const currentVariantStock = Number.isFinite(Number(variant?.quantity))
+                ? Math.max(0, Math.round(Number(variant.quantity)))
+                : 0;
+              return {
+                ...variant,
+                quantity: Math.max(0, currentVariantStock - entry.requested),
+              };
+            });
+            product.set("variations", {
+              hasVariants: variationState.hasVariants,
+              variants: nextVariants,
+            });
+          }
+        }
         await product.save({ transaction: tx });
       }
 

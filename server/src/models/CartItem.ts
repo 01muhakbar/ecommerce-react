@@ -5,6 +5,14 @@ interface CartItemAttributes {
   cartId: number;
   productId: number;
   quantity: number;
+  variantKey?: string | null;
+  variantLabel?: string | null;
+  variantSelections?: any;
+  variantSkuSnapshot?: string | null;
+  variantBarcodeSnapshot?: string | null;
+  unitPriceSnapshot?: number | null;
+  unitSalePriceSnapshot?: number | null;
+  variantImageSnapshot?: string | null;
 }
 
 interface CartItemCreationAttributes
@@ -18,6 +26,14 @@ export class CartItem
   declare cartId: number;
   declare productId: number;
   declare quantity: number;
+  declare variantKey?: string | null;
+  declare variantLabel?: string | null;
+  declare variantSelections?: any;
+  declare variantSkuSnapshot?: string | null;
+  declare variantBarcodeSnapshot?: string | null;
+  declare unitPriceSnapshot?: number | null;
+  declare unitSalePriceSnapshot?: number | null;
+  declare variantImageSnapshot?: string | null;
 
   declare readonly createdAt: Date;
   declare readonly updatedAt: Date;
@@ -50,6 +66,46 @@ export class CartItem
           type: DataTypes.INTEGER,
           allowNull: false,
           defaultValue: 1,
+        },
+        variantKey: {
+          type: DataTypes.STRING(255),
+          allowNull: true,
+          field: "variant_key",
+        },
+        variantLabel: {
+          type: DataTypes.STRING(255),
+          allowNull: true,
+          field: "variant_label",
+        },
+        variantSelections: {
+          type: DataTypes.JSON,
+          allowNull: true,
+          field: "variant_selections",
+        },
+        variantSkuSnapshot: {
+          type: DataTypes.STRING(100),
+          allowNull: true,
+          field: "variant_sku_snapshot",
+        },
+        variantBarcodeSnapshot: {
+          type: DataTypes.STRING(100),
+          allowNull: true,
+          field: "variant_barcode_snapshot",
+        },
+        unitPriceSnapshot: {
+          type: DataTypes.DECIMAL(12, 2),
+          allowNull: true,
+          field: "unit_price_snapshot",
+        },
+        unitSalePriceSnapshot: {
+          type: DataTypes.DECIMAL(12, 2),
+          allowNull: true,
+          field: "unit_sale_price_snapshot",
+        },
+        variantImageSnapshot: {
+          type: DataTypes.STRING(255),
+          allowNull: true,
+          field: "variant_image_snapshot",
         },
       },
       {

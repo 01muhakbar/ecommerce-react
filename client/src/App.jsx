@@ -41,6 +41,8 @@ const AdminResendVerificationPage = lazy(() =>
 const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
 const AdminProductsPage = lazy(() => import("./pages/admin/Products.jsx"));
 const AdminProductForm = lazy(() => import("./pages/admin/ProductForm.jsx"));
+const AdminProductDetailPage = lazy(() => import("./pages/admin/AdminProductDetailPage.jsx"));
+const AdminProductEditPage = lazy(() => import("./pages/admin/AdminProductEditPage.jsx"));
 const AdminOrdersPage = lazy(() => import("./pages/admin/Orders.jsx"));
 const AdminNotificationsPage = lazy(() =>
   import("./pages/admin/AdminNotificationsPage.jsx")
@@ -49,6 +51,7 @@ const Customers = lazy(() => import("./pages/Customers.jsx"));
 const Settings = lazy(() => import("./pages/Settings.jsx"));
 const AdminOrderDetail = lazy(() => import("./pages/admin/OrderDetail.jsx"));
 const AdminAttributesPage = lazy(() => import("./pages/admin/Attributes.jsx"));
+const AdminAttributeValuesPage = lazy(() => import("./pages/admin/AttributeValues.jsx"));
 const AdminCategoriesPage = lazy(() => import("./pages/admin/AdminCategoriesPage.jsx"));
 const AdminSubCategoriesPage = lazy(() =>
   import("./pages/admin/AdminSubCategoriesPage.jsx")
@@ -450,8 +453,16 @@ export default function App() {
               <Route
                 path="catalog/products/:id"
                 element={
+                  <RequirePerm perm="PRODUCTS_VIEW">
+                    <AdminProductDetailPage />
+                  </RequirePerm>
+                }
+              />
+              <Route
+                path="catalog/products/:id/edit"
+                element={
                   <RequirePerm perm="PRODUCTS_UPDATE">
-                    <AdminProductForm />
+                    <AdminProductEditPage />
                   </RequirePerm>
                 }
               />
@@ -560,6 +571,14 @@ export default function App() {
                 element={
                   <RequirePerm perm="ATTRIBUTES_CRUD">
                     <AdminAttributesPage />
+                  </RequirePerm>
+                }
+              />
+              <Route
+                path="catalog/attributes/:attributeId/values"
+                element={
+                  <RequirePerm perm="ATTRIBUTES_CRUD">
+                    <AdminAttributeValuesPage />
                   </RequirePerm>
                 }
               />

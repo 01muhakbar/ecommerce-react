@@ -6,7 +6,10 @@ import { fetchStoreProductById } from "../../api/public/storeProducts.ts";
 import { getStorePublicIdentityBySlug } from "../../api/public/storePublicIdentity.ts";
 import { formatCurrency } from "../../utils/format.js";
 import { resolveAssetUrl } from "../../lib/assetUrl.js";
-import { normalizePublicStoreIdentity } from "../../utils/storePublicIdentity.ts";
+import {
+  getPublicStoreOperationalReadiness,
+  normalizePublicStoreIdentity,
+} from "../../utils/storePublicIdentity.ts";
 import { UiEmptyState, UiErrorState } from "../../components/primitives/state/index.js";
 import StoreMicrositeShell from "../../components/store/StoreMicrositeShell.jsx";
 
@@ -85,8 +88,7 @@ export default function StoreMicrositeProductDetailPage() {
     () => normalizePublicStoreIdentity(storeQuery.data),
     [storeQuery.data]
   );
-  const publicOperationalReadiness =
-    storeQuery.data?.data?.summary?.operationalReadiness || null;
+  const publicOperationalReadiness = getPublicStoreOperationalReadiness(store);
   const isStoreOperationallyGated = Boolean(
     publicOperationalReadiness && !publicOperationalReadiness.isReady
   );

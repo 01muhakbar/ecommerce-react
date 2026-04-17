@@ -14,6 +14,7 @@ import {
   CheckoutModeBadge,
   PaymentStatusBadge,
 } from "../../components/payments/PaymentReadModelBadges.jsx";
+import { getOrderItemVariantLines } from "../../utils/orderVariantPresentation.js";
 import {
   getAdminOrderTransitionErrorMeta,
   toAdminOrderActionValue,
@@ -829,7 +830,17 @@ export default function OrderDetail() {
                               className="border-t border-slate-100 transition hover:bg-slate-50"
                             >
                               <td className="px-4 py-3.5 font-medium text-slate-900">
-                                {name}
+                                <div>
+                                  <p>{name}</p>
+                                  {getOrderItemVariantLines(item).map((line) => (
+                                    <p
+                                      key={`${item.id || item.productId}-${line}`}
+                                      className="mt-1 text-xs font-normal leading-5 text-slate-500"
+                                    >
+                                      {line}
+                                    </p>
+                                  ))}
+                                </div>
                               </td>
                               <td className="px-4 py-3.5 text-right tabular-nums text-slate-700">
                                 {formatMoney(price)}

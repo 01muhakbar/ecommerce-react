@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useCartStore } from "../../store/cart.store.ts";
 import { useStoreCategories } from "../../hooks/useStoreCategories.ts";
-import { useAuth } from "../../auth/useAuth.js";
+import { useAccountAuth } from "../../auth/authDomainHooks.js";
 import {
   getStoreCustomization,
   getStoreHeaderCustomization,
@@ -85,7 +85,7 @@ export default function StoreHeaderKacha({
   const [searchParams] = useSearchParams();
   const totalQty = useCartStore((state) => state.totalQty);
   const { data: categories, isLoading: categoriesLoading } = useStoreCategories();
-  const { isAuthenticated } = useAuth() || {};
+  const { isAccountSession } = useAccountAuth();
   const lang = "en";
   const headerQuery = useQuery({
     queryKey: ["store-customization-header", lang],
@@ -278,7 +278,7 @@ export default function StoreHeaderKacha({
         setSearch={setSearch}
         onSubmit={handleSearchSubmit}
         totalQty={totalQty}
-        isAuthenticated={Boolean(isAuthenticated)}
+        isAuthenticated={Boolean(isAccountSession)}
         onCartClick={onCartClick}
         brandName={resolvedBrandName}
         headerLogoUrl={effectiveHeaderLogoUrl}

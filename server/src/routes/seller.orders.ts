@@ -233,6 +233,19 @@ const normalizeSnapshotObject = (value: unknown) => {
   return typeof value === "object" ? { ...(value as Record<string, unknown>) } : null;
 };
 
+const normalizeVariantSelectionsSnapshot = (value: unknown) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
+
 const syncSellerShipmentFinancials = async (input: {
   orderId: number;
   suborder: any;
@@ -781,6 +794,12 @@ const listInclude = [
       "id",
       "productId",
       "productNameSnapshot",
+      "variantKey",
+      "variantLabel",
+      "variantSelections",
+      "skuSnapshot",
+      "barcodeSnapshot",
+      "imageSnapshot",
       "qty",
       "priceSnapshot",
       "totalPrice",
@@ -1185,6 +1204,12 @@ const serializeDetail = (suborder: any, sellerAccess: any = null) => {
       qty: toNumber(getAttr(item, "qty")),
       price: toNumber(getAttr(item, "priceSnapshot")),
       totalPrice: toNumber(getAttr(item, "totalPrice")),
+      variantKey: String(getAttr(item, "variantKey") || "").trim() || null,
+      variantLabel: String(getAttr(item, "variantLabel") || "").trim() || null,
+      variantSelections: normalizeVariantSelectionsSnapshot(getAttr(item, "variantSelections")),
+      sku: String(getAttr(item, "skuSnapshot") || "").trim() || null,
+      barcode: String(getAttr(item, "barcodeSnapshot") || "").trim() || null,
+      image: String(getAttr(item, "imageSnapshot") || "").trim() || null,
     })),
     paymentSummary: latestPayment
       ? {

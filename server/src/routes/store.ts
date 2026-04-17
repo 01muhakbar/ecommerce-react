@@ -210,6 +210,21 @@ const normalizeShippingDetailsOutput = (raw: any): Record<string, any> | null =>
   return null;
 };
 
+const normalizeOrderVariantSelectionsOutput = (raw: any) => {
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
+
 const resolveOrderAmountSnapshot = (order: any, computedSubtotal = 0) => {
   const subtotalAmount = toNumber(
     getAttr(order, "subtotalAmount") ?? order?.subtotalAmount ?? order?.subtotal_amount
@@ -870,7 +885,10 @@ const buildPublicPurchaseState = (product: any, store: any) => {
 
 const toProductListItem = (product: any) => {
   const plain = product?.get ? product.get({ plain: true }) : product;
-  const rawImage = plain?.promoImagePath || plain?.imagePaths?.[0] || null;
+  const normalizedImagePaths = parseImagePaths(plain?.imagePaths)
+    .map((value) => normalizeUploadsUrl(value))
+    .filter(Boolean) as string[];
+  const rawImage = plain?.promoImagePath || normalizedImagePaths[0] || null;
   const imageUrl = normalizeUploadsUrl(rawImage);
   const basePrice = toSafeNumber(plain?.price, 0);
   const salePriceRaw = toNumber(plain?.salePrice);
@@ -903,6 +921,7 @@ const toProductListItem = (product: any) => {
     slug: plain?.slug,
     routeSlug: plain?.slug || null,
     productHref: plain?.slug ? `/product/${encodeURIComponent(String(plain.slug))}` : null,
+    sku: plain?.sku ?? null,
     price,
     originalPrice,
     salePrice: hasDiscount ? Number(salePrice) : null,
@@ -911,9 +930,17 @@ const toProductListItem = (product: any) => {
     reviewCount,
     unit,
     imageUrl,
+    imagePaths: normalizedImagePaths,
+    imageUrls: normalizedImagePaths,
     categoryId: plain?.categoryId ?? null,
     category,
     stock: plain?.stock ?? null,
+    preOrder: Boolean(plain?.preOrder),
+    preorderDays: toNumber(plain?.preorderDays),
+    weight: toNumber(plain?.weight),
+    condition: plain?.condition ?? null,
+    variations: plain?.variations ?? null,
+    tags: plain?.tags ?? null,
     purchaseState,
     status: plain?.status,
     published: plain?.isPublished ?? plain?.published ?? false,
@@ -1185,10 +1212,16 @@ router.get(
           "id",
           "name",
           "slug",
+          "sku",
           "price",
           "salePrice",
           "stock",
           "categoryId",
+          "preOrder",
+          "preorderDays",
+          "weight",
+          "condition",
+          "variations",
           "promoImagePath",
           "imagePaths",
           "tags",
@@ -1684,7 +1717,18 @@ router.get(
           {
             model: OrderItem,
             as: "items",
-            attributes: ["id", "quantity", "price", ["product_id", "productId"]],
+            attributes: [
+              "id",
+              "quantity",
+              "price",
+              "variantKey",
+              "variantLabel",
+              "variantSelections",
+              "skuSnapshot",
+              "barcodeSnapshot",
+              "imageSnapshot",
+              ["product_id", "productId"],
+            ],
             include: [
               {
                 model: Product,
@@ -1707,6 +1751,12 @@ router.get(
         quantity: Number(item.quantity || 0),
         price: Number(item.price || 0),
         lineTotal: Number(item.price || 0) * Number(item.quantity || 0),
+        variantKey: String(item.variantKey || "").trim() || null,
+        variantLabel: String(item.variantLabel || "").trim() || null,
+        variantSelections: normalizeOrderVariantSelectionsOutput(item.variantSelections),
+        sku: String(item.skuSnapshot || "").trim() || null,
+        barcode: String(item.barcodeSnapshot || "").trim() || null,
+        image: normalizeUploadsUrl(item.imageSnapshot || null),
       }));
       const paymentGroups = await Suborder.findAll({
         where: { orderId },

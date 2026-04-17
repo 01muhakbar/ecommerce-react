@@ -261,8 +261,9 @@ const stepToneTextClass = (tone) => {
   return "text-sky-700";
 };
 
-const getBuyerPaymentProgress = (status) => {
+const getBuyerPaymentProgress = (status, label = "") => {
   const code = String(status || "").toUpperCase();
+  const resolvedLabel = String(label || "").trim();
   const steps = [
     "Payment created",
     "Waiting for transfer",
@@ -274,7 +275,7 @@ const getBuyerPaymentProgress = (status) => {
     return {
       steps,
       currentStep: 4,
-      summary: "Confirmed",
+      summary: resolvedLabel || "Paid",
       tone: "emerald",
       isFinal: true,
     };
@@ -284,7 +285,7 @@ const getBuyerPaymentProgress = (status) => {
     return {
       steps,
       currentStep: 3,
-      summary: "Under review",
+      summary: resolvedLabel || "Awaiting Review",
       tone: "amber",
       isFinal: false,
     };
@@ -294,7 +295,7 @@ const getBuyerPaymentProgress = (status) => {
     return {
       steps,
       currentStep: 2,
-      summary: "Transfer needs review update",
+      summary: resolvedLabel || "Rejected",
       tone: "rose",
       isFinal: false,
     };
@@ -304,7 +305,7 @@ const getBuyerPaymentProgress = (status) => {
     return {
       steps,
       currentStep: 1,
-      summary: "Closed",
+      summary: resolvedLabel || "Failed",
       tone: "rose",
       isFinal: true,
     };
@@ -314,7 +315,7 @@ const getBuyerPaymentProgress = (status) => {
     return {
       steps,
       currentStep: 1,
-      summary: "Cancelled",
+      summary: resolvedLabel || "Cancelled",
       tone: "slate",
       isFinal: true,
     };
@@ -324,7 +325,7 @@ const getBuyerPaymentProgress = (status) => {
     return {
       steps,
       currentStep: 1,
-      summary: "Expired",
+      summary: resolvedLabel || "Expired",
       tone: "rose",
       isFinal: true,
     };
@@ -333,7 +334,7 @@ const getBuyerPaymentProgress = (status) => {
   return {
     steps,
     currentStep: 2,
-    summary: "Awaiting payment",
+    summary: resolvedLabel || "Awaiting payment",
     tone: "sky",
     isFinal: false,
   };
@@ -501,7 +502,9 @@ function StorePaymentStepList({ groups }) {
           const operationalPayment = getSplitOperationalPayment(group);
           const operationalSummary = getSplitOperationalStatusSummary(group);
           const status = operationalPayment.status || readModel.status;
-          const progress = getBuyerPaymentProgress(status);
+          const paymentStatusLabel =
+            operationalPayment.statusMeta?.label || readModel.statusMeta?.label || status;
+          const progress = getBuyerPaymentProgress(status, paymentStatusLabel);
           const statusLabel =
             operationalSummary?.label ||
             operationalPayment.statusMeta?.label ||

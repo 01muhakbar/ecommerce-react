@@ -7,6 +7,36 @@ import { Store } from "../models/index.js";
 import { buildPublicStoreOperationalReadiness } from "../services/sharedContracts/publicStoreIdentity.js";
 import { STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES } from "../services/sharedContracts/storePaymentProfileCompat.js";
 
+const CART_ITEM_VARIANT_FIELD_COLUMN_MAP = {
+  variantKey: "variant_key",
+  variantLabel: "variant_label",
+  variantSelections: "variant_selections",
+  variantSkuSnapshot: "variant_sku_snapshot",
+  variantBarcodeSnapshot: "variant_barcode_snapshot",
+  unitPriceSnapshot: "unit_price_snapshot",
+  unitSalePriceSnapshot: "unit_sale_price_snapshot",
+  variantImageSnapshot: "variant_image_snapshot",
+} as const;
+
+const CART_ITEM_VARIANT_FIELDS = Object.keys(
+  CART_ITEM_VARIANT_FIELD_COLUMN_MAP
+) as Array<keyof typeof CART_ITEM_VARIANT_FIELD_COLUMN_MAP>;
+
+const CART_ITEM_SNAPSHOT_FIELDS = [
+  "variantKey",
+  "variantLabel",
+  "variantSelections",
+  "variantSkuSnapshot",
+  "variantBarcodeSnapshot",
+  "unitPriceSnapshot",
+  "unitSalePriceSnapshot",
+  "variantImageSnapshot",
+] as const;
+
+let cartItemVariantFieldSupportPromise: Promise<
+  Set<keyof typeof CART_ITEM_VARIANT_FIELD_COLUMN_MAP>
+> | null = null;
+
 const asSingle = (v: unknown) => (Array.isArray(v) ? v[0] : v);
 const toId = (v: unknown): number | null => {
   const raw = asSingle(v);
@@ -22,8 +52,93 @@ const toQty = (v: unknown): number | null => {
   return qty;
 };
 
+const normalizeJsonValue = (value: unknown) => {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+};
+
+const normalizeUploadsUrl = (value?: string | null) => {
+  if (!value) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  if (/^https?:\/\//i.test(text)) return text;
+  if (text.startsWith("/")) return text;
+  return `/uploads/${text}`;
+};
+
+const normalizeVariantSelectionCompareKey = (selection: any) =>
+  `${Number(selection?.attributeId) || 0}:${String(selection?.valueId ?? selection?.value ?? "")
+    .trim()
+    .toLowerCase()}`;
+
+const buildVariantCombinationKey = (selections: any[]) =>
+  (Array.isArray(selections) ? selections : []).map(normalizeVariantSelectionCompareKey).join("|");
+
 const getAttr = (row: any, key: string) =>
   row?.getDataValue?.(key) ?? row?.get?.(key) ?? row?.dataValues?.[key];
+
+const getCartItemSupportedVariantFields = async () => {
+  if (!cartItemVariantFieldSupportPromise) {
+    cartItemVariantFieldSupportPromise = (async () => {
+      const queryInterface = sequelize.getQueryInterface();
+      let description: Record<string, any> = {};
+      try {
+        description = (await queryInterface.describeTable("cart_items")) as Record<string, any>;
+      } catch {
+        try {
+          description = (await queryInterface.describeTable("CartItems")) as Record<string, any>;
+        } catch {
+          description = {};
+        }
+      }
+      const columns = new Set(Object.keys(description || {}));
+      return new Set(
+        CART_ITEM_VARIANT_FIELDS.filter((field) =>
+          columns.has(CART_ITEM_VARIANT_FIELD_COLUMN_MAP[field])
+        )
+      );
+    })();
+  }
+  return cartItemVariantFieldSupportPromise;
+};
+
+const buildSupportedCartItemSnapshotFields = (
+  snapshot: Record<string, any>,
+  supportedFields: Set<keyof typeof CART_ITEM_VARIANT_FIELD_COLUMN_MAP>
+) =>
+  CART_ITEM_SNAPSHOT_FIELDS.reduce((acc, field) => {
+    if (supportedFields.has(field as keyof typeof CART_ITEM_VARIANT_FIELD_COLUMN_MAP)) {
+      acc[field] = snapshot[field];
+    }
+    return acc;
+  }, {} as Record<string, any>);
+
+const buildCartItemQueryAttributes = (
+  supportedFields: Set<keyof typeof CART_ITEM_VARIANT_FIELD_COLUMN_MAP>
+) => [
+  "id",
+  "cartId",
+  "productId",
+  "quantity",
+  ...CART_ITEM_VARIANT_FIELDS.filter((field) => supportedFields.has(field)),
+];
+
+const buildCartItemLookupWhere = (
+  cartId: number,
+  productId: number,
+  variantKey: string | null,
+  supportedFields: Set<keyof typeof CART_ITEM_VARIANT_FIELD_COLUMN_MAP>
+) => ({
+  cartId,
+  productId,
+  ...(supportedFields.has("variantKey") ? { variantKey } : {}),
+});
 
 const resolveCartId = async (cart: any, userId: number | string) => {
   let cartId = getAttr(cart, "id");
@@ -52,11 +167,273 @@ const toCartItemPayload = (row: any) => {
   const cartId = Number(getAttr(row, "cartId"));
   const productId = Number(getAttr(row, "productId"));
   const quantity = Number(getAttr(row, "quantity"));
+  const variantSelections = normalizeJsonValue(getAttr(row, "variantSelections"));
   return {
     id: Number.isFinite(id) ? id : null,
     cartId: Number.isFinite(cartId) ? cartId : null,
     productId: Number.isFinite(productId) ? productId : null,
     quantity: Number.isFinite(quantity) ? quantity : null,
+    variantKey: String(getAttr(row, "variantKey") || "").trim() || null,
+    variantLabel: String(getAttr(row, "variantLabel") || "").trim() || null,
+    variantSelections: Array.isArray(variantSelections) ? variantSelections : [],
+    variantSkuSnapshot: String(getAttr(row, "variantSkuSnapshot") || "").trim() || null,
+    variantBarcodeSnapshot: String(getAttr(row, "variantBarcodeSnapshot") || "").trim() || null,
+    unitPriceSnapshot: Number(getAttr(row, "unitPriceSnapshot") ?? 0) || 0,
+    unitSalePriceSnapshot: Number(getAttr(row, "unitSalePriceSnapshot") ?? 0) || 0,
+    variantImageSnapshot: normalizeUploadsUrl(getAttr(row, "variantImageSnapshot")),
+  };
+};
+
+const normalizeProductVariationState = (value: unknown) => {
+  const normalized = normalizeJsonValue(value);
+  if (!normalized || typeof normalized !== "object") {
+    return {
+      hasVariants: false,
+      variants: [],
+    };
+  }
+  const raw = Array.isArray(normalized)
+    ? { hasVariants: normalized.length > 0, variants: normalized }
+    : (normalized as Record<string, any>);
+  const variants = (Array.isArray(raw?.variants) ? raw.variants : [])
+    .map((entry: any, index: number) => {
+      const selections = Array.isArray(entry?.selections)
+        ? entry.selections
+            .map((selection: any) => {
+              const attributeId = Number(selection?.attributeId);
+              const attributeName = String(selection?.attributeName || "").trim();
+              const valueText = String(selection?.value || "").trim();
+              if (!Number.isInteger(attributeId) || attributeId <= 0 || !attributeName || !valueText) {
+                return null;
+              }
+              return {
+                attributeId,
+                attributeName,
+                valueId: selection?.valueId ?? null,
+                value: valueText,
+              };
+            })
+            .filter(Boolean)
+        : [];
+
+      const combination = String(entry?.combination || "").trim();
+      const combinationKey = String(
+        entry?.combinationKey || buildVariantCombinationKey(selections)
+      ).trim();
+      if (!combination || !combinationKey || selections.length === 0) return null;
+
+      return {
+        id: String(entry?.id || `variant-${index + 1}`),
+        combination,
+        combinationKey,
+        selections,
+        sku: String(entry?.sku || "").trim() || null,
+        barcode: String(entry?.barcode || "").trim() || null,
+        price:
+          entry?.price === null || typeof entry?.price === "undefined" || entry?.price === ""
+            ? null
+            : Number(entry.price),
+        salePrice:
+          entry?.salePrice === null ||
+          typeof entry?.salePrice === "undefined" ||
+          entry?.salePrice === ""
+            ? null
+            : Number(entry.salePrice),
+        quantity:
+          entry?.quantity === null || typeof entry?.quantity === "undefined" || entry?.quantity === ""
+            ? null
+            : Math.max(0, Math.round(Number(entry.quantity))),
+        image: normalizeUploadsUrl(entry?.image ? String(entry.image) : null),
+      };
+    })
+    .filter(Boolean);
+
+  return {
+    hasVariants: Boolean(raw?.hasVariants) || variants.length > 0,
+    variants,
+  };
+};
+
+const getProductPrimaryImage = (product: any) => {
+  const promo = normalizeUploadsUrl(String(getAttr(product, "promoImagePath") || "").trim() || null);
+  if (promo) return promo;
+  const rawImages = normalizeJsonValue(getAttr(product, "imagePaths"));
+  if (Array.isArray(rawImages) && rawImages.length > 0) {
+    return normalizeUploadsUrl(String(rawImages[0] || "").trim() || null);
+  }
+  return null;
+};
+
+const buildCartReadProductSnapshot = (product: any, cartItem: any) => {
+  const normalizedVariantSelections = normalizeJsonValue(getAttr(cartItem, "variantSelections"));
+  const snapshot = {
+    id: toId(getAttr(cartItem, "id")),
+    quantity: Number(getAttr(cartItem, "quantity") ?? 0),
+    variantKey: String(getAttr(cartItem, "variantKey") || "").trim() || null,
+    variantLabel: String(getAttr(cartItem, "variantLabel") || "").trim() || null,
+    variantSelections: Array.isArray(normalizedVariantSelections)
+      ? normalizedVariantSelections
+      : [],
+    variantSkuSnapshot: String(getAttr(cartItem, "variantSkuSnapshot") || "").trim() || null,
+    variantBarcodeSnapshot:
+      String(getAttr(cartItem, "variantBarcodeSnapshot") || "").trim() || null,
+    unitPriceSnapshot: getAttr(cartItem, "unitPriceSnapshot"),
+    unitSalePriceSnapshot: getAttr(cartItem, "unitSalePriceSnapshot"),
+    variantImageSnapshot:
+      normalizeUploadsUrl(String(getAttr(cartItem, "variantImageSnapshot") || "").trim() || null),
+  };
+
+  if (!product) return null;
+  product.setDataValue?.("CartItem", snapshot);
+  (product as any).CartItem = snapshot;
+  return product;
+};
+
+const loadCartProductsForRead = async (cartId: number, supportedVariantFields: Set<any>) => {
+  const rows = await CartItem.findAll({
+    where: { cartId },
+    attributes: buildCartItemQueryAttributes(supportedVariantFields),
+    include: [
+      {
+        model: Product,
+        attributes: [
+          "id",
+          "name",
+          "slug",
+          "sku",
+          "price",
+          "salePrice",
+          "promoImagePath",
+          "imagePaths",
+          "storeId",
+          "stock",
+        ],
+        required: true,
+      },
+    ],
+    order: [["id", "ASC"]],
+  });
+
+  return rows
+    .map((row: any) => buildCartReadProductSnapshot(row?.Product ?? row?.product ?? null, row))
+    .filter(Boolean);
+};
+
+const resolveRequestedCartVariant = (product: any, body: Record<string, any>) => {
+  const variationState = normalizeProductVariationState(getAttr(product, "variations"));
+  if (!variationState.hasVariants) return null;
+
+  const rawVariantKey = String(body?.variantKey || "").trim();
+  const rawSelections = Array.isArray(body?.variantSelections) ? body.variantSelections : [];
+  const normalizedSelections = rawSelections
+    .map((selection: any) => {
+      const attributeId = Number(selection?.attributeId);
+      const attributeName = String(selection?.attributeName || "").trim();
+      const value = String(selection?.value || "").trim();
+      if (!Number.isInteger(attributeId) || attributeId <= 0 || !value) return null;
+      return {
+        attributeId,
+        attributeName,
+        valueId: selection?.valueId ?? null,
+        value,
+      };
+    })
+    .filter(Boolean);
+  const resolvedVariantKey =
+    rawVariantKey || (normalizedSelections.length > 0 ? buildVariantCombinationKey(normalizedSelections) : "");
+
+  if (!resolvedVariantKey) {
+    const error: any = new Error("Select a product variant before adding this item to cart.");
+    error.statusCode = 409;
+    error.code = "VARIANT_REQUIRED";
+    throw error;
+  }
+
+  const variant =
+    variationState.variants.find(
+      (entry: any) => String(entry?.combinationKey || "").trim() === resolvedVariantKey
+    ) || null;
+  if (!variant) {
+    const error: any = new Error("Selected product variant is no longer available.");
+    error.statusCode = 409;
+    error.code = "VARIANT_NOT_AVAILABLE";
+    throw error;
+  }
+  return variant;
+};
+
+const buildCartLineSnapshot = (product: any, variant: any) => {
+  const productPrice = Number(getAttr(product, "price") ?? 0) || 0;
+  const productSalePrice = Number(getAttr(product, "salePrice") ?? 0) || 0;
+  const productSku = String(getAttr(product, "sku") || "").trim() || null;
+  const productBarcode = String(getAttr(product, "barcode") || "").trim() || null;
+  const productImage = getProductPrimaryImage(product);
+
+  return {
+    variantKey: variant?.combinationKey ? String(variant.combinationKey).trim() : null,
+    variantLabel: variant?.combination ? String(variant.combination).trim() : null,
+    variantSelections: Array.isArray(variant?.selections) ? variant.selections : null,
+    variantSkuSnapshot: variant?.sku ? String(variant.sku).trim() : productSku,
+    variantBarcodeSnapshot: variant?.barcode ? String(variant.barcode).trim() : productBarcode,
+    unitPriceSnapshot:
+      variant?.price === null || typeof variant?.price === "undefined" ? productPrice : Number(variant.price),
+    unitSalePriceSnapshot:
+      variant?.salePrice === null || typeof variant?.salePrice === "undefined"
+        ? variant?.price === null || typeof variant?.price === "undefined"
+          ? productSalePrice > 0
+            ? productSalePrice
+            : productPrice
+          : Number(variant.price)
+        : Number(variant.salePrice),
+    variantImageSnapshot: normalizeUploadsUrl(variant?.image || productImage),
+    stockSnapshot:
+      variant?.quantity === null || typeof variant?.quantity === "undefined"
+        ? Number(getAttr(product, "stock") ?? 0)
+        : Number(variant.quantity),
+  };
+};
+
+const resolveCartItemLookup = async (
+  cartId: number,
+  idOrProductId: number,
+  transaction?: any,
+  supportedFields?: Set<keyof typeof CART_ITEM_VARIANT_FIELD_COLUMN_MAP>
+) => {
+  const queryAttributes = buildCartItemQueryAttributes(
+    supportedFields ?? (await getCartItemSupportedVariantFields())
+  );
+  const byItemId = await CartItem.findOne({
+    where: { cartId, id: idOrProductId },
+    attributes: queryAttributes,
+    transaction,
+    lock: transaction?.LOCK?.UPDATE,
+  });
+  if (byItemId) {
+    return {
+      cartItem: byItemId,
+      resolvedProductId: Number(getAttr(byItemId, "productId") ?? 0),
+      lookupMode: "itemId",
+    };
+  }
+
+  const byProductId = await CartItem.findOne({
+    where: { cartId, productId: idOrProductId },
+    attributes: queryAttributes,
+    transaction,
+    lock: transaction?.LOCK?.UPDATE,
+  });
+  if (byProductId) {
+    return {
+      cartItem: byProductId,
+      resolvedProductId: Number(getAttr(byProductId, "productId") ?? 0),
+      lookupMode: "productId",
+    };
+  }
+
+  return {
+    cartItem: null,
+    resolvedProductId: idOrProductId,
+    lookupMode: null,
   };
 };
 
@@ -108,11 +485,18 @@ const loadCartProductForMutation = async (
     attributes: [
       "id",
       "name",
+      "sku",
+      "barcode",
+      "price",
+      "salePrice",
       "stock",
       "status",
       "isPublished",
       "sellerSubmissionStatus",
       "storeId",
+      "promoImagePath",
+      "imagePaths",
+      "variations",
     ],
     include: [
       {
@@ -150,7 +534,8 @@ const loadCartProductForMutation = async (
 
 const validateCartMutationProduct = (
   product: any,
-  requestedQty: number
+  requestedQty: number,
+  snapshot?: { stockSnapshot?: number | null }
 ) => {
   if (!product) {
     const error: any = new Error("Product not found.");
@@ -165,7 +550,7 @@ const validateCartMutationProduct = (
     throw error;
   }
 
-  const stock = Number(getAttr(product, "stock") ?? 0);
+  const stock = Number(snapshot?.stockSnapshot ?? getAttr(product, "stock") ?? 0);
   if (!Number.isFinite(stock) || stock < requestedQty) {
     const error: any = new Error(
       `Not enough stock. Only ${Math.max(0, Number.isFinite(stock) ? stock : 0)} items available.`
@@ -183,8 +568,8 @@ export const addToCart = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { productId, quantity = 1 }: { productId: number; quantity: number } =
-      req.body;
+    const body = (req.body && typeof req.body === "object" ? req.body : {}) as Record<string, any>;
+    const { productId, quantity = 1 }: { productId: number; quantity: number } = body as any;
     const userId = (req as any).user?.id;
 
     if (!userId) {
@@ -199,6 +584,7 @@ export const addToCart = async (
     let responsePayload: any = null;
 
     await sequelize.transaction(async (t) => {
+      const supportedVariantFields = await getCartItemSupportedVariantFields();
       let cart = await Cart.findOne({
         where: { userId },
         transaction: t,
@@ -213,17 +599,32 @@ export const addToCart = async (
       }
 
       const product = await loadCartProductForMutation(Number(productId), t);
+      const requestedVariant = resolveRequestedCartVariant(product, body);
+      const snapshot = buildCartLineSnapshot(product, requestedVariant);
       const existingItem = await CartItem.findOne({
-        where: { cartId, productId: productId },
+        where: buildCartItemLookupWhere(
+          cartId,
+          productId,
+          snapshot.variantKey,
+          supportedVariantFields
+        ),
+        attributes: buildCartItemQueryAttributes(supportedVariantFields),
         transaction: t,
         lock: t.LOCK.UPDATE,
       });
       const currentQty = Number(getAttr(existingItem, "quantity") ?? 0);
       const nextQty = currentQty + Math.max(1, Number(quantity) || 1);
-      validateCartMutationProduct(product, nextQty);
+      validateCartMutationProduct(product, nextQty, snapshot);
 
       if (existingItem) {
         existingItem.set("quantity", nextQty);
+        const supportedSnapshotFields = buildSupportedCartItemSnapshotFields(
+          snapshot,
+          supportedVariantFields
+        );
+        Object.entries(supportedSnapshotFields).forEach(([field, value]) => {
+          existingItem.setDataValue(field as any, value);
+        });
         await existingItem.save({ transaction: t });
         responsePayload = toCartItemPayload(existingItem);
         return;
@@ -234,6 +635,7 @@ export const addToCart = async (
           quantity: Math.max(1, Number(quantity) || 1),
           productId: productId,
           cartId,
+          ...buildSupportedCartItemSnapshotFields(snapshot, supportedVariantFields),
         },
         { transaction: t }
       );
@@ -271,15 +673,10 @@ export const getCart = async (
       return;
     }
 
+    const supportedVariantFields = await getCartItemSupportedVariantFields();
     const cart = await Cart.findOne({
       where: { userId },
-      include: [
-        {
-          model: Product,
-          as: "Products",
-          through: { attributes: ["quantity"] },
-        },
-      ],
+      attributes: ["id", "userId"],
     });
 
     if (!cart) {
@@ -287,7 +684,16 @@ export const getCart = async (
       return;
     }
 
-    res.status(200).json(cart);
+    const cartId = await resolveCartId(cart, userId);
+    const products = cartId
+      ? await loadCartProductsForRead(cartId, supportedVariantFields)
+      : [];
+
+    res.status(200).json({
+      id: getAttr(cart, "id"),
+      userId: getAttr(cart, "userId"),
+      Products: products,
+    });
   } catch (error) {
     console.error("GET CART ERROR:", error);
     res
@@ -327,17 +733,18 @@ export const removeFromCart = async (
       return;
     }
 
-    const deletedRows = await CartItem.destroy({
-      where: {
-        cartId,
-        productId: id,
-      },
-    });
-
-    if (deletedRows === 0) {
+    const resolved = await resolveCartItemLookup(
+      cartId,
+      id,
+      undefined,
+      await getCartItemSupportedVariantFields()
+    );
+    if (!resolved.cartItem) {
       res.status(404).json({ message: "Item not found in cart." });
       return;
     }
+
+    await resolved.cartItem.destroy();
 
     res.status(200).json({ message: "Item removed from cart successfully." });
   } catch (error) {
@@ -433,7 +840,7 @@ export const setCartItemQty = async (
 ): Promise<void> => {
   try {
     const userId = (req as any).user?.id;
-    const productId = toId(req.params.productId);
+    const targetId = toId((req.params as any).itemId ?? req.params.productId);
     const qty = toQty((req.body as any)?.qty ?? (req.body as any)?.quantity);
 
     if (!userId) {
@@ -441,8 +848,8 @@ export const setCartItemQty = async (
       return;
     }
 
-    if (!productId || productId <= 0 || !Number.isInteger(productId)) {
-      res.status(400).json({ message: "Invalid productId" });
+    if (!targetId || targetId <= 0 || !Number.isInteger(targetId)) {
+      res.status(400).json({ message: "Invalid cart target id" });
       return;
     }
 
@@ -452,6 +859,7 @@ export const setCartItemQty = async (
     }
 
     await sequelize.transaction(async (t) => {
+      const supportedVariantFields = await getCartItemSupportedVariantFields();
       let cart = await Cart.findOne({
         where: { userId },
         transaction: t,
@@ -467,11 +875,13 @@ export const setCartItemQty = async (
         throw new Error("Failed to resolve cart id.");
       }
 
-      const cartItem = await CartItem.findOne({
-        where: { cartId, productId },
-        transaction: t,
-        lock: t.LOCK.UPDATE,
-      });
+      const resolved = await resolveCartItemLookup(
+        cartId,
+        targetId,
+        t,
+        supportedVariantFields
+      );
+      const cartItem = resolved.cartItem;
 
       if (qty <= 0) {
         if (cartItem) {
@@ -480,8 +890,20 @@ export const setCartItemQty = async (
         return;
       }
 
-      const product = await loadCartProductForMutation(productId, t);
-      validateCartMutationProduct(product, qty);
+      const product = await loadCartProductForMutation(resolved.resolvedProductId, t);
+      const lineStockSnapshot =
+        cartItem &&
+        supportedVariantFields.has("variantKey") &&
+        String(getAttr(cartItem, "variantKey") || "").trim()
+          ? buildCartLineSnapshot(
+              product,
+              resolveRequestedCartVariant(product, {
+                variantKey: getAttr(cartItem, "variantKey"),
+                variantSelections: normalizeJsonValue(getAttr(cartItem, "variantSelections")),
+              })
+            ).stockSnapshot
+          : Number(getAttr(product, "stock") ?? 0);
+      validateCartMutationProduct(product, qty, { stockSnapshot: lineStockSnapshot });
 
       if (cartItem) {
         const currentQty = Number(getAttr(cartItem, "quantity") ?? 0);
@@ -492,8 +914,15 @@ export const setCartItemQty = async (
         return;
       }
 
+      const initialVariant = resolveRequestedCartVariant(product, req.body as any);
+      const initialSnapshot = buildCartLineSnapshot(product, initialVariant);
       await CartItem.create(
-        { cartId, productId, quantity: qty },
+        {
+          cartId,
+          productId: resolved.resolvedProductId,
+          quantity: qty,
+          ...buildSupportedCartItemSnapshotFields(initialSnapshot, supportedVariantFields),
+        },
         { transaction: t }
       );
     });

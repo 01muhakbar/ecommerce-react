@@ -25,7 +25,7 @@ export class Cart
       as: "user",
     });
     Cart.belongsToMany(models.Product, {
-      through: models.CartItem, // Gunakan model langsung
+      through: { model: models.CartItem, unique: false }, // Gunakan model langsung
       as: "Products",
       foreignKey: "cartId", // GUNAKAN camelCase agar konsisten
     });

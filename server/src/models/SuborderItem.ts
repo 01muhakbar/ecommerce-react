@@ -7,6 +7,11 @@ export interface SuborderItemAttributes {
   storeId: number;
   productNameSnapshot: string;
   skuSnapshot?: string | null;
+  variantKey?: string | null;
+  variantLabel?: string | null;
+  variantSelections?: any;
+  barcodeSnapshot?: string | null;
+  imageSnapshot?: string | null;
   priceSnapshot: number;
   qty: number;
   totalPrice: number;
@@ -16,7 +21,7 @@ export interface SuborderItemAttributes {
 
 type SuborderItemCreationAttributes = Optional<
   SuborderItemAttributes,
-  "id" | "skuSnapshot"
+  "id" | "skuSnapshot" | "variantKey" | "variantLabel" | "variantSelections" | "barcodeSnapshot" | "imageSnapshot"
 >;
 
 export class SuborderItem
@@ -29,6 +34,11 @@ export class SuborderItem
   declare storeId: number;
   declare productNameSnapshot: string;
   declare skuSnapshot?: string | null;
+  declare variantKey?: string | null;
+  declare variantLabel?: string | null;
+  declare variantSelections?: any;
+  declare barcodeSnapshot?: string | null;
+  declare imageSnapshot?: string | null;
   declare priceSnapshot: number;
   declare qty: number;
   declare totalPrice: number;
@@ -94,6 +104,31 @@ export class SuborderItem
           type: DataTypes.STRING(100),
           allowNull: true,
           field: "sku_snapshot",
+        },
+        variantKey: {
+          type: DataTypes.STRING(255),
+          allowNull: true,
+          field: "variant_key",
+        },
+        variantLabel: {
+          type: DataTypes.STRING(255),
+          allowNull: true,
+          field: "variant_label",
+        },
+        variantSelections: {
+          type: DataTypes.JSON,
+          allowNull: true,
+          field: "variant_selections",
+        },
+        barcodeSnapshot: {
+          type: DataTypes.STRING(100),
+          allowNull: true,
+          field: "barcode_snapshot",
+        },
+        imageSnapshot: {
+          type: DataTypes.STRING(255),
+          allowNull: true,
+          field: "image_snapshot",
         },
         priceSnapshot: {
           type: DataTypes.DECIMAL(12, 2),

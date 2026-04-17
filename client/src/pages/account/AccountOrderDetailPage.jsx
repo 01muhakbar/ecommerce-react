@@ -21,6 +21,7 @@ import { getOrderTruthStatus } from "../../utils/orderTruth.js";
 import { ENABLE_MULTISTORE_SHIPMENT_MVP } from "../../config/featureFlags.js";
 import { normalizeShipmentList } from "../../utils/shipmentReadModel.ts";
 import { getBuyerShipmentPresentation } from "../../utils/buyerShipmentPresentation.js";
+import { getOrderItemVariantLines } from "../../utils/orderVariantPresentation.js";
 import {
   getSplitOperationalPayment,
   getSplitOperationalShipment,
@@ -545,6 +546,11 @@ export default function AccountOrderDetailPage() {
             >
               <div>
                 <p className="font-medium text-slate-900">{item.name}</p>
+                {getOrderItemVariantLines(item).map((line) => (
+                  <p key={`${item.id}-${line}`} className="text-xs text-slate-500">
+                    {line}
+                  </p>
+                ))}
                 <p className="text-xs text-slate-500">
                   {item.quantity} × {money(item.price)}
                 </p>

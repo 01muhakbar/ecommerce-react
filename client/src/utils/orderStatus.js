@@ -17,7 +17,7 @@ const STATUS_GROUPS = {
 const STATUS_LABELS = {
   pending: "Pending",
   processing: "Processing",
-  shipping: "Shipping",
+  shipping: "On delivery",
   complete: "Delivered",
   cancelled: "Cancelled",
   unknown: "Unknown",

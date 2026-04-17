@@ -10,6 +10,8 @@ import {
   markUserNotificationRead,
 } from "../../api/userNotifications.ts";
 
+const NOTIFICATION_STREAM_CONNECT_DELAY_MS = 4000;
+
 const formatTime = (value) => {
   const date = new Date(value || "");
   if (Number.isNaN(date.getTime())) return "-";
@@ -90,6 +92,7 @@ export default function UserNotificationsPopup({
   const openRef = useRef(Boolean(open));
   const eventSourceRef = useRef(null);
   const pollingTimerRef = useRef(null);
+  const connectTimerRef = useRef(null);
 
   useEffect(() => {
     openRef.current = Boolean(open);
@@ -179,8 +182,12 @@ export default function UserNotificationsPopup({
     setError("");
     setRealtimeStatus("connected");
     stopPolling();
+    if (connectTimerRef.current) {
+      window.clearTimeout(connectTimerRef.current);
+      connectTimerRef.current = null;
+    }
     if (eventSourceRef.current) {
-      eventSourceRef.current.close();
+      eventSourceRef.current.__cleanup?.();
       eventSourceRef.current = null;
     }
   }, [isAuthenticated, stopPolling]);
@@ -190,80 +197,95 @@ export default function UserNotificationsPopup({
     if (typeof window === "undefined" || typeof EventSource === "undefined") {
       return undefined;
     }
+    setRealtimeStatus("connecting");
 
-    const eventSource = new EventSource("/api/user/notifications/stream", {
-      withCredentials: true,
-    });
-    eventSourceRef.current = eventSource;
+    connectTimerRef.current = window.setTimeout(() => {
+      const eventSource = new EventSource("/api/user/notifications/stream", {
+        withCredentials: true,
+      });
+      eventSourceRef.current = eventSource;
 
-    const onHello = (event) => {
-      try {
-        const payload = JSON.parse(String(event?.data || "{}"));
-        if (Number.isFinite(Number(payload?.unreadCount))) {
-          setUnreadCount(Number(payload.unreadCount || 0));
+      const onHello = (event) => {
+        try {
+          const payload = JSON.parse(String(event?.data || "{}"));
+          if (Number.isFinite(Number(payload?.unreadCount))) {
+            setUnreadCount(Number(payload.unreadCount || 0));
+          }
+          setRealtimeStatus("connected");
+          stopPolling();
+        } catch {
+          // ignore malformed payload
         }
+      };
+
+      const onNotificationNew = (event) => {
+        try {
+          const payload = JSON.parse(String(event?.data || "{}"));
+          const nextUnreadCount = Number(payload?.unreadCount);
+          const notification = payload?.notification;
+          if (Number.isFinite(nextUnreadCount)) {
+            setUnreadCount(nextUnreadCount);
+          }
+          if (!openRef.current || !notification?.id) return;
+          setItems((previous) => {
+            const deduped = previous.filter(
+              (item) => Number(item?.id) !== Number(notification.id)
+            );
+            return [notification, ...deduped].slice(0, 20);
+          });
+        } catch {
+          // ignore malformed payload
+        }
+      };
+
+      const onPing = () => {};
+      const onOpen = () => {
         setRealtimeStatus("connected");
         stopPolling();
-      } catch {
-        // ignore malformed payload
-      }
-    };
+      };
+      const onError = () => {
+        setRealtimeStatus("disconnected");
+        startPollingUnreadCount();
+      };
 
-    const onNotificationNew = (event) => {
-      try {
-        const payload = JSON.parse(String(event?.data || "{}"));
-        const nextUnreadCount = Number(payload?.unreadCount);
-        const notification = payload?.notification;
-        if (Number.isFinite(nextUnreadCount)) {
-          setUnreadCount(nextUnreadCount);
-        }
-        if (!openRef.current || !notification?.id) return;
-        setItems((previous) => {
-          const deduped = previous.filter(
-            (item) => Number(item?.id) !== Number(notification.id)
-          );
-          return [notification, ...deduped].slice(0, 20);
-        });
-      } catch {
-        // ignore malformed payload
-      }
-    };
+      eventSource.onopen = onOpen;
+      eventSource.addEventListener("hello", onHello);
+      eventSource.addEventListener("notification:new", onNotificationNew);
+      eventSource.addEventListener("ping", onPing);
+      eventSource.onerror = onError;
 
-    const onPing = () => {};
-    const onOpen = () => {
-      setRealtimeStatus("connected");
-      stopPolling();
-    };
-    const onError = () => {
-      setRealtimeStatus("disconnected");
-      startPollingUnreadCount();
-    };
-
-    eventSource.onopen = onOpen;
-    eventSource.addEventListener("hello", onHello);
-    eventSource.addEventListener("notification:new", onNotificationNew);
-    eventSource.addEventListener("ping", onPing);
-    eventSource.onerror = onError;
+      eventSourceRef.current.__cleanup = () => {
+        eventSource.onopen = null;
+        eventSource.removeEventListener("hello", onHello);
+        eventSource.removeEventListener("notification:new", onNotificationNew);
+        eventSource.removeEventListener("ping", onPing);
+        eventSource.onerror = null;
+        eventSource.close();
+      };
+    }, NOTIFICATION_STREAM_CONNECT_DELAY_MS);
 
     return () => {
       stopPolling();
-      if (eventSourceRef.current === eventSource) {
-        eventSourceRef.current = null;
+      if (connectTimerRef.current) {
+        window.clearTimeout(connectTimerRef.current);
+        connectTimerRef.current = null;
       }
-      eventSource.onopen = null;
-      eventSource.removeEventListener("hello", onHello);
-      eventSource.removeEventListener("notification:new", onNotificationNew);
-      eventSource.removeEventListener("ping", onPing);
-      eventSource.onerror = null;
-      eventSource.close();
+      if (eventSourceRef.current?.__cleanup) {
+        eventSourceRef.current.__cleanup();
+      }
+      eventSourceRef.current = null;
     };
   }, [isAuthenticated, startPollingUnreadCount, stopPolling]);
 
   useEffect(() => {
     return () => {
       stopPolling();
+      if (connectTimerRef.current) {
+        window.clearTimeout(connectTimerRef.current);
+        connectTimerRef.current = null;
+      }
       if (eventSourceRef.current) {
-        eventSourceRef.current.close();
+        eventSourceRef.current.__cleanup?.();
         eventSourceRef.current = null;
       }
     };

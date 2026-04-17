@@ -17,6 +17,7 @@ import {
 } from "../../components/seller/SellerWorkspaceFoundation.jsx";
 import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
 import { useSellerWorkspaceRoute } from "../../utils/sellerWorkspaceRoute.js";
+import { getOrderItemVariantLines } from "../../utils/orderVariantPresentation.js";
 import {
   getOrderContractMeta,
   getOrderContractSummary,
@@ -639,6 +640,14 @@ export default function SellerOrderDetailPage() {
                     <div>
                       <p className="font-semibold text-slate-900">{item.productName}</p>
                       <p className="mt-1 text-sm text-slate-500">Product #{item.productId}</p>
+                      {getOrderItemVariantLines(item).map((line) => (
+                        <p
+                          key={`${item.id}-${line}`}
+                          className="mt-1 text-xs leading-5 text-slate-500"
+                        >
+                          {line}
+                        </p>
+                      ))}
                     </div>
                     <div className="text-sm text-slate-600">
                       Qty {item.qty} · {formatMoney(item.price)}

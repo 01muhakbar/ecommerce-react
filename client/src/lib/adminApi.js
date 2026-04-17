@@ -409,6 +409,12 @@ const normalizeAdminOrderDetail = (raw) => {
       price: Number(it.price || 0),
       lineTotal:
         Number(it.lineTotal || 0) || Number(it.price || 0) * Number(it.quantity || 0),
+      variantKey: it.variantKey || null,
+      variantLabel: it.variantLabel || null,
+      variantSelections: Array.isArray(it.variantSelections) ? it.variantSelections : [],
+      sku: it.sku || null,
+      barcode: it.barcode || null,
+      image: it.image || null,
       product: it.product ? { id: it.product.id, name: it.product.name } : null,
     })),
   };
@@ -633,13 +639,146 @@ export const bulkAdminCoupons = async (action, ids) => {
   return data;
 };
 
-export const fetchAdminAttributes = async () => {
-  const { data } = await adminApi.get("/admin/attributes");
-  return data;
+const normalizeAdminAttributesMeta = (payload, params = {}) => {
+  const meta = payload?.meta || payload?.data?.meta || payload?.pagination || {};
+  const page = Number(meta.page ?? meta.currentPage ?? params.page ?? 1);
+  const limit = Number(meta.limit ?? meta.pageSize ?? params.limit ?? 20);
+  const total = Number(meta.total ?? meta.totalItems ?? payload?.total ?? 0);
+  const rawTotalPages =
+    meta.totalPages ?? (limit ? Math.ceil(total / limit) : 1);
+  const totalPages = Math.max(1, Number(rawTotalPages || 1));
+  return { page, limit, total, totalPages };
+};
+
+const normalizeAdminAttribute = (value) => {
+  if (!value || typeof value !== "object") return null;
+  const values = Array.isArray(value.values)
+    ? value.values
+        .map((entry) =>
+          typeof entry === "string"
+            ? entry.trim()
+            : String(entry?.value || "").trim()
+        )
+        .filter(Boolean)
+    : [];
+  return {
+    id: Number(value.id || 0) || null,
+    name: String(value.name || "").trim(),
+    displayName: value.displayName ?? value.display_name ?? null,
+    type: String(value.type || "dropdown").trim().toLowerCase() || "dropdown",
+    published: Boolean(value.published),
+    values,
+    valueCount:
+      Number(value.valueCount || 0) ||
+      values.length,
+  };
+};
+
+const normalizeAdminAttributesList = (payload, params = {}) => {
+  const items = Array.isArray(payload?.data)
+    ? payload.data
+    : Array.isArray(payload?.items)
+      ? payload.items
+      : Array.isArray(payload)
+        ? payload
+        : [];
+  return {
+    data: items
+      .map(normalizeAdminAttribute)
+      .filter(Boolean),
+    meta: normalizeAdminAttributesMeta(payload, params),
+    warning: payload?.warning || "",
+  };
+};
+
+export const fetchAdminAttributes = async (params = {}) => {
+  const { data } = await adminApi.get("/admin/attributes", { params });
+  return normalizeAdminAttributesList(data, params);
+};
+
+const normalizeAdminAttributeValue = (value) => {
+  if (!value || typeof value !== "object") return null;
+  return {
+    id: Number(value.id || 0) || null,
+    attributeId: Number(value.attributeId ?? value.attribute_id ?? 0) || null,
+    value: String(value.value || "").trim(),
+  };
 };
 
 export const fetchAdminAttributeValues = async (attributeId) => {
   const { data } = await adminApi.get(`/admin/attributes/${attributeId}/values`);
+  return {
+    ...data,
+    data: Array.isArray(data?.data)
+      ? data.data.map(normalizeAdminAttributeValue).filter(Boolean)
+      : [],
+  };
+};
+
+export const createAdminAttributeValue = async (attributeId, payload) => {
+  const { data } = await adminApi.post(`/admin/attributes/${attributeId}/values`, payload);
+  return data;
+};
+
+export const updateAdminAttributeValue = async (id, payload) => {
+  const { data } = await adminApi.patch(`/admin/attribute-values/${id}`, payload);
+  return data;
+};
+
+export const deleteAdminAttributeValue = async (id) => {
+  const { data } = await adminApi.delete(`/admin/attribute-values/${id}`);
+  return data;
+};
+
+export const bulkDeleteAdminAttributeValues = async (ids) => {
+  const { data } = await adminApi.post("/admin/attribute-values/bulk-delete", { ids });
+  return data;
+};
+
+export const createAdminAttribute = async (payload) => {
+  const { data } = await adminApi.post("/admin/attributes", payload);
+  return data;
+};
+
+export const updateAdminAttribute = async (id, payload) => {
+  const { data } = await adminApi.patch(`/admin/attributes/${id}`, payload);
+  return data;
+};
+
+export const deleteAdminAttribute = async (id) => {
+  const { data } = await adminApi.delete(`/admin/attributes/${id}`);
+  return data;
+};
+
+export const bulkAdminAttributes = async (action, ids) => {
+  const { data } = await adminApi.post("/admin/attributes/bulk", { action, ids });
+  return data;
+};
+
+export const exportAdminAttributes = async (format = "json") => {
+  const normalizedFormat = String(format || "json").trim().toLowerCase() === "csv" ? "csv" : "json";
+  const endpoint = `/api/admin/attributes/export?type=${encodeURIComponent(normalizedFormat)}`;
+  const response = await fetch(endpoint, { credentials: "include" });
+
+  if (!response.ok) {
+    const fallback = `Failed to export attributes (${response.status}).`;
+    try {
+      const payload = await response.json();
+      throw new Error(payload?.message || fallback);
+    } catch {
+      throw new Error(fallback);
+    }
+  }
+
+  return response;
+};
+
+export const importAdminAttributes = async (file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await adminApi.post("/admin/attributes/import", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
   return data;
 };
 

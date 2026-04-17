@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   bulkAdminProducts,
@@ -17,7 +18,6 @@ import {
   ChevronDown,
   Copy,
   Download,
-  Eye,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -29,7 +29,6 @@ import {
   X,
 } from "lucide-react";
 import ProductForm from "./ProductForm.jsx";
-import ProductPreviewDrawer from "./ProductPreviewDrawer.jsx";
 
 const FALLBACK_THUMBNAIL = "/demo/placeholder-product.svg";
 const MAX_IMPORT_FILE_SIZE = 2 * 1024 * 1024;
@@ -423,6 +422,7 @@ const parseImportPreview = async (file) => {
 
 export default function AdminProductsPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
   const [draftFilters, setDraftFilters] = useState(DEFAULT_FILTERS);
@@ -1067,10 +1067,10 @@ export default function AdminProductsPage() {
     setDrawerState({ open: true, mode: "edit", productId: parsedId });
   };
 
-  const openViewDrawer = (productId) => {
+  const openProductDetailPage = (productId) => {
     const parsedId = Number(productId);
     if (!parsedId) return;
-    setDrawerState({ open: true, mode: "view", productId: parsedId });
+    navigate(`/admin/catalog/products/${encodeURIComponent(String(parsedId))}`);
   };
 
   const closeDrawer = () => {
@@ -1790,11 +1790,11 @@ export default function AdminProductsPage() {
                         <td className={`${tableCell} text-center`}>
                           <button
                             type="button"
-                            onClick={() => openViewDrawer(product.id)}
+                            onClick={() => openProductDetailPage(product.id)}
                             className="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
                             title="View product"
                           >
-                            <Eye className="h-3 w-3" />
+                            <Search className="h-3.5 w-3.5" />
                           </button>
                         </td>
                       ) : null}
@@ -1840,11 +1840,11 @@ export default function AdminProductsPage() {
                                   type="button"
                                   onClick={() => {
                                     closeFloatingMenus();
-                                    openViewDrawer(product.id);
+                                    openProductDetailPage(product.id);
                                   }}
                                   className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50"
                                 >
-                                  <Eye className="h-3.5 w-3.5" />
+                                  <Search className="h-3.5 w-3.5" />
                                   View
                                 </button>
                                 <button
@@ -1919,24 +1919,16 @@ export default function AdminProductsPage() {
             className="fixed inset-0 z-40 bg-slate-900/35"
           />
           <div className="fixed inset-0 z-50 w-screen max-w-full overflow-x-hidden border-l border-slate-200 bg-white shadow-2xl md:left-[280px] md:right-0 md:w-auto">
-            {drawerState.mode === "view" ? (
-              <ProductPreviewDrawer
-                productId={drawerState.productId}
-                onClose={closeDrawer}
-                onEdit={(id) => openEditDrawer(id)}
-              />
-            ) : (
-              <ProductForm
-                key={`${drawerState.mode}-${drawerState.productId ?? "new"}`}
-                mode="drawer"
-                productId={drawerState.mode === "edit" ? drawerState.productId : null}
-                onClose={closeDrawer}
-                onSuccess={() => {
-                  closeDrawer();
-                  queryClient.invalidateQueries({ queryKey: ["admin-products"] });
-                }}
-              />
-            )}
+            <ProductForm
+              key={`${drawerState.mode}-${drawerState.productId ?? "new"}`}
+              mode="drawer"
+              productId={drawerState.mode === "edit" ? drawerState.productId : null}
+              onClose={closeDrawer}
+              onSuccess={() => {
+                closeDrawer();
+                queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+              }}
+            />
           </div>
         </>
       ) : null}

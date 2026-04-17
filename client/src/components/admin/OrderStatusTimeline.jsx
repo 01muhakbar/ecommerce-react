@@ -3,7 +3,7 @@ import { normalizeAdminOrderLifecycle } from "../../pages/admin/orderLifecyclePr
 const STATUS_FLOW = [
   { key: "pending", label: "Pending" },
   { key: "processing", label: "Processing" },
-  { key: "in_delivery", label: "In Delivery" },
+  { key: "in_delivery", label: "On delivery" },
   { key: "delivered", label: "Delivered" },
 ];
 

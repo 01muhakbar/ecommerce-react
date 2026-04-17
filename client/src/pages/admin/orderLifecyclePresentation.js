@@ -25,7 +25,7 @@ export const getAdminOrderLifecycleLabel = (raw) => {
   const key = normalizeAdminOrderLifecycle(raw);
   if (key === "pending") return "Pending";
   if (key === "processing") return "Processing";
-  if (key === "in_delivery") return "In Delivery";
+  if (key === "in_delivery") return "On delivery";
   if (key === "delivered") return "Delivered";
   if (key === "cancelled") return "Cancelled";
   return "Unknown";
@@ -64,7 +64,7 @@ export const getAdminOrderLifecycleNote = (raw) => {
 export const ADMIN_ORDER_ACTION_OPTIONS = [
   { value: "pending", label: "Pending" },
   { value: "processing", label: "Processing" },
-  { value: "shipping", label: "In Delivery" },
+  { value: "shipping", label: "On delivery" },
   { value: "delivered", label: "Delivered" },
   { value: "cancel", label: "Cancelled" },
 ];

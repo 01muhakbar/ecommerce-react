@@ -51,6 +51,20 @@ const csvEscape = (value: unknown) => {
   return `"${text.replace(/"/g, '""')}"`;
 };
 const csvRow = (values: unknown[]) => values.map((value) => csvEscape(value)).join(",");
+const normalizeVariantSelectionsSnapshot = (value: unknown) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
 
 const normalizeStatusInput = (raw: unknown): DbOrderStatus | "" => {
   const value = String(raw || "").toLowerCase().trim();
@@ -611,7 +625,18 @@ const orderDetailInclude: any[] = [
   {
     model: OrderItem,
     as: "items",
-    attributes: ["id", "quantity", "price", ["product_id", "productId"]],
+    attributes: [
+      "id",
+      "quantity",
+      "price",
+      "variantKey",
+      "variantLabel",
+      "variantSelections",
+      "skuSnapshot",
+      "barcodeSnapshot",
+      "imageSnapshot",
+      ["product_id", "productId"],
+    ],
     include: [
       {
         model: Product,
@@ -709,6 +734,12 @@ const toOrderDetailPayload = (orderItem: any) => {
     lineTotal:
       Number(getAttr(item, "price") || 0) *
       Number(getAttr(item, "quantity") || 0),
+    variantKey: String(getAttr(item, "variantKey") || "").trim() || null,
+    variantLabel: String(getAttr(item, "variantLabel") || "").trim() || null,
+    variantSelections: normalizeVariantSelectionsSnapshot(getAttr(item, "variantSelections")),
+    sku: String(getAttr(item, "skuSnapshot") || "").trim() || null,
+    barcode: String(getAttr(item, "barcodeSnapshot") || "").trim() || null,
+    image: String(getAttr(item, "imageSnapshot") || "").trim() || null,
     product: item.product
       ? {
           id: getAttr(item.product, "id"),

@@ -14,6 +14,23 @@ import { resolveAssetUrl } from "../../lib/assetUrl.js";
 import { ChevronDown, ChevronRight, UploadCloud, X } from "lucide-react";
 
 const ACCEPTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const MAX_PRODUCT_IMAGES = 5;
+const readImageDimensions = (file) =>
+  new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      const width = Number(image.naturalWidth || image.width || 0);
+      const height = Number(image.naturalHeight || image.height || 0);
+      URL.revokeObjectURL(objectUrl);
+      resolve({ width, height });
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Failed to read image dimensions."));
+    };
+    image.src = objectUrl;
+  });
 
 const slugify = (value) =>
   String(value || "")
@@ -84,9 +101,9 @@ const resolveDefaultCategoryId = (categoryIds, currentDefaultCategoryId) => {
 };
 
 const fieldInputClass =
-  "h-11 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-700 transition focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100";
+  "h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 transition focus:border-emerald-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-50";
 const fieldTextareaClass =
-  "h-32 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-700 transition focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100";
+  "h-32 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition focus:border-emerald-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-50";
 const sectionCardClass =
   "rounded-[24px] border border-slate-200/90 bg-white p-4 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.45)] sm:p-5";
 const sectionTitleClass = "text-base font-semibold text-slate-900";
@@ -279,12 +296,12 @@ const isLikelySeoImageUrl = (value) => {
 
 function FormRow({ label, helper, children }) {
   return (
-    <div className="space-y-2">
-      <div>
+    <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start lg:gap-5">
+      <div className="pt-2">
         <p className="text-sm font-semibold text-slate-700">{label}</p>
         {helper ? <p className="mt-1 text-xs text-slate-500">{helper}</p> : null}
       </div>
-      <div>{children}</div>
+      <div className="min-w-0">{children}</div>
     </div>
   );
 }
@@ -410,6 +427,10 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
     status: "active",
     imageUrl: "",
   });
+  const activeSectionClass = isDrawerMode
+    ? "border-t border-slate-200 px-0 py-5 first:border-t-0"
+    : sectionCardClass;
+  const showCompactSectionHeaders = !isDrawerMode;
 
   const categoriesQuery = useQuery({
     queryKey: ["admin-categories-add-product"],
@@ -430,6 +451,10 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
 
   const categories = categoriesQuery.data?.data || [];
   const attributes = Array.isArray(attributesQuery.data) ? attributesQuery.data : [];
+  const visibleTabs = useMemo(
+    () => PRODUCT_EDIT_TABS.filter((tab) => tab.id !== "combination" || hasVariants),
+    [hasVariants]
+  );
   const categoryTree = useMemo(() => buildCategoryTree(categories), [categories]);
   const selectedCategories = useMemo(() => {
     const selectedIdSet = new Set(normalizeSelectedCategoryIds(form.categoryIds));
@@ -489,6 +514,12 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
   };
 
   useEffect(() => {
+    if (!hasVariants && activeTab === "combination") {
+      setActiveTab("basic");
+    }
+  }, [activeTab, hasVariants]);
+
+  useEffect(() => {
     if (!isEdit) return;
     const product = productQuery.data?.data;
     if (!product) return;
@@ -508,11 +539,18 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
       initialCategoryIds,
       product.defaultCategoryId ?? product.categoryId ?? null
     );
-    const initialImage =
-      product.promoImagePath ||
-      (Array.isArray(product.imagePaths) ? product.imagePaths[0] : "") ||
-      product.imageUrl ||
-      "";
+    const initialImagePaths = Array.isArray(product.imagePaths)
+      ? product.imagePaths.filter(Boolean)
+      : [];
+    const initialImages =
+      initialImagePaths.length > 0
+        ? initialImagePaths
+        : product.promoImagePath
+          ? [product.promoImagePath]
+          : product.imageUrl
+            ? [product.imageUrl]
+            : [];
+    const initialImage = initialImages[0] || "";
     const initialTags = Array.isArray(product.tags)
       ? product.tags.map((tag) => String(tag))
       : [];
@@ -541,17 +579,16 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
     setSeo(initialSeo);
     setSlugTouched(Boolean(initialSlug));
 
-    if (initialImage) {
-      setLocalImages([
-        {
-          id: `remote-${Date.now()}`,
-          name: "Current image",
-          url: resolveAssetUrl(initialImage),
-          file: null,
-          remote: true,
-        },
-      ]);
-    }
+    setLocalImages(
+      initialImages.slice(0, MAX_PRODUCT_IMAGES).map((imagePath, index) => ({
+        id: `remote-${activeProductId || "product"}-${index + 1}`,
+        name: `Current image ${index + 1}`,
+        url: resolveAssetUrl(imagePath),
+        file: null,
+        remote: true,
+        storedUrl: imagePath,
+      }))
+    );
   }, [isEdit, productQuery.data]);
 
   useEffect(() => {
@@ -641,25 +678,91 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
 
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
-  const addFiles = (files) => {
+  const addFiles = async (files) => {
+    const incomingFiles = Array.from(files || []);
+    if (incomingFiles.length === 0) return;
+
+    const existingIds = new Set(localImages.map((item) => item.id));
+    const availableSlots = Math.max(0, MAX_PRODUCT_IMAGES - localImages.length);
+
+    if (availableSlots <= 0) {
+      setNotice({
+        type: "error",
+        message: `You can upload up to ${MAX_PRODUCT_IMAGES} product images.`,
+      });
+      return;
+    }
+
     const nextImages = [];
-    Array.from(files || []).forEach((file) => {
-      if (!ACCEPTED_IMAGE_TYPES.has(file.type)) return;
+    let rejectedTypeCount = 0;
+    let rejectedSquareCount = 0;
+    let skippedDuplicateCount = 0;
+    let skippedOverflowCount = 0;
+
+    for (const file of incomingFiles) {
+      if (nextImages.length >= availableSlots) {
+        skippedOverflowCount += 1;
+        continue;
+      }
+      if (!ACCEPTED_IMAGE_TYPES.has(file.type)) {
+        rejectedTypeCount += 1;
+        continue;
+      }
+
       const idValue = `${file.name}-${file.size}-${file.lastModified}`;
-      const alreadyExists = localImages.some((item) => item.id === idValue);
-      if (alreadyExists) return;
+      if (existingIds.has(idValue) || nextImages.some((item) => item.id === idValue)) {
+        skippedDuplicateCount += 1;
+        continue;
+      }
+
+      try {
+        const { width, height } = await readImageDimensions(file);
+        if (width <= 0 || height <= 0 || width !== height) {
+          rejectedSquareCount += 1;
+          continue;
+        }
+      } catch {
+        rejectedSquareCount += 1;
+        continue;
+      }
+
       nextImages.push({
         id: idValue,
         name: file.name,
         url: URL.createObjectURL(file),
         file,
         remote: false,
+        storedUrl: null,
       });
-    });
+    }
 
     if (nextImages.length > 0) {
       setLocalImages((prev) => [...prev, ...nextImages]);
     }
+
+    const messageParts = [];
+    if (rejectedTypeCount > 0) {
+      messageParts.push(`${rejectedTypeCount} file harus JPG, PNG, atau WEBP`);
+    }
+    if (rejectedSquareCount > 0) {
+      messageParts.push(`${rejectedSquareCount} file ditolak karena bukan rasio 1:1`);
+    }
+    if (skippedDuplicateCount > 0) {
+      messageParts.push(`${skippedDuplicateCount} file duplikat dilewati`);
+    }
+    if (skippedOverflowCount > 0) {
+      messageParts.push(`${skippedOverflowCount} file melebihi batas ${MAX_PRODUCT_IMAGES} gambar`);
+    }
+
+    if (messageParts.length > 0) {
+      setNotice({
+        type: nextImages.length > 0 ? "warning" : "error",
+        message: messageParts.join(". "),
+      });
+      return;
+    }
+
+    setNotice(null);
   };
 
   const removeImage = (imageId) => {
@@ -674,15 +777,19 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
 
   const uploadSelectedImages = async () => {
     const fileItems = localImages.filter((item) => !item.remote && item.file);
-    if (fileItems.length === 0) return [];
-
-    const uploadedUrls = [];
+    const uploadedUrlsById = new Map();
     for (const item of fileItems) {
       const response = await uploadAdminImage(item.file);
       const url = response?.url || response?.data?.url;
-      if (url) uploadedUrls.push(url);
+      if (url) uploadedUrlsById.set(item.id, url);
     }
-    return uploadedUrls;
+    return localImages
+      .map((item) => {
+        if (item.remote) return item.storedUrl || null;
+        return uploadedUrlsById.get(item.id) || null;
+      })
+      .filter(Boolean)
+      .slice(0, MAX_PRODUCT_IMAGES);
   };
 
   const onToggleCategory = (categoryId) => {
@@ -993,7 +1100,7 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
 
     try {
       const uploadedUrls = await uploadSelectedImages();
-      const imageUrl = uploadedUrls[0] || form.imageUrl || undefined;
+      const imageUrl = uploadedUrls[0] || undefined;
       const variationPayload = hasVariants
         ? {
             hasVariants: true,
@@ -1037,7 +1144,7 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
         defaultCategoryId: Number(form.defaultCategoryId),
         categoryId: Number(form.defaultCategoryId),
         imageUrl,
-        imageUrls: uploadedUrls.length > 0 ? uploadedUrls : undefined,
+        imageUrls: uploadedUrls,
         sku: form.sku || undefined,
         barcode: form.barcode || undefined,
         slug: form.slug || slugify(name),
@@ -1075,17 +1182,31 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
           }`}
         >
         <div className="shrink-0 border-b border-slate-200 px-4 py-4 sm:px-5 md:px-6">
-          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div className="space-y-1">
-              <h1 className="text-2xl font-semibold leading-tight text-slate-900 sm:text-3xl md:text-4xl">
-                {isEdit ? "Edit Product" : "Add Product"}
+              <h1 className="text-2xl font-semibold leading-tight text-slate-900">
+                {isEdit ? "Update Products" : "Add Product"}
               </h1>
+              <p className="text-sm text-slate-500">
+                {isEdit
+                  ? "Update products info, combinations and extras."
+                  : "Add your product and necessary information from here"}
+              </p>
             </div>
             <div className="flex items-center gap-3 self-start md:self-auto">
+              {isDrawerMode ? (
+                <select
+                  defaultValue="en"
+                  className="h-10 rounded-lg border border-emerald-200 bg-white px-3 text-sm text-slate-700 outline-none"
+                  aria-label="Language"
+                >
+                  <option value="en">en</option>
+                </select>
+              ) : null}
               <button
                 type="button"
                 onClick={closeForm}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-rose-500 shadow-[0_6px_14px_-8px_rgba(15,23,42,0.3)] transition hover:bg-slate-50"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-rose-100 bg-rose-50 text-rose-500 transition hover:bg-rose-100"
                 aria-label="Close add product page"
               >
                 <X className="h-4 w-4" />
@@ -1126,25 +1247,57 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
             ) : null}
             {isEdit && productQuery.isLoading ? null : (
               <div className="space-y-5">
-                <div className="flex flex-nowrap items-center gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2">
-                  {PRODUCT_EDIT_TABS.map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`inline-flex h-10 shrink-0 items-center justify-center rounded-xl px-4 text-sm font-semibold transition ${
-                        activeTab === tab.id
-                          ? "bg-slate-900 text-white shadow-[0_10px_22px_-16px_rgba(15,23,42,0.75)]"
-                          : "text-slate-600 hover:bg-slate-100"
-                      }`}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
+                <div
+                  className={`flex flex-col gap-3 ${
+                    isDrawerMode ? "border-b border-slate-200 pb-0" : "rounded-2xl border border-slate-200 bg-white p-2"
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
+                      {visibleTabs.map((tab) => (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setActiveTab(tab.id)}
+                          className={`inline-flex h-10 shrink-0 items-center justify-center border-b-2 px-4 text-sm font-semibold transition ${
+                            activeTab === tab.id
+                              ? "border-emerald-600 text-emerald-700"
+                              : "border-transparent text-slate-500 hover:text-slate-700"
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+                    {isDrawerMode ? (
+                      <div className="flex w-full flex-wrap items-center justify-between gap-3 sm:w-auto sm:flex-nowrap sm:justify-start">
+                        <span className="text-sm font-medium text-orange-500 sm:whitespace-nowrap">
+                          Does this product have variants?
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setHasVariants((prev) => !prev)}
+                          className={`relative inline-flex h-8 w-[66px] items-center rounded-full px-1 transition ${
+                            hasVariants ? "bg-emerald-500" : "bg-rose-500"
+                          }`}
+                          aria-label="Toggle variants"
+                        >
+                          <span
+                            className={`inline-block h-6 w-6 rounded-full bg-white shadow transition ${
+                              hasVariants ? "translate-x-[34px]" : "translate-x-0"
+                            }`}
+                          />
+                          <span className="absolute right-2 text-sm font-semibold text-white">
+                            {hasVariants ? "Yes" : "No"}
+                          </span>
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
                 {activeTab === "basic" ? (
                   <>
-                <section className={sectionCardClass}>
+                <section className={activeSectionClass}>
                   <div className="grid gap-4 lg:grid-cols-2">
                     <div className="lg:col-span-2">
                       <FormRow label="Product Title/Name">
@@ -1196,23 +1349,22 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
                   </div>
                 </section>
 
-                <section className={sectionCardClass}>
-                  <SectionHeader
-                    eyebrow="Placement"
-                    title="Category"
-                    description="Assign category placement for storefront navigation."
-                    meta={
-                      <span className="inline-flex items-center rounded-full border border-sky-100 bg-sky-50 px-3 py-1 text-[11px] font-semibold text-sky-700">
-                        {selectedCategoryLabel}
-                      </span>
-                    }
-                  />
+                <section className={activeSectionClass}>
+                  {showCompactSectionHeaders ? (
+                    <SectionHeader
+                      eyebrow="Placement"
+                      title="Category"
+                      description="Assign category placement for storefront navigation."
+                      meta={
+                        <span className="inline-flex items-center rounded-full border border-sky-100 bg-sky-50 px-3 py-1 text-[11px] font-semibold text-sky-700">
+                          {selectedCategoryLabel}
+                        </span>
+                      }
+                    />
+                  ) : null}
                   <div className="grid gap-4 lg:grid-cols-2">
-                    <div className="lg:col-span-2">
-                      <FormRow
-                        label="Category"
-                        helper="Select all categories that should include this product in the catalog tree."
-                      >
+                      <div className="lg:col-span-2">
+                        <FormRow label="Category">
                         <div className="space-y-2">
                           <input
                             type="text"
@@ -1243,10 +1395,7 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
                         </div>
                       </FormRow>
                     </div>
-                    <FormRow
-                      label="Default Category"
-                      helper="Choose the primary category from the selected categories above."
-                    >
+                      <FormRow label="Default Category">
                       <select
                         value={form.defaultCategoryId ? String(form.defaultCategoryId) : ""}
                         onChange={(event) =>
@@ -1271,21 +1420,23 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
                   </div>
                 </section>
 
-                <section className={sectionCardClass}>
-                  <SectionHeader
-                    eyebrow="Commercial"
-                    title="Pricing"
-                    description="Configure base price first. Sale price is optional and must stay lower."
-                    meta={
-                      <span className="inline-flex items-center rounded-full border border-amber-100 bg-amber-50 px-3 py-1 text-[11px] font-semibold text-amber-700">
-                        Base + promo pricing
-                      </span>
-                    }
-                  />
+                <section className={activeSectionClass}>
+                  {showCompactSectionHeaders ? (
+                    <SectionHeader
+                      eyebrow="Commercial"
+                      title="Pricing"
+                      description="Configure base price first. Sale price is optional and must stay lower."
+                      meta={
+                        <span className="inline-flex items-center rounded-full border border-amber-100 bg-amber-50 px-3 py-1 text-[11px] font-semibold text-amber-700">
+                          Base + promo pricing
+                        </span>
+                      }
+                    />
+                  ) : null}
                   <div className="grid gap-4 lg:grid-cols-2">
                     <FormRow label="Product Price">
-                      <div className="flex items-center overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
-                        <span className="inline-flex h-10 w-14 items-center justify-center border-r border-slate-200 bg-slate-100 text-xs font-semibold text-slate-500">
+                      <div className="flex items-center overflow-hidden rounded-lg border border-slate-200 bg-white">
+                        <span className="inline-flex h-11 w-14 items-center justify-center border-r border-slate-200 bg-slate-50 text-xs font-semibold text-slate-500">
                           Rp
                         </span>
                         <input
@@ -1303,8 +1454,8 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
                     </FormRow>
 
                     <FormRow label="Sale Price">
-                      <div className="flex items-center overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
-                        <span className="inline-flex h-10 w-14 items-center justify-center border-r border-slate-200 bg-slate-100 text-xs font-semibold text-slate-500">
+                      <div className="flex items-center overflow-hidden rounded-lg border border-slate-200 bg-white">
+                        <span className="inline-flex h-11 w-14 items-center justify-center border-r border-slate-200 bg-slate-50 text-xs font-semibold text-slate-500">
                           Rp
                         </span>
                         <input
@@ -1322,12 +1473,14 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
                   </div>
                 </section>
 
-                <section className={sectionCardClass}>
-                  <SectionHeader
-                    eyebrow="Operations"
-                    title="Inventory"
-                    description="Manage stock, status, and product slug settings."
-                  />
+                <section className={activeSectionClass}>
+                  {showCompactSectionHeaders ? (
+                    <SectionHeader
+                      eyebrow="Operations"
+                      title="Inventory"
+                      description="Manage stock, status, and product slug settings."
+                    />
+                  ) : null}
                   <div className="grid gap-4 lg:grid-cols-2">
                     <FormRow label="Product Quantity">
                       <input
@@ -1358,17 +1511,19 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
                   </div>
                 </section>
 
-                <section className={sectionCardClass}>
-                  <SectionHeader
-                    eyebrow="Media"
-                    title="Images"
-                    description="Upload product visuals and review selected previews."
-                    meta={
-                      <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
-                        {localImages.length} file(s) attached
-                      </span>
-                    }
-                  />
+                <section className={activeSectionClass}>
+                  {showCompactSectionHeaders ? (
+                    <SectionHeader
+                      eyebrow="Media"
+                      title="Images"
+                      description="Upload product visuals and review selected previews."
+                      meta={
+                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
+                          {localImages.length}/{MAX_PRODUCT_IMAGES} image(s)
+                        </span>
+                      }
+                    />
+                  ) : null}
                   <FormRow label="Product Images">
                     <div className="space-y-3">
                       <div
@@ -1378,7 +1533,7 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
                         onDrop={(event) => {
                           event.preventDefault();
                           setDragActive(false);
-                          addFiles(event.dataTransfer.files);
+                          void addFiles(event.dataTransfer.files);
                         }}
                         onDragOver={(event) => {
                           event.preventDefault();
@@ -1391,10 +1546,10 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
                             fileInputRef.current?.click();
                           }
                         }}
-                        className={`flex h-[170px] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-6 text-center transition ${
+                        className={`flex h-[170px] cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed px-4 py-6 text-center transition ${
                           dragActive
                             ? "border-emerald-400 bg-emerald-50"
-                            : "border-slate-300 bg-slate-50 hover:border-slate-400"
+                            : "border-slate-300 bg-white hover:border-slate-400"
                         }`}
                       >
                         <UploadCloud className="mb-2 h-8 w-8 text-emerald-500" />
@@ -1404,27 +1559,36 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
                         <p className="mt-2 text-xs italic text-slate-500">
                           (Only *.jpeg, *.webp and *.png images will be accepted)
                         </p>
+                        <p className="mt-2 text-[11px] font-medium text-slate-500">
+                          Up to {MAX_PRODUCT_IMAGES} images. Square 1:1 previews are recommended.
+                        </p>
                       </div>
                       <input
                         ref={fileInputRef}
                         type="file"
                         multiple
                         accept="image/jpeg,image/png,image/webp"
-                        onChange={(event) => addFiles(event.target.files)}
+                        onChange={(event) => {
+                          void addFiles(event.target.files);
+                          event.target.value = "";
+                        }}
                         className="hidden"
                       />
                       {localImages.length > 0 ? (
-                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
                           {localImages.map((image) => (
                             <div
                               key={image.id}
-                              className="relative overflow-hidden rounded-lg border border-slate-200 bg-white"
+                              className="group relative aspect-square overflow-hidden rounded-2xl border border-slate-200 bg-slate-50"
                             >
                               <img
                                 src={image.url}
                                 alt={image.name}
-                                className="h-20 w-full object-cover"
+                                className="h-full w-full object-cover"
                               />
+                              <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/50 via-slate-900/0 to-transparent px-2 py-2 text-[10px] font-medium text-white opacity-0 transition group-hover:opacity-100">
+                                {image.remote ? "Saved" : "Ready to upload"}
+                              </div>
                               <button
                                 type="button"
                                 onClick={() => removeImage(image.id)}
@@ -1441,17 +1605,19 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
                   </FormRow>
                 </section>
 
-                <section className={sectionCardClass}>
-                  <SectionHeader
-                    eyebrow="Discovery"
-                    title="Metadata"
-                    description="Keep slug and tags organized for search and display."
-                    meta={
-                      <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
-                        {form.tags.length} tag(s)
-                      </span>
-                    }
-                  />
+                <section className={activeSectionClass}>
+                  {showCompactSectionHeaders ? (
+                    <SectionHeader
+                      eyebrow="Discovery"
+                      title="Metadata"
+                      description="Keep slug and tags organized for search and display."
+                      meta={
+                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
+                          {form.tags.length} tag(s)
+                        </span>
+                      }
+                    />
+                  ) : null}
                   <div className="grid gap-4 lg:grid-cols-2">
                     <div className="lg:col-span-2">
                       <FormRow label="Product Tags">
@@ -1497,7 +1663,7 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
                   </>
                 ) : null}
                 {activeTab === "combination" ? (
-                  <section className={sectionCardClass}>
+                  <section className={activeSectionClass}>
                     <div className="space-y-5">
                       <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 lg:flex-row lg:items-center lg:justify-between">
                         <div>
@@ -1506,28 +1672,30 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
                             Configure variant attributes and generate editable combinations.
                           </p>
                         </div>
-                        <div className="flex w-full flex-wrap items-center justify-between gap-3 sm:w-auto sm:flex-nowrap sm:justify-start">
-                          <span className="text-sm font-medium text-orange-500 sm:whitespace-nowrap">
-                            Does this product have variants?
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setHasVariants((prev) => !prev)}
-                            className={`relative inline-flex h-8 w-[66px] items-center rounded-full px-1 transition ${
-                              hasVariants ? "bg-emerald-500" : "bg-rose-500"
-                            }`}
-                            aria-label="Toggle variants"
-                          >
-                            <span
-                              className={`inline-block h-6 w-6 rounded-full bg-white shadow transition ${
-                                hasVariants ? "translate-x-[34px]" : "translate-x-0"
-                              }`}
-                            />
-                            <span className="absolute right-2 text-sm font-semibold text-white">
-                              {hasVariants ? "Yes" : "No"}
+                        {!isDrawerMode ? (
+                          <div className="flex w-full flex-wrap items-center justify-between gap-3 sm:w-auto sm:flex-nowrap sm:justify-start">
+                            <span className="text-sm font-medium text-orange-500 sm:whitespace-nowrap">
+                              Does this product have variants?
                             </span>
-                          </button>
-                        </div>
+                            <button
+                              type="button"
+                              onClick={() => setHasVariants((prev) => !prev)}
+                              className={`relative inline-flex h-8 w-[66px] items-center rounded-full px-1 transition ${
+                                hasVariants ? "bg-emerald-500" : "bg-rose-500"
+                              }`}
+                              aria-label="Toggle variants"
+                            >
+                              <span
+                                className={`inline-block h-6 w-6 rounded-full bg-white shadow transition ${
+                                  hasVariants ? "translate-x-[34px]" : "translate-x-0"
+                                }`}
+                              />
+                              <span className="absolute right-2 text-sm font-semibold text-white">
+                                {hasVariants ? "Yes" : "No"}
+                              </span>
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
 
                       {!hasVariants ? (
@@ -1842,7 +2010,7 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
                   </section>
                 ) : null}
                 {activeTab === "seo" ? (
-                  <section className={sectionCardClass}>
+                  <section className={activeSectionClass}>
                     <div className="space-y-5">
                       <div className="border-b border-slate-100 pb-4">
                         <p className="text-base font-semibold text-slate-900">SEO</p>
@@ -2014,7 +2182,7 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
                 <button
                   type="button"
                   onClick={closeForm}
-                  className="inline-flex h-12 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-800 transition hover:bg-slate-100"
+                  className="inline-flex h-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
                 >
                   Cancel
                 </button>
@@ -2029,7 +2197,11 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="inline-flex h-12 items-center justify-center rounded-xl bg-emerald-600 px-6 text-sm font-semibold text-white shadow-[0_14px_26px_-18px_rgba(5,150,105,0.7)] transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className={`inline-flex h-12 items-center justify-center rounded-xl px-6 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                  isEdit
+                    ? "bg-amber-500 shadow-[0_14px_26px_-18px_rgba(245,158,11,0.65)] hover:bg-amber-600"
+                    : "bg-emerald-600 shadow-[0_14px_26px_-18px_rgba(5,150,105,0.7)] hover:bg-emerald-700"
+                }`}
               >
                 {isSubmitting
                   ? isEdit

@@ -159,7 +159,7 @@ const STATUS_FILTER_OPTIONS = [
   { value: "", label: "All Status" },
   { value: "pending", label: "Pending" },
   { value: "processing", label: "Processing" },
-  { value: "shipping", label: "In Delivery" },
+  { value: "shipping", label: "On delivery" },
   { value: "delivered", label: "Delivered" },
   { value: "cancel", label: "Cancelled" },
 ];

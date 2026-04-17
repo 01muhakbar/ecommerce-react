@@ -4,11 +4,24 @@ import * as cartApi from "../api/cartApi.ts";
 import { fetchRemoteCartItems } from "../utils/cartSync.ts";
 
 export type CartItem = {
+  lineId?: string;
+  cartItemId?: number | null;
   productId: number;
   name: string;
   price: number;
   imageUrl?: string | null;
   qty: number;
+  stock?: number | null;
+  variantKey?: string | null;
+  variantLabel?: string | null;
+  variantSelections?: Array<{
+    attributeId: number;
+    attributeName?: string;
+    valueId?: number | null;
+    value: string;
+  }>;
+  variantSku?: string | null;
+  variantBarcode?: string | null;
 };
 
 const CART_STORAGE_KEY = "kb_cart_v1";
@@ -86,11 +99,26 @@ const normalizeCartItem = (item: any): CartItem | null => {
     return null;
   }
   return {
+    lineId:
+      typeof item?.lineId === "string"
+        ? item.lineId
+        : `${productId}:${String(item?.variantKey || "").trim().toLowerCase() || "base"}`,
+    cartItemId:
+      item?.cartItemId !== undefined && item?.cartItemId !== null
+        ? Number(item.cartItemId)
+        : null,
     productId,
     name: item?.name || item?.title || "",
     price: Number(item?.price || 0),
     imageUrl: item?.imageUrl ?? item?.image ?? item?.img ?? item?.image_url ?? null,
     qty,
+    stock:
+      item?.stock !== undefined && item?.stock !== null ? Number(item.stock) : null,
+    variantKey: String(item?.variantKey || "").trim() || null,
+    variantLabel: String(item?.variantLabel || "").trim() || null,
+    variantSelections: Array.isArray(item?.variantSelections) ? item.variantSelections : [],
+    variantSku: String(item?.variantSku || "").trim() || null,
+    variantBarcode: String(item?.variantBarcode || "").trim() || null,
   };
 };
 

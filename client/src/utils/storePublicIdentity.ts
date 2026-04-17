@@ -24,6 +24,13 @@ export type NormalizedPublicStoreIdentity = {
       label: string;
       tone: string;
     };
+    operationalReadiness: {
+      code: string;
+      label: string;
+      tone: string;
+      description: string | null;
+      isReady: boolean;
+    } | null;
     productCount: number | null;
     ratingAverage: number | null;
     ratingCount: number;
@@ -36,6 +43,9 @@ export type NormalizedPublicStoreIdentity = {
     canContact: boolean;
   };
 };
+
+export type PublicStoreOperationalReadiness =
+  NormalizedPublicStoreIdentity["summary"]["operationalReadiness"];
 
 const toText = (value: unknown, fallback = "") => {
   const normalized = String(value ?? "").trim();
@@ -83,6 +93,28 @@ export const normalizePublicStoreIdentity = (
         label: toText((source as any)?.summary?.status?.label, "Unavailable"),
         tone: toText((source as any)?.summary?.status?.tone, "neutral"),
       },
+      operationalReadiness:
+        (source as any)?.summary?.operationalReadiness &&
+        typeof (source as any).summary.operationalReadiness === "object"
+          ? {
+              code: toText(
+                (source as any).summary.operationalReadiness.code,
+                "UNKNOWN"
+              ),
+              label: toText(
+                (source as any).summary.operationalReadiness.label,
+                "Unavailable"
+              ),
+              tone: toText(
+                (source as any).summary.operationalReadiness.tone,
+                "neutral"
+              ),
+              description: toText(
+                (source as any).summary.operationalReadiness.description
+              ),
+              isReady: Boolean((source as any).summary.operationalReadiness.isReady),
+            }
+          : null,
       productCount: Number.isFinite(Number((source as any)?.summary?.productCount))
         ? Number((source as any)?.summary?.productCount)
         : null,
@@ -109,6 +141,17 @@ export const normalizePublicStoreIdentity = (
       canContact: Boolean((source as any)?.summary?.canContact),
     },
   };
+};
+
+export const getPublicStoreOperationalReadiness = (
+  identity: Pick<NormalizedPublicStoreIdentity, "summary"> | null | undefined
+): PublicStoreOperationalReadiness => identity?.summary?.operationalReadiness || null;
+
+export const isPublicStoreOperationallyReady = (
+  identity: Pick<NormalizedPublicStoreIdentity, "summary"> | null | undefined
+) => {
+  const readiness = getPublicStoreOperationalReadiness(identity);
+  return readiness ? Boolean(readiness.isReady) : true;
 };
 
 export const resolvePreferredText = (

@@ -6,6 +6,12 @@ interface OrderItemAttributes {
   productId: number;
   quantity: number;
   price: number;
+  variantKey?: string | null;
+  variantLabel?: string | null;
+  variantSelections?: any;
+  skuSnapshot?: string | null;
+  barcodeSnapshot?: string | null;
+  imageSnapshot?: string | null;
 }
 
 interface OrderItemCreationAttributes
@@ -20,6 +26,12 @@ export class OrderItem
   declare productId: number;
   declare quantity: number;
   declare price: number;
+  declare variantKey?: string | null;
+  declare variantLabel?: string | null;
+  declare variantSelections?: any;
+  declare skuSnapshot?: string | null;
+  declare barcodeSnapshot?: string | null;
+  declare imageSnapshot?: string | null;
 
   declare readonly createdAt: Date;
   declare readonly updatedAt: Date;
@@ -57,6 +69,30 @@ export class OrderItem
         price: {
           type: DataTypes.DECIMAL(10, 2),
           allowNull: false,
+        },
+        variantKey: {
+          type: DataTypes.STRING(255),
+          allowNull: true,
+        },
+        variantLabel: {
+          type: DataTypes.STRING(255),
+          allowNull: true,
+        },
+        variantSelections: {
+          type: DataTypes.JSON,
+          allowNull: true,
+        },
+        skuSnapshot: {
+          type: DataTypes.STRING(100),
+          allowNull: true,
+        },
+        barcodeSnapshot: {
+          type: DataTypes.STRING(100),
+          allowNull: true,
+        },
+        imageSnapshot: {
+          type: DataTypes.STRING(255),
+          allowNull: true,
         },
       },
       {

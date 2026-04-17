@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { Link } from "react-router-dom";
-import { useAuth } from "../../auth/useAuth.js";
+import { useAccountAuth } from "../../auth/authDomainHooks.js";
 
 const toText = (value, fallback = "") => {
   const normalized = String(value ?? "").trim();
@@ -25,7 +25,7 @@ export default function TopInfoBar({
   menuEnabled = {},
   isHeaderLoading = false,
 }) {
-  const { isAuthenticated, logout } = useAuth() || {};
+  const { isAccountSession, logout } = useAccountAuth();
   const safeHeaderText = toText(headerText);
   const safePhoneNumber = toText(phoneNumber);
   const safeWhatsAppLink = toText(whatsAppLink);
@@ -57,7 +57,7 @@ export default function TopInfoBar({
     label: toText(menuLabels.myAccount, "My Account"),
   });
 
-  if (isAuthenticated) {
+  if (isAccountSession) {
     utilityItems.push({
       key: "logout",
       type: "button",

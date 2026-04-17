@@ -289,6 +289,13 @@ export type PublicStoreIdentity = {
       label?: string;
       tone?: string;
     };
+    operationalReadiness?: {
+      code?: string;
+      label?: string;
+      tone?: string;
+      description?: string | null;
+      isReady?: boolean;
+    } | null;
     productCount?: number | null;
     ratingAverage?: number | null;
     ratingCount?: number | null;

@@ -7,7 +7,7 @@ import {
 
 export default function AccountGuard() {
   const location = useLocation();
-  const { user, isLoading, isAuthenticated } = useAccountAuth();
+  const { user, isLoading, isAccountSession } = useAccountAuth();
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
@@ -16,7 +16,7 @@ export default function AccountGuard() {
     );
   }
 
-  if (!isAuthenticated || !user) {
+  if (!isAccountSession || !user) {
     return (
       <Navigate
         to="/auth/login"

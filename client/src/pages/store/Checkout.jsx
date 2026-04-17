@@ -592,6 +592,10 @@ function resolveInvalidCheckoutItemMessage(item) {
         return `Requested ${requested}, but only ${Math.max(0, available)} left in stock.`;
       }
       return "Stock changed before checkout. Update the cart quantity and try again.";
+    case "PRODUCT_VARIANT_MISSING":
+      return "The selected product variant is no longer available. Update the cart selection and try again.";
+    case "PRODUCT_VARIANT_REQUIRED":
+      return "This product now requires a variant selection before checkout can continue.";
     case "PRODUCT_NOT_PUBLIC":
       return "This item is no longer publicly purchasable because the product or its store is currently gated.";
     case "PRODUCT_STORE_UNMAPPED":
@@ -722,14 +726,17 @@ export default function CheckoutPage() {
   useOutletContext();
   const { user, isLoading: isAuthLoading } = useAuth() || {};
   const queryClient = useQueryClient();
-  const { isLoading: isCartLoading, hasInitialized: hasCartBootstrapInitialized } = useCart();
-  const items = useCartStore((state) => state.items);
+  const {
+    items,
+    isLoading: isCartLoading,
+    hasInitialized: hasCartBootstrapInitialized,
+    update: updateCartItem,
+    remove: removeCartItem,
+  } = useCart();
   const hasHydrated = useCartStore((state) => state.hasHydrated);
   const subtotal = useCartStore((state) => state.subtotal);
   const totalQty = useCartStore((state) => state.totalQty);
   const clearCart = useCartStore((state) => state.clearCart);
-  const updateQty = useCartStore((state) => state.updateQty);
-  const removeItem = useCartStore((state) => state.removeItem);
   const isRemoteSyncing = useCartStore((state) => state.isRemoteSyncing);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -856,19 +863,24 @@ export default function CheckoutPage() {
   const summaryItems = useMemo(
     () =>
       items.map((item) => ({
+        lineId: item.lineId || `${Number(item.productId ?? item.id)}:${String(item.variantKey || "base")}`,
+        cartItemId: Number(item.cartItemId) || null,
         productId: Number(item.productId ?? item.id),
         name: item.name || "Product",
         qty: Math.max(1, Number(item.qty ?? 1)),
         price: Number(item.price ?? 0),
         imageUrl: item.imageUrl ?? item.image ?? null,
         stock: item.stock ?? null,
+        variantKey: item.variantKey ?? null,
+        variantLabel: item.variantLabel ?? null,
+        variantSelections: Array.isArray(item.variantSelections) ? item.variantSelections : [],
       })),
     [items]
   );
   const checkoutPreviewSignature = useMemo(
     () =>
       summaryItems
-        .map((item) => `${item.productId}:${item.qty}`)
+        .map((item) => `${item.lineId}:${item.qty}`)
         .sort()
         .join("|"),
     [summaryItems]
@@ -915,7 +927,10 @@ export default function CheckoutPage() {
       },
       paymentMethod,
       items: summaryItems.map((item) => ({
+        lineId: item.lineId,
+        cartItemId: item.cartItemId,
         productId: item.productId,
+        variantKey: item.variantKey,
         qty: item.qty,
       })),
       couponCode: appliedCouponMeta?.code || undefined,
@@ -1375,7 +1390,7 @@ export default function CheckoutPage() {
   const handleQtyDecrement = (item) => {
     const currentQty = Math.max(1, Number(item.qty ?? 1));
     if (currentQty <= 1) return;
-    updateQty(item.productId, currentQty - 1);
+    updateCartItem(item, currentQty - 1);
   };
 
   const handleQtyIncrement = (item) => {
@@ -1384,7 +1399,7 @@ export default function CheckoutPage() {
     const stock = Number.isFinite(stockValue) && stockValue >= 0 ? stockValue : null;
     const nextQty = stock !== null ? Math.min(stock, currentQty + 1) : currentQty + 1;
     if (nextQty <= currentQty) return;
-    updateQty(item.productId, nextQty);
+    updateCartItem(item, nextQty);
   };
 
   const handleToggleDefaultShipping = async () => {
@@ -1570,10 +1585,13 @@ export default function CheckoutPage() {
       const checkoutRequestSignature = JSON.stringify({
         items: summaryItems
           .map((item) => ({
+            lineId: String(item.lineId),
+            cartItemId: Number(item.cartItemId || 0),
             productId: Number(item.productId),
+            variantKey: item.variantKey || null,
             qty: Number(item.qty),
           }))
-          .sort((left, right) => left.productId - right.productId),
+          .sort((left, right) => String(left.lineId).localeCompare(String(right.lineId))),
         couponCode: submitPayload.couponCode || null,
         groupCoupons: Array.isArray(submitPayload.groupCoupons)
           ? [...submitPayload.groupCoupons].sort(
@@ -2673,7 +2691,7 @@ export default function CheckoutPage() {
                 const canIncrement = stock === null || item.qty < stock;
                 return (
                   <div
-                    key={item.productId}
+                    key={item.lineId}
                     className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5"
                   >
                     <div className="flex items-start gap-3">
@@ -2694,6 +2712,11 @@ export default function CheckoutPage() {
                         <p className="break-words text-sm font-semibold leading-5 text-slate-900">
                           {item.name}
                         </p>
+                        {item.variantLabel ? (
+                          <p className="mt-1 text-xs font-medium text-slate-500">
+                            Variant: {item.variantLabel}
+                          </p>
+                        ) : null}
                         <p className="mt-1 text-xs text-slate-500">
                           {checkoutCopy.cartItemSection.itemPriceLabel} {formatCurrency(item.price)}
                         </p>
@@ -2703,7 +2726,7 @@ export default function CheckoutPage() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => removeItem(item.productId)}
+                        onClick={() => removeCartItem(item)}
                         disabled={isSubmitting || isRemoteSyncing}
                         className="rounded-full p-1.5 text-rose-500 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
                         aria-label={`Remove ${item.name}`}

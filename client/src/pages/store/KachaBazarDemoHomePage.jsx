@@ -7,6 +7,7 @@ import { getStoreCustomization } from "../../api/public/storeCustomizationPublic
 import { getStorePublicIdentity } from "../../api/public/storePublicIdentity.ts";
 import { formatCurrency } from "../../utils/format.js";
 import { resolveAssetUrl } from "../../lib/assetUrl.js";
+import { normalizePublicStoreIdentity } from "../../utils/storePublicIdentity.ts";
 import CouponPanel from "../../components/kachabazar-demo/CouponPanel.jsx";
 import FeatureStrip from "../../components/kachabazar-demo/FeatureStrip.jsx";
 import FeaturedCategoriesSection from "../../components/kachabazar-demo/FeaturedCategoriesSection.jsx";
@@ -587,7 +588,10 @@ export default function KachaBazarDemoHomePage() {
     retry: 1,
     refetchOnWindowFocus: false,
   });
-  const publicStore = storeIdentityQuery.data?.data || null;
+  const publicStore = useMemo(
+    () => normalizePublicStoreIdentity(storeIdentityQuery.data),
+    [storeIdentityQuery.data]
+  );
   const publicStoreSlug = toText(publicStore?.slug).toLowerCase();
   const publicStoreName = toText(publicStore?.name);
   const couponsQuery = useQuery({

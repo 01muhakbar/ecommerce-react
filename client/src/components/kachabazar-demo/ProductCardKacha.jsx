@@ -5,6 +5,7 @@ import { useCart } from "../../hooks/useCart.ts";
 import { formatCurrency } from "../../utils/format.js";
 import { resolveProductImageUrl } from "../../utils/productImage.js";
 import { resolveAssetUrl } from "../../lib/assetUrl.js";
+import { productHasVariantSelections } from "../../utils/publicProductVariations.js";
 
 const FALLBACK_IMAGE = "/demo/placeholder-product.svg";
 
@@ -74,10 +75,12 @@ export default function ProductCardKacha({ product }) {
   const purchaseLabel = isPurchasable
     ? null
     : purchaseState?.label || (isOutOfStock ? "Out of stock" : "Unavailable");
+  const hasVariants = productHasVariantSelections(product?.variations);
 
   const handleAdd = (event) => {
     event.preventDefault();
     event.stopPropagation();
+    if (hasVariants) return;
     if (isAdding || !product?.id || !isPurchasable) return;
     setIsAdding(true);
     add(product.id, 1, {
@@ -134,9 +137,21 @@ export default function ProductCardKacha({ product }) {
             <button
               type="button"
               onClick={handleAdd}
-              aria-label={!isPurchasable ? "Unavailable" : "Add to cart"}
-              title={!isPurchasable ? purchaseLabel || "Unavailable" : "Add to cart"}
-              disabled={isAdding || isLoading || !isPurchasable}
+              aria-label={
+                hasVariants
+                  ? "Select options on the product page"
+                  : !isPurchasable
+                    ? "Unavailable"
+                    : "Add to cart"
+              }
+              title={
+                hasVariants
+                  ? "Select options on the product page"
+                  : !isPurchasable
+                    ? purchaseLabel || "Unavailable"
+                    : "Add to cart"
+              }
+              disabled={isAdding || isLoading || !isPurchasable || hasVariants}
               className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-70 sm:h-10 sm:w-10"
             >
               {!isPurchasable ? "!" : isAdding ? "✓" : <ShoppingCart className="h-4.5 w-4.5" />}

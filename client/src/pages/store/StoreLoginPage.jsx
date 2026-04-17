@@ -22,7 +22,7 @@ export default function StoreLoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { storeSettings } = useOutletContext() || {};
-  const { refreshSession, isAuthenticated } = useAccountAuth();
+  const { refreshSession, isAccountSession } = useAccountAuth();
   const { refreshCart } = useCart();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -47,10 +47,10 @@ export default function StoreLoginPage() {
   ].filter((item) => item.enabled);
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAccountSession) {
       navigate("/account", { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAccountSession, navigate]);
 
   useEffect(() => {
     const nextMessage = String(
@@ -102,7 +102,12 @@ export default function StoreLoginPage() {
             const id = Number(item?.productId);
             const qty = Math.max(1, Number(item?.qty) || 1);
             if (!Number.isFinite(id) || id <= 0) continue;
-            await cartApi.addToCart(id, qty);
+            await cartApi.addToCart(id, qty, {
+              variantKey: item?.variantKey ?? null,
+              variantSelections: Array.isArray(item?.variantSelections)
+                ? item.variantSelections
+                : [],
+            });
           }
           clearGuestCart();
         } catch (mergeError) {
@@ -128,7 +133,7 @@ export default function StoreLoginPage() {
           const id = Number(parsed?.productId);
           const qty = Math.max(1, Number(parsed?.qty) || 1);
           if (Number.isFinite(id) && id > 0) {
-            await cartApi.addToCart(id, qty);
+            await cartApi.addToCart(id, qty, parsed?.snapshot || undefined);
           }
           return typeof parsed?.from === "string" ? parsed.from : null;
         } catch (mergeError) {
