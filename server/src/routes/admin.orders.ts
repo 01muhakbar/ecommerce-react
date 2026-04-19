@@ -22,6 +22,7 @@ import { resolveBuyerFacingPaymentStatus } from "../services/paymentCheckoutView
 import {
   buildAction,
   buildAdminOrderContract,
+  buildFulfillmentStatusMeta,
   buildPaymentStatusMeta,
 } from "../services/orderLifecycleContract.service.js";
 import { buildOrderShippingReadModel } from "../services/orderShippingReadModel.service.js";
@@ -645,19 +646,22 @@ const orderDetailInclude: any[] = [
       },
     ],
   },
-  {
-    model: Suborder,
-    as: "suborders",
-    attributes: [
-      "id",
-      "suborderNumber",
-      "storeId",
-      "shippingAmount",
-      "paymentStatus",
-      "fulfillmentStatus",
-    ],
-    required: false,
-    include: [
+      {
+        model: Suborder,
+        as: "suborders",
+        attributes: [
+          "id",
+          "suborderNumber",
+          "storeId",
+          "subtotalAmount",
+          "shippingAmount",
+          "serviceFeeAmount",
+          "totalAmount",
+          "paymentStatus",
+          "fulfillmentStatus",
+        ],
+        required: false,
+        include: [
       {
         model: Store,
         as: "store",
@@ -667,16 +671,35 @@ const orderDetailInclude: any[] = [
       {
         model: SuborderItem,
         as: "items",
-        attributes: ["id", "qty", "priceSnapshot", "totalPrice", ["product_id", "productId"]],
+        attributes: [
+          "id",
+          "productNameSnapshot",
+          "skuSnapshot",
+          "variantKey",
+          "variantLabel",
+          "variantSelections",
+          "barcodeSnapshot",
+          "imageSnapshot",
+          "qty",
+          "priceSnapshot",
+          "totalPrice",
+          ["product_id", "productId"],
+        ],
         required: false,
         include: [
           {
             model: Product,
             as: "product",
-            attributes: ["id", "name"],
+            attributes: ["id", "name", "slug"],
             required: false,
           },
         ],
+      },
+      {
+        model: Payment,
+        as: "payments",
+        attributes: ["id", "status", "expiresAt", "paidAt", "updatedAt"],
+        required: false,
       },
       {
         model: Shipment,
@@ -751,6 +774,84 @@ const toOrderDetailPayload = (orderItem: any) => {
   const customer = (orderItem as any).customer ?? null;
   const suborders = Array.isArray((orderItem as any).suborders) ? (orderItem as any).suborders : [];
   const shippingReadModel = buildOrderShippingReadModel(suborders);
+  const groups = suborders.map((suborder: any) => {
+    const payments = Array.isArray(suborder?.payments)
+      ? [...suborder.payments].sort((left: any, right: any) => {
+          const leftTime = new Date(getAttr(left, "updatedAt") || 0).getTime();
+          const rightTime = new Date(getAttr(right, "updatedAt") || 0).getTime();
+          if (rightTime !== leftTime) return rightTime - leftTime;
+          return Number(getAttr(right, "id") || 0) - Number(getAttr(left, "id") || 0);
+        })
+      : [];
+    const latestPayment = payments[0] ?? null;
+    const paymentStatus = normalizeSuborderPaymentStatus(getAttr(suborder, "paymentStatus"));
+    const fulfillmentStatus = normalizeSuborderFulfillmentStatus(
+      getAttr(suborder, "fulfillmentStatus")
+    );
+    const displayStatus = resolveBuyerFacingPaymentStatus({
+      paymentStatus: getAttr(latestPayment, "status") || "CREATED",
+      suborderPaymentStatus: paymentStatus,
+      expiresAt: getAttr(latestPayment, "expiresAt") || null,
+    });
+    const shippingSummary =
+      shippingReadModel.suborders.get(Number(getAttr(suborder, "id") || 0)) ?? null;
+    return {
+      suborderId: Number(getAttr(suborder, "id") || 0) || null,
+      suborderNumber: String(getAttr(suborder, "suborderNumber") || "").trim() || null,
+      storeId: Number(getAttr(suborder, "storeId") || getAttr(suborder?.store, "id") || 0) || null,
+      storeName: String(
+        getAttr(suborder?.store, "name") || `Store #${getAttr(suborder, "storeId")}`
+      ),
+      storeSlug: String(getAttr(suborder?.store, "slug") || "").trim() || null,
+      subtotalAmount: Number(getAttr(suborder, "subtotalAmount") || 0),
+      shippingAmount: Number(getAttr(suborder, "shippingAmount") || 0),
+      serviceFeeAmount: Number(getAttr(suborder, "serviceFeeAmount") || 0),
+      totalAmount: Number(getAttr(suborder, "totalAmount") || 0),
+      paymentStatus,
+      paymentStatusMeta: buildPaymentStatusMeta(paymentStatus),
+      fulfillmentStatus,
+      fulfillmentStatusMeta: buildFulfillmentStatusMeta(fulfillmentStatus),
+      shippingStatus: shippingSummary?.shippingStatus ?? fulfillmentStatus,
+      shippingStatusMeta:
+        shippingSummary?.shippingStatusMeta ?? buildFulfillmentStatusMeta(fulfillmentStatus),
+      usedLegacyFallback: Boolean(shippingSummary?.usedLegacyFallback),
+      hasPersistedShipment: Boolean(shippingSummary?.hasPersistedShipment),
+      compatibilityMatchesStorage:
+        typeof shippingSummary?.compatibilityMatchesStorage === "boolean"
+          ? shippingSummary.compatibilityMatchesStorage
+          : true,
+      payment: latestPayment
+        ? {
+            id: Number(getAttr(latestPayment, "id") || 0) || null,
+            status: String(getAttr(latestPayment, "status") || "CREATED"),
+            statusMeta: buildPaymentStatusMeta(getAttr(latestPayment, "status") || "CREATED"),
+            displayStatus,
+            displayStatusMeta: buildPaymentStatusMeta(displayStatus),
+            expiresAt: getAttr(latestPayment, "expiresAt") || null,
+            paidAt: getAttr(latestPayment, "paidAt") || null,
+          }
+        : null,
+      items: (Array.isArray(suborder?.items) ? suborder.items : []).map((item: any) => ({
+        id: Number(getAttr(item, "id") || 0) || null,
+        productId: Number(getAttr(item, "productId") || 0) || null,
+        productName: String(
+          getAttr(item, "productNameSnapshot") ||
+            getAttr(item?.product, "name") ||
+            `Product #${getAttr(item, "productId")}`
+        ),
+        slug: String(getAttr(item?.product, "slug") || "").trim() || null,
+        qty: Number(getAttr(item, "qty") || 0),
+        price: Number(getAttr(item, "priceSnapshot") || 0),
+        lineTotal: Number(getAttr(item, "totalPrice") || 0),
+        image: String(getAttr(item, "imageSnapshot") || "").trim() || null,
+        variantKey: String(getAttr(item, "variantKey") || "").trim() || null,
+        variantLabel: String(getAttr(item, "variantLabel") || "").trim() || null,
+        variantSelections: normalizeVariantSelectionsSnapshot(getAttr(item, "variantSelections")),
+        sku: String(getAttr(item, "skuSnapshot") || "").trim() || null,
+        barcode: String(getAttr(item, "barcodeSnapshot") || "").trim() || null,
+      })),
+    };
+  });
 
   const computedSubtotal = items.reduce((sum: number, item: any) => {
     return sum + Number(item.lineTotal || 0);
@@ -805,6 +906,7 @@ const toOrderDetailPayload = (orderItem: any) => {
     shipmentAuditMeta: shippingReadModel.shipmentAuditMeta,
     suborderShipmentSummary: shippingReadModel.suborderShipmentSummary,
     shipments: shippingReadModel.shipments,
+    groups,
     items,
   };
 };

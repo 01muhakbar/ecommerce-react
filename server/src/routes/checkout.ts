@@ -505,6 +505,32 @@ const normalizeShippingDetails = (raw: any): ShippingDetailsSnapshot | null => {
   return parsed.success ? parsed.data : null;
 };
 
+const resolveCheckoutInvalidItemMessage = (
+  code: string,
+  extras: { available?: number | null; requested?: number | null } = {}
+) => {
+  switch (String(code || "").trim().toUpperCase()) {
+    case "PRODUCT_VARIANT_REQUIRED":
+      return "Choose a variant before continuing with checkout.";
+    case "PRODUCT_VARIANT_MISSING":
+      return "This cart line has lost its variant selection. Remove it and choose the variant again.";
+    case "VARIANT_NOT_AVAILABLE":
+      return "This variant is no longer available. Remove it or choose another variant.";
+    case "PRODUCT_OUT_OF_STOCK":
+      return "This product is currently out of stock.";
+    case "PRODUCT_STOCK_REDUCED": {
+      const available = Math.max(0, Number(extras.available || 0));
+      return `Stock changed. Reduce the quantity to ${available} and try again.`;
+    }
+    case "PRODUCT_NOT_PUBLIC":
+      return "This item is no longer publicly available for checkout.";
+    case "PRODUCT_STORE_UNMAPPED":
+      return "This item is missing its store checkout binding and cannot proceed.";
+    default:
+      return "This cart line is currently blocked from checkout.";
+  }
+};
+
 const getMissingShippingField = (
   details: ShippingDetailsSnapshot | null
 ): string | null => {
@@ -629,7 +655,7 @@ const resolveCheckoutCartLineSnapshot = (product: any) => {
       cartItemId: toNumber(cartItem?.id, 0) || null,
       variantKey,
       variantSelections,
-      invalidReason: hasVariantSelection ? "PRODUCT_VARIANT_MISSING" : "PRODUCT_VARIANT_REQUIRED",
+      invalidReason: "PRODUCT_VARIANT_MISSING",
     };
   }
 
@@ -1010,16 +1036,29 @@ const buildInvalidCheckoutItem = (
   extras: { available?: number | null; requested?: number | null } = {}
 ) => {
   const productId = toNumber(getAttr(product, "id"));
+  const variantKey = String(product?.CartItem?.variantKey || "").trim() || null;
+  const lineId = buildCheckoutLineId(productId, variantKey);
+  const available = extras.available == null ? null : Math.max(0, Number(extras.available) || 0);
+  const requested = extras.requested == null ? null : Math.max(0, Number(extras.requested) || 0);
   return {
-    lineId: buildCheckoutLineId(productId, product?.CartItem?.variantKey ?? null),
+    lineId,
     cartItemId: toNumber(product?.CartItem?.id, 0) || null,
     productId,
     productName: String(getAttr(product, "name") || `Product #${productId}`),
+    code: reason,
     reason,
-    available:
-      extras.available == null ? null : Math.max(0, Number(extras.available) || 0),
-    requested:
-      extras.requested == null ? null : Math.max(0, Number(extras.requested) || 0),
+    variantKey,
+    message: resolveCheckoutInvalidItemMessage(reason, extras),
+    meta: {
+      productId,
+      lineId,
+      cartItemId: toNumber(product?.CartItem?.id, 0) || null,
+      variantKey,
+      availableStock: available,
+      requestedQty: requested,
+    },
+    available,
+    requested,
   };
 };
 
@@ -1039,11 +1078,7 @@ const prepareCartGroups = (cartItems: any[]) => {
     const lineTotal = unitPrice * quantity;
 
     if (!isStorefrontProductVisible(product)) {
-      invalidItems.push({
-        productId,
-        productName: String(getAttr(product, "name") || `Product #${productId}`),
-        reason: "PRODUCT_NOT_PUBLIC",
-      });
+      invalidItems.push(buildInvalidCheckoutItem(product, "PRODUCT_NOT_PUBLIC"));
       continue;
     }
 
@@ -1935,6 +1970,7 @@ router.post("/preview", async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Cart is empty.",
+        code: "CART_EMPTY",
       });
     }
 
@@ -1959,6 +1995,7 @@ router.post("/create-multi-store", async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Invalid payload.",
+        code: "CHECKOUT_PAYLOAD_INVALID",
         errors: parsed.error.flatten(),
       });
     }
@@ -2074,6 +2111,7 @@ router.post("/create-multi-store", async (req, res) => {
         return res.status(400).json({
           success: false,
           message: "Cart is empty.",
+          code: "CART_EMPTY",
         });
       }
 
@@ -2111,6 +2149,7 @@ router.post("/create-multi-store", async (req, res) => {
         return res.status(409).json({
           success: false,
           message: "Some cart items are no longer eligible for checkout.",
+          code: "CHECKOUT_INVALID_ITEMS",
           data: {
             invalidItems: prepared.invalidItems,
           },
@@ -2142,9 +2181,20 @@ router.post("/create-multi-store", async (req, res) => {
         const currentStock = Math.max(0, toNumber(lineSnapshot.stock, 0));
         if (currentStock < entry.requested) {
           await tx.rollback();
+          const stockCode = currentStock <= 0 ? "PRODUCT_OUT_OF_STOCK" : "PRODUCT_STOCK_REDUCED";
           return res.status(409).json({
             success: false,
-            message: "Insufficient stock",
+            message: resolveCheckoutInvalidItemMessage(stockCode, {
+              available: currentStock,
+              requested: entry.requested,
+            }),
+            code: stockCode,
+            meta: {
+              productId: entry.productId,
+              variantKey: entry.variantKey,
+              availableStock: currentStock,
+              requestedQty: entry.requested,
+            },
             data: {
               productId: entry.productId,
               name: entry.productName,

@@ -72,6 +72,40 @@ const normalizeUploadsUrl = (value?: string | null) => {
   return `/uploads/${text}`;
 };
 
+const createControllerError = (
+  message: string,
+  options: {
+    statusCode?: number;
+    code?: string;
+    meta?: Record<string, unknown> | null;
+  } = {}
+) => {
+  const error: any = new Error(message);
+  error.statusCode = Number(options.statusCode || 500);
+  error.code = String(options.code || "").trim() || undefined;
+  error.meta = options.meta ?? undefined;
+  return error;
+};
+
+const sendControllerError = (
+  res: Response,
+  error: unknown,
+  fallbackMessage: string
+) => {
+  const statusCode = Number((error as any)?.statusCode || 500);
+  const code = String((error as any)?.code || "").trim();
+  const meta = (error as any)?.meta;
+  res.status(statusCode).json({
+    message:
+      statusCode >= 400 && statusCode < 500
+        ? (error as Error).message
+        : fallbackMessage,
+    error: (error as Error).message,
+    ...(code ? { code } : {}),
+    ...(meta && typeof meta === "object" ? { meta } : {}),
+  });
+};
+
 const normalizeVariantSelectionCompareKey = (selection: any) =>
   `${Number(selection?.attributeId) || 0}:${String(selection?.valueId ?? selection?.value ?? "")
     .trim()
@@ -322,6 +356,7 @@ const loadCartProductsForRead = async (cartId: number, supportedVariantFields: S
 const resolveRequestedCartVariant = (product: any, body: Record<string, any>) => {
   const variationState = normalizeProductVariationState(getAttr(product, "variations"));
   if (!variationState.hasVariants) return null;
+  const productId = Number(getAttr(product, "id") ?? product?.id ?? 0) || null;
 
   const rawVariantKey = String(body?.variantKey || "").trim();
   const rawSelections = Array.isArray(body?.variantSelections) ? body.variantSelections : [];
@@ -343,10 +378,13 @@ const resolveRequestedCartVariant = (product: any, body: Record<string, any>) =>
     rawVariantKey || (normalizedSelections.length > 0 ? buildVariantCombinationKey(normalizedSelections) : "");
 
   if (!resolvedVariantKey) {
-    const error: any = new Error("Select a product variant before adding this item to cart.");
-    error.statusCode = 409;
-    error.code = "VARIANT_REQUIRED";
-    throw error;
+    throw createControllerError("Choose a variant before adding this product to the cart.", {
+      statusCode: 409,
+      code: "PRODUCT_VARIANT_REQUIRED",
+      meta: {
+        productId,
+      },
+    });
   }
 
   const variant =
@@ -354,10 +392,15 @@ const resolveRequestedCartVariant = (product: any, body: Record<string, any>) =>
       (entry: any) => String(entry?.combinationKey || "").trim() === resolvedVariantKey
     ) || null;
   if (!variant) {
-    const error: any = new Error("Selected product variant is no longer available.");
-    error.statusCode = 409;
-    error.code = "VARIANT_NOT_AVAILABLE";
-    throw error;
+    throw createControllerError("This variant is no longer available. Choose another variant.", {
+      statusCode: 409,
+      code: "VARIANT_NOT_AVAILABLE",
+      meta: {
+        productId,
+        variantKey: resolvedVariantKey,
+        variantSelections: normalizedSelections,
+      },
+    });
   }
   return variant;
 };
@@ -535,29 +578,54 @@ const loadCartProductForMutation = async (
 const validateCartMutationProduct = (
   product: any,
   requestedQty: number,
-  snapshot?: { stockSnapshot?: number | null }
+  snapshot?: {
+    stockSnapshot?: number | null;
+    variantKey?: string | null;
+    variantLabel?: string | null;
+  }
 ) => {
+  const productId = Number(getAttr(product, "id") ?? product?.id ?? 0) || null;
   if (!product) {
-    const error: any = new Error("Product not found.");
-    error.statusCode = 404;
-    throw error;
+    throw createControllerError("Product not found.", {
+      statusCode: 404,
+      code: "PRODUCT_NOT_FOUND",
+      meta: {
+        productId,
+      },
+    });
   }
 
   if (!isStorefrontCartEligible(product)) {
-    const error: any = new Error("Product is no longer available for purchase.");
-    error.statusCode = 409;
-    error.code = "PRODUCT_NOT_AVAILABLE";
-    throw error;
+    throw createControllerError("This product is no longer available for purchase.", {
+      statusCode: 409,
+      code: "PRODUCT_NOT_AVAILABLE",
+      meta: {
+        productId,
+        variantKey: snapshot?.variantKey ?? null,
+        variantLabel: snapshot?.variantLabel ?? null,
+      },
+    });
   }
 
   const stock = Number(snapshot?.stockSnapshot ?? getAttr(product, "stock") ?? 0);
   if (!Number.isFinite(stock) || stock < requestedQty) {
-    const error: any = new Error(
-      `Not enough stock. Only ${Math.max(0, Number.isFinite(stock) ? stock : 0)} items available.`
+    const availableStock = Math.max(0, Number.isFinite(stock) ? stock : 0);
+    throw createControllerError(
+      availableStock <= 0
+        ? "This product is currently out of stock."
+        : `Stock changed. Reduce the quantity to ${availableStock} and try again.`,
+      {
+        statusCode: 409,
+        code: availableStock <= 0 ? "PRODUCT_OUT_OF_STOCK" : "PRODUCT_STOCK_REDUCED",
+        meta: {
+          productId,
+          variantKey: snapshot?.variantKey ?? null,
+          variantLabel: snapshot?.variantLabel ?? null,
+          availableStock,
+          requestedQty,
+        },
+      }
     );
-    error.statusCode = 409;
-    error.code = "INSUFFICIENT_STOCK";
-    throw error;
   }
 };
 
@@ -648,17 +716,7 @@ export const addToCart = async (
     });
   } catch (error) {
     console.error("ADD TO CART ERROR:", error);
-    const statusCode = Number((error as any)?.statusCode || 500);
-    res.status(statusCode).json({
-      message:
-        statusCode >= 400 && statusCode < 500
-          ? (error as Error).message
-          : "Failed to add product to cart.",
-      error: (error as Error).message,
-      ...(String((error as any)?.code || "").trim()
-        ? { code: String((error as any).code) }
-        : {}),
-    });
+    sendControllerError(res, error, "Failed to add product to cart.");
   }
 };
 
@@ -820,17 +878,7 @@ export const updateCartItem = async (
     res.status(200).json({ message: "Cart updated successfully." });
   } catch (error) {
     console.error("UPDATE CART ERROR:", error);
-    const statusCode = Number((error as any)?.statusCode || 500);
-    res.status(statusCode).json({
-      message:
-        statusCode >= 400 && statusCode < 500
-          ? (error as Error).message
-          : "Failed to update cart.",
-      error: (error as Error).message,
-      ...(String((error as any)?.code || "").trim()
-        ? { code: String((error as any).code) }
-        : {}),
-    });
+    sendControllerError(res, error, "Failed to update cart.");
   }
 };
 
@@ -891,19 +939,46 @@ export const setCartItemQty = async (
       }
 
       const product = await loadCartProductForMutation(resolved.resolvedProductId, t);
+      const variationState = normalizeProductVariationState(getAttr(product, "variations"));
+      const persistedVariantKey = String(getAttr(cartItem, "variantKey") || "").trim() || null;
+      const persistedVariantSelections = normalizeJsonValue(getAttr(cartItem, "variantSelections"));
+      if (
+        cartItem &&
+        variationState.hasVariants &&
+        !persistedVariantKey &&
+        (!Array.isArray(persistedVariantSelections) || persistedVariantSelections.length === 0)
+      ) {
+        throw createControllerError(
+          "This cart line has lost its variant selection. Remove it and add the product again.",
+          {
+            statusCode: 409,
+            code: "PRODUCT_VARIANT_MISSING",
+            meta: {
+              productId: resolved.resolvedProductId,
+              cartItemId: Number(getAttr(cartItem, "id") ?? 0) || null,
+            },
+          }
+        );
+      }
       const lineStockSnapshot =
         cartItem &&
         supportedVariantFields.has("variantKey") &&
-        String(getAttr(cartItem, "variantKey") || "").trim()
+        persistedVariantKey
           ? buildCartLineSnapshot(
               product,
               resolveRequestedCartVariant(product, {
-                variantKey: getAttr(cartItem, "variantKey"),
-                variantSelections: normalizeJsonValue(getAttr(cartItem, "variantSelections")),
+                variantKey: persistedVariantKey,
+                variantSelections: Array.isArray(persistedVariantSelections)
+                  ? persistedVariantSelections
+                  : [],
               })
             ).stockSnapshot
           : Number(getAttr(product, "stock") ?? 0);
-      validateCartMutationProduct(product, qty, { stockSnapshot: lineStockSnapshot });
+      validateCartMutationProduct(product, qty, {
+        stockSnapshot: lineStockSnapshot,
+        variantKey: persistedVariantKey,
+        variantLabel: String(getAttr(cartItem, "variantLabel") || "").trim() || null,
+      });
 
       if (cartItem) {
         const currentQty = Number(getAttr(cartItem, "quantity") ?? 0);
@@ -930,17 +1005,7 @@ export const setCartItemQty = async (
     res.status(200).json({ message: "Cart updated successfully." });
   } catch (error) {
     console.error("SET CART ITEM QTY ERROR:", error);
-    const statusCode = Number((error as any)?.statusCode || 500);
-    res.status(statusCode).json({
-      message:
-        statusCode >= 400 && statusCode < 500
-          ? (error as Error).message
-          : "Failed to set cart item quantity.",
-      error: (error as Error).message,
-      ...(String((error as any)?.code || "").trim()
-        ? { code: String((error as any).code) }
-        : {}),
-    });
+    sendControllerError(res, error, "Failed to set cart item quantity.");
   }
 };
 

@@ -338,6 +338,28 @@ async function addVariantToCart(input: {
   assert.ok(response.body?.cartItem, `${input.label}: cartItem payload missing`);
 }
 
+async function addVariantToCartExpectFailure(input: {
+  customerClient: CookieClient;
+  productId: number;
+  variantKey: string;
+  variantSelections?: VariantSelection[];
+  quantity?: number;
+  label: string;
+  expectedStatus?: number;
+}) {
+  const response = await input.customerClient.request("/api/cart/add", {
+    method: "POST",
+    body: JSON.stringify({
+      productId: input.productId,
+      quantity: input.quantity ?? 1,
+      variantKey: input.variantKey,
+      variantSelections: input.variantSelections ?? [],
+    }),
+  });
+  assertStatus(response, input.expectedStatus ?? 409, input.label);
+  return response.body ?? null;
+}
+
 async function fetchCart(customerClient: CookieClient, label: string) {
   const response = await customerClient.request("/api/cart");
   assertStatus(response, 200, label);
@@ -345,6 +367,19 @@ async function fetchCart(customerClient: CookieClient, label: string) {
 }
 
 async function previewCheckout(customerClient: CookieClient, label: string) {
+  const response = await customerClient.request("/api/checkout/preview", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  assertStatus(response, 200, label);
+  assert.equal(Boolean(response.body?.success), true, `${label}: preview missing success`);
+  return response.body?.data ?? null;
+}
+
+async function previewCheckoutExpectSuccessWithInvalidItems(
+  customerClient: CookieClient,
+  label: string
+) {
   const response = await customerClient.request("/api/checkout/preview", {
     method: "POST",
     body: JSON.stringify({}),
@@ -371,6 +406,28 @@ async function createCheckout(customerClient: CookieClient, label: string) {
   assertStatus(response, 201, label);
   assert.equal(Boolean(response.body?.success), true, `${label}: create checkout missing success`);
   return response.body?.data ?? null;
+}
+
+async function createCheckoutExpectFailure(
+  customerClient: CookieClient,
+  label: string,
+  expectedStatus = 409
+) {
+  const shippingDetails = buildShippingDetails(label);
+  const response = await customerClient.request("/api/checkout/create-multi-store", {
+    method: "POST",
+    body: JSON.stringify({
+      customer: {
+        name: shippingDetails.fullName,
+        phone: shippingDetails.phoneNumber,
+        address: `${shippingDetails.streetName} ${shippingDetails.houseNumber}`,
+        notes: `Smoke ${label}`,
+      },
+      shippingDetails,
+    }),
+  });
+  assertStatus(response, expectedStatus, label);
+  return response.body ?? null;
 }
 
 async function fetchBuyerOrderDetail(customerClient: CookieClient, orderId: number, label: string) {
@@ -643,6 +700,80 @@ async function run() {
     "variant cart snapshot"
   );
   logPass("cart stores two variants of the same product separately");
+
+  logStep("rejecting an invalid variant selection before checkout");
+  const invalidVariantAdd = await addVariantToCartExpectFailure({
+    customerClient: buyerClient,
+    productId: product.id,
+    variantKey: "1:999",
+    variantSelections: [{ attributeId: 1, attributeName: "Color", valueId: 999, value: "Ghost" }],
+    label: "add invalid variant",
+  });
+  assert.equal(
+    String(invalidVariantAdd?.code || ""),
+    "VARIANT_NOT_AVAILABLE",
+    "invalid variant add: expected VARIANT_NOT_AVAILABLE code"
+  );
+  logPass("invalid variant selection is rejected before checkout");
+
+  logStep("blocking checkout when a cart line loses its variant snapshot");
+  const corruptedCartLine = await CartItem.findOne({
+    where: {
+      productId: product.id,
+      variantKey: product.variants[0].combinationKey,
+    } as any,
+    order: [["id", "ASC"]],
+  });
+  assert.ok(corruptedCartLine, "corrupted cart line fixture missing");
+  await corruptedCartLine!.update({
+    variantKey: null,
+    variantLabel: null,
+    variantSelections: null,
+  } as any);
+
+  const corruptedPreview = await previewCheckoutExpectSuccessWithInvalidItems(
+    buyerClient,
+    "variant checkout preview with corrupted cart line"
+  );
+  const corruptedInvalidItems = Array.isArray(corruptedPreview?.invalidItems)
+    ? corruptedPreview.invalidItems
+    : [];
+  assert.equal(corruptedInvalidItems.length, 1, "corrupted preview: expected one invalid item");
+  assert.equal(
+    String(corruptedInvalidItems[0]?.code || corruptedInvalidItems[0]?.reason || ""),
+    "PRODUCT_VARIANT_MISSING",
+    "corrupted preview: expected PRODUCT_VARIANT_MISSING"
+  );
+
+  const corruptedCreate = await createCheckoutExpectFailure(
+    buyerClient,
+    "variant checkout create with corrupted cart line"
+  );
+  assert.equal(
+    String(corruptedCreate?.code || ""),
+    "CHECKOUT_INVALID_ITEMS",
+    "corrupted create: expected CHECKOUT_INVALID_ITEMS"
+  );
+  assert.equal(
+    String(corruptedCreate?.data?.invalidItems?.[0]?.code || ""),
+    "PRODUCT_VARIANT_MISSING",
+    "corrupted create: expected PRODUCT_VARIANT_MISSING invalid item"
+  );
+  logPass("checkout blocks corrupted cart lines that lose their variant snapshot");
+
+  await resetCartForUser(buyerUser.id);
+  await addVariantToCart({
+    customerClient: buyerClient,
+    productId: product.id,
+    variant: product.variants[0],
+    label: "restore blue variant",
+  });
+  await addVariantToCart({
+    customerClient: buyerClient,
+    productId: product.id,
+    variant: product.variants[1],
+    label: "restore green variant",
+  });
 
   logStep("previewing checkout");
   const preview = await previewCheckout(buyerClient, "variant checkout preview");

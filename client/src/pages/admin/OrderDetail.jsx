@@ -238,6 +238,7 @@ export default function OrderDetail() {
         "Operational order lifecycle is tracked separately from payment review.";
   const paymentStatusMeta = order?.paymentStatusMeta || contract?.paymentStatusMeta || null;
   const shipmentAuditMeta = order?.shipmentAuditMeta || null;
+  const groups = Array.isArray(order?.groups) ? order.groups : [];
   const suborderShipmentSummary = Array.isArray(order?.suborderShipmentSummary)
     ? order.suborderShipmentSummary
     : [];
@@ -533,6 +534,133 @@ export default function OrderDetail() {
                   Notes
                 </p>
                 <p className="mt-2 text-sm leading-6 text-slate-700">{orderNote}</p>
+              </section>
+            ) : null}
+
+            {groups.length > 0 ? (
+              <section className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      Store Splits
+                    </p>
+                    <h2 className="mt-1 text-lg font-semibold text-slate-900">
+                      Split payment and fulfillment truth
+                    </h2>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+                    {groups.length} split{groups.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+                <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                  {groups.map((group) => {
+                    const splitPaymentLabel =
+                      group?.payment?.displayStatusMeta?.label ||
+                      group?.payment?.displayStatus ||
+                      group?.paymentStatusMeta?.label ||
+                      group?.paymentStatus ||
+                      "-";
+                    const splitPaymentTone =
+                      group?.payment?.displayStatusMeta?.tone ||
+                      group?.paymentStatusMeta?.tone ||
+                      "slate";
+                    const splitShipmentLabel =
+                      group?.shippingStatusMeta?.label ||
+                      group?.fulfillmentStatusMeta?.label ||
+                      group?.shippingStatus ||
+                      group?.fulfillmentStatus ||
+                      "-";
+                    const splitShipmentTone =
+                      group?.shippingStatusMeta?.tone ||
+                      group?.fulfillmentStatusMeta?.tone ||
+                      "slate";
+                    return (
+                      <article
+                        key={group.suborderId || group.storeId || group.suborderNumber || group.storeName}
+                        className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-slate-900">
+                              {group.storeName || group.suborderNumber || "Store split"}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {group.suborderNumber || "Suborder"} • Total {formatMoney(group.totalAmount)}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <PaymentStatusBadge
+                              status={group.payment?.displayStatus || group.paymentStatus}
+                              label={splitPaymentLabel}
+                              tone={splitPaymentTone}
+                              prefix="Payment"
+                            />
+                            <PaymentStatusBadge
+                              status={group.shippingStatus || group.fulfillmentStatus}
+                              label={splitShipmentLabel}
+                              tone={splitShipmentTone}
+                              prefix="Shipment"
+                            />
+                          </div>
+                        </div>
+                        <div className="mt-3 grid gap-2 text-xs text-slate-600 md:grid-cols-2">
+                          <p>
+                            Source:{" "}
+                            <span className="font-semibold text-slate-900">
+                              {group.usedLegacyFallback ? "Legacy fallback" : "Persisted split snapshot"}
+                            </span>
+                          </p>
+                          <p>
+                            Payment record:{" "}
+                            <span className="font-semibold text-slate-900">
+                              {group.payment?.statusMeta?.label || group.payment?.status || "Missing"}
+                            </span>
+                          </p>
+                        </div>
+                        {Array.isArray(group.items) && group.items.length > 0 ? (
+                          <div className="mt-4 space-y-2 rounded-xl border border-slate-200 bg-white p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                              Split Items
+                            </p>
+                            {group.items.map((item, index) => (
+                              <div
+                                key={`${group.suborderId || group.storeId || "group"}-${item.id || item.productId || index}`}
+                                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5"
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="font-medium text-slate-900">
+                                      {item.productName || `Product #${item.productId}`}
+                                    </p>
+                                    {getOrderItemVariantLines(item).map((line) => (
+                                      <p
+                                        key={`${item.id || item.productId}-${line}`}
+                                        className="mt-1 text-xs text-slate-500"
+                                      >
+                                        {line}
+                                      </p>
+                                    ))}
+                                    <p className="mt-1 text-xs text-slate-500">
+                                      {item.qty} × {formatMoney(item.price)}
+                                    </p>
+                                  </div>
+                                  <div className="text-sm font-semibold text-slate-900">
+                                    {formatMoney(item.lineTotal)}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                        {group.compatibilityMatchesStorage === false ? (
+                          <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                            Shipment compatibility storage is not aligned with split shipment truth.
+                          </div>
+                        ) : null}
+                      </article>
+                    );
+                  })}
+                </div>
               </section>
             ) : null}
 

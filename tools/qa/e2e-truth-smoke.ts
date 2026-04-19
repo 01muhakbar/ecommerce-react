@@ -67,6 +67,25 @@ type CheckoutScenario = {
   paymentId: number;
 };
 
+type VariantSelection = {
+  attributeId: number;
+  attributeName: string;
+  valueId: number | string | null;
+  value: string;
+};
+
+type VariantRecord = {
+  combination: string;
+  combinationKey: string;
+  selections: VariantSelection[];
+  price: number;
+  salePrice: number;
+  quantity: number;
+  sku: string;
+  barcode: string;
+  image: string;
+};
+
 class CookieClient {
   private cookie = "";
 
@@ -322,6 +341,75 @@ async function createFixtureProduct(input: {
   return { id, slug, name: String(product.getDataValue("name") || slug) };
 }
 
+const buildVariantCombinationKey = (selections: VariantSelection[]) =>
+  selections
+    .map((entry) =>
+      `${entry.attributeId}:${String(entry.valueId ?? entry.value).trim().toLowerCase()}`
+    )
+    .join("|");
+
+async function createFixtureVariantProduct(input: {
+  ownerUserId: number;
+  storeId: number;
+  label: string;
+}) {
+  const slug = slugify(`${RUN_ID}-${input.label}`);
+  const blueSelections: VariantSelection[] = [
+    { attributeId: 1, attributeName: "Color", valueId: 101, value: "Blue" },
+  ];
+  const greenSelections: VariantSelection[] = [
+    { attributeId: 1, attributeName: "Color", valueId: 102, value: "Green" },
+  ];
+  const variants: VariantRecord[] = [
+    {
+      combination: "Blue",
+      combinationKey: buildVariantCombinationKey(blueSelections),
+      selections: blueSelections,
+      price: 30000,
+      salePrice: 25000,
+      quantity: 12,
+      sku: `${slug.toUpperCase()}-BLUE`,
+      barcode: `${slug.toUpperCase()}-BLUE`,
+      image: "/uploads/products/demo.svg",
+    },
+    {
+      combination: "Green",
+      combinationKey: buildVariantCombinationKey(greenSelections),
+      selections: greenSelections,
+      price: 42000,
+      salePrice: 30000,
+      quantity: 12,
+      sku: `${slug.toUpperCase()}-GREEN`,
+      barcode: `${slug.toUpperCase()}-GREEN`,
+      image: "/uploads/products/demo.svg",
+    },
+  ];
+
+  const product = await Product.create({
+    name: slug,
+    slug,
+    sku: slug.toUpperCase(),
+    price: 45000,
+    salePrice: 40000,
+    stock: 30,
+    userId: input.ownerUserId,
+    storeId: input.storeId,
+    status: "active",
+    isPublished: true,
+    sellerSubmissionStatus: "none",
+    description: `Fixture ${slug}`,
+    promoImagePath: "/uploads/products/demo.svg",
+    imagePaths: ["/uploads/products/demo.svg", "/uploads/products/demo.svg"],
+    variations: {
+      hasVariants: true,
+      variants,
+    },
+  } as any);
+  const id = Number(product.getDataValue("id"));
+  createdProductIds.push(id);
+  return { id, slug, name: String(product.getDataValue("name") || slug), variants };
+}
+
 async function login(client: CookieClient, email: string, password: string, label: string) {
   const response = await client.request("/api/auth/login", {
     method: "POST",
@@ -537,11 +625,20 @@ function getSellerPaymentLabel(detail: any) {
 
 function resolveInvalidCheckoutMessage(reason: string) {
   const code = String(reason || "").trim().toUpperCase();
+  if (code === "PRODUCT_VARIANT_REQUIRED") {
+    return "Choose a variant before continuing.";
+  }
+  if (code === "PRODUCT_VARIANT_MISSING") {
+    return "This cart line has lost its variant selection. Remove it and choose the variant again.";
+  }
+  if (code === "VARIANT_NOT_AVAILABLE") {
+    return "This variant is no longer available. Remove it or choose another variant.";
+  }
   if (code === "PRODUCT_NOT_PUBLIC") {
-    return "This item is no longer publicly purchasable because the product or its store is currently gated.";
+    return "This item is no longer publicly available for checkout.";
   }
   if (code === "PRODUCT_OUT_OF_STOCK") {
-    return "This item is out of stock and cannot be checked out.";
+    return "This product is currently out of stock.";
   }
   if (code === "PRODUCT_STORE_UNMAPPED") {
     return "This item is missing store binding and is blocked from checkout.";
@@ -672,6 +769,11 @@ async function runScenario(browser: any) {
     storeId: checkoutStore.id,
     label: "checkout-product",
   });
+  const variantProduct = await createFixtureVariantProduct({
+    ownerUserId: checkoutSellerUser.id,
+    storeId: checkoutStore.id,
+    label: "checkout-variant-product",
+  });
   const orderProduct = await createFixtureProduct({
     ownerUserId: orderSellerUser.id,
     storeId: orderStore.id,
@@ -690,6 +792,93 @@ async function runScenario(browser: any) {
     "order seller login"
   );
   await login(buyerClient, buyerUser.email, buyerUser.password, "buyer login");
+
+  log("running guest login recovery browser assertions");
+  const guestVariantContext = await browser.newContext();
+  await guestVariantContext.addInitScript((seedItem: any) => {
+    try {
+      window.localStorage.removeItem("authSessionHint");
+      window.localStorage.setItem("guest_cart_v1", JSON.stringify({ items: [seedItem] }));
+    } catch {
+      // ignore guest cart bootstrap issues in smoke setup
+    }
+  }, {
+    productId: variantProduct.id,
+    qty: 1,
+    lineId: `${variantProduct.id}:${variantProduct.variants[0].combinationKey}`,
+    name: variantProduct.name,
+    price: variantProduct.variants[0].salePrice,
+    imageUrl: variantProduct.variants[0].image,
+    variantKey: variantProduct.variants[0].combinationKey,
+    variantLabel: variantProduct.variants[0].combination,
+    variantSelections: variantProduct.variants[0].selections,
+    variantSku: variantProduct.variants[0].sku,
+    variantBarcode: variantProduct.variants[0].barcode,
+    variantPrice: variantProduct.variants[0].price,
+    variantSalePrice: variantProduct.variants[0].salePrice,
+    variantImage: variantProduct.variants[0].image,
+    stock: variantProduct.variants[0].quantity,
+  });
+  const guestVariantPage = await guestVariantContext.newPage();
+  try {
+    let previewMutationApplied = false;
+    await guestVariantPage.route("**/api/checkout/preview", async (route: any) => {
+      if (route.request().method() !== "POST" || previewMutationApplied) {
+        await route.continue();
+        return;
+      }
+      previewMutationApplied = true;
+      const current = await Product.findByPk(variantProduct.id);
+      const currentVariations =
+        (typeof current?.getDataValue === "function" ? current.getDataValue("variations") : null) ||
+        {};
+      const nextVariants = (Array.isArray((currentVariations as any)?.variants)
+        ? (currentVariations as any).variants
+        : []
+      ).filter(
+        (entry: any) =>
+          String(entry?.combinationKey || "").trim().toLowerCase() !==
+          String(variantProduct.variants[0].combinationKey || "").trim().toLowerCase()
+      );
+      await Product.update(
+        {
+          variations: {
+            ...(currentVariations || {}),
+            hasVariants: true,
+            variants: nextVariants,
+          },
+        } as any,
+        { where: { id: variantProduct.id } as any }
+      );
+      await route.continue();
+    });
+
+    await gotoRoute(guestVariantPage, "/checkout");
+    await waitForBodyText(guestVariantPage, variantProduct.name);
+    await waitForBodyText(guestVariantPage, "Variant: Blue");
+    await guestVariantPage.getByPlaceholder("First Name").fill("Guest");
+    await guestVariantPage.getByPlaceholder("Last Name").fill("Recovery");
+    await guestVariantPage.getByPlaceholder("Email Address").fill("guest-recovery@local.dev");
+    await guestVariantPage.getByPlaceholder("Phone Number").fill("081234567890");
+    await guestVariantPage.locator("select").nth(0).selectOption({ label: "DKI Jakarta" });
+    await guestVariantPage.locator("select").nth(1).selectOption({ label: "Kota Jakarta Selatan" });
+    await guestVariantPage.locator("select").nth(2).selectOption({ label: "Kebayoran Baru" });
+    await guestVariantPage.locator("input").nth(4).fill("12190");
+    await guestVariantPage.locator("input").nth(5).fill("Guest Recovery Street");
+    await guestVariantPage.locator("input").nth(6).fill("12");
+    await guestVariantPage.getByTestId("checkout-submit-cta").click();
+    await waitForUrl(guestVariantPage, /\/auth\/login$/, "guest checkout login redirect");
+    await waitForBodyText(guestVariantPage, "Sign in to continue checkout.");
+    const loginState = await guestVariantPage.evaluate(() => (window.history.state as any)?.usr || null);
+    assert.equal(
+      String(loginState?.from || "/checkout"),
+      "/checkout",
+      "login redirect should preserve checkout return path"
+    );
+  } finally {
+    await guestVariantPage.close().catch(() => null);
+    await guestVariantContext.close().catch(() => null);
+  }
 
   log("running client checkout browser assertions");
   const buyerContext = await createAuthedContext(browser, buyerClient);
@@ -729,7 +918,9 @@ async function runScenario(browser: any) {
       await addProductToCart(buyerClient, buyerUser.id, checkoutProduct.id);
       await gotoRoute(buyerPage, "/cart");
       await waitForBodyText(buyerPage, checkoutProduct.name);
-      await buyerPage.getByRole("link", { name: "Proceed to Checkout" }).click();
+      const proceedToCheckout =
+        buyerPage.getByRole("button", { name: "Proceed to Checkout" }).first();
+      await proceedToCheckout.click();
       await waitForUrl(buyerPage, /\/checkout$/, "open checkout");
       await buyerPage.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);
 
@@ -851,6 +1042,7 @@ async function runScenario(browser: any) {
       true,
       "checkout submit CTA should stay disabled"
     );
+
   } finally {
     await buyerPage.close().catch(() => null);
     await buyerContext.close().catch(() => null);
@@ -1096,7 +1288,7 @@ async function main() {
   try {
     await ensurePortAvailable(API_PORT);
     clientPort = await getFreePort();
-    clientOrigin = `http://${APP_HOST}:${clientPort}`;
+    clientOrigin = `http://localhost:${clientPort}`;
     clientBase = clientOrigin;
     const smokeCorsOrigins = [
       clientOrigin,
@@ -1121,7 +1313,7 @@ async function main() {
 
         clientProc = spawn(
           "pnpm",
-          ["-F", "client", "dev", "--host", APP_HOST, "--port", String(clientPort), "--strictPort"],
+          ["-F", "client", "dev", "--host", "localhost", "--port", String(clientPort), "--strictPort"],
           { stdio: "inherit", shell: true }
         );
 

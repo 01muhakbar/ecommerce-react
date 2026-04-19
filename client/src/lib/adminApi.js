@@ -401,6 +401,61 @@ const normalizeAdminOrderDetail = (raw) => {
     shipmentAuditMeta: normalizeShipmentAuditMeta(raw.shipmentAuditMeta),
     suborderShipmentSummary: normalizeSuborderShipmentSummary(raw.suborderShipmentSummary),
     shipments: normalizeShipmentList(raw.shipments),
+    groups: Array.isArray(raw.groups)
+      ? raw.groups.map((group) => ({
+          suborderId: Number(group?.suborderId || 0) || null,
+          suborderNumber: group?.suborderNumber || null,
+          storeId: Number(group?.storeId || 0) || null,
+          storeName: group?.storeName || null,
+          storeSlug: group?.storeSlug || null,
+          subtotalAmount: Number(group?.subtotalAmount || 0),
+          shippingAmount: Number(group?.shippingAmount || 0),
+          serviceFeeAmount: Number(group?.serviceFeeAmount || 0),
+          totalAmount: Number(group?.totalAmount || 0),
+          paymentStatus: group?.paymentStatus || null,
+          paymentStatusMeta: group?.paymentStatusMeta || null,
+          fulfillmentStatus: group?.fulfillmentStatus || null,
+          fulfillmentStatusMeta: group?.fulfillmentStatusMeta || null,
+          shippingStatus: group?.shippingStatus || null,
+          shippingStatusMeta: group?.shippingStatusMeta || null,
+          usedLegacyFallback: Boolean(group?.usedLegacyFallback),
+          hasPersistedShipment: Boolean(group?.hasPersistedShipment),
+          compatibilityMatchesStorage:
+            typeof group?.compatibilityMatchesStorage === "boolean"
+              ? group.compatibilityMatchesStorage
+              : null,
+          payment: group?.payment
+            ? {
+                id: Number(group.payment.id || 0) || null,
+                status: group.payment.status || null,
+                statusMeta: group.payment.statusMeta || null,
+                displayStatus: group.payment.displayStatus || null,
+                displayStatusMeta: group.payment.displayStatusMeta || null,
+                expiresAt: group.payment.expiresAt || null,
+                paidAt: group.payment.paidAt || null,
+              }
+            : null,
+          items: Array.isArray(group?.items)
+            ? group.items.map((item) => ({
+                id: item.id,
+                productId: item.productId ?? null,
+                productName: item.productName || null,
+                slug: item.slug || null,
+                qty: Number(item.qty || 0),
+                price: Number(item.price || 0),
+                lineTotal: Number(item.lineTotal || 0),
+                image: item.image || null,
+                variantKey: item.variantKey || null,
+                variantLabel: item.variantLabel || null,
+                variantSelections: Array.isArray(item.variantSelections)
+                  ? item.variantSelections
+                  : [],
+                sku: item.sku || null,
+                barcode: item.barcode || null,
+              }))
+            : [],
+        }))
+      : [],
     contract: raw.contract || null,
     items: (raw.items || []).map((it) => ({
       id: it.id,

@@ -264,6 +264,17 @@ export type GroupedOrderPaymentResponse = {
         qty: number;
         price: number;
         lineTotal: number;
+        image?: string | null;
+        variantKey?: string | null;
+        variantLabel?: string | null;
+        variantSelections?: Array<{
+          attributeId?: number;
+          attributeName?: string;
+          valueId?: number | null;
+          value?: string;
+        }>;
+        sku?: string | null;
+        barcode?: string | null;
       }>;
       payment?: GroupedPaymentDetail | null;
     }>;

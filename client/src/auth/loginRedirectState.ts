@@ -32,11 +32,17 @@ const normalizeFrom = (value: unknown) => {
 export const buildLoginRedirectState = ({
   from,
   authNotice,
+  postLoginState,
 }: {
   from?: unknown;
   authNotice?: string;
+  postLoginState?: Record<string, unknown>;
 } = {}) => {
-  const state: { from?: string; authNotice?: string } = {};
+  const state: {
+    from?: string;
+    authNotice?: string;
+    postLoginState?: Record<string, unknown>;
+  } = {};
   const normalizedFrom = normalizeFrom(from);
   if (normalizedFrom) {
     state.from = normalizedFrom;
@@ -44,6 +50,9 @@ export const buildLoginRedirectState = ({
   const notice = String(readPendingAuthNotice() || authNotice || "").trim();
   if (notice) {
     state.authNotice = notice;
+  }
+  if (postLoginState && typeof postLoginState === "object") {
+    state.postLoginState = postLoginState;
   }
   return state;
 };

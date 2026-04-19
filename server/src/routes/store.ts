@@ -515,8 +515,11 @@ const sanitizePublicStoreSplit = (split: any) => {
       ? split.paymentReadModel
       : null;
   return {
+    suborderId: Number(split.suborderId || 0) || null,
+    storeId: Number(split.storeId || 0) || null,
     suborderNumber: split.suborderNumber ? String(split.suborderNumber) : null,
     storeName: split.storeName ? String(split.storeName) : null,
+    storeSlug: split.storeSlug ? String(split.storeSlug) : null,
     storeLogoUrl: split.storeLogoUrl ? String(split.storeLogoUrl) : null,
     totalAmount: Number(split.totalAmount || 0),
     paymentStatus: split.paymentStatus ? String(split.paymentStatus) : null,
@@ -540,6 +543,25 @@ const sanitizePublicStoreSplit = (split: any) => {
     hasTrackingNumber: Boolean(split.hasTrackingNumber),
     usedLegacyFallback: Boolean(split.usedLegacyFallback),
     operationalTruth: sanitizePublicOperationalTruth(split.operationalTruth),
+    items: Array.isArray(split.items)
+      ? split.items.map((item: any) => ({
+          id: Number(item?.id || 0) || null,
+          productId: Number(item?.productId || 0) || null,
+          productName: String(item?.productName || `Product #${item?.productId || "-"}`),
+          slug: item?.slug ? String(item.slug) : "",
+          qty: Number(item?.qty || 0),
+          price: Number(item?.price || 0),
+          lineTotal: Number(item?.lineTotal || 0),
+          image: item?.image ? String(item.image) : null,
+          variantKey: item?.variantKey ? String(item.variantKey) : null,
+          variantLabel: item?.variantLabel ? String(item.variantLabel) : null,
+          variantSelections: Array.isArray(item?.variantSelections)
+            ? item.variantSelections
+            : [],
+          sku: item?.sku ? String(item.sku) : null,
+          barcode: item?.barcode ? String(item.barcode) : null,
+        }))
+      : [],
     paymentReadModel: paymentReadModel
       ? {
           status: paymentReadModel.status ? String(paymentReadModel.status) : null,
@@ -2063,12 +2085,23 @@ router.get(
           {
             model: OrderItem,
             as: "items",
-            attributes: ["id", "quantity", "price", ["product_id", "productId"]],
+            attributes: [
+              "id",
+              "quantity",
+              "price",
+              "variantKey",
+              "variantLabel",
+              "variantSelections",
+              "skuSnapshot",
+              "barcodeSnapshot",
+              "imageSnapshot",
+              ["product_id", "productId"],
+            ],
             include: [
               {
                 model: Product,
                 as: "product",
-                attributes: ["id", "name"],
+                attributes: ["id", "name", "slug", "promoImagePath", "imagePaths"],
               },
             ],
           },
@@ -2101,6 +2134,11 @@ router.get(
                   "storeId",
                   "productNameSnapshot",
                   "skuSnapshot",
+                  "variantKey",
+                  "variantLabel",
+                  "variantSelections",
+                  "barcodeSnapshot",
+                  "imageSnapshot",
                   "priceSnapshot",
                   "qty",
                   "totalPrice",
@@ -2238,23 +2276,46 @@ router.get(
         order.get?.("customer_email") ??
         null;
 
-      const [rows] = await sequelize.query(
-        "SELECT oi.product_id, oi.quantity, oi.price, p.name, p.promo_image_path AS promoImagePath FROM orderitems oi LEFT JOIN products p ON p.id=oi.product_id WHERE oi.order_id = ?",
-        { replacements: [orderId] }
+      const items = (Array.isArray((order as any).items) ? (order as any).items : []).map(
+        (item: any) => {
+          const product = item?.product ?? item?.get?.("product") ?? null;
+          const productId =
+            item?.productId ??
+            item?.get?.("productId") ??
+            item?.product_id ??
+            getAttr(product, "id") ??
+            null;
+          const quantity = Number(item?.quantity || 0);
+          const price = Number(item?.price || 0);
+          const fallbackImage =
+            getAttr(product, "promoImagePath") ||
+            (Array.isArray(getAttr(product, "imagePaths")) ? getAttr(product, "imagePaths")[0] : null) ||
+            null;
+          const imageUrl = normalizeUploadsUrl(item?.imageSnapshot || fallbackImage || null);
+          return {
+            id: Number(item?.id || 0) || null,
+            productId,
+            name: getAttr(product, "name") ?? `Product #${productId || "-"}`,
+            product: product
+              ? {
+                  id: Number(getAttr(product, "id") || 0) || null,
+                  name: String(getAttr(product, "name") || "").trim() || null,
+                  slug: String(getAttr(product, "slug") || "").trim() || null,
+                }
+              : null,
+            imageUrl,
+            image: imageUrl,
+            quantity,
+            price,
+            lineTotal: price * quantity,
+            variantKey: String(item?.variantKey || "").trim() || null,
+            variantLabel: String(item?.variantLabel || "").trim() || null,
+            variantSelections: normalizeOrderVariantSelectionsOutput(item?.variantSelections),
+            sku: String(item?.skuSnapshot || "").trim() || null,
+            barcode: String(item?.barcodeSnapshot || "").trim() || null,
+          };
+        }
       );
-
-      const items = (rows as any[]).map((r: any) => {
-        const productId = r.product_id ?? r.productId;
-        const quantity = Number(r.quantity || 0);
-        const price = Number(r.price || 0);
-        return {
-          name: r.name ?? `Product #${productId || "-"}`,
-          imageUrl: normalizeUploadsUrl(r.promoImagePath ?? null),
-          quantity,
-          price,
-          lineTotal: price * quantity,
-        };
-      });
       const subtotal = items.reduce(
         (sum: number, item: any) => sum + Number(item.lineTotal || 0),
         0
@@ -2337,6 +2398,27 @@ router.get(
               incompleteTrackingData: Boolean(shippingSummary?.incompleteTrackingData),
               shipments: Array.isArray(shippingSummary?.shipments) ? shippingSummary.shipments : [],
               operationalTruth,
+              items: (Array.isArray(suborder?.items) ? suborder.items : []).map((item: any) => ({
+                id: Number(getAttr(item, "id") || 0) || null,
+                productId: Number(getAttr(item, "productId") || 0) || null,
+                productName: String(
+                  getAttr(item, "productNameSnapshot") ||
+                    getAttr(item?.product, "name") ||
+                    `Product #${getAttr(item, "productId")}`
+                ),
+                slug: getAttr(item?.product, "slug") ? String(getAttr(item?.product, "slug")) : "",
+                qty: Number(getAttr(item, "qty") || 0),
+                price: Number(getAttr(item, "priceSnapshot") || 0),
+                lineTotal: Number(getAttr(item, "totalPrice") || 0),
+                image: normalizeUploadsUrl(getAttr(item, "imageSnapshot") || null),
+                variantKey: String(getAttr(item, "variantKey") || "").trim() || null,
+                variantLabel: String(getAttr(item, "variantLabel") || "").trim() || null,
+                variantSelections: normalizeOrderVariantSelectionsOutput(
+                  getAttr(item, "variantSelections")
+                ),
+                sku: String(getAttr(item, "skuSnapshot") || "").trim() || null,
+                barcode: String(getAttr(item, "barcodeSnapshot") || "").trim() || null,
+              })),
               payment: payment
                 ? {
                     id: Number(getAttr(payment, "id") || 0) || null,

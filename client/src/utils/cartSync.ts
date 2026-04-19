@@ -32,6 +32,8 @@ export const normalizeRemoteCartToItems = (remotePayload: any): CartItem[] => {
         return null;
       }
       const rawImage =
+        product?.CartItem?.variantImageSnapshot ||
+        product?.cartItem?.variantImageSnapshot ||
         product?.imageUrl ||
         product?.image ||
         product?.thumbnail ||

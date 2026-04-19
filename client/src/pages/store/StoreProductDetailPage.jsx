@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import {
   Banknote,
   ChevronLeft,
@@ -31,6 +31,7 @@ import SearchProductCard from "../../components/store/SearchProductCard.jsx";
 import { formatCurrency } from "../../utils/format.js";
 import { ensureProductImageUrl, resolveProductImageUrl } from "../../utils/productImage.js";
 import { getProductVisibleImageUrls, normalizeProductDisplayTags } from "../../utils/productDisplay.js";
+import { resolveVariantCheckoutMessage } from "../../utils/variantCheckoutErrors.js";
 import {
   buildPublicProductVariationGroups,
   normalizePublicProductVariationState,
@@ -103,6 +104,17 @@ const toDateLabel = (value) => {
     month: "short",
     year: "numeric",
   });
+};
+
+const buildSelectedOptionsFromVariantSelections = (selections) => {
+  if (!Array.isArray(selections)) return {};
+  return selections.reduce((result, selection) => {
+    const attributeId = Number(selection?.attributeId);
+    const value = String(selection?.valueId ?? selection?.value ?? "").trim().toLowerCase();
+    if (!Number.isInteger(attributeId) || attributeId <= 0 || !value) return result;
+    result[String(attributeId)] = `${attributeId}:${value}`;
+    return result;
+  }, {});
 };
 
 const normalizeReviews = (rawReviews) => {
@@ -551,8 +563,9 @@ function ProductSummaryPanel({
 }
 
 export default function StoreProductDetailPage() {
+  const location = useLocation();
   const { slug } = useParams();
-  const { add, isLoading: cartLoading } = useCart();
+  const { add, isLoading: cartLoading, error: cartError } = useCart();
   const [qty, setQty] = useState(1);
   const [selectedOptions, setSelectedOptions] = useState({});
   const [activeTab, setActiveTab] = useState("reviews");
@@ -664,6 +677,7 @@ export default function StoreProductDetailPage() {
     () => buildPublicProductVariationGroups(product?.variations),
     [product?.variations]
   );
+  const checkoutRecovery = location.state?.checkoutRecovery ?? null;
   const selectedVariant = useMemo(
     () => resolvePublicSelectedVariant(product?.variations, selectedOptions),
     [product?.variations, selectedOptions]
@@ -745,6 +759,36 @@ export default function StoreProductDetailPage() {
     });
   }, [variationGroups]);
 
+  useEffect(() => {
+    if (!checkoutRecovery || variationGroups.length === 0) return;
+    const recoverySelections = Array.isArray(checkoutRecovery?.variantSelections)
+      ? checkoutRecovery.variantSelections
+      : [];
+    const nextSelectedOptions = buildSelectedOptionsFromVariantSelections(recoverySelections);
+    const nextEntries = Object.entries(nextSelectedOptions);
+    if (nextEntries.length === 0) return;
+
+    setSelectedOptions((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      nextEntries.forEach(([groupId, selectionKey]) => {
+        const matchedGroup = variationGroups.find(
+          (group) =>
+            String(group?.id) === String(groupId) ||
+            Number(group?.attributeId) === Number(groupId)
+        );
+        if (!matchedGroup?.options?.some((option) => option.selectionKey === selectionKey)) {
+          return;
+        }
+        if (next[groupId] !== selectionKey) {
+          next[groupId] = selectionKey;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [checkoutRecovery, variationGroups]);
+
   const handleAddMainProduct = () => {
     if (!isPurchasable || (selectedVariantHasFiniteStock && selectedVariantStockValue <= 0)) return;
     add(product.id, qty, {
@@ -762,6 +806,20 @@ export default function StoreProductDetailPage() {
       stock: selectedVariant?.quantity ?? null,
     });
   };
+  const variantSelectionInlineMessage =
+    variationState.hasVariants && !selectedVariant
+      ? "Choose a variant before adding this product to the cart."
+      : "";
+  const recoveryInlineMessage = checkoutRecovery
+    ? `${resolveVariantCheckoutMessage(
+        { code: checkoutRecovery?.reason },
+        "This cart line needs a valid variant."
+      )} Choose a valid variant and add it again.`
+    : "";
+  const cartInlineError =
+    !variantSelectionInlineMessage && !recoveryInlineMessage && cartError
+      ? resolveVariantCheckoutMessage(cartError, "")
+      : "";
 
   const scrollRelatedProducts = (direction) => {
     const element = relatedShelfRef.current;
@@ -986,6 +1044,11 @@ export default function StoreProductDetailPage() {
                 tags={tags}
                 sellerInfo={sellerInfo}
               />
+              {recoveryInlineMessage || variantSelectionInlineMessage || cartInlineError ? (
+                <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  {recoveryInlineMessage || variantSelectionInlineMessage || cartInlineError}
+                </div>
+              ) : null}
             </aside>
           </div>
         </div>

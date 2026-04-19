@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useOutletContext } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2, WalletCards } from "lucide-react";
 import { createOrderSchema } from "@ecommerce/schemas";
@@ -14,6 +14,11 @@ import { quoteStoreCoupon } from "../../api/public/storeCoupons.ts";
 import { getStoreCustomization } from "../../api/public/storeCustomizationPublic.ts";
 import { getDefaultAddress } from "../../api/userAddresses.ts";
 import { formatCurrency } from "../../utils/format.js";
+import { getOrderItemVariantLines } from "../../utils/orderVariantPresentation.js";
+import {
+  findInvalidVariantCheckoutItem,
+  resolveVariantCheckoutMessage,
+} from "../../utils/variantCheckoutErrors.js";
 import { GENERIC_ERROR, ORDER_FAILED } from "../../constants/uiMessages.js";
 import {
   getCityOptions,
@@ -118,6 +123,11 @@ const DEFAULT_CHECKOUT_COPY = {
 };
 
 const CHECKOUT_REQUEST_KEY_STORAGE_KEY = "tppreneurs.checkout.request";
+const RECOVERY_RESELECT_CODES = new Set([
+  "PRODUCT_VARIANT_REQUIRED",
+  "PRODUCT_VARIANT_MISSING",
+  "VARIANT_NOT_AVAILABLE",
+]);
 
 const createCheckoutRequestKey = () => {
   const randomUUID =
@@ -582,27 +592,7 @@ function resolveCouponReasonMessage(reason, minSpend) {
 }
 
 function resolveInvalidCheckoutItemMessage(item) {
-  const available = Number(item?.available);
-  const requested = Number(item?.requested);
-  switch (String(item?.reason || "").trim().toUpperCase()) {
-    case "PRODUCT_OUT_OF_STOCK":
-      return "This item is out of stock and cannot be checked out.";
-    case "PRODUCT_STOCK_REDUCED":
-      if (Number.isFinite(available) && Number.isFinite(requested)) {
-        return `Requested ${requested}, but only ${Math.max(0, available)} left in stock.`;
-      }
-      return "Stock changed before checkout. Update the cart quantity and try again.";
-    case "PRODUCT_VARIANT_MISSING":
-      return "The selected product variant is no longer available. Update the cart selection and try again.";
-    case "PRODUCT_VARIANT_REQUIRED":
-      return "This product now requires a variant selection before checkout can continue.";
-    case "PRODUCT_NOT_PUBLIC":
-      return "This item is no longer publicly purchasable because the product or its store is currently gated.";
-    case "PRODUCT_STORE_UNMAPPED":
-      return "This item is missing store binding and is blocked from checkout.";
-    default:
-      return "This item is currently blocked from checkout.";
-  }
+  return resolveVariantCheckoutMessage(item, "This item is currently blocked from checkout.");
 }
 
 function getCheckoutPaymentProfileStatusLabel(group) {
@@ -688,7 +678,10 @@ function resolveCheckoutSubmitErrorMessage(data, fallbackMessage) {
       : "";
   const invalidItems = Array.isArray(data?.data?.invalidItems) ? data.data.invalidItems : [];
   if (invalidItems.length > 0) {
-    const invalidDetail = resolveInvalidCheckoutItemMessage(invalidItems[0]);
+    const invalidDetail = resolveVariantCheckoutMessage(
+      invalidItems[0],
+      resolveInvalidCheckoutItemMessage(invalidItems[0])
+    );
     return serverMessage ? `${serverMessage} ${invalidDetail}` : invalidDetail;
   }
 
@@ -721,7 +714,32 @@ function resolveCheckoutSubmitErrorMessage(data, fallbackMessage) {
   return serverMessage || ORDER_FAILED;
 }
 
+const canReselectInvalidCheckoutItem = (invalidItem) =>
+  RECOVERY_RESELECT_CODES.has(String(invalidItem?.code || invalidItem?.reason || "").trim().toUpperCase());
+
+const buildVariantRecoveryState = (item, invalidItem, sourcePath) => {
+  const rawSelections =
+    invalidItem?.meta?.variantSelections ??
+    invalidItem?.variantSelections ??
+    item?.variantSelections ??
+    [];
+
+  return {
+    checkoutRecovery: {
+      reason: String(invalidItem?.code || invalidItem?.reason || "").trim().toUpperCase() || null,
+      productId: Number(item?.productId ?? invalidItem?.productId) || null,
+      productName:
+        String(item?.name || item?.productName || invalidItem?.productName || "").trim() || null,
+      variantKey: invalidItem?.variantKey ?? item?.variantKey ?? null,
+      variantSelections: Array.isArray(rawSelections) ? rawSelections : [],
+      source: "checkout",
+      fromPath: sourcePath,
+    },
+  };
+};
+
 export default function CheckoutPage() {
+  const location = useLocation();
   const navigate = useNavigate();
   useOutletContext();
   const { user, isLoading: isAuthLoading } = useAuth() || {};
@@ -738,6 +756,14 @@ export default function CheckoutPage() {
   const totalQty = useCartStore((state) => state.totalQty);
   const clearCart = useCartStore((state) => state.clearCart);
   const isRemoteSyncing = useCartStore((state) => state.isRemoteSyncing);
+  const cartPreflightWarning =
+    typeof location.state?.cartPreflightWarning === "string"
+      ? location.state.cartPreflightWarning
+      : "";
+  const postLoginState =
+    location.state && typeof location.state === "object"
+      ? { ...location.state }
+      : undefined;
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -827,10 +853,11 @@ export default function CheckoutPage() {
         state: buildLoginRedirectState({
           from: "/checkout",
           authNotice: CHECKOUT_LOGIN_REQUIRED_NOTICE,
+          postLoginState,
         }),
       }
     );
-  }, [hasCheckoutAuthHint, isAuthLoading, navigate, user]);
+  }, [hasCheckoutAuthHint, isAuthLoading, navigate, postLoginState, user]);
 
   const hasItems = items.length > 0;
   const isInitialCartSyncing =
@@ -867,7 +894,7 @@ export default function CheckoutPage() {
         cartItemId: Number(item.cartItemId) || null,
         productId: Number(item.productId ?? item.id),
         name: item.name || "Product",
-        qty: Math.max(1, Number(item.qty ?? 1)),
+        qty: Math.max(1, Number(item.quantity ?? item.qty ?? 1)),
         price: Number(item.price ?? 0),
         imageUrl: item.imageUrl ?? item.image ?? null,
         stock: item.stock ?? null,
@@ -1027,6 +1054,18 @@ export default function CheckoutPage() {
     previewBlocksPricingActions ||
     (!checkoutPreviewQuery.isError &&
       (previewHasPaymentBlocker || checkoutPreviewInvalidItems.length > 0));
+  const scrollToFirstCheckoutInvalidItem = useCallback(() => {
+    if (typeof document === "undefined") return;
+    const invalidTarget =
+      document.querySelector('[data-checkout-invalid-item="true"]') ||
+      document.querySelector('[data-checkout-invalid-summary="true"]');
+    if (invalidTarget && typeof invalidTarget.scrollIntoView === "function") {
+      invalidTarget.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, []);
+  const handleFocusCheckoutIssues = useCallback(() => {
+    scrollToFirstCheckoutInvalidItem();
+  }, [scrollToFirstCheckoutInvalidItem]);
   const applyAddressToCheckoutForm = (address) => {
     const normalized = toUserAddressPayload(address || {});
     const fullNameParts = splitFullName(normalized.fullName);
@@ -1402,6 +1441,17 @@ export default function CheckoutPage() {
     updateCartItem(item, nextQty);
   };
 
+  const handleReselectVariant = useCallback(
+    (item, invalidItem) => {
+      const productId = Number(item?.productId ?? invalidItem?.productId);
+      if (!Number.isFinite(productId) || productId <= 0) return;
+      navigate(`/product/${encodeURIComponent(String(productId))}`, {
+        state: buildVariantRecoveryState(item, invalidItem, "/checkout"),
+      });
+    },
+    [navigate]
+  );
+
   const handleToggleDefaultShipping = async () => {
     if (!resolveHasAuthHint()) {
       navigate(
@@ -1411,6 +1461,7 @@ export default function CheckoutPage() {
           state: buildLoginRedirectState({
             from: "/checkout",
             authNotice: CHECKOUT_LOGIN_REQUIRED_NOTICE,
+            postLoginState,
           }),
         }
       );
@@ -1441,9 +1492,32 @@ export default function CheckoutPage() {
           state: buildLoginRedirectState({
             from: "/checkout",
             authNotice: CHECKOUT_LOGIN_REQUIRED_NOTICE,
+            postLoginState,
           }),
         }
       );
+      return;
+    }
+
+    if (previewBlocksPricingActions) {
+      setError(
+        "Checkout preview is still syncing with the latest cart data. Wait for the latest snapshot before placing the order."
+      );
+      if (typeof window !== "undefined") {
+        window.requestAnimationFrame(() => {
+          scrollToFirstCheckoutInvalidItem();
+        });
+      }
+      return;
+    }
+
+    if (checkoutPreviewInvalidItems.length > 0) {
+      setError("Fix the highlighted items before continuing.");
+      if (typeof window !== "undefined") {
+        window.requestAnimationFrame(() => {
+          scrollToFirstCheckoutInvalidItem();
+        });
+      }
       return;
     }
 
@@ -1648,6 +1722,7 @@ export default function CheckoutPage() {
             state: buildLoginRedirectState({
               from: "/checkout",
               authNotice: CHECKOUT_LOGIN_REQUIRED_NOTICE,
+              postLoginState,
             }),
           }
         );
@@ -2283,41 +2358,94 @@ export default function CheckoutPage() {
                           ) : null}
 
                           <div className="mt-4 space-y-3">
-                            {group.items.map((item) => (
-                              <div
-                                key={`${group.storeId}-${item.productId}`}
-                                className="flex gap-3 rounded-2xl border border-slate-200 bg-white p-3"
-                              >
-                                <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-slate-100">
-                                  {item.image ? (
-                                    <img
-                                      src={item.image}
-                                      alt={item.productName}
-                                      className="h-full w-full object-cover"
-                                    />
-                                  ) : (
-                                    <div className="flex h-full w-full items-center justify-center text-[10px] text-slate-400">
-                                      IMG
+                            {group.items.map((item) => {
+                              const invalidItem = findInvalidVariantCheckoutItem(
+                                checkoutPreviewInvalidMessages,
+                                item
+                              );
+                              return (
+                                <div
+                                  key={item.lineId || `${group.storeId}-${item.productId}-${item.variantKey || "base"}`}
+                                  data-checkout-invalid-item={invalidItem ? "true" : undefined}
+                                  className={`rounded-2xl border p-3 ${
+                                    invalidItem
+                                      ? "border-amber-300 bg-amber-50/70"
+                                      : "border-slate-200 bg-white"
+                                  }`}
+                                >
+                                  <div className="flex gap-3">
+                                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-slate-100">
+                                      {item.image ? (
+                                        <img
+                                          src={item.image}
+                                          alt={item.productName}
+                                          className="h-full w-full object-cover"
+                                        />
+                                      ) : (
+                                        <div className="flex h-full w-full items-center justify-center text-[10px] text-slate-400">
+                                          IMG
+                                        </div>
+                                      )}
                                     </div>
-                                  )}
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <p className="text-sm font-semibold text-slate-900">
+                                          {item.productName}
+                                        </p>
+                                        {invalidItem ? (
+                                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-700">
+                                            Invalid
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                      {getOrderItemVariantLines(item).map((line) => (
+                                        <p
+                                          key={`${item.lineId || item.productId}-${line}`}
+                                          className="mt-1 text-xs text-slate-500"
+                                        >
+                                          {line}
+                                        </p>
+                                      ))}
+                                      <p className="mt-1 text-xs text-slate-500">
+                                        Qty {item.qty} x {formatCurrency(item.price)}
+                                        {item.category?.name ? ` • ${item.category.name}` : ""}
+                                      </p>
+                                    </div>
+                                    <div className="text-right">
+                                      <p className="text-xs text-slate-500">Line Total</p>
+                                      <p className="text-sm font-semibold text-slate-900">
+                                        {formatCurrency(item.lineTotal)}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  {invalidItem ? (
+                                    <div className="mt-3 rounded-2xl border border-amber-200 bg-white px-3 py-3 text-xs leading-5 text-amber-800">
+                                      <p>{invalidItem.message}</p>
+                                      <div className="mt-3 flex flex-wrap gap-2">
+                                        <button
+                                          type="button"
+                                          disabled={isSubmitting || isRemoteSyncing}
+                                          onClick={() => removeCartItem(item)}
+                                          className="inline-flex h-9 items-center justify-center rounded-full border border-rose-200 bg-rose-50 px-4 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                          Remove item
+                                        </button>
+                                        {canReselectInvalidCheckoutItem(invalidItem) ? (
+                                          <button
+                                            type="button"
+                                            disabled={isSubmitting || isRemoteSyncing}
+                                            onClick={() => handleReselectVariant(item, invalidItem)}
+                                            className="inline-flex h-9 items-center justify-center rounded-full border border-amber-200 bg-amber-50 px-4 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                          >
+                                            Choose variant again
+                                          </button>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  ) : null}
                                 </div>
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-sm font-semibold text-slate-900">
-                                    {item.productName}
-                                  </p>
-                                  <p className="mt-1 text-xs text-slate-500">
-                                    Qty {item.qty} x {formatCurrency(item.price)}
-                                    {item.category?.name ? ` • ${item.category.name}` : ""}
-                                  </p>
-                                </div>
-                                <div className="text-right">
-                                  <p className="text-xs text-slate-500">Line Total</p>
-                                  <p className="text-sm font-semibold text-slate-900">
-                                    {formatCurrency(item.lineTotal)}
-                                  </p>
-                                </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
 
                           <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -2627,6 +2755,23 @@ export default function CheckoutPage() {
                 <p className="mt-1 text-xs text-rose-600">
                   Fix any issue and press {checkoutCopy.buttons.confirmButtonLabel} to try again.
                 </p>
+                {checkoutPreviewInvalidMessages.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleFocusCheckoutIssues}
+                      className="inline-flex h-9 items-center justify-center rounded-full border border-rose-200 bg-white px-4 text-xs font-semibold text-rose-700 transition hover:bg-rose-100"
+                    >
+                      Fix now
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {cartPreflightWarning && checkoutPreviewInvalidMessages.length > 0 ? (
+              <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                {cartPreflightWarning}
               </div>
             ) : null}
 
@@ -2685,6 +2830,10 @@ export default function CheckoutPage() {
 
             <div className="mt-4 space-y-3">
               {summaryItems.map((item) => {
+                const invalidItem = findInvalidVariantCheckoutItem(
+                  checkoutPreviewInvalidMessages,
+                  item
+                );
                 const stockValue = Number(item.stock);
                 const stock =
                   Number.isFinite(stockValue) && stockValue >= 0 ? stockValue : null;
@@ -2692,7 +2841,12 @@ export default function CheckoutPage() {
                 return (
                   <div
                     key={item.lineId}
-                    className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5"
+                    data-checkout-invalid-summary={invalidItem ? "true" : undefined}
+                    className={`rounded-2xl border p-3.5 ${
+                      invalidItem
+                        ? "border-amber-300 bg-amber-50/70"
+                        : "border-slate-200 bg-slate-50/70"
+                    }`}
                   >
                     <div className="flex items-start gap-3">
                       <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-white">
@@ -2709,14 +2863,24 @@ export default function CheckoutPage() {
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="break-words text-sm font-semibold leading-5 text-slate-900">
-                          {item.name}
-                        </p>
-                        {item.variantLabel ? (
-                          <p className="mt-1 text-xs font-medium text-slate-500">
-                            Variant: {item.variantLabel}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="break-words text-sm font-semibold leading-5 text-slate-900">
+                            {item.name}
                           </p>
-                        ) : null}
+                          {invalidItem ? (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-700">
+                              Invalid
+                            </span>
+                          ) : null}
+                        </div>
+                        {getOrderItemVariantLines(item).map((line) => (
+                          <p
+                            key={`${item.lineId}-${line}`}
+                            className="mt-1 text-xs font-medium text-slate-500"
+                          >
+                            {line}
+                          </p>
+                        ))}
                         <p className="mt-1 text-xs text-slate-500">
                           {checkoutCopy.cartItemSection.itemPriceLabel} {formatCurrency(item.price)}
                         </p>
@@ -2757,6 +2921,31 @@ export default function CheckoutPage() {
                         </button>
                       </div>
                     </div>
+                    {invalidItem ? (
+                      <div className="mt-3 rounded-2xl border border-amber-200 bg-white px-3 py-3 text-xs leading-5 text-amber-800">
+                        <p>{invalidItem.message}</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={isSubmitting || isRemoteSyncing}
+                            onClick={() => removeCartItem(item)}
+                            className="inline-flex h-9 items-center justify-center rounded-full border border-rose-200 bg-rose-50 px-4 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Remove item
+                          </button>
+                          {canReselectInvalidCheckoutItem(invalidItem) ? (
+                            <button
+                              type="button"
+                              disabled={isSubmitting || isRemoteSyncing}
+                              onClick={() => handleReselectVariant(item, invalidItem)}
+                              className="inline-flex h-9 items-center justify-center rounded-full border border-amber-200 bg-amber-50 px-4 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Choose variant again
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}
@@ -2772,9 +2961,15 @@ export default function CheckoutPage() {
                   </span>
                 </div>
                 <div className="mt-3 space-y-2">
-                  {checkoutPreviewInvalidMessages.map((item) => (
+                  {checkoutPreviewInvalidMessages.map((item) => {
+                    const linkedItem =
+                      summaryItems.find(
+                        (summaryItem) =>
+                          findInvalidVariantCheckoutItem([item], summaryItem) !== null
+                      ) || null;
+                    return (
                     <div
-                      key={`${item.productId}-${item.reason}`}
+                      key={`${item.productId}-${item.reason}-${item.lineId || "line"}`}
                       data-testid={`checkout-invalid-item-${item.productId}`}
                       data-checkout-reason={item.reason}
                       className="rounded-2xl border border-amber-200 bg-white/80 px-3 py-3"
@@ -2786,8 +2981,37 @@ export default function CheckoutPage() {
                       >
                         {item.message}
                       </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={handleFocusCheckoutIssues}
+                          className="inline-flex h-9 items-center justify-center rounded-full border border-amber-200 bg-amber-50 px-4 text-xs font-semibold text-amber-900 transition hover:bg-amber-100"
+                        >
+                          Fix now
+                        </button>
+                        {linkedItem ? (
+                          <button
+                            type="button"
+                            disabled={isSubmitting || isRemoteSyncing}
+                            onClick={() => removeCartItem(linkedItem)}
+                            className="inline-flex h-9 items-center justify-center rounded-full border border-rose-200 bg-rose-50 px-4 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Remove item
+                          </button>
+                        ) : null}
+                        {linkedItem && canReselectInvalidCheckoutItem(item) ? (
+                          <button
+                            type="button"
+                            disabled={isSubmitting || isRemoteSyncing}
+                            onClick={() => handleReselectVariant(linkedItem, item)}
+                            className="inline-flex h-9 items-center justify-center rounded-full border border-amber-200 bg-white px-4 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Choose variant again
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
-                  ))}
+                  )})}
                 </div>
               </div>
             ) : null}

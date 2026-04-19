@@ -29,6 +29,7 @@ import {
   getOrderContractSummary,
   isOrderContractFinal,
 } from "../../utils/orderContract.ts";
+import { getOrderItemVariantLines } from "../../utils/orderVariantPresentation.js";
 import { getOrderTruthStatus } from "../../utils/orderTruth.js";
 import {
   getGroupedPaymentReadModel,
@@ -485,9 +486,10 @@ export default function StoreOrderTrackingPage() {
             const quantity = getItemQuantity(item);
             const price = getItemPrice(item);
             const lineTotal = Number(item?.lineTotal ?? item?.total ?? price * quantity);
+            const variantLines = getOrderItemVariantLines(item);
             return {
               no: String(index + 1),
-              name: getItemName(item),
+              name: [getItemName(item), ...variantLines].filter(Boolean).join("\n"),
               quantity: String(quantity),
               price: money(price),
               total: money(lineTotal),
@@ -1093,6 +1095,7 @@ export default function StoreOrderTrackingPage() {
           <div className="mt-5 grid gap-3 lg:grid-cols-2">
             {storeSplits.map((split) => {
               const splitPresentation = getSplitPresentation(split);
+              const splitItems = Array.isArray(split?.items) ? split.items : [];
               return (
                 <div
                   key={split.suborderId || split.suborderNumber || split.storeId || split.storeName}
@@ -1130,6 +1133,58 @@ export default function StoreOrderTrackingPage() {
                       Payment {splitPresentation.paymentLabel}
                     </span>
                   </div>
+                  {splitItems.length > 0 ? (
+                    <div className="mt-4 space-y-2 rounded-2xl border border-slate-200 bg-white p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                        Split Items
+                      </p>
+                      {splitItems.map((item, index) => {
+                        const itemImage = resolveAssetUrl(item?.image || null);
+                        const quantity = Number(item?.qty || 0);
+                        const price = Number(item?.price || 0);
+                        const lineTotal = Number(item?.lineTotal || price * quantity);
+                        return (
+                          <div
+                            key={`${split.suborderId || split.storeId || "split"}-${item?.id || item?.productId || index}`}
+                            className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3"
+                          >
+                            <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white">
+                              {itemImage ? (
+                                <img
+                                  src={itemImage}
+                                  alt={item?.productName || "Split item"}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center text-[10px] text-slate-400">
+                                  IMG
+                                </div>
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-slate-900">
+                                {item?.productName || `Product #${item?.productId || "-"}`}
+                              </p>
+                              {getOrderItemVariantLines(item).map((line) => (
+                                <p
+                                  key={`${item?.id ?? item?.productId ?? index}-${line}`}
+                                  className="mt-1 text-xs text-slate-500"
+                                >
+                                  {line}
+                                </p>
+                              ))}
+                              <p className="mt-1 text-xs text-slate-500">
+                                {quantity} × {formatCurrency(price)}
+                              </p>
+                            </div>
+                            <div className="text-right text-sm font-semibold text-slate-900">
+                              {formatCurrency(lineTotal)}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                 </div>
               );
             })}
@@ -1246,7 +1301,17 @@ export default function StoreOrderTrackingPage() {
                           </div>
                         )}
                       </div>
-                      <p className="text-sm font-semibold text-slate-900">{getItemName(item)}</p>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-900">{getItemName(item)}</p>
+                        {getOrderItemVariantLines(item).map((line) => (
+                          <p
+                            key={`${item?.id ?? item?.productId ?? index}-${line}`}
+                            className="mt-1 text-xs text-slate-500"
+                          >
+                            {line}
+                          </p>
+                        ))}
+                      </div>
                     </div>
                     <div className="mt-3 space-y-1.5 text-xs text-slate-600">
                       <div className="flex items-center justify-between gap-3">
@@ -1311,7 +1376,17 @@ export default function StoreOrderTrackingPage() {
                                 </div>
                               )}
                             </div>
-                            <span>{getItemName(item)}</span>
+                            <div className="min-w-0">
+                              <p>{getItemName(item)}</p>
+                              {getOrderItemVariantLines(item).map((line) => (
+                                <p
+                                  key={`${item?.id ?? item?.productId ?? index}-${line}`}
+                                  className="mt-1 text-xs text-slate-500"
+                                >
+                                  {line}
+                                </p>
+                              ))}
+                            </div>
                           </div>
                         </td>
                         <td className="px-4 py-3 text-right text-slate-700">{quantity}</td>

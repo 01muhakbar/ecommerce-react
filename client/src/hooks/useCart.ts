@@ -523,6 +523,7 @@ export function useCart() {
           return;
         }
         setError(err);
+        await refreshCart(false);
       } finally {
         setIsLoading(false);
       }
@@ -613,6 +614,7 @@ export function useCart() {
           return;
         }
         setError(err);
+        await refreshCart(false);
       } finally {
         setIsLoading(false);
       }

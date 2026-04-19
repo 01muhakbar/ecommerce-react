@@ -1,14 +1,111 @@
+import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ShoppingCart, Trash2, X } from "lucide-react";
+import { previewCheckoutByStore } from "../../api/public/storeCheckout.ts";
 import { useCart } from "../../hooks/useCart.ts";
 import { formatCurrency } from "../../utils/format.js";
+import { getOrderItemVariantLines } from "../../utils/orderVariantPresentation.js";
+import {
+  findInvalidVariantCheckoutItem,
+  resolveVariantCheckoutMessage,
+} from "../../utils/variantCheckoutErrors.js";
 import {
   UiEmptyState,
   UiErrorState,
   UiUpdatingBadge,
 } from "../../components/primitives/state/index.js";
 import { GENERIC_ERROR, UPDATING } from "../../constants/uiMessages.js";
+
+const RECOVERY_RESELECT_CODES = new Set([
+  "PRODUCT_VARIANT_REQUIRED",
+  "PRODUCT_VARIANT_MISSING",
+  "VARIANT_NOT_AVAILABLE",
+]);
+
+const resolveHasCheckoutAuthHint = () => {
+  try {
+    return (
+      Boolean(localStorage.getItem("authToken")) ||
+      localStorage.getItem("authSessionHint") === "true"
+    );
+  } catch {
+    return false;
+  }
+};
+
+const buildCartCheckoutSignature = (items) =>
+  (Array.isArray(items) ? items : [])
+    .map((item) => {
+      const productId = Number(item?.productId ?? item?.id);
+      const lineId =
+        String(item?.lineId || "").trim() ||
+        `${productId}:${String(item?.variantKey || "").trim().toLowerCase() || "base"}`;
+      const qty = Math.max(0, Number(item?.quantity ?? item?.qty ?? 0));
+      return `${lineId}:${qty}`;
+    })
+    .filter((value) => !value.startsWith(":"))
+    .sort()
+    .join("|");
+
+const canReselectInvalidCartItem = (invalidItem) =>
+  RECOVERY_RESELECT_CODES.has(String(invalidItem?.code || invalidItem?.reason || "").trim().toUpperCase());
+
+const buildVariantRecoveryState = (item, invalidItem, sourcePath) => {
+  const rawSelections =
+    invalidItem?.meta?.variantSelections ??
+    invalidItem?.variantSelections ??
+    item?.variantSelections ??
+    [];
+
+  return {
+    checkoutRecovery: {
+      reason: String(invalidItem?.code || invalidItem?.reason || "").trim().toUpperCase() || null,
+      productId: Number(item?.productId ?? invalidItem?.productId) || null,
+      productName: String(item?.name || invalidItem?.productName || "").trim() || null,
+      variantKey: invalidItem?.variantKey ?? item?.variantKey ?? null,
+      variantSelections: Array.isArray(rawSelections) ? rawSelections : [],
+      source: "cart",
+      fromPath: sourcePath,
+    },
+  };
+};
+
+function useCartCheckoutPreflight(items, enabled) {
+  const checkoutSignature = buildCartCheckoutSignature(items);
+  const preflightQuery = useQuery({
+    queryKey: ["cart-checkout-preflight", checkoutSignature],
+    queryFn: () => previewCheckoutByStore(),
+    enabled: enabled && Boolean(checkoutSignature),
+    staleTime: 10_000,
+    retry: false,
+  });
+
+  const invalidItems = Array.isArray(preflightQuery.data?.data?.invalidItems)
+    ? preflightQuery.data.data.invalidItems.map((item) => ({
+        ...item,
+        message: resolveVariantCheckoutMessage(
+          item,
+          "This cart line needs attention before checkout."
+        ),
+      }))
+    : [];
+
+  return {
+    invalidItems,
+    hasInvalidItems: invalidItems.length > 0,
+    isLoading: preflightQuery.isLoading,
+    isError: preflightQuery.isError,
+  };
+}
+
+const scrollToFirstCartInvalidItem = (selector) => {
+  if (typeof document === "undefined") return;
+  const target = document.querySelector(selector);
+  if (target && typeof target.scrollIntoView === "function") {
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+};
 
 export function StoreCartDrawer({
   isOpen = true,
@@ -35,13 +132,25 @@ export function StoreCartDrawer({
   const showInlineError = Boolean(error) && hasItems;
   const [shouldRender, setShouldRender] = useState(isOpen);
   const lastRefreshAtRef = useRef(0);
+  const hasCheckoutAuthHint = resolveHasCheckoutAuthHint();
+  const {
+    invalidItems: checkoutPreflightInvalidItems,
+    hasInvalidItems: hasCheckoutPreflightInvalidItems,
+    isLoading: isCheckoutPreflightLoading,
+  } = useCartCheckoutPreflight(
+    items,
+    hasHydrated && hasItems && !isLoading && hasCheckoutAuthHint
+  );
   const subtotalValue = Number(subtotal || 0);
   const discountValue = 0;
   const shippingLabel = "Calculated at checkout";
   const taxLabel = "Calculated at checkout";
   const totalValue = subtotalValue;
   const errorMessage =
-    error?.response?.data?.message ?? error?.message ?? GENERIC_ERROR;
+    resolveVariantCheckoutMessage(error, "") ||
+    error?.response?.data?.message ||
+    error?.message ||
+    GENERIC_ERROR;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -104,6 +213,38 @@ export function StoreCartDrawer({
     handleClose();
     navigate("/");
   };
+
+  const handleReselectVariant = useCallback(
+    (item, invalidItem) => {
+      const productId = Number(item?.productId ?? invalidItem?.productId);
+      if (!Number.isFinite(productId) || productId <= 0) return;
+      if (typeof onClose === "function") {
+        onClose();
+      }
+      navigate(`/product/${encodeURIComponent(String(productId))}`, {
+        state: buildVariantRecoveryState(item, invalidItem, "/cart"),
+      });
+    },
+    [navigate, onClose]
+  );
+
+  const handleProceedToCheckout = useCallback(() => {
+    if (typeof onClose === "function") {
+      onClose();
+    }
+    navigate("/checkout", {
+      state: hasCheckoutPreflightInvalidItems
+        ? {
+            cartPreflightWarning:
+              "Some cart lines need attention. Fix the highlighted items before placing the order.",
+          }
+        : undefined,
+    });
+  }, [hasCheckoutPreflightInvalidItems, navigate, onClose]);
+
+  const handleReviewIssues = useCallback(() => {
+    scrollToFirstCartInvalidItem('[data-cart-drawer-invalid-item="true"]');
+  }, []);
 
   if (!shouldRender) return null;
 
@@ -215,6 +356,11 @@ export function StoreCartDrawer({
                 ) : null}
                 {items.map((item) => {
                   const rowTarget = resolveCartTarget(item);
+                  const invalidItem = findInvalidVariantCheckoutItem(
+                    checkoutPreflightInvalidItems,
+                    item
+                  );
+                  const canReselect = Boolean(rowTarget.productId) && canReselectInvalidCartItem(invalidItem);
                   const quantity = Math.max(1, Number(item.quantity) || 1);
                   const price = Number(item.price) || 0;
                   const stockValue = Number(item.stock);
@@ -228,7 +374,12 @@ export function StoreCartDrawer({
                   return (
                     <article
                       key={item.lineId ?? rowTarget.productId ?? item.name}
-                      className="rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_8px_20px_rgba(15,23,42,0.06)]"
+                      data-cart-drawer-invalid-item={invalidItem ? "true" : undefined}
+                      className={`rounded-2xl border bg-white p-3 shadow-[0_8px_20px_rgba(15,23,42,0.06)] ${
+                        invalidItem
+                          ? "border-amber-300 bg-amber-50/70"
+                          : "border-slate-200"
+                      }`}
                     >
                       <div className="flex items-start gap-3 sm:gap-4">
                         <div className="flex h-[68px] w-[68px] shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 sm:h-[74px] sm:w-[74px]">
@@ -247,11 +398,19 @@ export function StoreCartDrawer({
                           <p className="line-clamp-2 text-[13px] font-semibold leading-tight text-slate-900 sm:text-sm">
                             {item.name}
                           </p>
-                          {item.variantLabel ? (
-                            <p className="mt-1 text-[11px] font-medium text-slate-500">
-                              Variant {item.variantLabel}
-                            </p>
+                          {invalidItem ? (
+                            <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-700">
+                              Needs attention
+                            </span>
                           ) : null}
+                          {getOrderItemVariantLines(item).map((line) => (
+                            <p
+                              key={`${item.lineId ?? rowTarget.productId ?? item.name}-${line}`}
+                              className="mt-1 text-[11px] font-medium text-slate-500"
+                            >
+                              {line}
+                            </p>
+                          ))}
                           <p className="mt-1 text-[11px] text-slate-500">
                             Unit {formatCurrency(price)}
                           </p>
@@ -310,6 +469,34 @@ export function StoreCartDrawer({
                           </div>
                         </div>
                       </div>
+                      {invalidItem ? (
+                        <div className="mt-3 rounded-2xl border border-amber-200 bg-white px-3 py-3 text-xs leading-5 text-amber-800">
+                          <p>{invalidItem.message}</p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              disabled={isLoading || !rowTarget.productId}
+                              onClick={() => {
+                                if (!rowTarget.productId) return;
+                                remove(rowTarget);
+                              }}
+                              className="inline-flex h-9 items-center justify-center rounded-full border border-rose-200 bg-rose-50 px-4 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Remove item
+                            </button>
+                            {canReselect ? (
+                              <button
+                                type="button"
+                                disabled={isLoading}
+                                onClick={() => handleReselectVariant(item, invalidItem)}
+                                className="inline-flex h-9 items-center justify-center rounded-full border border-amber-200 bg-amber-50 px-4 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                Choose variant again
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                      ) : null}
                     </article>
                   );
                 })}
@@ -357,23 +544,35 @@ export function StoreCartDrawer({
               </div>
             </div>
             <div className="mt-3.5 space-y-2.5">
+              {hasCheckoutPreflightInvalidItems ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  <p>
+                    Some items need attention before checkout. Fix the highlighted lines now, or
+                    continue to review them in checkout.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleReviewIssues}
+                      className="inline-flex h-9 items-center justify-center rounded-full border border-amber-200 bg-white px-4 text-xs font-semibold text-amber-900 transition hover:bg-amber-100"
+                    >
+                      Review issues
+                    </button>
+                  </div>
+                </div>
+              ) : isCheckoutPreflightLoading ? (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                  Checking the latest cart snapshot before checkout.
+                </div>
+              ) : null}
               {hasItems ? (
-                hasVariantItems ? (
-                  <button
-                    type="button"
-                    disabled
-                    className="inline-flex h-12 w-full items-center justify-center rounded-full bg-amber-300 px-4 text-sm font-semibold text-white"
-                  >
-                    Variant Checkout Coming Next Phase
-                  </button>
-                ) : (
-                  <Link
-                    to="/checkout"
-                    className="inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white shadow-[0_10px_18px_rgba(5,150,105,0.3)] transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
-                  >
-                    Proceed to Checkout
-                  </Link>
-                )
+                <button
+                  type="button"
+                  onClick={handleProceedToCheckout}
+                  className="inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white shadow-[0_10px_18px_rgba(5,150,105,0.3)] transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+                >
+                  Proceed to Checkout
+                </button>
               ) : (
                 <button
                   type="button"
@@ -408,6 +607,7 @@ export function StoreCartDrawer({
 }
 
 export default function StoreCartPage() {
+  const navigate = useNavigate();
   const {
     items,
     subtotal,
@@ -426,7 +626,19 @@ export default function StoreCartPage() {
   const showInlineError = Boolean(error) && hasItems;
   const lastRefreshAtRef = useRef(0);
   const errorMessage =
-    error?.response?.data?.message ?? error?.message ?? GENERIC_ERROR;
+    resolveVariantCheckoutMessage(error, "") ||
+    error?.response?.data?.message ||
+    error?.message ||
+    GENERIC_ERROR;
+  const hasCheckoutAuthHint = resolveHasCheckoutAuthHint();
+  const {
+    invalidItems: checkoutPreflightInvalidItems,
+    hasInvalidItems: hasCheckoutPreflightInvalidItems,
+    isLoading: isCheckoutPreflightLoading,
+  } = useCartCheckoutPreflight(
+    items,
+    hasHydrated && hasItems && !isLoading && hasCheckoutAuthHint
+  );
   const subtotalValue = Number(subtotal || 0);
   const discountValue = 0;
   const shippingLabel = "Calculated at checkout";
@@ -452,6 +664,32 @@ export default function StoreCartPage() {
       variantKey: item?.variantKey ?? null,
     };
   };
+
+  const handleReselectVariant = useCallback(
+    (item, invalidItem) => {
+      const productId = Number(item?.productId ?? invalidItem?.productId);
+      if (!Number.isFinite(productId) || productId <= 0) return;
+      navigate(`/product/${encodeURIComponent(String(productId))}`, {
+        state: buildVariantRecoveryState(item, invalidItem, "/cart"),
+      });
+    },
+    [navigate]
+  );
+
+  const handleProceedToCheckout = useCallback(() => {
+    navigate("/checkout", {
+      state: hasCheckoutPreflightInvalidItems
+        ? {
+            cartPreflightWarning:
+              "Some cart lines need attention. Fix the highlighted items before placing the order.",
+          }
+        : undefined,
+    });
+  }, [hasCheckoutPreflightInvalidItems, navigate]);
+
+  const handleReviewIssues = useCallback(() => {
+    scrollToFirstCartInvalidItem('[data-cart-page-invalid-item="true"]');
+  }, []);
 
   return (
     <section className="mx-auto max-w-[1240px] space-y-6 px-2 py-2 sm:px-3 lg:px-0">
@@ -534,8 +772,35 @@ export default function StoreCartPage() {
               </div>
             ) : null}
 
+            {hasCheckoutPreflightInvalidItems ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <p>
+                  Some cart lines need attention before checkout. Use the recovery actions below,
+                  or continue to checkout to review the same blockers there.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={handleReviewIssues}
+                    className="inline-flex h-9 items-center justify-center rounded-full border border-amber-200 bg-white px-4 text-xs font-semibold text-amber-900 transition hover:bg-amber-100"
+                  >
+                    Review issues
+                  </button>
+                </div>
+              </div>
+            ) : isCheckoutPreflightLoading ? (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                Checking the latest cart snapshot before checkout.
+              </div>
+            ) : null}
+
             {items.map((item) => {
               const rowTarget = resolveCartTarget(item);
+              const invalidItem = findInvalidVariantCheckoutItem(
+                checkoutPreflightInvalidItems,
+                item
+              );
+              const canReselect = Boolean(rowTarget.productId) && canReselectInvalidCartItem(invalidItem);
               const quantity = Math.max(1, Number(item.quantity) || 1);
               const price = Number(item.price) || 0;
               const stockValue = Number(item.stock);
@@ -549,7 +814,12 @@ export default function StoreCartPage() {
               return (
                 <article
                   key={item.lineId ?? rowTarget.productId ?? item.name}
-                  className="rounded-3xl border border-slate-200 bg-white p-3.5 shadow-[0_10px_24px_rgba(15,23,42,0.06)] sm:p-4"
+                  data-cart-page-invalid-item={invalidItem ? "true" : undefined}
+                  className={`rounded-3xl border bg-white p-3.5 shadow-[0_10px_24px_rgba(15,23,42,0.06)] sm:p-4 ${
+                    invalidItem
+                      ? "border-amber-300 bg-amber-50/70"
+                      : "border-slate-200"
+                  }`}
                 >
                   <div className="flex items-start gap-3 sm:gap-4">
                     <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-slate-100 sm:h-20 sm:w-20">
@@ -568,11 +838,19 @@ export default function StoreCartPage() {
                       <p className="line-clamp-2 text-sm font-semibold leading-tight text-slate-900 sm:text-[15px]">
                         {item.name}
                       </p>
-                      {item.variantLabel ? (
-                        <p className="mt-1 text-xs font-medium text-slate-500">
-                          Variant {item.variantLabel}
-                        </p>
+                      {invalidItem ? (
+                        <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-700">
+                          Needs attention
+                        </span>
                       ) : null}
+                      {getOrderItemVariantLines(item).map((line) => (
+                        <p
+                          key={`${item.lineId ?? rowTarget.productId ?? item.name}-${line}`}
+                          className="mt-1 text-xs font-medium text-slate-500"
+                        >
+                          {line}
+                        </p>
+                      ))}
                       <p className="mt-1 text-xs text-slate-400">
                         Item Price {formatCurrency(price)}
                       </p>
@@ -634,6 +912,34 @@ export default function StoreCartPage() {
                       </div>
                     </div>
                   </div>
+                  {invalidItem ? (
+                    <div className="mt-4 rounded-2xl border border-amber-200 bg-white px-4 py-3 text-sm text-amber-900">
+                      <p>{invalidItem.message}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={isLoading || !rowTarget.productId}
+                          onClick={() => {
+                            if (!rowTarget.productId) return;
+                            remove(rowTarget);
+                          }}
+                          className="inline-flex h-10 items-center justify-center rounded-full border border-rose-200 bg-rose-50 px-4 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Remove item
+                        </button>
+                        {canReselect ? (
+                          <button
+                            type="button"
+                            disabled={isLoading}
+                            onClick={() => handleReselectVariant(item, invalidItem)}
+                            className="inline-flex h-10 items-center justify-center rounded-full border border-amber-200 bg-amber-50 px-4 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Choose variant again
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
                 </article>
               );
             })}
@@ -697,33 +1003,20 @@ export default function StoreCartPage() {
                   <span className="font-medium text-slate-500">{taxLabel}</span>
                 </div>
               </div>
-              <div
-                className={`mt-4 rounded-2xl px-4 py-3 text-sm ${
-                  hasVariantItems
-                    ? "border border-amber-200 bg-amber-50 text-amber-900"
-                    : "border border-emerald-100 bg-emerald-50 text-emerald-900"
-                }`}
-              >
-                {hasVariantItems
-                  ? "Variant cart items are already locked in the cart. Checkout hardening is the next phase before these lines can proceed safely."
-                  : "Proceed to checkout to confirm shipping, payment method, and the final order total."}
+              <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                {hasCheckoutPreflightInvalidItems
+                  ? "Some cart lines need attention before checkout. Fix the highlighted items now, or continue and review them again in checkout."
+                  : hasVariantItems
+                    ? "Variant selections are preserved through checkout and revalidated against the latest stock before the order is placed."
+                    : "Proceed to checkout to confirm shipping, payment method, and the final order total."}
               </div>
-              {hasVariantItems ? (
-                <button
-                  type="button"
-                  disabled
-                  className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-full bg-amber-300 px-5 text-sm font-semibold text-white"
-                >
-                  Variant Checkout Coming Next Phase
-                </button>
-              ) : (
-                <Link
-                  to="/checkout"
-                  className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-5 text-sm font-semibold text-white shadow-[0_14px_26px_rgba(5,150,105,0.26)] transition hover:bg-emerald-700"
-                >
-                  Proceed to Checkout
-                </Link>
-              )}
+              <button
+                type="button"
+                onClick={handleProceedToCheckout}
+                className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-5 text-sm font-semibold text-white shadow-[0_14px_26px_rgba(5,150,105,0.26)] transition hover:bg-emerald-700"
+              >
+                Proceed to Checkout
+              </button>
               <Link
                 to="/"
                 className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-full border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:border-slate-400"

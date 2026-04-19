@@ -175,7 +175,12 @@ export default function StoreLoginPage() {
           : resolvedFrom && resolvedFrom !== "/auth/login"
             ? resolvedFrom
             : "/account";
-      navigate(target, { replace: true });
+      const postLoginState =
+        location.state?.postLoginState &&
+        typeof location.state.postLoginState === "object"
+          ? location.state.postLoginState
+          : undefined;
+      navigate(target, { replace: true, state: postLoginState });
     } catch (err) {
       if (err?.response?.status === 403 && err?.response?.data?.code === "VERIFICATION_REQUIRED") {
         const pendingRegistration = err?.response?.data?.data?.pending || null;

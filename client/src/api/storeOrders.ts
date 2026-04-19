@@ -122,15 +122,36 @@ export const fetchStoreOrder = async (ref: string) => {
         masked?: boolean;
       } | null;
       items: Array<{
+        id?: number | null;
+        productId?: number | null;
         name: string;
         imageUrl?: string | null;
+        image?: string | null;
         quantity: number;
         price: number;
         lineTotal: number;
+        variantKey?: string | null;
+        variantLabel?: string | null;
+        variantSelections?: Array<{
+          attributeId?: number;
+          attributeName?: string;
+          valueId?: number | null;
+          value?: string;
+        }>;
+        sku?: string | null;
+        barcode?: string | null;
+        product?: {
+          id?: number | null;
+          name?: string | null;
+          slug?: string | null;
+        } | null;
       }>;
       storeSplits?: Array<{
+        suborderId?: number | null;
+        storeId?: number | null;
         suborderNumber?: string | null;
         storeName?: string | null;
+        storeSlug?: string | null;
         storeLogoUrl?: string | null;
         totalAmount?: number;
         paymentStatus?: string | null;
@@ -163,6 +184,26 @@ export const fetchStoreOrder = async (ref: string) => {
           settlementStatus?: string | null;
           settlementStatusMeta?: Record<string, any> | null;
         } | null;
+        items?: Array<{
+          id?: number | null;
+          productId?: number | null;
+          productName?: string | null;
+          slug?: string | null;
+          qty?: number;
+          price?: number;
+          lineTotal?: number;
+          image?: string | null;
+          variantKey?: string | null;
+          variantLabel?: string | null;
+          variantSelections?: Array<{
+            attributeId?: number;
+            attributeName?: string;
+            valueId?: number | null;
+            value?: string;
+          }>;
+          sku?: string | null;
+          barcode?: string | null;
+        }>;
         payment?: {
           status?: string | null;
           statusMeta?: Record<string, any> | null;
