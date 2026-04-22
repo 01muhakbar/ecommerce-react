@@ -1,0 +1,104 @@
+{
+  "runId": "seller-category-selector-smoke-20260420T050002z-6w3st4",
+  "startedAt": "2026-04-20T05:00:02.122Z",
+  "serverBaseUrl": "http://localhost:3001",
+  "clientBaseUrl": "http://localhost:5173",
+  "storeSlug": "superseller-demo-store",
+  "sellerEmail": "superseller@local.dev",
+  "storeId": 562,
+  "productId": null,
+  "productSlug": null,
+  "categories": {
+    "selected": [
+      {
+        "id": 6,
+        "name": "Beverages",
+        "code": "beverages"
+      },
+      {
+        "id": 3,
+        "name": "Bread & Bakery",
+        "code": "bakery"
+      }
+    ],
+    "searchQuery": "bakery"
+  },
+  "screenshots": [
+    "C:\\Users\\user\\Documents\\ecommerce-react\\reports\\seller-category-selector-smoke-20260420T050002z-6w3st4\\01-search-category.png"
+  ],
+  "regressions": [],
+  "steps": [
+    {
+      "id": "1",
+      "title": "Bootstrap seller session and category references",
+      "status": "passed",
+      "summary": "Seller session and category references are ready.",
+      "startedAt": "2026-04-20T05:00:02.195Z",
+      "finishedAt": "2026-04-20T05:00:02.345Z",
+      "durationMs": 150,
+      "proof": {
+        "storeId": 562,
+        "selectedCategories": [
+          {
+            "id": 6,
+            "name": "Beverages",
+            "code": "beverages"
+          },
+          {
+            "id": 3,
+            "name": "Bread & Bakery",
+            "code": "bakery"
+          }
+        ],
+        "searchQuery": "bakery",
+        "cookieName": "token"
+      },
+      "rootCause": null
+    },
+    {
+      "id": "2",
+      "title": "Open Seller Product create page",
+      "status": "passed",
+      "summary": "Seller product create page loaded with the new category selector.",
+      "startedAt": "2026-04-20T05:00:03.132Z",
+      "finishedAt": "2026-04-20T05:00:04.615Z",
+      "durationMs": 1483,
+      "proof": {
+        "url": "http://localhost:5173/seller/stores/superseller-demo-store/catalog/products/new"
+      },
+      "rootCause": null
+    },
+    {
+      "id": "3",
+      "title": "Search category using the new search box",
+      "status": "passed",
+      "summary": "Search narrowed the selector to the expected category entry.",
+      "startedAt": "2026-04-20T05:00:04.615Z",
+      "finishedAt": "2026-04-20T05:00:05.126Z",
+      "durationMs": 511,
+      "proof": {
+        "searchQuery": "bakery",
+        "matchedCategory": "Bread & Bakery",
+        "screenshot": "C:\\Users\\user\\Documents\\ecommerce-react\\reports\\seller-category-selector-smoke-20260420T050002z-6w3st4\\01-search-category.png"
+      },
+      "rootCause": null
+    },
+    {
+      "id": "4",
+      "title": "Select multiple categories and set one as default",
+      "status": "failed",
+      "summary": "locator.waitFor: Error: strict mode violation: getByText('Default category: Bread & Bakery') resolved to 2 elements:\n    1) <p>Default category: Bread & Bakery</p> aka getByText('Default category: Bread &').first()\n    2) <p class=\"text-xs text-slate-500\">Default category: Bread & Bakery</p> aka locator('form').getByText('Default category: Bread &')\n\nCall log:\n\u001b[2m  - waiting for getByText('Default category: Bread & Bakery') to be visible\u001b[22m\n",
+      "startedAt": "2026-04-20T05:00:05.126Z",
+      "finishedAt": "2026-04-20T05:00:05.625Z",
+      "durationMs": 499,
+      "rootCause": "locator.waitFor: Error: strict mode violation: getByText('Default category: Bread & Bakery') resolved to 2 elements:\n    1) <p>Default category: Bread & Bakery</p> aka getByText('Default category: Bread &').first()\n    2) <p class=\"text-xs text-slate-500\">Default category: Bread & Bakery</p> aka locator('form').getByText('Default category: Bread &')\n\nCall log:\n\u001b[2m  - waiting for getByText('Default category: Bread & Bakery') to be visible\u001b[22m"
+    }
+  ],
+  "overallStatus": "failed",
+  "failure": {
+    "stepId": "4",
+    "stepTitle": "Select multiple categories and set one as default",
+    "message": "locator.waitFor: Error: strict mode violation: getByText('Default category: Bread & Bakery') resolved to 2 elements:\n    1) <p>Default category: Bread & Bakery</p> aka getByText('Default category: Bread &').first()\n    2) <p class=\"text-xs text-slate-500\">Default category: Bread & Bakery</p> aka locator('form').getByText('Default category: Bread &')\n\nCall log:\n\u001b[2m  - waiting for getByText('Default category: Bread & Bakery') to be visible\u001b[22m\n",
+    "rootCause": "locator.waitFor: Error: strict mode violation: getByText('Default category: Bread & Bakery') resolved to 2 elements:\n    1) <p>Default category: Bread & Bakery</p> aka getByText('Default category: Bread &').first()\n    2) <p class=\"text-xs text-slate-500\">Default category: Bread & Bakery</p> aka locator('form').getByText('Default category: Bread &')\n\nCall log:\n\u001b[2m  - waiting for getByText('Default category: Bread & Bakery') to be visible\u001b[22m"
+  }
+}

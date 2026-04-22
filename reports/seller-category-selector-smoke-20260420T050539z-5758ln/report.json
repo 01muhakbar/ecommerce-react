@@ -1,0 +1,196 @@
+{
+  "runId": "seller-category-selector-smoke-20260420T050539z-5758ln",
+  "startedAt": "2026-04-20T05:05:39.498Z",
+  "serverBaseUrl": "http://localhost:3001",
+  "clientBaseUrl": "http://localhost:5173",
+  "storeSlug": "superseller-demo-store",
+  "sellerEmail": "superseller@local.dev",
+  "storeId": 562,
+  "productId": 849,
+  "productSlug": "seller-category-selector-smoke-20260420t050539z-5758ln-draft",
+  "categories": {
+    "selected": [
+      {
+        "id": 6,
+        "name": "Beverages",
+        "code": "beverages"
+      },
+      {
+        "id": 3,
+        "name": "Bread & Bakery",
+        "code": "bakery"
+      }
+    ],
+    "searchQuery": "bakery"
+  },
+  "screenshots": [
+    "C:\\Users\\user\\Documents\\ecommerce-react\\reports\\seller-category-selector-smoke-20260420T050539z-5758ln\\01-search-category.png",
+    "C:\\Users\\user\\Documents\\ecommerce-react\\reports\\seller-category-selector-smoke-20260420T050539z-5758ln\\02-reopened-draft.png"
+  ],
+  "regressions": [],
+  "steps": [
+    {
+      "id": "1",
+      "title": "Bootstrap seller session and category references",
+      "status": "passed",
+      "summary": "Seller session and category references are ready.",
+      "startedAt": "2026-04-20T05:05:39.565Z",
+      "finishedAt": "2026-04-20T05:10:37.735Z",
+      "durationMs": 298170,
+      "proof": {
+        "storeId": 562,
+        "selectedCategories": [
+          {
+            "id": 6,
+            "name": "Beverages",
+            "code": "beverages"
+          },
+          {
+            "id": 3,
+            "name": "Bread & Bakery",
+            "code": "bakery"
+          }
+        ],
+        "searchQuery": "bakery",
+        "cookieName": "token"
+      },
+      "rootCause": null
+    },
+    {
+      "id": "2",
+      "title": "Open Seller Product create page",
+      "status": "passed",
+      "summary": "Seller product create page loaded with the new category selector.",
+      "startedAt": "2026-04-20T05:10:38.505Z",
+      "finishedAt": "2026-04-20T05:10:40.012Z",
+      "durationMs": 1507,
+      "proof": {
+        "url": "http://localhost:5173/seller/stores/superseller-demo-store/catalog/products/new"
+      },
+      "rootCause": null
+    },
+    {
+      "id": "3",
+      "title": "Search category using the new search box",
+      "status": "passed",
+      "summary": "Search narrowed the selector to the expected category entry.",
+      "startedAt": "2026-04-20T05:10:40.012Z",
+      "finishedAt": "2026-04-20T05:10:40.470Z",
+      "durationMs": 458,
+      "proof": {
+        "searchQuery": "bakery",
+        "matchedCategory": "Bread & Bakery",
+        "screenshot": "C:\\Users\\user\\Documents\\ecommerce-react\\reports\\seller-category-selector-smoke-20260420T050539z-5758ln\\01-search-category.png"
+      },
+      "rootCause": null
+    },
+    {
+      "id": "4",
+      "title": "Select multiple categories and set one as default",
+      "status": "passed",
+      "summary": "Multiple categories were selected and one default category was set.",
+      "startedAt": "2026-04-20T05:10:40.470Z",
+      "finishedAt": "2026-04-20T05:10:40.851Z",
+      "durationMs": 381,
+      "proof": {
+        "selectedCategoryIds": [
+          6,
+          3
+        ],
+        "defaultCategoryId": 3
+      },
+      "rootCause": null
+    },
+    {
+      "id": "5",
+      "title": "Save draft and capture create payload",
+      "status": "passed",
+      "summary": "Draft saved with the expected selected categories and default category.",
+      "startedAt": "2026-04-20T05:10:40.851Z",
+      "finishedAt": "2026-04-20T05:10:41.390Z",
+      "durationMs": 539,
+      "proof": {
+        "productId": 849,
+        "productSlug": "seller-category-selector-smoke-20260420t050539z-5758ln-draft",
+        "createPayload": {
+          "name": "Category Selector seller-category-selector-smoke-20260420T050539z-5758ln",
+          "description": "Seller category selector smoke seller-category-selector-smoke-20260420T050539z-5758ln.",
+          "sku": "CATSEL-seller-category-selector-smoke-20260420T050539z-5758ln",
+          "barcode": null,
+          "slug": "seller-category-selector-smoke-20260420t050539z-5758ln-draft",
+          "categoryIds": [
+            6,
+            3
+          ],
+          "defaultCategoryId": 3,
+          "price": 170000,
+          "salePrice": null,
+          "stock": 9,
+          "imageUrls": [],
+          "tags": []
+        }
+      },
+      "rootCause": null
+    },
+    {
+      "id": "6",
+      "title": "Re-open draft and verify category persistence",
+      "status": "passed",
+      "summary": "Selected categories, default category, and badges persisted after reopening the draft.",
+      "startedAt": "2026-04-20T05:10:41.390Z",
+      "finishedAt": "2026-04-20T05:10:43.097Z",
+      "durationMs": 1707,
+      "proof": {
+        "defaultSelectValue": "3",
+        "screenshot": "C:\\Users\\user\\Documents\\ecommerce-react\\reports\\seller-category-selector-smoke-20260420T050539z-5758ln\\02-reopened-draft.png"
+      },
+      "rootCause": null
+    },
+    {
+      "id": "7",
+      "title": "Remove the default category and verify safe fallback",
+      "status": "passed",
+      "summary": "Removing the default category safely re-normalized the fallback before save.",
+      "startedAt": "2026-04-20T05:10:43.097Z",
+      "finishedAt": "2026-04-20T05:10:43.354Z",
+      "durationMs": 257,
+      "proof": {
+        "fallbackValue": "6",
+        "updatePayload": {
+          "name": "Category Selector seller-category-selector-smoke-20260420T050539z-5758ln",
+          "description": "Seller category selector smoke seller-category-selector-smoke-20260420T050539z-5758ln.",
+          "sku": "CATSEL-seller-category-selector-smoke-20260420T050539z-5758ln",
+          "barcode": null,
+          "slug": "seller-category-selector-smoke-20260420t050539z-5758ln-draft",
+          "categoryIds": [
+            6
+          ],
+          "defaultCategoryId": 6,
+          "price": 170000,
+          "salePrice": null,
+          "stock": 9,
+          "imageUrls": [],
+          "tags": []
+        }
+      },
+      "rootCause": null
+    },
+    {
+      "id": "8",
+      "title": "Verify final product detail remains valid",
+      "status": "failed",
+      "summary": "Seller detail response no longer includes the remaining selected category.",
+      "startedAt": "2026-04-20T05:10:43.354Z",
+      "finishedAt": "2026-04-20T05:10:44.520Z",
+      "durationMs": 1166,
+      "rootCause": "Seller detail response no longer includes the remaining selected category."
+    }
+  ],
+  "overallStatus": "failed",
+  "failure": {
+    "stepId": "8",
+    "stepTitle": "Verify final product detail remains valid",
+    "message": "Seller detail response no longer includes the remaining selected category.",
+    "rootCause": "Seller detail response no longer includes the remaining selected category."
+  }
+}

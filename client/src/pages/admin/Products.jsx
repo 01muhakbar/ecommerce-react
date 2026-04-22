@@ -80,8 +80,8 @@ const PRICE_MENU_OPTIONS = [
   { value: "price_desc", label: "High to Low" },
   { value: "published", label: "Published" },
   { value: "unpublished", label: "Unpublished" },
-  { value: "selling", label: "Status - Selling" },
-  { value: "out_of_stock", label: "Status - Out of Stock" },
+  { value: "selling", label: "Inventory - Selling" },
+  { value: "out_of_stock", label: "Inventory - Out of Stock" },
   { value: "date_added", label: "Date Added" },
   { value: "date_updated", label: "Date Updated" },
 ];
@@ -1575,7 +1575,7 @@ export default function AdminProductsPage() {
                       ["price", "Price"],
                       ["salePrice", "Sale Price"],
                       ["stock", "Stock"],
-                      ["status", "Status"],
+                      ["status", "Inventory"],
                       ["published", "Published"],
                       ["view", "View"],
                       ["actions", "Actions"],
@@ -1667,7 +1667,7 @@ export default function AdminProductsPage() {
                     <th className={`${tableHeadCell} min-w-[76px] text-right`}>Stock</th>
                   ) : null}
                   {columnVisibility.status ? (
-                    <th className={`${tableHeadCell} min-w-[80px]`}>Status</th>
+                    <th className={`${tableHeadCell} min-w-[80px]`}>Inventory</th>
                   ) : null}
                   {columnVisibility.view ? (
                     <th className={`${tableHeadCell} min-w-[52px] text-center`}>View</th>

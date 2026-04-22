@@ -1,4 +1,5 @@
 import { api } from "./axios.ts";
+import { presentStoreApplicationStatus } from "../utils/storeOnboardingPresentation.ts";
 
 const textOrNull = (value: unknown) => {
   const normalized = String(value || "").trim();
@@ -15,11 +16,8 @@ const numberOrZero = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const normalizeStatusMeta = (value: any, fallbackCode = "draft", fallbackLabel = "Draft") => ({
-  code: textOrFallback(value?.code, fallbackCode),
-  label: textOrFallback(value?.label, fallbackLabel),
-  tone: textOrFallback(value?.tone, "stone"),
-});
+const normalizeStatusMeta = (value: any, fallbackCode = "draft") =>
+  presentStoreApplicationStatus(value, textOrFallback(fallbackCode, "draft") as any);
 
 const normalizeCompleteness = (value: any) => ({
   completedFields: numberOrZero(value?.completedFields),
@@ -74,7 +72,7 @@ const normalizeIdentityMatch = (value: any) => ({
 const normalizeListItem = (value: any) => ({
   id: numberOrZero(value?.id),
   status: textOrFallback(value?.status, "draft"),
-  statusMeta: normalizeStatusMeta(value?.statusMeta, value?.status, "Draft"),
+  statusMeta: normalizeStatusMeta(value?.statusMeta, value?.status),
   currentStep: textOrFallback(value?.currentStep, "owner_identity"),
   currentStepMeta: {
     code: textOrFallback(value?.currentStepMeta?.code || value?.currentStep, "owner_identity"),
@@ -120,7 +118,7 @@ const normalizeDetail = (value: any) => {
   return {
     id: numberOrZero(value.id),
     status: textOrFallback(value.status, "draft"),
-    statusMeta: normalizeStatusMeta(value.statusMeta, value.status, "Draft"),
+    statusMeta: normalizeStatusMeta(value.statusMeta, value.status),
     currentStep: textOrFallback(value.currentStep, "owner_identity"),
     currentStepMeta: {
       code: textOrFallback(value?.currentStepMeta?.code || value?.currentStep, "owner_identity"),

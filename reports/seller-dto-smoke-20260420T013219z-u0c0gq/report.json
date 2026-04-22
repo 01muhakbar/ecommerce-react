@@ -1,0 +1,52 @@
+{
+  "runId": "seller-dto-smoke-20260420T013219z-u0c0gq",
+  "startedAt": "2026-04-20T01:32:19.901Z",
+  "serverBaseUrl": "http://localhost:3001",
+  "clientBaseUrl": "http://localhost:5173",
+  "storeSlug": "super-admin-1",
+  "sellerEmail": "superadmin@local.dev",
+  "storeId": 1,
+  "category": {
+    "id": 6,
+    "name": "Beverages"
+  },
+  "productId": null,
+  "productSlug": null,
+  "screenshots": [],
+  "mismatches": [],
+  "steps": [
+    {
+      "id": "1",
+      "title": "Bootstrap seller session and references",
+      "status": "passed",
+      "summary": "Seller session, store context, and category references are ready.",
+      "startedAt": "2026-04-20T01:32:19.974Z",
+      "finishedAt": "2026-04-20T01:32:20.150Z",
+      "durationMs": 176,
+      "proof": {
+        "storeId": 1,
+        "categoryId": 6,
+        "categoryName": "Beverages",
+        "cookieName": "token"
+      },
+      "rootCause": null
+    },
+    {
+      "id": "2",
+      "title": "Create seller product through UI and capture payload",
+      "status": "failed",
+      "summary": "locator.fill: Error: strict mode violation: getByLabel('Base Price') resolved to 2 elements:\n    1) <input min=\"0\" value=\"0\" step=\"0.01\" type=\"number\" placeholder=\"0\" class=\"h-11 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-700 transition placeholder:text-slate-400 focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100 mt-2 \"/> aka getByRole('spinbutton', { name: 'Base Price', exact: true })\n    2) <input min=\"0\" value=\"\" step=\"0.01\" type=\"number\" placeholder=\"Optional\" class=\"h-11 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-700 transition placeholder:text-slate-400 focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100 mt-2 \"/> aka getByRole('spinbutton', { name: 'Sale Price Must stay below' })\n\nCall log:\n\u001b[2m  - waiting for getByLabel('Base Price')\u001b[22m\n",
+      "startedAt": "2026-04-20T01:32:21.736Z",
+      "finishedAt": "2026-04-20T01:32:23.968Z",
+      "durationMs": 2232,
+      "rootCause": "locator.fill: Error: strict mode violation: getByLabel('Base Price') resolved to 2 elements:\n    1) <input min=\"0\" value=\"0\" step=\"0.01\" type=\"number\" placeholder=\"0\" class=\"h-11 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-700 transition placeholder:text-slate-400 focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100 mt-2 \"/> aka getByRole('spinbutton', { name: 'Base Price', exact: true })\n    2) <input min=\"0\" value=\"\" step=\"0.01\" type=\"number\" placeholder=\"Optional\" class=\"h-11 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-700 transition placeholder:text-slate-400 focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100 mt-2 \"/> aka getByRole('spinbutton', { name: 'Sale Price Must stay below' })\n\nCall log:\n\u001b[2m  - waiting for getByLabel('Base Price')\u001b[22m"
+    }
+  ],
+  "overallStatus": "failed",
+  "failure": {
+    "stepId": "2",
+    "stepTitle": "Create seller product through UI and capture payload",
+    "message": "locator.fill: Error: strict mode violation: getByLabel('Base Price') resolved to 2 elements:\n    1) <input min=\"0\" value=\"0\" step=\"0.01\" type=\"number\" placeholder=\"0\" class=\"h-11 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-700 transition placeholder:text-slate-400 focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100 mt-2 \"/> aka getByRole('spinbutton', { name: 'Base Price', exact: true })\n    2) <input min=\"0\" value=\"\" step=\"0.01\" type=\"number\" placeholder=\"Optional\" class=\"h-11 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-700 transition placeholder:text-slate-400 focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100 mt-2 \"/> aka getByRole('spinbutton', { name: 'Sale Price Must stay below' })\n\nCall log:\n\u001b[2m  - waiting for getByLabel('Base Price')\u001b[22m\n",
+    "rootCause": "locator.fill: Error: strict mode violation: getByLabel('Base Price') resolved to 2 elements:\n    1) <input min=\"0\" value=\"0\" step=\"0.01\" type=\"number\" placeholder=\"0\" class=\"h-11 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-700 transition placeholder:text-slate-400 focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100 mt-2 \"/> aka getByRole('spinbutton', { name: 'Base Price', exact: true })\n    2) <input min=\"0\" value=\"\" step=\"0.01\" type=\"number\" placeholder=\"Optional\" class=\"h-11 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-700 transition placeholder:text-slate-400 focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100 mt-2 \"/> aka getByRole('spinbutton', { name: 'Sale Price Must stay below' })\n\nCall log:\n\u001b[2m  - waiting for getByLabel('Base Price')\u001b[22m"
+  }
+}

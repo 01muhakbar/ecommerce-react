@@ -1,0 +1,84 @@
+{
+  "entries": [
+    {
+      "type": "debug",
+      "text": "[vite] connecting..."
+    },
+    {
+      "type": "debug",
+      "text": "[vite] connected."
+    },
+    {
+      "type": "info",
+      "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"
+    },
+    {
+      "type": "log",
+      "text": "[store-login] login ok {url: /api/auth/login, status: 200}"
+    },
+    {
+      "type": "log",
+      "text": "[store-login] document.cookie "
+    },
+    {
+      "type": "log",
+      "text": "[store-login] me status 200"
+    },
+    {
+      "type": "log",
+      "text": "[auth] refreshSession user {id: 1, email: superadmin@local.dev, name: Super Admin, role: super_admin, avatarUrl: /uploads/products/1774792159177-414115977.jpg}"
+    },
+    {
+      "type": "debug",
+      "text": "[vite] connecting..."
+    },
+    {
+      "type": "debug",
+      "text": "[vite] connected."
+    },
+    {
+      "type": "info",
+      "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"
+    },
+    {
+      "type": "log",
+      "text": "[auth] refreshSession user {id: 1, email: superadmin@local.dev, name: Super Admin, role: super_admin, avatarUrl: /uploads/products/1774792159177-414115977.jpg}"
+    },
+    {
+      "type": "log",
+      "text": "[auth] refreshSession user {id: 1, email: superadmin@local.dev, name: Super Admin, role: super_admin, avatarUrl: /uploads/products/1774792159177-414115977.jpg}"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. 1-Blue"
+    },
+    {
+      "type": "debug",
+      "text": "[vite] connecting..."
+    },
+    {
+      "type": "debug",
+      "text": "[vite] connected."
+    },
+    {
+      "type": "info",
+      "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"
+    },
+    {
+      "type": "log",
+      "text": "[auth] refreshSession user {id: 1, email: superadmin@local.dev, name: Super Admin, role: super_admin, avatarUrl: /uploads/products/1774792159177-414115977.jpg}"
+    },
+    {
+      "type": "log",
+      "text": "[auth] refreshSession user {id: 1, email: superadmin@local.dev, name: Super Admin, role: super_admin, avatarUrl: /uploads/products/1774792159177-414115977.jpg}"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. 1-Blue"
+    },
+    {
+      "type": "error",
+      "text": "Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. 1-Blue"
+    }
+  ]
+}

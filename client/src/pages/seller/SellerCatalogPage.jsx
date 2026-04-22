@@ -45,6 +45,7 @@ import {
 const DEFAULT_FILTERS = {
   keyword: "",
   status: "",
+  published: "",
   submissionStatus: "",
   visibilityState: "",
   page: 1,
@@ -88,6 +89,7 @@ const buildActiveFilterCount = (filters) =>
   [
     filters.keyword?.trim(),
     filters.status,
+    filters.published,
     filters.submissionStatus,
     filters.visibilityState,
   ].filter(Boolean).length;
@@ -102,16 +104,22 @@ const getStatusFilterLabel = (status) => {
 const getSubmissionFilterLabel = (status) => {
   if (status === "ready_to_submit") return "Ready to submit";
   if (status === "review_queue") return "Review queue";
-  if (status === "submitted") return "Submitted";
+  if (status === "submitted") return "Submitted for review";
   if (status === "needs_revision") return "Needs revision";
   if (status === "none") return "Not submitted";
   return "All submission";
 };
 
+const getPublishedFilterLabel = (value) => {
+  if (value === "true") return "Published";
+  if (value === "false") return "Unpublished";
+  return "All publish states";
+};
+
 const getVisibilityFilterLabel = (value) => {
   if (value === "storefront_visible") return "Storefront visible";
   if (value === "published_blocked") return "Visibility blocked";
-  if (value === "internal_only") return "Internal only";
+  if (value === "internal_only") return "Hidden from storefront";
   return "All visibility";
 };
 
@@ -123,6 +131,9 @@ const buildAppliedFilterPills = (filters) => {
   }
   if (filters.status) {
     pills.push(`Lifecycle: ${getStatusFilterLabel(filters.status)}`);
+  }
+  if (filters.published) {
+    pills.push(`Publish: ${getPublishedFilterLabel(filters.published)}`);
   }
   if (filters.submissionStatus) {
     pills.push(`Submission: ${getSubmissionFilterLabel(filters.submissionStatus)}`);
@@ -287,11 +298,14 @@ const getPublishActionErrorMessage = (error) => {
 const getCurrentLaneLabel = (filters) => {
   if (filters.submissionStatus === "ready_to_submit") return "Ready";
   if (filters.submissionStatus === "review_queue") return "Queue";
-  if (filters.submissionStatus === "submitted") return "Submitted";
-  if (filters.submissionStatus === "needs_revision") return "Revision";
+  if (filters.submissionStatus === "submitted") return "Submitted for review";
+  if (filters.submissionStatus === "needs_revision") return "Needs revision";
   if (filters.status === "draft") return "Draft";
+  if (filters.published === "true") return "Published";
+  if (filters.published === "false") return "Unpublished";
   if (filters.visibilityState === "storefront_visible") return "Visible";
   if (filters.visibilityState === "published_blocked") return "Blocked";
+  if (filters.visibilityState === "internal_only") return "Hidden";
   return "All";
 };
 
@@ -325,8 +339,8 @@ const getCompactSubmissionHint = (item) => {
 };
 
 const getCompactSubmissionLabel = (item) => {
-  if (item?.submission?.status === "submitted") return "Waiting review";
-  if (item?.submission?.status === "needs_revision") return "Revision required";
+  if (item?.submission?.status === "submitted") return "Submitted for review";
+  if (item?.submission?.status === "needs_revision") return "Needs revision";
   if (isReadyToSubmitItem(item)) return "Ready to submit";
   if (item?.status === "draft") return "Draft";
   return item?.submission?.label || "Not submitted";
@@ -340,12 +354,12 @@ const getCompactVisibilityLabel = (item) => {
     return visibility?.storefrontLabel || "Visible";
   }
   if (reasonCode === "STORE_NOT_READY") return "Store not ready";
-  if (reasonCode === "STORE_NOT_ACTIVE") return "Store inactive";
+  if (reasonCode === "STORE_NOT_ACTIVE") return "Store blocked";
   if (reasonCode === "REVIEW_PENDING") return "Review blocked";
   if (reasonCode === "REVISION_REQUIRED") return "Revision blocked";
-  if (item?.status === "draft") return "Draft only";
-  if (visibility?.stateCode === "PUBLISHED_BLOCKED") return visibility?.sellerLabel || "State blocked";
-  return "Internal";
+  if (item?.status === "draft") return "Draft";
+  if (visibility?.stateCode === "PUBLISHED_BLOCKED") return visibility?.sellerLabel || "Blocked";
+  return "Hidden";
 };
 
 const getCompactLifecycleLabel = (item) => {
@@ -372,6 +386,22 @@ const getCompactVisibilityHint = (item) => {
     return "Lifecycle still blocks storefront";
   }
   return "Hidden from storefront";
+};
+
+const getPublishedStateMeta = (item) => {
+  const published = Boolean(
+    item?.published ?? item?.visibility?.isPublished ?? item?.publishing?.isPublished
+  );
+
+  return {
+    published,
+    label: published ? "Published" : "Unpublished",
+    hint: published
+      ? item?.visibility?.storefrontVisible
+        ? "Published and storefront-visible."
+        : "Published, but storefront visibility is still blocked."
+      : "Hidden from storefront until publish is turned on.",
+  };
 };
 
 const isItemEligibleForBulkAction = (item, action) => {
@@ -646,6 +676,7 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
       ...current,
       keyword: String(draftFilters.keyword || "").trim(),
       status: String(draftFilters.status || ""),
+      published: String(draftFilters.published || ""),
       submissionStatus: String(draftFilters.submissionStatus || ""),
       visibilityState: String(draftFilters.visibilityState || ""),
       limit: Number(draftFilters.limit || 20) || 20,
@@ -704,6 +735,7 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
         filters: {
           keyword: appliedFilters.keyword,
           status: appliedFilters.status,
+          published: appliedFilters.published,
           submissionStatus: appliedFilters.submissionStatus,
           visibilityState: appliedFilters.visibilityState,
         },
@@ -937,7 +969,7 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
               Icon={AlertTriangle}
             />
             <CompactSummaryItem
-              label="Live"
+              label="Visible"
               value={String(summary.storefrontVisible)}
               tone="emerald"
               Icon={Eye}
@@ -949,7 +981,7 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
               Icon={AlertTriangle}
             />
             <CompactSummaryItem
-              label="Internal"
+              label="Hidden"
               value={String(summary.internalOnly)}
               Icon={Boxes}
             />
@@ -1019,9 +1051,28 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                     <option value="ready_to_submit">Ready to submit</option>
                   ) : null}
                   <option value="none">Not submitted</option>
-                  <option value="submitted">Submitted</option>
+                  <option value="submitted">Submitted for review</option>
                   <option value="needs_revision">Needs revision</option>
                   <option value="review_queue">Review queue</option>
+                </select>
+              </div>
+              <div>
+                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Publish
+                </p>
+                <select
+                  value={draftFilters.published}
+                  onChange={(event) =>
+                    setDraftFilters((current) => ({
+                      ...current,
+                      published: event.target.value,
+                    }))
+                  }
+                  className={`${sellerFieldClass} h-10 w-full sm:w-[156px]`}
+                >
+                  <option value="">All publish states</option>
+                  <option value="true">Published</option>
+                  <option value="false">Unpublished</option>
                 </select>
               </div>
               <div>
@@ -1039,7 +1090,7 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                   className={`${sellerFieldClass} h-10 w-full sm:w-[172px]`}
                 >
                   <option value="">All visibility</option>
-                  <option value="internal_only">Internal only</option>
+                  <option value="internal_only">Hidden from storefront</option>
                   <option value="storefront_visible">Storefront visible</option>
                   <option value="published_blocked">Visibility blocked</option>
                 </select>
@@ -1096,6 +1147,7 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                 Icon={Boxes}
                 active={
                   !appliedFilters.status &&
+                  !appliedFilters.published &&
                   !appliedFilters.submissionStatus &&
                   !appliedFilters.visibilityState
                 }
@@ -1166,7 +1218,7 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                 }
               />
               <ReviewQueueCard
-                label="Revision"
+                label="Needs revision"
                 count={summary.needsRevision}
                 tone="amber"
                 Icon={AlertTriangle}
@@ -1426,16 +1478,17 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                         />
                       </th>
                     ) : null}
-                    <th className={`${compactTableHeadClass} ${canEditProducts ? "w-[31%]" : "w-[34%]"}`}>
+                    <th className={`${compactTableHeadClass} ${canEditProducts ? "w-[30%]" : "w-[32%]"}`}>
                       Product
                     </th>
-                    <th className={`${compactTableHeadClass} w-[13%]`}>Category</th>
+                    <th className={`${compactTableHeadClass} w-[12%]`}>Category</th>
                     <th className={`${compactTableHeadClass} w-[10%] text-right`}>Price</th>
                     <th className={`${compactTableHeadClass} w-[9%] text-right`}>Sale</th>
                     <th className={`${compactTableHeadClass} w-[8%]`}>Stock</th>
-                    <th className={`${compactTableHeadClass} w-[12%]`}>Submission</th>
-                    <th className={`${compactTableHeadClass} w-[7%]`}>Visibility</th>
-                    <th className={`${compactTableHeadClass} w-[10%]`}>Actions</th>
+                    <th className={`${compactTableHeadClass} w-[11%]`}>Status</th>
+                    <th className={`${compactTableHeadClass} w-[5%] text-center`}>View</th>
+                    <th className={`${compactTableHeadClass} w-[6%] text-center`}>Published</th>
+                    <th className={`${compactTableHeadClass} w-[9%]`}>Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 bg-white">
@@ -1452,6 +1505,15 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                     const isPublishing =
                       publishMutation.isPending &&
                       Number(publishMutation.variables?.productId) === Number(item.id);
+                    const publishedState = getPublishedStateMeta(item);
+                    const canTogglePublished = canPublish || canUnpublish;
+                    const publishToggleTitle = canTogglePublished
+                      ? publishedState.published
+                        ? "Hide from storefront"
+                        : "Publish to storefront"
+                      : item.publishing?.hint ||
+                        item.submission?.nextActionDescription ||
+                        publishedState.hint;
                     const submissionReason = getSubmissionReason(item.submission);
                     const waitingForAdmin = item.submission?.status === "submitted";
                     const needsRevision = item.submission?.status === "needs_revision";
@@ -1467,11 +1529,11 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                         ? `Requested ${formatDateTime(item.submission.revisionRequestedAt)}`
                         : null;
                     const rowStateLabel = waitingForAdmin
-                      ? "Waiting review"
+                      ? "Submitted for review"
                       : needsRevision
                         ? "Revise and resubmit"
                         : item.visibility?.storefrontVisible
-                          ? "Live"
+                          ? "Visible"
                           : item.status === "inactive"
                             ? "Hidden"
                             : item.status === "draft"
@@ -1532,6 +1594,16 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                                   tone={getLifecycleTone(item)}
                                   className="px-2.5 py-1 text-[11px]"
                                 />
+                                <SellerWorkspaceBadge
+                                  label={getCompactSubmissionLabel(item)}
+                                  tone={getSubmissionTone(item)}
+                                  className="px-2.5 py-1 text-[11px]"
+                                />
+                                <SellerWorkspaceBadge
+                                  label={getCompactVisibilityLabel(item)}
+                                  tone={getVisibilityTone(item.visibility)}
+                                  className="px-2.5 py-1 text-[11px]"
+                                />
                                 {item.pricing?.salePrice ? (
                                   <span
                                     className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700"
@@ -1588,53 +1660,60 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                           </p>
                         </td>
                         <td className={compactTableCellClass}>
-                          <div className="space-y-1">
-                            <span
-                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700"
+                          <div className="space-y-1.5">
+                            <SellerWorkspaceBadge
+                              label={getCompactLifecycleLabel(item)}
+                              tone={getLifecycleTone(item)}
+                              className="px-2.5 py-1 text-[11px]"
+                            />
+                            <p
+                              className="text-[11px] font-medium text-slate-600"
                               title={submissionHint}
                             >
-                              {needsRevision ? (
-                                <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
-                              ) : waitingForAdmin ? (
-                                <Clock3 className="h-3.5 w-3.5 text-sky-600" />
-                              ) : readyToSubmit ? (
-                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                              ) : (
-                                <Pencil className="h-3.5 w-3.5 text-slate-400" />
-                              )}
-                              {getCompactSubmissionLabel(item)}
-                            </span>
-                            {submissionTimelineLabel ? (
-                              <p className="text-[11px] text-slate-400" title={submissionTimelineLabel}>
-                                {submissionTimelineLabel}
-                              </p>
-                            ) : null}
-                          </div>
-                          {submissionReason ? (
-                            <p
-                              className="mt-1 line-clamp-1 text-[11px] text-amber-700"
-                              title={submissionReason}
-                            >
-                              {submissionReason}
+                              {rowStateLabel || getCompactSubmissionLabel(item)}
                             </p>
-                          ) : null}
-                        </td>
-                        <td className={compactTableCellClass}>
-                          <div className="space-y-1">
-                            <span
-                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700"
-                              title={getCompactVisibilityHint(item)}
+                            <p
+                              className="line-clamp-2 text-[11px] text-slate-400"
+                              title={submissionTimelineLabel || getCompactVisibilityHint(item)}
                             >
-                              {item.visibility?.storefrontVisible ? (
-                                <Eye className="h-3.5 w-3.5 text-emerald-600" />
-                              ) : item.visibility?.stateCode === "PUBLISHED_BLOCKED" ? (
-                                <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
-                              ) : (
-                                <Boxes className="h-3.5 w-3.5 text-slate-400" />
-                              )}
-                              {getCompactVisibilityLabel(item)}
-                            </span>
-                            <p className="text-[11px] text-slate-400">{getCompactVisibilityHint(item)}</p>
+                              {submissionTimelineLabel || getCompactVisibilityHint(item)}
+                            </p>
+                          </div>
+                        </td>
+                        <td className={`${compactTableCellClass} text-center`}>
+                          <Link
+                            to={workspaceRoutes.productDetail(item.id)}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
+                            title="Open product detail"
+                          >
+                            <Search className="h-3.5 w-3.5" />
+                          </Link>
+                        </td>
+                        <td className={`${compactTableCellClass} text-center`}>
+                          <div className="flex flex-col items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                canTogglePublished &&
+                                publishMutation.mutate({
+                                  productId: item.id,
+                                  published: !publishedState.published,
+                                })
+                              }
+                              disabled={!canTogglePublished || isPublishing}
+                              className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${
+                                publishedState.published ? "bg-emerald-500" : "bg-slate-300"
+                              } disabled:cursor-not-allowed disabled:opacity-60`}
+                              aria-label={publishToggleTitle}
+                              title={publishToggleTitle}
+                            >
+                              <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                                  publishedState.published ? "translate-x-4" : "translate-x-0.5"
+                                }`}
+                              />
+                            </button>
+                            <p className="text-[10px] text-slate-400">{publishedState.label}</p>
                           </div>
                         </td>
                         <td className={`${compactTableCellClass} whitespace-nowrap`}>
@@ -1711,28 +1790,6 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                                       : "Submit"}
                                 </button>
                               ) : null}
-                              {(canSubmit ||
-                                canEditDraft ||
-                                waitingForAdmin ||
-                                item.visibility?.storefrontVisible) ? (
-                                <Link
-                                  to={workspaceRoutes.productDetail(item.id)}
-                                  className={compactTextLinkClass}
-                                  title="Open product detail"
-                                >
-                                  <Eye className="h-3.5 w-3.5" />
-                                  Open
-                                </Link>
-                              ) : (
-                                <Link
-                                  to={workspaceRoutes.productDetail(item.id)}
-                                  className={compactPrimaryActionButtonClass}
-                                  title="Open product detail"
-                                >
-                                  <Eye className="h-3.5 w-3.5" />
-                                  Open
-                                </Link>
-                              )}
                             </div>
                             <div className="flex flex-wrap items-center gap-2 text-[10px] font-medium">
                               {rowStateLabel ? (

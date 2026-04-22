@@ -1,4 +1,5 @@
 import { api } from "./axios.ts";
+import { presentStoreApplicationStatus } from "../utils/storeOnboardingPresentation.ts";
 
 export type StoreApplicationStatus =
   | "draft"
@@ -305,6 +306,10 @@ const normalizeStoreApplication = (payload: any): StoreApplicationRecord | null 
   const activation = asObject(payload.activation);
   const contract = asObject(payload.contract);
   const snapshots = normalizeSnapshots(payload);
+  const normalizedStatus = presentStoreApplicationStatus(
+    payload?.statusMeta,
+    textOrFallback(payload.status, "draft") as StoreApplicationStatus
+  );
 
   return {
     id: Number(payload.id || 0),
@@ -315,10 +320,10 @@ const normalizeStoreApplication = (payload: any): StoreApplicationRecord | null 
     },
     status: textOrFallback(payload.status, "draft") as StoreApplicationStatus,
     statusMeta: {
-      code: textOrFallback(payload?.statusMeta?.code || payload?.status, "draft") as StoreApplicationStatus,
-      label: textOrFallback(payload?.statusMeta?.label, "Draft"),
-      tone: textOrFallback(payload?.statusMeta?.tone, "stone"),
-      description: textOrNull(payload?.statusMeta?.description),
+      code: normalizedStatus.code,
+      label: normalizedStatus.label,
+      tone: normalizedStatus.tone,
+      description: normalizedStatus.description,
     },
     currentStep: textOrFallback(payload.currentStep, "owner_identity") as StoreApplicationStep,
     currentStepMeta: {

@@ -1,0 +1,50 @@
+{
+  "runId": "svflow-20260419T124140z-jrsk1i",
+  "startedAt": "2026-04-19T12:41:40.030Z",
+  "serverBaseUrl": "http://localhost:3001",
+  "clientBaseUrl": "http://localhost:5173",
+  "storeSlug": "super-admin-1",
+  "sellerEmail": "superadmin@local.dev",
+  "productId": 835,
+  "finalProductSlug": "svflow-20260419t124140z-jrsk1i-draft",
+  "screenshots": [],
+  "steps": [
+    {
+      "id": "1",
+      "title": "Create product from Seller",
+      "status": "passed",
+      "summary": "Seller authentication, store context, image upload, and draft creation completed.",
+      "startedAt": "2026-04-19T12:41:40.105Z",
+      "finishedAt": "2026-04-19T12:41:40.411Z",
+      "durationMs": 306,
+      "proof": {
+        "storeId": 1,
+        "categoryId": 6,
+        "categoryName": "Beverages",
+        "uploadedPrimaryImage": "/uploads/products/1776602500310-191637454.jpg",
+        "uploadedSecondaryImage": "/uploads/products/1776602500336-76266164.png",
+        "productId": 835,
+        "slug": "svflow-20260419t124140z-jrsk1i-draft",
+        "createStatus": 201
+      },
+      "rootCause": null
+    },
+    {
+      "id": "2",
+      "title": "Save as draft and check DB/API response",
+      "status": "failed",
+      "summary": "Access denied for user 'root'@'localhost' (using password: YES)",
+      "startedAt": "2026-04-19T12:41:40.411Z",
+      "finishedAt": "2026-04-19T12:41:40.457Z",
+      "durationMs": 46,
+      "rootCause": "Access denied for user 'root'@'localhost' (using password: YES)"
+    }
+  ],
+  "overallStatus": "failed",
+  "failure": {
+    "stepId": "2",
+    "stepTitle": "Save as draft and check DB/API response",
+    "message": "Access denied for user 'root'@'localhost' (using password: YES)",
+    "rootCause": "Access denied for user 'root'@'localhost' (using password: YES)"
+  }
+}

@@ -18,6 +18,7 @@ import {
   Pencil,
   Plus,
   Save,
+  Search,
   ShieldCheck,
   Tag,
   Upload,
@@ -38,9 +39,11 @@ import {
   SellerWorkspaceNotice,
   SellerWorkspaceStatePanel,
 } from "../../components/seller/SellerWorkspaceFoundation.jsx";
+import SellerProductVariationSummary from "../../components/seller/SellerProductVariationSummary.jsx";
 import { resolveAssetUrl } from "../../lib/assetUrl.js";
 import { useSellerWorkspaceRoute } from "../../utils/sellerWorkspaceRoute.js";
 import { buildCategoryTree } from "../../utils/categoryTree.ts";
+import { summarizeProductVariations } from "../../utils/productVariations.js";
 import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
 
 const emptyToNull = (value) => {
@@ -48,12 +51,80 @@ const emptyToNull = (value) => {
   return normalized ? normalized : null;
 };
 
+const formatCurrency = (value) =>
+  new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+
 const slugify = (value) =>
   String(value || "")
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)+/g, "");
+
+const normalizeSelectedCategoryIds = (value) =>
+  Array.from(
+    new Set(
+      (Array.isArray(value) ? value : [])
+        .map((entry) => Number(entry))
+        .filter((entry) => Number.isInteger(entry) && entry > 0),
+    ),
+  );
+
+const resolveDefaultCategoryId = (categoryIds, currentDefaultCategoryId) => {
+  const normalizedIds = normalizeSelectedCategoryIds(categoryIds);
+  const normalizedDefault = Number(currentDefaultCategoryId);
+
+  if (normalizedIds.length === 0) return "";
+  if (
+    Number.isInteger(normalizedDefault) &&
+    normalizedIds.includes(normalizedDefault)
+  ) {
+    return String(normalizedDefault);
+  }
+  return String(normalizedIds[0]);
+};
+
+const normalizeCategorySearchValue = (value) =>
+  String(value || "").trim().toLowerCase();
+
+const filterCategoryTree = (nodes, query) => {
+  if (!Array.isArray(nodes) || nodes.length === 0) return [];
+  if (!query) return nodes;
+
+  return nodes.reduce((accumulator, node) => {
+    const children = Array.isArray(node?.children) ? node.children : [];
+    const filteredChildren = filterCategoryTree(children, query);
+    const haystack = `${node?.name || ""} ${node?.code || ""}`.toLowerCase();
+    const nodeMatches = haystack.includes(query);
+
+    if (nodeMatches) {
+      accumulator.push({
+        ...node,
+        children,
+      });
+      return accumulator;
+    }
+
+    if (filteredChildren.length > 0) {
+      accumulator.push({
+        ...node,
+        children: filteredChildren,
+      });
+    }
+
+    return accumulator;
+  }, []);
+};
+
+const countCategoryTreeNodes = (nodes) =>
+  (Array.isArray(nodes) ? nodes : []).reduce((total, node) => {
+    const children = Array.isArray(node?.children) ? node.children : [];
+    return total + 1 + countCategoryTreeNodes(children);
+  }, 0);
 
 const createEmptyForm = () => ({
   name: "",
@@ -76,13 +147,11 @@ const createFormFromMeta = (meta) => ({
   sku: meta?.draftDefaults?.sku || "",
   barcode: meta?.draftDefaults?.barcode || "",
   slug: meta?.draftDefaults?.slug || "",
-  categoryIds: Array.isArray(meta?.draftDefaults?.categoryIds)
-    ? meta.draftDefaults.categoryIds
-    : [],
-  defaultCategoryId:
-    meta?.draftDefaults?.defaultCategoryId != null
-      ? String(meta.draftDefaults.defaultCategoryId)
-      : "",
+  categoryIds: normalizeSelectedCategoryIds(meta?.draftDefaults?.categoryIds),
+  defaultCategoryId: resolveDefaultCategoryId(
+    meta?.draftDefaults?.categoryIds,
+    meta?.draftDefaults?.defaultCategoryId,
+  ),
   price: String(meta?.draftDefaults?.price ?? 0),
   salePrice:
     meta?.draftDefaults?.salePrice == null
@@ -101,15 +170,17 @@ const createFormFromProduct = (product) => ({
   sku: product?.sku || "",
   barcode: product?.attributes?.barcode || "",
   slug: product?.slug || "",
-  categoryIds: Array.isArray(product?.category?.assigned)
-    ? product.category.assigned
-        .map((category) => Number(category?.id || 0))
-        .filter((id) => id > 0)
-    : [],
-  defaultCategoryId:
-    product?.category?.default?.id != null
-      ? String(product.category.default.id)
-      : "",
+  categoryIds: normalizeSelectedCategoryIds(
+    Array.isArray(product?.category?.assigned)
+      ? product.category.assigned.map((category) => Number(category?.id || 0))
+      : [],
+  ),
+  defaultCategoryId: resolveDefaultCategoryId(
+    Array.isArray(product?.category?.assigned)
+      ? product.category.assigned.map((category) => Number(category?.id || 0))
+      : [],
+    product?.category?.default?.id,
+  ),
   price: String(product?.pricing?.price ?? 0),
   salePrice:
     product?.pricing?.salePrice == null
@@ -122,7 +193,13 @@ const createFormFromProduct = (product) => ({
   tags: Array.isArray(product?.attributes?.tags) ? product.attributes.tags : [],
 });
 
-function SellerCategoryTree({ tree = [], selectedIds = [], onToggle }) {
+function SellerCategoryTree({
+  tree = [],
+  selectedIds = [],
+  defaultCategoryId = "",
+  onToggle,
+  depth = 0,
+}) {
   if (!Array.isArray(tree) || tree.length === 0) {
     return <p className="text-sm text-slate-500">No categories available.</p>;
   }
@@ -134,28 +211,58 @@ function SellerCategoryTree({ tree = [], selectedIds = [], onToggle }) {
         const isChecked = selectedIds.includes(nodeId);
         const hasChildren =
           Array.isArray(node?.children) && node.children.length > 0;
+        const isDefaultCategory =
+          String(nodeId) === String(defaultCategoryId || "");
+        const hierarchyLabel = depth === 0 ? "Parent category" : "Subcategory";
 
         return (
           <li
             key={`${nodeId}-${node?.slug || node?.name || "category"}`}
             className="space-y-1.5"
           >
-            <label className="flex items-start gap-2.5 rounded-md px-2 py-1.5 text-sm text-slate-700 transition hover:bg-white/80">
+            <label
+              className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 text-sm transition ${
+                isChecked
+                  ? "border-emerald-200 bg-emerald-50/70 text-emerald-900"
+                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50/80"
+              }`}
+            >
               <input
                 type="checkbox"
                 checked={isChecked}
                 onChange={() => onToggle(nodeId)}
                 className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300"
               />
-              <span className="min-w-0">
-                <span className="block font-medium text-slate-900">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium text-slate-900">
                   {node?.name || "Category"}
                 </span>
-                {node?.code ? (
-                  <span className="block text-[11px] uppercase tracking-[0.12em] text-slate-500">
-                    {node.code}
+                <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-slate-500">
+                    {hierarchyLabel}
                   </span>
-                ) : null}
+                  {node?.code ? (
+                    <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-slate-500">
+                      {node.code}
+                    </span>
+                  ) : null}
+                  {isChecked ? (
+                    <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-emerald-700">
+                      Selected
+                    </span>
+                  ) : null}
+                  {isDefaultCategory ? (
+                    <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-sky-700">
+                      Default
+                    </span>
+                  ) : null}
+                  {hasChildren ? (
+                    <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-amber-700">
+                      {node.children.length} subcategor
+                      {node.children.length === 1 ? "y" : "ies"}
+                    </span>
+                  ) : null}
+                </span>
               </span>
             </label>
 
@@ -164,7 +271,9 @@ function SellerCategoryTree({ tree = [], selectedIds = [], onToggle }) {
                 <SellerCategoryTree
                   tree={node.children}
                   selectedIds={selectedIds}
+                  defaultCategoryId={defaultCategoryId}
                   onToggle={onToggle}
+                  depth={depth + 1}
                 />
               </div>
             ) : null}
@@ -421,6 +530,7 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
   const [uploadStatus, setUploadStatus] = useState(null);
   const [tagInput, setTagInput] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
+  const [categorySearch, setCategorySearch] = useState("");
 
   const metaQuery = useQuery({
     queryKey: ["seller", "products", "authoring-meta", storeId],
@@ -466,11 +576,23 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
   const detailAuthoring = productQuery.data?.authoring ?? null;
   const publishing = productQuery.data?.publishing ?? null;
   const submission = productQuery.data?.submission ?? null;
+  const variationSummary = useMemo(
+    () => summarizeProductVariations(productQuery.data?.variations?.raw),
+    [productQuery.data?.variations?.raw],
+  );
   const submissionReason = getSubmissionReason(submission);
   const categoryReference = metaQuery.data?.references?.categories || [];
   const categoryTree = useMemo(
     () => buildCategoryTree(categoryReference),
     [categoryReference],
+  );
+  const normalizedCategorySearch = useMemo(
+    () => normalizeCategorySearchValue(categorySearch),
+    [categorySearch],
+  );
+  const filteredCategoryTree = useMemo(
+    () => filterCategoryTree(categoryTree, normalizedCategorySearch),
+    [categoryTree, normalizedCategorySearch],
   );
   const selectedCategories = useMemo(
     () =>
@@ -659,14 +781,15 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
       const nextIds = current.categoryIds.includes(numericId)
         ? current.categoryIds.filter((id) => id !== numericId)
         : [...current.categoryIds, numericId];
-      const shouldClearDefault =
-        current.defaultCategoryId &&
-        !nextIds.includes(Number(current.defaultCategoryId));
+      const normalizedIds = normalizeSelectedCategoryIds(nextIds);
 
       return {
         ...current,
-        categoryIds: nextIds,
-        defaultCategoryId: shouldClearDefault ? "" : current.defaultCategoryId,
+        categoryIds: normalizedIds,
+        defaultCategoryId: resolveDefaultCategoryId(
+          normalizedIds,
+          current.defaultCategoryId,
+        ),
       };
     });
   };
@@ -678,6 +801,25 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
         (entry) => entry !== imageUrl,
       ),
     }));
+  };
+
+  const handleSetPrimaryImage = (imageUrl) => {
+    setForm((current) => {
+      const nextImages = Array.isArray(current.imageUrls)
+        ? current.imageUrls.filter(Boolean)
+        : [];
+      if (!nextImages.includes(imageUrl) || nextImages[0] === imageUrl) {
+        return current;
+      }
+
+      return {
+        ...current,
+        imageUrls: [
+          imageUrl,
+          ...nextImages.filter((entry) => entry !== imageUrl),
+        ],
+      };
+    });
   };
 
   const handleImageFiles = async (fileList) => {
@@ -976,6 +1118,13 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
   }
 
   const selectedCategoryCount = selectedCategories.length;
+  const categoryTreeCount = countCategoryTreeNodes(categoryTree);
+  const filteredCategoryCount = countCategoryTreeNodes(filteredCategoryTree);
+  const defaultCategoryLabel =
+    selectedCategories.find(
+      (category) => String(category?.id) === String(form.defaultCategoryId),
+    )?.name || "Auto-select from chosen categories";
+  const primaryImageUrl = Array.isArray(form.imageUrls) ? form.imageUrls[0] || null : null;
   const isPublished = Boolean(
     productQuery.data?.published ??
       productQuery.data?.visibility?.isPublished ??
@@ -1049,6 +1198,37 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
               {uploadStatus.message}
             </SellerWorkspaceNotice>
           ) : null}
+
+          <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/85 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <DrawerChip
+                icon={isEditMode ? Pencil : Plus}
+                label={isEditMode ? "Edit seller product" : "Create seller draft"}
+                tone="slate"
+              />
+              <DrawerChip
+                icon={Layers3}
+                label={`${selectedCategoryCount} categor${selectedCategoryCount === 1 ? "y" : "ies"}`}
+                tone={selectedCategoryCount > 0 ? "sky" : "slate"}
+              />
+              <DrawerChip
+                icon={ImageIcon}
+                label={`${form.imageUrls.length} image${form.imageUrls.length === 1 ? "" : "s"}`}
+                tone={form.imageUrls.length > 0 ? "emerald" : "slate"}
+              />
+              <DrawerChip
+                icon={Globe2}
+                label={visibilityLabel}
+                tone={isStorefrontVisible ? "emerald" : isPublished ? "amber" : "slate"}
+              />
+            </div>
+            <div className="mt-2 grid gap-2 text-xs text-slate-500 sm:grid-cols-2 xl:grid-cols-4">
+              <p>Default category: {defaultCategoryLabel}</p>
+              <p>Primary image: {primaryImageUrl ? "Configured" : "Not set"}</p>
+              <p>SKU: {form.sku || "Not set"}</p>
+              <p>Slug: {form.slug || slugify(form.name) || "-"}</p>
+            </div>
+          </div>
 
           {isNeedsRevision ? (
             <SellerWorkspaceNotice type="warning">
@@ -1124,39 +1304,115 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
                   />
                 </div>
 
-                <FormSectionLabel eyebrow="Placement" title="Categories" />
+                <FormSectionLabel
+                  eyebrow="Placement"
+                  title="Categories"
+                  description="Choose the published categories you want to use for this product."
+                />
                 <div className="grid gap-4 lg:grid-cols-2">
                   <label className="block lg:col-span-2">
                     <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
                       <Layers3 className="h-3.5 w-3.5" />
                       Categories
                     </span>
-                    <div className="mt-2 space-y-2">
+                    <div className="mt-2 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2">
+                        <div className="space-y-0.5">
+                          <p className="text-sm font-medium text-slate-800">
+                            {selectedCategories.length > 0
+                              ? `${selectedCategories.length} categor${
+                                  selectedCategories.length === 1 ? "y" : "ies"
+                                } selected`
+                              : "No categories selected"}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {selectedCategories.length > 0
+                              ? `Default category: ${defaultCategoryLabel}`
+                              : "Select at least one category to enable the default choice."}
+                          </p>
+                        </div>
+                        <div className="text-right text-xs text-slate-500">
+                          <p>
+                            {normalizedCategorySearch
+                              ? `${filteredCategoryCount} matching entries`
+                              : `${categoryTreeCount} available entries`}
+                          </p>
+                          <p>Published catalog only</p>
+                        </div>
+                      </div>
+
                       {selectedCategories.length > 0 ? (
                         <div className="flex flex-wrap gap-1.5">
-                          {selectedCategories.slice(0, 2).map((category) => (
+                          {selectedCategories.slice(0, 4).map((category) => {
+                            const isDefault =
+                              String(category?.id) === String(form.defaultCategoryId);
+                            return (
+                              <DrawerChip
+                                key={category.id}
+                                icon={Layers3}
+                                label={`${category.name}${isDefault ? " • Default" : ""}`}
+                                tone={isDefault ? "emerald" : "sky"}
+                              />
+                            );
+                          })}
+                          {selectedCategories.length > 4 ? (
                             <DrawerChip
-                              key={category.id}
                               icon={Layers3}
-                              label={category.name}
-                              tone="sky"
-                            />
-                          ))}
-                          {selectedCategories.length > 2 ? (
-                            <DrawerChip
-                              icon={Layers3}
-                              label={`+${selectedCategories.length - 2} more`}
+                              label={`+${selectedCategories.length - 4} more`}
                               tone="slate"
                             />
                           ) : null}
                         </div>
                       ) : null}
-                      <div className="max-h-36 overflow-auto rounded-lg border border-slate-200 bg-slate-50/40 p-1.5">
-                        <SellerCategoryTree
-                          tree={categoryTree}
-                          selectedIds={form.categoryIds}
-                          onToggle={handleToggleCategory}
-                        />
+
+                      <div className="rounded-xl border border-slate-200 bg-white">
+                        <div className="border-b border-slate-200 px-3 py-2.5">
+                          <div className="relative">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                              type="search"
+                              value={categorySearch}
+                              onChange={(event) => setCategorySearch(event.target.value)}
+                              placeholder="Search category name or code"
+                              className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-10 text-sm text-slate-700 transition focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100"
+                            />
+                            {categorySearch ? (
+                              <button
+                                type="button"
+                                onClick={() => setCategorySearch("")}
+                                className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                                aria-label="Clear category search"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            ) : null}
+                          </div>
+                          <p className="mt-2 text-xs text-slate-500">
+                            Pick one or more categories. The default category must be one of your selections.
+                          </p>
+                        </div>
+                        <div className="max-h-60 overflow-auto p-2">
+                          {categoryReference.length === 0 ? (
+                            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-500">
+                              No published categories are available for seller assignment yet.
+                            </div>
+                          ) : filteredCategoryTree.length === 0 ? (
+                            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-500">
+                              No categories match the current search.
+                            </div>
+                          ) : (
+                            <SellerCategoryTree
+                              tree={filteredCategoryTree}
+                              selectedIds={form.categoryIds}
+                              defaultCategoryId={form.defaultCategoryId}
+                              onToggle={handleToggleCategory}
+                            />
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-xs text-slate-500">
+                        Parent categories group related subcategories. Choose the most specific category that fits this product.
                       </div>
                     </div>
                   </label>
@@ -1185,6 +1441,9 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
                         </option>
                       ))}
                     </select>
+                    <p className="mt-1.5 text-xs text-slate-500">
+                      The first selected category becomes the fallback default until you choose a different one.
+                    </p>
                   </label>
 
                   <div className="lg:col-span-2">
@@ -1255,16 +1514,40 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
                   </div>
                 </div>
 
+                {isEditMode ? (
+                  <div className="space-y-3">
+                    <FormSectionLabel
+                      eyebrow="Reference"
+                      title="Variant Summary"
+                      description="Existing variant data is shown for reference only."
+                    />
+                    <div className={authoringSurfaceClass}>
+                      <SellerProductVariationSummary
+                        summary={variationSummary}
+                        formatCurrency={formatCurrency}
+                        emptyTitle="No variants stored"
+                        emptyDescription="This product does not currently expose variant data in seller authoring."
+                        readOnlyHint="Variant combinations are read-only here. Use this summary to review the existing attribute and stock setup."
+                      />
+                    </div>
+                  </div>
+                ) : null}
+
                 <FormSectionLabel eyebrow="Media" title="Images" />
 
                 {canManageMedia ? (
                   <div className={`space-y-2.5 ${authoringSurfaceClass}`}>
                     <div className="flex flex-wrap items-start justify-between gap-2.5">
-                      <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-                        <ImageIcon className="h-3.5 w-3.5" />
-                        <span>{form.imageUrls.length} image(s)</span>
-                        <span className="text-slate-300">/</span>
-                        <span>6 max</span>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
+                          <ImageIcon className="h-3.5 w-3.5" />
+                          <span>{form.imageUrls.length} image(s)</span>
+                          <span className="text-slate-300">/</span>
+                          <span>6 max</span>
+                        </div>
+                        <p className="text-xs text-slate-400">
+                          The first image becomes the primary storefront preview.
+                        </p>
                       </div>
                       <label
                         className={`${authoringActionMutedClass} cursor-pointer`}
@@ -1331,13 +1614,33 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
                               >
                                 {imageUrl}
                               </p>
+                              <div className="flex flex-wrap gap-2 pt-1">
+                                {index !== 0 ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSetPrimaryImage(imageUrl)}
+                                    className={authoringActionMutedClass}
+                                  >
+                                    <CheckCircle2 className="h-4 w-4" />
+                                    Set as Primary
+                                  </button>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveImage(imageUrl)}
+                                  className={authoringActionMutedClass}
+                                >
+                                  <X className="h-4 w-4" />
+                                  Remove
+                                </button>
+                              </div>
                             </div>
                           </div>
                         ))}
                       </div>
                     ) : (
                       <div className="rounded-lg border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-400">
-                        Add product images
+                        Add product images. JPG and PNG only, up to 2MB each.
                       </div>
                     )}
                   </div>

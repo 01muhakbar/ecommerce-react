@@ -26,6 +26,11 @@ import {
 } from "../../utils/publicOrderReference.js";
 import { normalizeDashboardSettingCopy } from "../../utils/dashboardSettingCopy.js";
 import { getOrderTruthStatus } from "../../utils/orderTruth.js";
+import {
+  getStoreOnboardingPrimaryAction,
+  presentStoreApplicationStatus,
+  presentStoreReadiness,
+} from "../../utils/storeOnboardingPresentation.ts";
 
 const fetchOrders = async () => {
   const { data } = await api.get("/store/my/orders");
@@ -38,7 +43,7 @@ const formatDate = (value) => {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString();
+  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(date);
 };
 
 const getOrderDateValue = (order) =>
@@ -63,143 +68,144 @@ const ONBOARDING_TONE = {
   rose: "bg-rose-100 text-rose-700",
 };
 
-const resolveStoreStatusTone = (status) =>
-  String(status || "").toUpperCase() === "ACTIVE" ? "emerald" : "stone";
-
 const resolveDashboardOnboardingState = ({ application, ownerStore, fallbackStore }) => {
+  const applicationStatus = application
+    ? presentStoreApplicationStatus(application.statusMeta, application.status)
+    : null;
+  const readinessStatus = presentStoreReadiness({
+    storeStatus: ownerStore?.store?.status || application?.activation?.storeStatus || null,
+    hasStore: Boolean(ownerStore || fallbackStore || application?.activation?.storeId),
+    sellerAccessReady: Boolean(application?.activation?.sellerAccessReady),
+  });
+  const completionText = application
+    ? `${application.completeness?.completedFields || 0} of ${
+        application.completeness?.totalFields || 0
+      } fields completed`
+    : "No application started";
+
   if (ownerStore) {
-    const storeStatus = String(ownerStore.store.status || "INACTIVE").toUpperCase();
     return {
-      title: "Seller Workspace Sudah Tersedia",
+      title: "Start Selling",
       description:
-        storeStatus === "ACTIVE"
-          ? "Akun ini sudah terhubung dengan store dan seller workspace siap dipakai."
-          : "Akun ini sudah terhubung dengan seller workspace. Operasional publik store tetap mengikuti status store dan readiness backend.",
-      badge: {
-        label: storeStatus,
-        tone: resolveStoreStatusTone(storeStatus),
-      },
-      ctaLabel: "Masuk ke Seller Workspace",
+        readinessStatus.code === "active"
+          ? "Seller access is ready. Open the workspace to manage your store."
+          : "Seller access is ready. Public activity still depends on store readiness.",
+      applicationBadge: applicationStatus,
+      readinessBadge: readinessStatus,
+      ctaLabel: "Go to Seller Workspace",
       href: createSellerWorkspaceRoutes(ownerStore.store).home(),
-      meta: `@${ownerStore.store.slug}`,
+      progress: `Store @${ownerStore.store.slug}`,
+      meta: completionText,
       icon: Store,
     };
   }
 
   if (!application) {
     return {
-      title: "Mulai Jualan di Platform Kami",
-      description:
-        "Ajukan pembukaan toko untuk mulai menjual produk Anda. Lengkapi data toko dan verifikasi identitas agar tim admin dapat meninjau pengajuan Anda.",
-      badge: null,
-      ctaLabel: "Ajukan Pembukaan Toko",
+      title: "Start Selling",
+      description: "Complete your store details and submit for review.",
+      applicationBadge: null,
+      readinessBadge: readinessStatus,
+      ctaLabel: "Start Application",
       href: "/user/store-application",
-      meta: "Belum ada pengajuan aktif",
+      progress: "No active application",
+      meta: "The store is not public yet.",
       icon: BriefcaseBusiness,
     };
   }
 
   if (application.status === "draft") {
     return {
-      title: "Mulai Jualan di Platform Kami",
-      description:
-        "Draft pengajuan toko sudah tersimpan. Lanjutkan pengisian data dan ringkasan sebelum dikirim ke admin.",
-      badge: {
-        label: application.statusMeta?.label || "Draft",
-        tone: application.statusMeta?.tone || "stone",
-      },
-      ctaLabel: "Lanjutkan Pengajuan Toko",
+      title: "Start Selling",
+      description: "Finish the missing details and submit when you are ready.",
+      applicationBadge: applicationStatus,
+      readinessBadge: readinessStatus,
+      ctaLabel: getStoreOnboardingPrimaryAction(application.status, false),
       href: "/user/store-application",
-      meta: `${application.completeness?.completedFields || 0}/${
-        application.completeness?.totalFields || 0
-      } field backend lengkap`,
+      progress: completionText,
+      meta: application.currentStepMeta?.label || "Owner Details",
       icon: BriefcaseBusiness,
     };
   }
 
   if (application.status === "submitted" || application.status === "under_review") {
     return {
-      title: "Pengajuan Sedang Ditinjau",
-      description:
-        application.statusMeta?.description ||
-        "Pengajuan toko sedang diproses admin. Status akan diperbarui dari backend setelah review berjalan.",
-      badge: {
-        label: "Pengajuan Sedang Ditinjau",
-        tone: application.statusMeta?.tone || "sky",
-      },
-      ctaLabel: "Lihat Status Pengajuan",
+      title: "Start Selling",
+      description: applicationStatus?.description || "Your application is being reviewed.",
+      applicationBadge: applicationStatus,
+      readinessBadge: readinessStatus,
+      ctaLabel: getStoreOnboardingPrimaryAction(application.status, false),
       href: "/user/store-application",
-      meta: application.currentStepMeta?.label || "Review",
+      progress: completionText,
+      meta: application.submittedAt
+        ? `Submitted ${formatDate(application.submittedAt)}`
+        : application.currentStepMeta?.label || "Review",
       icon: BriefcaseBusiness,
     };
   }
 
   if (application.status === "revision_requested") {
     return {
-      title: "Perlu Revisi",
-      description:
-        application.revisionNote ||
-        "Admin meminta perbaikan data. Perbarui pengajuan yang sama lalu kirim ulang.",
-      badge: {
-        label: "Perlu Revisi",
-        tone: application.statusMeta?.tone || "rose",
-      },
-      ctaLabel: "Perbaiki Pengajuan",
+      title: "Start Selling",
+      description: application.revisionNote || applicationStatus?.description,
+      applicationBadge: applicationStatus,
+      readinessBadge: readinessStatus,
+      ctaLabel: getStoreOnboardingPrimaryAction(application.status, false),
       href: "/user/store-application",
-      meta: application.currentStepMeta?.label || "Review",
+      progress: completionText,
+      meta: "Update the requested fields and submit again.",
       icon: BriefcaseBusiness,
     };
   }
 
   if (application.status === "approved") {
     return {
-      title: "Pengajuan Disetujui",
+      title: "Start Selling",
       description: fallbackStore
-        ? "Pengajuan sudah approved dan seller workspace tersedia untuk akun ini."
-        : "Pengajuan sudah approved. Jika workspace belum muncul, muat ulang dashboard untuk sinkronisasi boundary seller dari backend.",
-      badge: {
-        label: application.statusMeta?.label || "Approved",
-        tone: application.statusMeta?.tone || "emerald",
-      },
-      ctaLabel: "Masuk ke Seller Workspace",
+        ? "Seller access is approved. Open the workspace to continue setup."
+        : "Seller access is approved. Store setup may still be syncing.",
+      applicationBadge: applicationStatus,
+      readinessBadge: presentStoreReadiness({
+        storeStatus: fallbackStore?.store?.status || application?.activation?.storeStatus || null,
+        hasStore: Boolean(fallbackStore || application?.activation?.storeId),
+        sellerAccessReady: Boolean(application?.activation?.sellerAccessReady),
+      }),
+      ctaLabel: getStoreOnboardingPrimaryAction(application.status, Boolean(fallbackStore)),
       href: fallbackStore
         ? createSellerWorkspaceRoutes(fallbackStore.store).home()
         : "/user/store-application",
-      meta: application.reviewedAt ? `Direview ${formatDate(application.reviewedAt)}` : "Approved",
+      progress: completionText,
+      meta: application.reviewedAt ? `Reviewed ${formatDate(application.reviewedAt)}` : "Approved",
       icon: CheckCircle,
     };
   }
 
   if (application.status === "rejected") {
     return {
-      title: "Pengajuan Ditolak",
+      title: "Start Selling",
       description:
         application.rejectReason ||
-        application.statusMeta?.description ||
-        "Pengajuan ditutup. Anda dapat membuat pengajuan baru dari halaman onboarding.",
-      badge: {
-        label: "Pengajuan Ditolak",
-        tone: application.statusMeta?.tone || "rose",
-      },
-      ctaLabel: "Ajukan Ulang",
+        applicationStatus?.description ||
+        "Start a new application when you are ready.",
+      applicationBadge: applicationStatus,
+      readinessBadge: readinessStatus,
+      ctaLabel: getStoreOnboardingPrimaryAction(application.status, false),
       href: "/user/store-application",
-      meta: application.reviewedAt ? `Direview ${formatDate(application.reviewedAt)}` : "Closed",
+      progress: completionText,
+      meta: application.reviewedAt ? `Reviewed ${formatDate(application.reviewedAt)}` : "Closed",
       icon: BriefcaseBusiness,
     };
   }
 
   return {
-    title: "Pengajuan Dibatalkan",
-    description:
-      application.statusMeta?.description ||
-      "Pengajuan dibatalkan. Anda dapat memulai pengajuan baru saat sudah siap.",
-    badge: {
-      label: application.statusMeta?.label || "Cancelled",
-      tone: application.statusMeta?.tone || "stone",
-    },
-    ctaLabel: "Ajukan Pembukaan Toko",
+    title: "Start Selling",
+    description: applicationStatus?.description || "Start a new application when you are ready.",
+    applicationBadge: applicationStatus,
+    readinessBadge: readinessStatus,
+    ctaLabel: getStoreOnboardingPrimaryAction(application.status, false),
     href: "/user/store-application",
-    meta: application.updatedAt ? `Diperbarui ${formatDate(application.updatedAt)}` : "Cancelled",
+    progress: completionText,
+    meta: application.updatedAt ? `Updated ${formatDate(application.updatedAt)}` : "Cancelled",
     icon: BriefcaseBusiness,
   };
 };
@@ -351,30 +357,42 @@ export default function AccountDashboardPage() {
         ) : storeApplicationQuery.isLoading || sellerStoresQuery.isLoading ? (
           <div className="p-5 text-sm text-slate-500">Loading store onboarding status...</div>
         ) : (
-          <div className="grid gap-5 p-5 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div className="grid gap-4 p-5 lg:grid-cols-[1fr_auto] lg:items-center">
             <div className="flex items-start gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
                 <OnboardingIcon className="h-5 w-5" />
               </div>
               <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-lg font-semibold text-slate-950">{onboardingCard.title}</h2>
-                  {onboardingCard.badge ? (
+                  {onboardingCard.applicationBadge ? (
                     <span
                       className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
-                        ONBOARDING_TONE[onboardingCard.badge.tone] || ONBOARDING_TONE.stone
+                        ONBOARDING_TONE[onboardingCard.applicationBadge.tone] || ONBOARDING_TONE.stone
                       }`}
                     >
-                      {onboardingCard.badge.label}
+                      {onboardingCard.applicationBadge.label}
+                    </span>
+                  ) : null}
+                  {onboardingCard.readinessBadge ? (
+                    <span
+                      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                        ONBOARDING_TONE[onboardingCard.readinessBadge.tone] || ONBOARDING_TONE.stone
+                      }`}
+                    >
+                      {onboardingCard.readinessBadge.label}
                     </span>
                   ) : null}
                 </div>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                <p className="mt-2 max-w-2xl text-sm text-slate-600">
                   {onboardingCard.description}
                 </p>
-                <p className="mt-3 text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
-                  {onboardingCard.meta}
-                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500">
+                  <span className="font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    {onboardingCard.progress}
+                  </span>
+                  <span>{onboardingCard.meta}</span>
+                </div>
               </div>
             </div>
             <div className="flex justify-start lg:justify-end">

@@ -2,17 +2,9 @@ import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchAdminStoreApplications } from "../../api/adminStoreApplications.ts";
+import { STORE_APPLICATION_FILTER_OPTIONS } from "../../utils/storeOnboardingPresentation.ts";
 
-const STATUS_OPTIONS = [
-  { value: "", label: "All statuses" },
-  { value: "submitted", label: "Submitted" },
-  { value: "under_review", label: "Under review" },
-  { value: "revision_requested", label: "Revision requested" },
-  { value: "approved", label: "Approved" },
-  { value: "rejected", label: "Rejected" },
-  { value: "cancelled", label: "Cancelled" },
-  { value: "draft", label: "Draft" },
-];
+const STATUS_OPTIONS = STORE_APPLICATION_FILTER_OPTIONS;
 
 const STATUS_CLASS = {
   stone: "border-slate-200 bg-slate-100 text-slate-700",
@@ -26,7 +18,7 @@ const formatDateTime = (value) => {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
-  return new Intl.DateTimeFormat("id-ID", {
+  return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
@@ -87,10 +79,7 @@ export default function AdminStoreApplicationsPage() {
       <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
         <div>
           <h1 className="text-[22px] font-semibold text-slate-800">Store Applications</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Review incoming store onboarding applications, verify applicant data, and decide approve,
-            revision request, or reject.
-          </p>
+          <p className="mt-1 text-sm text-slate-500">Review store applications and make the next decision.</p>
         </div>
         <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
           {meta.total || 0} application{meta.total === 1 ? "" : "s"}
@@ -178,7 +167,7 @@ export default function AdminStoreApplicationsPage() {
                         </div>
                         <div className="text-xs text-slate-500">{entry.applicant.accountEmail || "-"}</div>
                         <div className="mt-2 text-xs text-slate-500">
-                          Match: {entry.applicant.identityMatch.summaryLabel}
+                          Identity: {entry.applicant.identityMatch.summaryLabel}
                         </div>
                       </td>
                       <td className="px-4 py-4">

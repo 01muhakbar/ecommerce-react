@@ -1,0 +1,17 @@
+{
+  "runId": "seller-tags-dto-fix-20260420T020644z-s0n0iv",
+  "storeId": 1,
+  "categoryId": 6,
+  "categoryName": "Beverages",
+  "productId": 847,
+  "rawTags": "[\"edited\",\"seller-tags-dto-fix-20260420T020644z-s0n0iv\",\"detail-visible\"]",
+  "rawTagsType": "string",
+  "mappedDetailTags": [
+    "edited",
+    "seller-tags-dto-fix-20260420T020644z-s0n0iv",
+    "detail-visible"
+  ],
+  "mappedListItemName": "Tags DTO Fix seller-tags-dto-fix-20260420T020644z-s0n0iv Edited",
+  "noTagCopyVisible": false,
+  "screenshot": "C:\\Users\\user\\Documents\\ecommerce-react\\reports\\seller-tags-dto-fix-20260420T020644z-s0n0iv\\seller-detail-tags-fixed.png"
+}

@@ -1,0 +1,36 @@
+{
+  "runId": "seller-dto-smoke-20260420T012745z-x4a00k",
+  "startedAt": "2026-04-20T01:27:45.841Z",
+  "serverBaseUrl": "http://localhost:3001",
+  "clientBaseUrl": "http://localhost:5173",
+  "storeSlug": "super-admin-1",
+  "sellerEmail": "superadmin@local.dev",
+  "storeId": 1,
+  "category": {
+    "id": 6,
+    "name": "Beverages"
+  },
+  "productId": null,
+  "productSlug": null,
+  "screenshots": [],
+  "mismatches": [],
+  "steps": [
+    {
+      "id": "1",
+      "title": "Bootstrap seller session and references",
+      "status": "passed",
+      "summary": "Seller session, store context, and category references are ready.",
+      "startedAt": "2026-04-20T01:27:45.910Z",
+      "finishedAt": "2026-04-20T01:27:46.281Z",
+      "durationMs": 371,
+      "proof": {
+        "storeId": 1,
+        "categoryId": 6,
+        "categoryName": "Beverages",
+        "cookieName": "token"
+      },
+      "rootCause": null
+    }
+  ],
+  "overallStatus": "failed"
+}

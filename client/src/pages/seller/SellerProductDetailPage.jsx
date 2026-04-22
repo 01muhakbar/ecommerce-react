@@ -28,11 +28,13 @@ import {
   SellerWorkspaceSectionCard,
   SellerWorkspaceSectionHeader,
 } from "../../components/seller/SellerWorkspaceFoundation.jsx";
+import SellerProductVariationSummary from "../../components/seller/SellerProductVariationSummary.jsx";
 import { resolveAssetUrl } from "../../lib/assetUrl.js";
 import {
   getProductVisibleImageUrls,
   normalizeProductDisplayTags,
 } from "../../utils/productDisplay.js";
+import { summarizeProductVariations } from "../../utils/productVariations.js";
 import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
 import { useSellerWorkspaceRoute } from "../../utils/sellerWorkspaceRoute.js";
 
@@ -96,7 +98,7 @@ const getSubmissionReason = (submission) =>
 
 const getSellerLaneVisibilityLabel = (product) => {
   if (product?.visibility?.sellerLabel) return product.visibility.sellerLabel;
-  if (product?.status === "draft") return "Draft only";
+  if (product?.status === "draft") return "Draft";
   return product?.visibility?.storefrontLabel || "Hidden from storefront";
 };
 
@@ -119,9 +121,9 @@ const getSellerLaneStorefrontImpact = (product) => {
 };
 
 const getSellerLanePublishFlagLabel = (product) => {
-  if (product?.submission?.status === "submitted") return "On, but review-blocked";
+  if (product?.submission?.status === "submitted") return "Published but review-blocked";
   if (product?.submission?.status === "needs_revision") {
-    return "On, but revision-blocked";
+    return "Published but revision-blocked";
   }
   return product?.visibility?.publishLabel || "-";
 };
@@ -301,6 +303,7 @@ export default function SellerProductDetailPage() {
     promoImageUrl: product?.media?.promoImageUrl,
     imageUrls: product?.media?.imageUrls,
   });
+  const variationSummary = summarizeProductVariations(product?.variations?.raw);
   const contractNotes = Array.isArray(product?.contract?.notes) ? product.contract.notes : [];
   const catalogGovernance = product?.governance ?? null;
   const authoringGovernance = catalogGovernance?.authoring ?? null;
@@ -400,13 +403,13 @@ export default function SellerProductDetailPage() {
           ) : isSubmitted ? (
             <SellerWorkspaceBadge
               key="waiting"
-              label="Waiting for admin review"
+              label="Submitted for review"
               tone="sky"
             />
           ) : isNeedsRevision ? (
-            <SellerWorkspaceBadge key="revision" label="Revision required" tone="amber" />
+            <SellerWorkspaceBadge key="revision" label="Needs revision" tone="amber" />
           ) : isStorefrontVisible ? (
-            <SellerWorkspaceBadge key="live" label="Live in storefront" tone="emerald" />
+            <SellerWorkspaceBadge key="live" label="Visible in storefront" tone="emerald" />
           ) : null,
           <SellerWorkspaceBadge
             key="status"
@@ -933,23 +936,18 @@ export default function SellerProductDetailPage() {
           </SellerWorkspaceSectionCard>
 
           <SellerWorkspaceSectionCard
-            title="Variants and Structured Data"
-            hint="Existing JSON-based representations are exposed read-only for seller visibility."
+            title="Variant Summary"
+            hint="Existing variant data is shown here for reference only. Seller editing stays disabled in this lane."
             Icon={Layers3}
           >
             <div className="space-y-3.5">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  Variations
-                </p>
-                {product?.variations?.hasVariations ? (
-                  <pre className="mt-2.5 overflow-x-auto rounded-xl bg-slate-950 p-3.5 text-xs leading-6 text-slate-100">
-                    {prettyJson(product.variations.raw)}
-                  </pre>
-                ) : (
-                  <p className="mt-2.5 text-sm text-slate-500">No variation data stored.</p>
-                )}
-              </div>
+              <SellerProductVariationSummary
+                summary={variationSummary}
+                formatCurrency={formatCurrency}
+                emptyTitle="No variants stored"
+                emptyDescription="This product does not currently expose variant data in the seller read model."
+                readOnlyHint="Existing combinations, pricing, and stock are visible here when the current read model provides them."
+              />
 
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">

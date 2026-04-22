@@ -17,6 +17,9 @@ import {
 
 const PENDING_ADD_KEY = "pending_cart_add";
 const PENDING_ADD_CONSUMED_KEY = "pending_cart_add_consumed";
+const ADMIN_WORKSPACE_ROLES = new Set(["admin", "super_admin", "superadmin", "staff"]);
+
+const normalizeRole = (value) => String(value || "").trim().toLowerCase();
 
 export default function StoreLoginPage() {
   const navigate = useNavigate();
@@ -161,6 +164,13 @@ export default function StoreLoginPage() {
       const pendingFrom = await mergePendingAdd();
       await refreshSession();
       await refreshCart(false);
+      const authenticatedRole = normalizeRole(
+        response?.data?.data?.user?.role || response?.data?.user?.role
+      );
+      if (ADMIN_WORKSPACE_ROLES.has(authenticatedRole)) {
+        navigate("/admin", { replace: true });
+        return;
+      }
       // Redirect back to intended page if present; avoid looping to login.
       const fromState = location.state?.from;
       const resolvedFrom =

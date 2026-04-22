@@ -7,6 +7,10 @@ import {
   rejectAdminStoreApplication,
   requestAdminStoreApplicationRevision,
 } from "../../api/adminStoreApplications.ts";
+import {
+  presentStoreApplicationStatus,
+  presentStoreReadiness,
+} from "../../utils/storeOnboardingPresentation.ts";
 
 const STATUS_CLASS = {
   stone: "border-slate-200 bg-slate-100 text-slate-700",
@@ -20,13 +24,13 @@ const formatDateTime = (value) => {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
-  return new Intl.DateTimeFormat("id-ID", {
+  return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
 };
 
-const yesNo = (value) => (value ? "Ya" : "Tidak");
+const yesNo = (value) => (value ? "Yes" : "No");
 
 function StatusPill({ label, tone = "stone" }) {
   return (
@@ -151,6 +155,14 @@ export default function AdminStoreApplicationDetailPage() {
   const detail = detailQuery.data;
   const workflow = detail?.workflowSummary;
   const actionGovernance = workflow?.actionGovernance || {};
+  const applicationStatus = detail
+    ? presentStoreApplicationStatus(detail.statusMeta, detail.status)
+    : presentStoreApplicationStatus("draft");
+  const readinessStatus = presentStoreReadiness({
+    storeStatus: workflow?.activation?.storeStatus || null,
+    hasStore: Boolean(workflow?.activation?.storeId),
+    sellerAccessReady: Boolean(workflow?.activation?.sellerAccessReady),
+  });
   const isBusy =
     approveMutation.isPending || revisionMutation.isPending || rejectMutation.isPending;
 
@@ -194,11 +206,12 @@ export default function AdminStoreApplicationDetailPage() {
             Store Application #{detail.id}
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Normalized admin review detail for store onboarding verification and workflow decisions.
+            Review the application details and decide the next step.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <StatusPill label={detail.statusMeta.label} tone={detail.statusMeta.tone} />
+          <StatusPill label={applicationStatus.label} tone={applicationStatus.tone} />
+          <StatusPill label={readinessStatus.label} tone={readinessStatus.tone} />
           <StatusPill label={detail.currentStepMeta.label} tone="stone" />
         </div>
       </div>
@@ -206,12 +219,12 @@ export default function AdminStoreApplicationDetailPage() {
       {flash ? <Notice tone={flash.type === "error" ? "error" : "info"}>{flash.message}</Notice> : null}
 
       <SectionCard
-        title="Workflow Summary"
-        description="Current review state, completeness, and latest admin workflow notes."
+        title="Application Summary"
+        description="Status, progress, and review timestamps."
       >
         <DetailGrid
           items={[
-            { label: "Application Status", value: detail.statusMeta.label },
+            { label: "Application Status", value: applicationStatus.label },
             { label: "Current Step", value: detail.currentStepMeta.label },
             {
               label: "Completeness",
@@ -229,6 +242,20 @@ export default function AdminStoreApplicationDetailPage() {
             { label: "Revision Summary", value: workflow.revisionSummary },
             { label: "Reject Reason", value: workflow.rejectReason },
             { label: "Internal Admin Note", value: workflow.internalAdminNote },
+          ]}
+        />
+        {actionGovernance.boundaryNote ? (
+          <Notice tone="warning">{actionGovernance.boundaryNote}</Notice>
+        ) : null}
+      </SectionCard>
+
+      <SectionCard
+        title="Store Readiness"
+        description="Seller access and store activation stay separate from application review."
+      >
+        <DetailGrid
+          items={[
+            { label: "Readiness", value: readinessStatus.label, hint: readinessStatus.description },
             {
               label: "Provisioned Store",
               value: workflow.activation?.storeSlug
@@ -247,16 +274,17 @@ export default function AdminStoreApplicationDetailPage() {
                   : "-",
               hint: workflow.activation?.ownerMembershipStatus || null,
             },
+            {
+              label: "Seller Access",
+              value: workflow.activation?.sellerAccessReady ? "Ready" : "Not Ready",
+            },
           ]}
         />
-        {actionGovernance.boundaryNote ? (
-          <Notice tone="warning">{actionGovernance.boundaryNote}</Notice>
-        ) : null}
       </SectionCard>
 
       <SectionCard
         title="Applicant Identity"
-        description="Account data, identity snapshot, and account-vs-application match summary."
+        description="Account data and identity comparison."
       >
         <DetailGrid
           items={[
@@ -301,7 +329,7 @@ export default function AdminStoreApplicationDetailPage() {
 
       <SectionCard
         title="Store Information"
-        description="Business-facing store proposal captured from the onboarding application."
+        description="Submitted store profile details."
       >
         <DetailGrid
           items={[
@@ -327,7 +355,7 @@ export default function AdminStoreApplicationDetailPage() {
 
       <SectionCard
         title="Operational Verification"
-        description="Operational contact and address block used for review."
+        description="Business contact and address details."
       >
         <DetailGrid
           items={[
@@ -346,7 +374,7 @@ export default function AdminStoreApplicationDetailPage() {
 
       <SectionCard
         title="Financial Verification"
-        description="Masked payout and banking snapshot for admin validation."
+        description="Masked payout details for review."
       >
         <DetailGrid
           items={[
@@ -361,14 +389,14 @@ export default function AdminStoreApplicationDetailPage() {
               label: "Account Name Matches Identity",
               value: yesNo(detail.financialVerification.accountHolderMatchesIdentity),
             },
-            { label: "NPWP", value: detail.financialVerification.taxId },
+            { label: "Tax ID", value: detail.financialVerification.taxId },
           ]}
         />
       </SectionCard>
 
       <SectionCard
         title="Compliance and Risk"
-        description="Product declarations, brand ownership, and support links."
+        description="Declarations, support details, and risk-related notes."
       >
         <DetailGrid
           items={[
@@ -399,8 +427,7 @@ export default function AdminStoreApplicationDetailPage() {
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <h3 className="text-sm font-semibold text-slate-900">Approve</h3>
             <p className="mt-1 text-xs text-slate-500">
-              Approve memprovision store boundary dan owner membership. Store publik tetap
-              mengikuti status store dan readiness backend.
+              Approve seller access. Public activity still depends on store readiness.
             </p>
             <textarea
               value={approveInternalNote}
@@ -424,7 +451,7 @@ export default function AdminStoreApplicationDetailPage() {
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <h3 className="text-sm font-semibold text-slate-900">Request Revision</h3>
             <p className="mt-1 text-xs text-slate-500">
-              Revision note wajib diisi agar seller tahu bagian yang harus diperbaiki.
+              Add a clear revision note for the applicant.
             </p>
             <textarea
               value={revisionNote}
@@ -436,7 +463,7 @@ export default function AdminStoreApplicationDetailPage() {
               value={revisionSummary}
               onChange={(event) => setRevisionSummary(event.target.value)}
               className="mt-3 h-20 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-emerald-400 focus:outline-none"
-              placeholder="Ringkasan bagian yang harus diperbaiki"
+              placeholder="Short revision summary"
             />
             <textarea
               value={revisionInternalNote}
@@ -460,7 +487,7 @@ export default function AdminStoreApplicationDetailPage() {
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <h3 className="text-sm font-semibold text-slate-900">Reject</h3>
             <p className="mt-1 text-xs text-slate-500">
-              Reject reason wajib diisi. Internal admin note tetap private di lane admin.
+              Add a rejection reason. Internal notes stay private.
             </p>
             <textarea
               value={rejectReason}

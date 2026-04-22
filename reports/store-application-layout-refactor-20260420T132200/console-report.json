@@ -1,0 +1,52 @@
+{
+  "entries": [
+    {
+      "type": "debug",
+      "text": "[vite] connecting..."
+    },
+    {
+      "type": "debug",
+      "text": "[vite] connected."
+    },
+    {
+      "type": "info",
+      "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"
+    },
+    {
+      "type": "log",
+      "text": "[store-login] login ok {url: /api/auth/login, status: 200}"
+    },
+    {
+      "type": "log",
+      "text": "[store-login] document.cookie "
+    },
+    {
+      "type": "log",
+      "text": "[store-login] me status 200"
+    },
+    {
+      "type": "log",
+      "text": "[auth] refreshSession user {id: 1310, email: superclient@local.dev, name: Super Client, role: customer, avatarUrl: null}"
+    },
+    {
+      "type": "debug",
+      "text": "[vite] connecting..."
+    },
+    {
+      "type": "debug",
+      "text": "[vite] connected."
+    },
+    {
+      "type": "info",
+      "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"
+    },
+    {
+      "type": "log",
+      "text": "[auth] refreshSession user {id: 1310, email: superclient@local.dev, name: Super Client, role: customer, avatarUrl: null}"
+    },
+    {
+      "type": "log",
+      "text": "[auth] refreshSession user {id: 1310, email: superclient@local.dev, name: Super Client, role: customer, avatarUrl: null}"
+    }
+  ]
+}

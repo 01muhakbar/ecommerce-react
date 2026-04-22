@@ -1,4 +1,10 @@
 import { api } from "./axios.ts";
+import {
+  mapSellerProductDetail as mapSellerProductDetailDto,
+  mapSellerProductListItem as mapSellerProductListItemDto,
+  toSellerProductWritePayload,
+  type ProductWriteDTO,
+} from "./productDto.ts";
 
 type SellerProductsQuery = {
   page?: number;
@@ -18,20 +24,7 @@ type SellerProductsQuery = {
 
 type SellerBulkSubmissionAction = "submit_review" | "resubmit_review";
 
-type SellerProductDraftPayload = {
-  name: string;
-  description?: string | null;
-  sku?: string | null;
-  barcode?: string | null;
-  slug?: string | null;
-  categoryIds?: number[];
-  defaultCategoryId?: number | null;
-  price?: number;
-  salePrice?: number | null;
-  stock?: number;
-  imageUrls?: string[];
-  tags?: string[];
-};
+type SellerProductDraftPayload = ProductWriteDTO;
 
 const PRODUCT_STATUSES = new Set(["active", "inactive", "draft"]);
 
@@ -53,133 +46,6 @@ const normalizeProductStatus = (value: unknown) => {
   return PRODUCT_STATUSES.has(status) ? status : "draft";
 };
 
-const buildStatusMeta = (status: string) => ({
-  code: status,
-  label: status === "active" ? "Active" : status === "inactive" ? "Inactive" : "Draft",
-  storefrontEligible: status === "active",
-  operationalMeaning:
-    status === "active"
-      ? "Product is operationally active and can become public when publish is on."
-      : status === "inactive"
-        ? "Product stays attached to the store but is blocked from public storefront queries."
-        : "Product is still draft and blocked from public storefront queries.",
-});
-
-const buildVisibility = (
-  published: boolean,
-  status: string,
-  fallback: Record<string, any> = {}
-) => {
-  const storefrontVisible =
-    typeof fallback?.storefrontVisible === "boolean"
-      ? fallback.storefrontVisible
-      : published && status === "active";
-  const reasonCode =
-    normalizeText(fallback?.reasonCode) ||
-    (!published
-      ? "UNPUBLISHED"
-      : storefrontVisible
-        ? "STOREFRONT_VISIBLE"
-        : "STATUS_NOT_ACTIVE");
-  const blockingSignals = Array.isArray(fallback?.blockingSignals)
-    ? fallback.blockingSignals
-    : [
-        ...(!published ? ["PUBLISH_OFF"] : []),
-        ...(status !== "active" ? ["STATUS_NOT_ACTIVE"] : []),
-      ];
-  const stateCode =
-    fallback?.stateCode ||
-    (!published ? "INTERNAL_ONLY" : storefrontVisible ? "STOREFRONT_VISIBLE" : "PUBLISHED_BLOCKED");
-
-  return {
-    ...fallback,
-    isPublished: published,
-    storefrontVisible,
-    stateCode,
-    label: normalizeText(fallback?.label) || (published ? "Published" : "Private"),
-    publishLabel:
-      normalizeText(fallback?.publishLabel) || (published ? "Published" : "Private"),
-    sellerLabel:
-      fallback?.sellerLabel ||
-      (!published
-        ? status === "draft"
-          ? "Draft in seller workspace"
-          : "Hidden from storefront"
-        : storefrontVisible
-          ? "Visible in storefront"
-          : "Published but blocked"),
-    storefrontLabel:
-      normalizeText(fallback?.storefrontLabel) ||
-      (storefrontVisible ? "Visible in storefront" : "Hidden from storefront"),
-    storefrontReason:
-      fallback?.storefrontReason ||
-      (!published
-        ? "Public storefront queries exclude this product because the publish flag is off."
-        : storefrontVisible
-          ? "Public storefront queries include this product because publish is on and status is active."
-          : "Publish is on, but public storefront queries still exclude this product until status becomes active."),
-    sellerHint:
-      fallback?.sellerHint ||
-      (!published
-        ? "Seller can still review this product here, but customers cannot see it yet."
-        : storefrontVisible
-          ? "Seller and customer views are aligned for visibility."
-          : "Seller can review this product here, but customers will not see it until status becomes active."),
-    blockingSignals,
-    reasonCode,
-  };
-};
-
-const normalizeAvailability = (availability: any, inventory: any = {}) => {
-  const stock = asNumber(availability?.stock ?? inventory?.stock, 0);
-  const preOrder = Boolean(availability?.preOrder ?? inventory?.preOrder);
-  const preorderDaysValue = Number(
-    availability?.preorderDays ?? inventory?.preorderDays ?? 0
-  );
-  const preorderDays =
-    Number.isFinite(preorderDaysValue) && preorderDaysValue > 0 ? preorderDaysValue : null;
-  const inStock = stock > 0;
-  const stateCode =
-    availability?.stateCode ||
-    (preOrder ? "PREORDER" : inStock ? "IN_STOCK" : "OUT_OF_STOCK");
-
-  return {
-    ...availability,
-    stock,
-    inStock,
-    preOrder,
-    preorderDays,
-    stateCode,
-    label:
-      availability?.label ||
-      (preOrder
-        ? `Pre-order${preorderDays ? ` (${preorderDays} day${preorderDays === 1 ? "" : "s"})` : ""}`
-        : inStock
-          ? "In stock"
-          : "Out of stock"),
-    storefrontImpact: availability?.storefrontImpact || "NO_VISIBILITY_CHANGE",
-    storefrontReason:
-      availability?.storefrontReason ||
-      "Current storefront product queries do not hide products based on stock or pre-order flags.",
-  };
-};
-
-const normalizeCategorySummary = (category: any) => {
-  if (!category || typeof category !== "object") return null;
-
-  const id = asNumber(category.id, 0);
-  const name = normalizeText(category.name);
-  const code = normalizeText(category.code);
-
-  if (!id && !name && !code) return null;
-
-  return {
-    id: id || null,
-    name: name || "-",
-    code: code || null,
-  };
-};
-
 const normalizeCategoryReference = (category: any) => {
   if (!category || typeof category !== "object") return null;
 
@@ -198,134 +64,8 @@ const normalizeCategoryReference = (category: any) => {
   };
 };
 
-const normalizePricing = (pricing: any) => {
-  const price = asNumber(pricing?.price, 0);
-  const salePriceValue = Number(pricing?.salePrice);
-  const salePrice =
-    Number.isFinite(salePriceValue) && salePriceValue > 0 ? salePriceValue : null;
-  return {
-    price,
-    salePrice,
-    effectivePrice: salePrice && salePrice > 0 ? salePrice : price,
-  };
-};
-
-const normalizeInventory = (inventory: any) => {
-  const stock = asNumber(inventory?.stock, 0);
-  return {
-    ...inventory,
-    stock,
-    inStock: stock > 0,
-    preOrder: Boolean(inventory?.preOrder),
-    preorderDays: inventory?.preorderDays ? asNumber(inventory.preorderDays, 0) || null : null,
-  };
-};
-
-const normalizeProductAuthoring = (value: any) => {
-  if (!value || typeof value !== "object") return null;
-
-  return {
-    canEditDraft: Boolean(value.canEditDraft),
-    editBlockedReason: normalizeText(value.editBlockedReason) || null,
-    allowedStatuses: Array.isArray(value.allowedStatuses)
-      ? value.allowedStatuses.map((entry: unknown) => normalizeText(entry)).filter(Boolean)
-      : [],
-  };
-};
-
-const normalizeProductPublishing = (value: any) => {
-  if (!value || typeof value !== "object") return null;
-
-  return {
-    stateCode: normalizeText(value.stateCode) || null,
-    isPublished: Boolean(value.isPublished ?? value.published),
-    label: normalizeText(value.label) || null,
-    isReady: Boolean(value.isReady),
-    canPublish: Boolean(value.canPublish),
-    canUnpublish: Boolean(value.canUnpublish),
-    nextActionLabel: normalizeText(value.nextActionLabel) || null,
-    hint: normalizeText(value.hint) || null,
-    blockedReasons: Array.isArray(value.blockedReasons)
-      ? value.blockedReasons
-          .map((entry: any) =>
-            entry && typeof entry === "object"
-              ? {
-                  field: normalizeText(entry.field) || null,
-                  code: normalizeText(entry.code) || null,
-                  message: normalizeText(entry.message) || null,
-                }
-              : null
-          )
-          .filter(Boolean)
-      : [],
-  };
-};
-
-const normalizeProductSubmission = (value: any) => {
-  if (!value || typeof value !== "object") return null;
-
-  const revisionNote = normalizeText(value.revisionNote) || null;
-  const reviewNote = normalizeText(value.reviewNote) || revisionNote;
-  const revisionReason = normalizeText(value.revisionReason) || reviewNote || revisionNote;
-
-  return {
-    status: normalizeText(value.status) || "none",
-    label: normalizeText(value.label) || null,
-    hasSubmission: Boolean(value.hasSubmission),
-    submittedAt: value.submittedAt || null,
-    submittedByUserId: asNumber(value.submittedByUserId, 0) || null,
-    reviewState: normalizeText(value.reviewState) || null,
-    storefrontImpact: normalizeText(value.storefrontImpact) || null,
-    revisionRequestedAt: value.revisionRequestedAt || null,
-    revisionRequestedByUserId: asNumber(value.revisionRequestedByUserId, 0) || null,
-    revisionNote,
-    reviewNote,
-    revisionReason,
-    requiresSellerChanges: Boolean(value.requiresSellerChanges),
-    canSubmit: Boolean(value.canSubmit),
-    canResubmit: Boolean(value.canResubmit),
-    canEdit: Boolean(value.canEdit),
-    nextActionCode: normalizeText(value.nextActionCode) || null,
-    nextActionLabel: normalizeText(value.nextActionLabel) || null,
-    nextActionDescription: normalizeText(value.nextActionDescription) || null,
-  };
-};
-
 const normalizeProductListItem = (item: any) => {
-  if (!item || typeof item !== "object") return null;
-
-  const status = normalizeProductStatus(item.status ?? item.statusMeta?.code);
-  const published = Boolean(item.published ?? item.visibility?.isPublished);
-
-  return {
-    ...item,
-    id: asNumber(item.id, 0),
-    storeId: asNumber(item.storeId, 0),
-    name: normalizeText(item.name) || "Untitled product",
-    slug: normalizeText(item.slug),
-    sku: normalizeText(item.sku) || null,
-    status,
-    statusMeta: {
-      ...buildStatusMeta(status),
-      ...(item.statusMeta && typeof item.statusMeta === "object" ? item.statusMeta : {}),
-    },
-    published,
-    visibility: buildVisibility(published, status, item.visibility),
-    storefrontVisibilityState:
-      normalizeText(item.storefrontVisibilityState || item.visibility?.stateCode) || null,
-    pricing: normalizePricing(item.pricing),
-    availability: normalizeAvailability(item.availability, item.inventory),
-    inventory: {
-      ...normalizeInventory(item.inventory),
-      ...normalizeAvailability(item.availability, item.inventory),
-    },
-    publishing: normalizeProductPublishing(item.publishing),
-    authoring: normalizeProductAuthoring(item.authoring),
-    submission: normalizeProductSubmission(item.submission),
-    category: normalizeCategorySummary(item.category),
-    ownership: item.ownership && typeof item.ownership === "object" ? item.ownership : null,
-    mediaPreviewUrl: normalizeText(item.mediaPreviewUrl) || null,
-  };
+  return mapSellerProductListItemDto(item);
 };
 
 const normalizeCatalogGovernance = (governance: any) => {
@@ -455,78 +195,8 @@ const normalizeProductSummary = (value: any) => ({
   internalOnly: asNumber(value?.internalOnly, 0),
 });
 
-const normalizeAssignedCategories = (value: unknown) =>
-  Array.isArray(value) ? value.map(normalizeCategorySummary).filter(Boolean) : [];
-
 const normalizeProductDetail = (item: any) => {
-  if (!item || typeof item !== "object") return null;
-
-  const status = normalizeProductStatus(item.status ?? item.statusMeta?.code);
-  const published = Boolean(item.published ?? item.visibility?.isPublished);
-  const category = item.category && typeof item.category === "object" ? item.category : {};
-  const media = item.media && typeof item.media === "object" ? item.media : {};
-
-  return {
-    ...item,
-    id: asNumber(item.id, 0),
-    storeId: asNumber(item.storeId, 0),
-    name: normalizeText(item.name) || "Untitled product",
-    slug: normalizeText(item.slug),
-    sku: normalizeText(item.sku) || null,
-    status,
-    statusMeta: {
-      ...buildStatusMeta(status),
-      ...(item.statusMeta && typeof item.statusMeta === "object" ? item.statusMeta : {}),
-    },
-    published,
-    visibility: buildVisibility(published, status, item.visibility),
-    storefrontVisibilityState:
-      normalizeText(item.storefrontVisibilityState || item.visibility?.stateCode) || null,
-    pricing: normalizePricing(item.pricing),
-    availability: normalizeAvailability(item.availability, item.inventory),
-    inventory: {
-      ...normalizeInventory(item.inventory),
-      ...normalizeAvailability(item.availability, item.inventory),
-    },
-    publishing: normalizeProductPublishing(item.publishing),
-    authoring: normalizeProductAuthoring(item.authoring),
-    submission: normalizeProductSubmission(item.submission),
-    ownership: item.ownership && typeof item.ownership === "object" ? item.ownership : null,
-    governance: normalizeCatalogGovernance(item.governance),
-    category: {
-      primary: normalizeCategorySummary(category.primary),
-      default: normalizeCategorySummary(category.default),
-      assigned: normalizeAssignedCategories(category.assigned),
-    },
-    media: {
-      ...media,
-      promoImageUrl: normalizeText(media.promoImageUrl) || null,
-      videoUrl: normalizeText(media.videoUrl) || null,
-      imageUrls: Array.isArray(media.imageUrls)
-        ? media.imageUrls
-            .map((entry: unknown) => normalizeText(entry))
-            .filter(Boolean)
-        : [],
-      totalImages: asNumber(media.totalImages, 0),
-    },
-    attributes:
-      item.attributes && typeof item.attributes === "object"
-        ? {
-            ...item.attributes,
-            barcode: normalizeText(item.attributes.barcode) || null,
-            gtin: normalizeText(item.attributes.gtin) || null,
-            tags: Array.isArray(item.attributes.tags)
-              ? item.attributes.tags
-                  .map((entry: unknown) => normalizeText(entry))
-                  .filter(Boolean)
-              : [],
-          }
-        : {
-            barcode: null,
-            gtin: null,
-            tags: [],
-          },
-  };
+  return mapSellerProductDetailDto(item);
 };
 
 export const getSellerProducts = async (
@@ -717,7 +387,10 @@ export const createSellerProductDraft = async (
   storeId: number | string,
   payload: SellerProductDraftPayload
 ) => {
-  const { data } = await api.post(`/seller/stores/${storeId}/products/drafts`, payload);
+  const { data } = await api.post(
+    `/seller/stores/${storeId}/products/drafts`,
+    toSellerProductWritePayload(payload)
+  );
   return normalizeProductDetail(data?.data ?? null);
 };
 
@@ -728,7 +401,7 @@ export const updateSellerProductDraft = async (
 ) => {
   const { data } = await api.patch(
     `/seller/stores/${storeId}/products/${productId}/draft`,
-    payload
+    toSellerProductWritePayload(payload)
   );
   return normalizeProductDetail(data?.data ?? null);
 };

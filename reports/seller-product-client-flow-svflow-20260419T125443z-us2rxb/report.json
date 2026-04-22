@@ -1,0 +1,106 @@
+{
+  "runId": "svflow-20260419T125443z-us2rxb",
+  "startedAt": "2026-04-19T12:54:43.573Z",
+  "serverBaseUrl": "http://localhost:3001",
+  "clientBaseUrl": "http://localhost:5173",
+  "storeSlug": "super-admin-1",
+  "sellerEmail": "superadmin@local.dev",
+  "productId": 837,
+  "finalProductSlug": "svflow-20260419t125443z-us2rxb-draft",
+  "screenshots": [],
+  "steps": [
+    {
+      "id": "1",
+      "title": "Create product from Seller",
+      "status": "passed",
+      "summary": "Seller authentication, store context, image upload, and draft creation completed.",
+      "startedAt": "2026-04-19T12:54:44.167Z",
+      "finishedAt": "2026-04-19T12:54:44.430Z",
+      "durationMs": 263,
+      "proof": {
+        "storeId": 1,
+        "categoryId": 6,
+        "categoryName": "Beverages",
+        "uploadedPrimaryImage": "/uploads/products/1776603284358-56040354.jpg",
+        "uploadedSecondaryImage": "/uploads/products/1776603284379-808958631.png",
+        "productId": 837,
+        "slug": "svflow-20260419t125443z-us2rxb-draft",
+        "createStatus": 201
+      },
+      "rootCause": null
+    },
+    {
+      "id": "2",
+      "title": "Save as draft and check DB/API response",
+      "status": "passed",
+      "summary": "Draft state is consistent across seller API and database, and remains hidden from public client APIs.",
+      "startedAt": "2026-04-19T12:54:44.430Z",
+      "finishedAt": "2026-04-19T12:54:44.541Z",
+      "durationMs": 111,
+      "proof": {
+        "dbStatus": "draft",
+        "dbPublished": 0,
+        "promoImagePath": "/uploads/products/1776603284358-56040354.jpg",
+        "imagePaths": [
+          "/uploads/products/1776603284358-56040354.jpg",
+          "/uploads/products/1776603284379-808958631.png"
+        ],
+        "publicListContainsDraft": false,
+        "publicDetailStatus": 404
+      },
+      "rootCause": null
+    },
+    {
+      "id": "3",
+      "title": "Publish product",
+      "status": "passed",
+      "summary": "Seller publish succeeded and persisted active/public product state.",
+      "startedAt": "2026-04-19T12:54:44.541Z",
+      "finishedAt": "2026-04-19T12:54:44.575Z",
+      "durationMs": 34,
+      "proof": {
+        "publishStatus": 200,
+        "responseVisibility": {
+          "isPublished": true,
+          "storefrontVisible": true,
+          "stateCode": "STOREFRONT_VISIBLE",
+          "label": "Published",
+          "publishLabel": "Published",
+          "sellerLabel": "Visible in storefront",
+          "storefrontLabel": "Visible in storefront",
+          "storefrontReason": "Public storefront queries include this product because publish is on, status is active, and the store is operational.",
+          "sellerHint": "Seller and customer views are aligned for visibility.",
+          "blockingSignals": [],
+          "reasonCode": "STOREFRONT_VISIBLE",
+          "storeOperational": true,
+          "operationalReadiness": {
+            "code": "READY",
+            "label": "Operational",
+            "description": "This store has an active approved payment setup and can be treated as operational on public store-facing lanes.",
+            "isReady": true
+          }
+        },
+        "dbStatus": "active",
+        "dbPublished": 1
+      },
+      "rootCause": null
+    },
+    {
+      "id": "4",
+      "title": "Open Client and check product appears",
+      "status": "failed",
+      "summary": "locator.getAttribute: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('article').filter({ hasText: 'SV Flow svflow-20260419T125443z-us2rxb' }).first().locator('img').first()\u001b[22m\n",
+      "startedAt": "2026-04-19T12:54:44.576Z",
+      "finishedAt": "2026-04-19T12:55:17.040Z",
+      "durationMs": 32464,
+      "rootCause": "locator.getAttribute: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('article').filter({ hasText: 'SV Flow svflow-20260419T125443z-us2rxb' }).first().locator('img').first()\u001b[22m"
+    }
+  ],
+  "overallStatus": "failed",
+  "failure": {
+    "stepId": "4",
+    "stepTitle": "Open Client and check product appears",
+    "message": "locator.getAttribute: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('article').filter({ hasText: 'SV Flow svflow-20260419T125443z-us2rxb' }).first().locator('img').first()\u001b[22m\n",
+    "rootCause": "locator.getAttribute: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('article').filter({ hasText: 'SV Flow svflow-20260419T125443z-us2rxb' }).first().locator('img').first()\u001b[22m"
+  }
+}

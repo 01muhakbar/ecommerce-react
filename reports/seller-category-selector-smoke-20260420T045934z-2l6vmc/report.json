@@ -1,0 +1,104 @@
+{
+  "runId": "seller-category-selector-smoke-20260420T045934z-2l6vmc",
+  "startedAt": "2026-04-20T04:59:34.425Z",
+  "serverBaseUrl": "http://localhost:3001",
+  "clientBaseUrl": "http://localhost:5173",
+  "storeSlug": "superseller-demo-store",
+  "sellerEmail": "superseller@local.dev",
+  "storeId": 562,
+  "productId": null,
+  "productSlug": null,
+  "categories": {
+    "selected": [
+      {
+        "id": 6,
+        "name": "Beverages",
+        "code": "beverages"
+      },
+      {
+        "id": 3,
+        "name": "Bread & Bakery",
+        "code": "bakery"
+      }
+    ],
+    "searchQuery": "bakery"
+  },
+  "screenshots": [
+    "C:\\Users\\user\\Documents\\ecommerce-react\\reports\\seller-category-selector-smoke-20260420T045934z-2l6vmc\\01-search-category.png"
+  ],
+  "regressions": [],
+  "steps": [
+    {
+      "id": "1",
+      "title": "Bootstrap seller session and category references",
+      "status": "passed",
+      "summary": "Seller session and category references are ready.",
+      "startedAt": "2026-04-20T04:59:34.482Z",
+      "finishedAt": "2026-04-20T04:59:34.618Z",
+      "durationMs": 136,
+      "proof": {
+        "storeId": 562,
+        "selectedCategories": [
+          {
+            "id": 6,
+            "name": "Beverages",
+            "code": "beverages"
+          },
+          {
+            "id": 3,
+            "name": "Bread & Bakery",
+            "code": "bakery"
+          }
+        ],
+        "searchQuery": "bakery",
+        "cookieName": "token"
+      },
+      "rootCause": null
+    },
+    {
+      "id": "2",
+      "title": "Open Seller Product create page",
+      "status": "passed",
+      "summary": "Seller product create page loaded with the new category selector.",
+      "startedAt": "2026-04-20T04:59:35.287Z",
+      "finishedAt": "2026-04-20T04:59:36.752Z",
+      "durationMs": 1465,
+      "proof": {
+        "url": "http://localhost:5173/seller/stores/superseller-demo-store/catalog/products/new"
+      },
+      "rootCause": null
+    },
+    {
+      "id": "3",
+      "title": "Search category using the new search box",
+      "status": "passed",
+      "summary": "Search narrowed the selector to the expected category entry.",
+      "startedAt": "2026-04-20T04:59:36.752Z",
+      "finishedAt": "2026-04-20T04:59:37.146Z",
+      "durationMs": 394,
+      "proof": {
+        "searchQuery": "bakery",
+        "matchedCategory": "Bread & Bakery",
+        "screenshot": "C:\\Users\\user\\Documents\\ecommerce-react\\reports\\seller-category-selector-smoke-20260420T045934z-2l6vmc\\01-search-category.png"
+      },
+      "rootCause": null
+    },
+    {
+      "id": "4",
+      "title": "Select multiple categories and set one as default",
+      "status": "failed",
+      "summary": "locator.selectOption: Error: strict mode violation: getByLabel('Default Category') resolved to 2 elements:\n    1) <input value=\"\" type=\"search\" placeholder=\"Search category name or code\" class=\"h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-10 text-sm text-slate-700 transition focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100\"/> aka getByRole('searchbox', { name: 'Categories 2 categories' })\n    2) <select class=\"mt-2 h-11 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-700 transition focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100 \">…</select> aka getByLabel('Default CategoryChoose')\n\nCall log:\n\u001b[2m  - waiting for getByLabel('Default Category')\u001b[22m\n",
+      "startedAt": "2026-04-20T04:59:37.146Z",
+      "finishedAt": "2026-04-20T04:59:37.451Z",
+      "durationMs": 305,
+      "rootCause": "locator.selectOption: Error: strict mode violation: getByLabel('Default Category') resolved to 2 elements:\n    1) <input value=\"\" type=\"search\" placeholder=\"Search category name or code\" class=\"h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-10 text-sm text-slate-700 transition focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100\"/> aka getByRole('searchbox', { name: 'Categories 2 categories' })\n    2) <select class=\"mt-2 h-11 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-700 transition focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100 \">…</select> aka getByLabel('Default CategoryChoose')\n\nCall log:\n\u001b[2m  - waiting for getByLabel('Default Category')\u001b[22m"
+    }
+  ],
+  "overallStatus": "failed",
+  "failure": {
+    "stepId": "4",
+    "stepTitle": "Select multiple categories and set one as default",
+    "message": "locator.selectOption: Error: strict mode violation: getByLabel('Default Category') resolved to 2 elements:\n    1) <input value=\"\" type=\"search\" placeholder=\"Search category name or code\" class=\"h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-10 text-sm text-slate-700 transition focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100\"/> aka getByRole('searchbox', { name: 'Categories 2 categories' })\n    2) <select class=\"mt-2 h-11 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-700 transition focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100 \">…</select> aka getByLabel('Default CategoryChoose')\n\nCall log:\n\u001b[2m  - waiting for getByLabel('Default Category')\u001b[22m\n",
+    "rootCause": "locator.selectOption: Error: strict mode violation: getByLabel('Default Category') resolved to 2 elements:\n    1) <input value=\"\" type=\"search\" placeholder=\"Search category name or code\" class=\"h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-10 text-sm text-slate-700 transition focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100\"/> aka getByRole('searchbox', { name: 'Categories 2 categories' })\n    2) <select class=\"mt-2 h-11 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-700 transition focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100 \">…</select> aka getByLabel('Default CategoryChoose')\n\nCall log:\n\u001b[2m  - waiting for getByLabel('Default Category')\u001b[22m"
+  }
+}

@@ -25,6 +25,10 @@ import {
   updateUserStoreApplicationDraft,
 } from "../../api/userStoreApplications.ts";
 import { createSellerWorkspaceRoutes } from "../../utils/sellerWorkspaceRoute.js";
+import {
+  presentStoreApplicationStatus,
+  presentStoreReadiness,
+} from "../../utils/storeOnboardingPresentation.ts";
 
 const QUERY_KEY = ["user", "store-application", "current"];
 const SELLER_STORES_QUERY_KEY = ["seller", "workspace", "stores"];
@@ -32,33 +36,33 @@ const SELLER_STORES_QUERY_KEY = ["seller", "workspace", "stores"];
 const STEP_CONFIG = [
   {
     code: "owner_identity",
-    label: "Data Pemilik",
-    description: "Identitas pemilik dan PIC utama untuk pengajuan toko.",
+    label: "Owner Details",
+    description: "Owner identity and primary contact.",
   },
   {
     code: "store_information",
-    label: "Informasi Toko",
-    description: "Nama toko, kategori, dan ringkasan usaha yang akan dijual.",
+    label: "Store Information",
+    description: "Store name, category, and business summary.",
   },
   {
     code: "operational_address",
-    label: "Alamat Operasional",
-    description: "Alamat operasional dan kontak lokasi usaha.",
+    label: "Business Address",
+    description: "Business contact and operating address.",
   },
   {
     code: "payout_payment",
-    label: "Informasi Keuangan",
-    description: "Tujuan pencairan dan data rekening operasional.",
+    label: "Payout Details",
+    description: "Payout method and account details.",
   },
   {
     code: "compliance",
-    label: "Kepatuhan",
-    description: "Produk, deklarasi kepatuhan, dan persetujuan seller.",
+    label: "Compliance",
+    description: "Support details, declarations, and consent.",
   },
   {
     code: "review",
-    label: "Ringkasan",
-    description: "Periksa kembali data pengajuan sebelum dikirim ke admin.",
+    label: "Review & Submit",
+    description: "Review the application before submission.",
   },
 ];
 
@@ -96,7 +100,7 @@ const formatDateTime = (value) => {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
-  return new Intl.DateTimeFormat("id-ID", {
+  return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
@@ -217,75 +221,75 @@ const buildLocalCompleteness = (form) => {
   const missingFields = [];
 
   if (!toText(form.ownerIdentitySnapshot.fullName)) {
-    missingFields.push({ key: "ownerIdentitySnapshot.fullName", label: "Nama lengkap" });
+    missingFields.push({ key: "ownerIdentitySnapshot.fullName", label: "Full name" });
   }
   if (!toText(form.ownerIdentitySnapshot.email)) {
-    missingFields.push({ key: "ownerIdentitySnapshot.email", label: "Email aktif" });
+    missingFields.push({ key: "ownerIdentitySnapshot.email", label: "Email address" });
   }
   if (!toText(form.storeInformationSnapshot.storeName)) {
-    missingFields.push({ key: "storeInformationSnapshot.storeName", label: "Nama toko" });
+    missingFields.push({ key: "storeInformationSnapshot.storeName", label: "Store name" });
   }
   if (!toText(form.operationalAddressSnapshot.addressLine1)) {
     missingFields.push({
       key: "operationalAddressSnapshot.addressLine1",
-      label: "Alamat operasional",
+      label: "Business address",
     });
   }
   if (!toText(form.operationalAddressSnapshot.city)) {
-    missingFields.push({ key: "operationalAddressSnapshot.city", label: "Kota / Kabupaten" });
+    missingFields.push({ key: "operationalAddressSnapshot.city", label: "City" });
   }
   if (!toText(form.operationalAddressSnapshot.province)) {
-    missingFields.push({ key: "operationalAddressSnapshot.province", label: "Provinsi" });
+    missingFields.push({ key: "operationalAddressSnapshot.province", label: "Province" });
   }
   if (!toText(form.operationalAddressSnapshot.country)) {
-    missingFields.push({ key: "operationalAddressSnapshot.country", label: "Negara" });
+    missingFields.push({ key: "operationalAddressSnapshot.country", label: "Country" });
   }
   if (!toText(form.payoutPaymentSnapshot.payoutMethod)) {
-    missingFields.push({ key: "payoutPaymentSnapshot.payoutMethod", label: "Channel pencairan" });
+    missingFields.push({ key: "payoutPaymentSnapshot.payoutMethod", label: "Payout method" });
   }
   if (!toText(form.payoutPaymentSnapshot.accountHolderName)) {
     missingFields.push({
       key: "payoutPaymentSnapshot.accountHolderName",
-      label: "Nama pemilik rekening",
+      label: "Account holder name",
     });
   }
   if (!toText(form.complianceSnapshot.supportEmail)) {
-    missingFields.push({ key: "complianceSnapshot.supportEmail", label: "Email dukungan" });
+    missingFields.push({ key: "complianceSnapshot.supportEmail", label: "Support email" });
   }
   if (!form.complianceSnapshot.agreedToTerms) {
     missingFields.push({
       key: "complianceSnapshot.agreedToTerms",
-      label: "Persetujuan syarat seller",
+      label: "Terms confirmation",
     });
   }
   if (!form.complianceSnapshot.agreedToAdminReview) {
     missingFields.push({
       key: "complianceSnapshot.agreedToAdminReview",
-      label: "Persetujuan review admin",
+      label: "Admin review consent",
     });
   }
   if (!form.complianceSnapshot.agreedToPlatformPolicy) {
     missingFields.push({
       key: "complianceSnapshot.agreedToPlatformPolicy",
-      label: "Persetujuan kebijakan platform",
+      label: "Platform policy consent",
     });
   }
   if (!form.complianceSnapshot.understandsStoreInactiveUntilApproved) {
     missingFields.push({
       key: "complianceSnapshot.understandsStoreInactiveUntilApproved",
-      label: "Konfirmasi toko belum aktif",
+      label: "Inactive until approval confirmation",
     });
   }
   if (!form.complianceSnapshot.authenticityConfirmed) {
     missingFields.push({
       key: "complianceSnapshot.authenticityConfirmed",
-      label: "Pernyataan keaslian produk",
+      label: "Authenticity confirmation",
     });
   }
   if (!form.complianceSnapshot.prohibitedGoodsConfirmed) {
     missingFields.push({
       key: "complianceSnapshot.prohibitedGoodsConfirmed",
-      label: "Pernyataan barang terlarang",
+      label: "Prohibited goods confirmation",
     });
   }
 
@@ -302,14 +306,14 @@ const getRequestErrorMessage = (error, fallback) => {
       ? payload.details.missingFields.map((entry) => entry?.label).filter(Boolean)
       : [];
     if (labels.length) {
-      return `Lengkapi field wajib sebelum submit: ${labels.join(", ")}.`;
+      return `Complete the required fields before submission: ${labels.join(", ")}.`;
     }
   }
   if (String(payload?.code || "").toUpperCase() === "OPEN_STORE_APPLICATION_EXISTS") {
-    return "Masih ada pengajuan toko aktif untuk akun ini. Lanjutkan pengajuan yang ada.";
+    return "An active store application already exists for this account.";
   }
   if (String(payload?.code || "").toUpperCase() === "STORE_ALREADY_EXISTS_FOR_USER") {
-    return "Akun ini sudah memiliki store. Gunakan Seller Workspace yang tersedia.";
+    return "This account already has a store. Use the available seller workspace.";
   }
   return payload?.message || error?.message || fallback;
 };
@@ -397,7 +401,7 @@ function InfoNotice({ tone = "info", children }) {
   return <div className={`rounded-xl border px-4 py-3 text-sm ${toneClass}`}>{children}</div>;
 }
 
-function SectionHeader({ title, description, eyebrow = "Store Onboarding" }) {
+function SectionHeader({ title, description, eyebrow = "Store Application" }) {
   return (
     <div>
       <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">
@@ -451,6 +455,14 @@ export default function AccountStoreApplicationPage() {
     : sellerStores[0]
       ? createSellerWorkspaceRoutes(sellerStores[0].store).home()
       : null;
+  const applicationPresentation = application
+    ? presentStoreApplicationStatus(application.statusMeta, application.status)
+    : presentStoreApplicationStatus("draft");
+  const readinessPresentation = presentStoreReadiness({
+    storeStatus: ownerStore?.store?.status || application?.activation?.storeStatus || null,
+    hasStore: Boolean(ownerStore || sellerStores[0] || application?.activation?.storeId),
+    sellerAccessReady: Boolean(application?.activation?.sellerAccessReady),
+  });
 
   useEffect(() => {
     setForm(createFormState(application, user));
@@ -494,14 +506,14 @@ export default function AccountStoreApplicationPage() {
         },
       }),
     onSuccess: (nextApplication) => {
-      hydrateApplication(nextApplication, "Draft pengajuan toko berhasil dibuat.");
+      hydrateApplication(nextApplication, "Draft created.");
     },
     onError: (error) => {
       setFlash({
         type: "error",
         message: getRequestErrorMessage(
           error,
-          "Gagal membuat draft pengajuan toko."
+          "Failed to create the draft."
         ),
       });
     },
@@ -516,12 +528,12 @@ export default function AccountStoreApplicationPage() {
       );
     },
     onSuccess: (nextApplication) => {
-      hydrateApplication(nextApplication, "Draft pengajuan toko berhasil disimpan.");
+      hydrateApplication(nextApplication, "Draft saved.");
     },
     onError: (error) => {
       setFlash({
         type: "error",
-        message: getRequestErrorMessage(error, "Gagal menyimpan draft pengajuan toko."),
+        message: getRequestErrorMessage(error, "Failed to save the draft."),
       });
     },
   });
@@ -541,15 +553,15 @@ export default function AccountStoreApplicationPage() {
       hydrateApplication(
         nextApplication,
         application?.status === "revision_requested"
-          ? "Pengajuan toko berhasil dikirim ulang untuk ditinjau admin."
-          : "Pengajuan toko berhasil dikirim untuk ditinjau admin."
+          ? "Application resubmitted for review."
+          : "Application submitted for review."
       );
       setActiveStep("review");
     },
     onError: (error) => {
       setFlash({
         type: "error",
-        message: getRequestErrorMessage(error, "Gagal mengirim pengajuan toko."),
+        message: getRequestErrorMessage(error, "Failed to submit the application."),
       });
     },
   });
@@ -560,12 +572,12 @@ export default function AccountStoreApplicationPage() {
       return cancelUserStoreApplication(application.id);
     },
     onSuccess: (nextApplication) => {
-      hydrateApplication(nextApplication, "Pengajuan toko berhasil dibatalkan.");
+      hydrateApplication(nextApplication, "Application cancelled.");
     },
     onError: (error) => {
       setFlash({
         type: "error",
-        message: getRequestErrorMessage(error, "Gagal membatalkan pengajuan toko."),
+        message: getRequestErrorMessage(error, "Failed to cancel the application."),
       });
     },
   });
@@ -583,7 +595,7 @@ export default function AccountStoreApplicationPage() {
 
   const handleCancelApplication = () => {
     if (!application?.workflow?.canCancel || isBusy) return;
-    if (!window.confirm("Batalkan pengajuan toko ini? Draft atau status aktif akan ditutup.")) {
+    if (!window.confirm("Cancel this store application?")) {
       return;
     }
     setFlash(null);
@@ -592,22 +604,22 @@ export default function AccountStoreApplicationPage() {
 
   const renderOwnerSection = () => (
     <section className={SECTION_CARD_CLASS}>
-      <h2 className="text-lg font-semibold text-slate-950">Data Pemilik / Identitas</h2>
-      <p className="mt-2 text-sm leading-6 text-slate-600">
-        Isi data identitas utama yang akan dipakai admin untuk memverifikasi pengajuan toko.
+      <h2 className="text-lg font-semibold text-slate-950">Owner Details</h2>
+      <p className="mt-2 text-sm text-slate-600">
+        Add the owner identity and primary contact used for review.
       </p>
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         <Field
-          label="Nama Lengkap Sesuai Identitas"
+          label="Full Name"
           value={form.ownerIdentitySnapshot.fullName || ""}
           onChange={(event) =>
             updateSection("ownerIdentitySnapshot", "fullName", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="Nama lengkap"
+          placeholder="Full name"
         />
         <Field
-          label="Nama PIC / Operasional"
+          label="Primary Contact"
           value={form.ownerIdentitySnapshot.operationalContactName || ""}
           onChange={(event) =>
             updateSection(
@@ -617,29 +629,29 @@ export default function AccountStoreApplicationPage() {
             )
           }
           disabled={!editable || isBusy}
-          placeholder="Nama PIC"
+          placeholder="Primary contact name"
         />
         <Field
-          label="Email Aktif"
+          label="Email Address"
           value={form.ownerIdentitySnapshot.email || ""}
           onChange={(event) =>
             updateSection("ownerIdentitySnapshot", "email", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="nama@email.com"
+          placeholder="name@email.com"
           type="email"
         />
         <Field
-          label="Nomor WhatsApp / Telepon"
+          label="Phone Number"
           value={form.ownerIdentitySnapshot.phoneNumber || ""}
           onChange={(event) =>
             updateSection("ownerIdentitySnapshot", "phoneNumber", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="08xxxxxxxxxx"
+          placeholder="+62..."
         />
         <Field
-          label="Tanggal Lahir"
+          label="Birth Date"
           value={form.ownerIdentitySnapshot.birthDate || ""}
           onChange={(event) =>
             updateSection("ownerIdentitySnapshot", "birthDate", event.target.value)
@@ -648,37 +660,37 @@ export default function AccountStoreApplicationPage() {
           type="date"
         />
         <SelectField
-          label="Jenis Identitas"
+          label="ID Type"
           value={form.ownerIdentitySnapshot.identityType || ""}
           onChange={(event) =>
             updateSection("ownerIdentitySnapshot", "identityType", event.target.value)
           }
           disabled={!editable || isBusy}
           options={[
-            { value: "", label: "Pilih jenis identitas" },
-            { value: "KTP", label: "KTP" },
-            { value: "SIM", label: "SIM" },
-            { value: "PASSPORT", label: "Paspor" },
-            { value: "OTHER", label: "Lainnya" },
+            { value: "", label: "Select an ID type" },
+            { value: "KTP", label: "National ID" },
+            { value: "SIM", label: "Driver License" },
+            { value: "PASSPORT", label: "Passport" },
+            { value: "OTHER", label: "Other" },
           ]}
         />
         <Field
-          label="Nomor Identitas"
+          label="ID Number"
           value={form.complianceSnapshot.identityNumber || ""}
           onChange={(event) =>
             updateSection("complianceSnapshot", "identityNumber", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="Nomor identitas"
+          placeholder="ID number"
         />
         <Field
-          label="Nama Sesuai Identitas"
+          label="Legal Name"
           value={form.ownerIdentitySnapshot.identityLegalName || ""}
           onChange={(event) =>
             updateSection("ownerIdentitySnapshot", "identityLegalName", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="Nama legal"
+          placeholder="Legal name"
         />
       </div>
     </section>
@@ -686,57 +698,56 @@ export default function AccountStoreApplicationPage() {
 
   const renderStoreSection = () => (
     <section className={SECTION_CARD_CLASS}>
-      <h2 className="text-lg font-semibold text-slate-950">Informasi Toko</h2>
-      <p className="mt-2 text-sm leading-6 text-slate-600">
-        Data ini menjadi snapshot awal untuk review admin. Belum membuat store publik atau seller
-        workspace secara otomatis.
+      <h2 className="text-lg font-semibold text-slate-950">Store Information</h2>
+      <p className="mt-2 text-sm text-slate-600">
+        Add the main store profile details for review.
       </p>
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         <Field
-          label="Nama Toko"
+          label="Store Name"
           value={form.storeInformationSnapshot.storeName || ""}
           onChange={(event) =>
             updateSection("storeInformationSnapshot", "storeName", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="Nama toko"
+          placeholder="Store name"
         />
         <Field
-          label="Slug / Handle Toko"
+          label="Store Slug"
           value={form.storeInformationSnapshot.storeSlug || ""}
           onChange={(event) =>
             updateSection("storeInformationSnapshot", "storeSlug", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="contoh-toko"
-          hint="Opsional. Gunakan huruf kecil dan tanda hubung bila ingin mengusulkan handle toko."
+          placeholder="example-store"
+          hint="Optional. Use lowercase letters and hyphens."
         />
         <Field
-          label="Kategori Usaha Utama"
+          label="Business Category"
           value={form.storeInformationSnapshot.storeCategory || ""}
           onChange={(event) =>
             updateSection("storeInformationSnapshot", "storeCategory", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="Fashion, makanan, elektronik, dll."
+          placeholder="Fashion, food, electronics, and more"
         />
         <SelectField
-          label="Jenis Penjual"
+          label="Seller Type"
           value={form.storeInformationSnapshot.sellerType || ""}
           onChange={(event) =>
             updateSection("storeInformationSnapshot", "sellerType", event.target.value)
           }
           disabled={!editable || isBusy}
           options={[
-            { value: "", label: "Pilih jenis penjual" },
+            { value: "", label: "Select a seller type" },
             { value: "INDIVIDUAL", label: "Individual" },
-            { value: "UMKM", label: "UMKM" },
-            { value: "COMPANY", label: "Perusahaan" },
+            { value: "UMKM", label: "SME" },
+            { value: "COMPANY", label: "Company" },
             { value: "DISTRIBUTOR", label: "Distributor" },
           ]}
         />
         <SelectField
-          label="Produksi Sendiri"
+          label="Self Produced"
           value={form.storeInformationSnapshot.isSelfProduced ? "yes" : "no"}
           onChange={(event) =>
             updateSection(
@@ -747,12 +758,12 @@ export default function AccountStoreApplicationPage() {
           }
           disabled={!editable || isBusy}
           options={[
-            { value: "yes", label: "Ya" },
-            { value: "no", label: "Tidak" },
+            { value: "yes", label: "Yes" },
+            { value: "no", label: "No" },
           ]}
         />
         <Field
-          label="Estimasi Jumlah Produk Awal"
+          label="Initial Product Count"
           value={form.storeInformationSnapshot.initialProductCount ?? ""}
           onChange={(event) =>
             updateSection(
@@ -767,7 +778,7 @@ export default function AccountStoreApplicationPage() {
           min="0"
         />
         <Field
-          label="Deskripsi Toko"
+          label="Store Description"
           multiline
           className="md:col-span-2"
           value={form.storeInformationSnapshot.description || ""}
@@ -775,7 +786,7 @@ export default function AccountStoreApplicationPage() {
             updateSection("storeInformationSnapshot", "description", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="Ringkas produk dan value toko Anda"
+          placeholder="Briefly describe the store and what you sell"
         />
       </div>
     </section>
@@ -783,87 +794,87 @@ export default function AccountStoreApplicationPage() {
 
   const renderAddressSection = () => (
     <section className={SECTION_CARD_CLASS}>
-      <h2 className="text-lg font-semibold text-slate-950">Alamat Operasional</h2>
-      <p className="mt-2 text-sm leading-6 text-slate-600">
-        Tambahkan alamat operasional yang dipakai untuk koordinasi operasional toko.
+      <h2 className="text-lg font-semibold text-slate-950">Business Address</h2>
+      <p className="mt-2 text-sm text-slate-600">
+        Add the operating contact and address for the business.
       </p>
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         <Field
-          label="Nama Penanggung Jawab"
+          label="Contact Name"
           value={form.operationalAddressSnapshot.contactName || ""}
           onChange={(event) =>
             updateSection("operationalAddressSnapshot", "contactName", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="Nama penanggung jawab"
+          placeholder="Contact name"
         />
         <Field
-          label="Telepon Operasional"
+          label="Business Phone"
           value={form.operationalAddressSnapshot.phoneNumber || ""}
           onChange={(event) =>
             updateSection("operationalAddressSnapshot", "phoneNumber", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="08xxxxxxxxxx"
+          placeholder="+62..."
         />
         <Field
-          label="Alamat Lengkap"
+          label="Address Line 1"
           className="md:col-span-2"
           value={form.operationalAddressSnapshot.addressLine1 || ""}
           onChange={(event) =>
             updateSection("operationalAddressSnapshot", "addressLine1", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="Jalan, nomor, RT/RW"
+          placeholder="Street address"
         />
         <Field
-          label="Alamat Tambahan"
+          label="Address Line 2"
           className="md:col-span-2"
           value={form.operationalAddressSnapshot.addressLine2 || ""}
           onChange={(event) =>
             updateSection("operationalAddressSnapshot", "addressLine2", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="Blok, unit, patokan, dll."
+          placeholder="Unit, block, or landmark"
         />
         <Field
-          label="Provinsi"
+          label="Province"
           value={form.operationalAddressSnapshot.province || ""}
           onChange={(event) =>
             updateSection("operationalAddressSnapshot", "province", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="Provinsi"
+          placeholder="Province"
         />
         <Field
-          label="Kota / Kabupaten"
+          label="City"
           value={form.operationalAddressSnapshot.city || ""}
           onChange={(event) =>
             updateSection("operationalAddressSnapshot", "city", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="Kota / Kabupaten"
+          placeholder="City"
         />
         <Field
-          label="Kecamatan"
+          label="District"
           value={form.operationalAddressSnapshot.district || ""}
           onChange={(event) =>
             updateSection("operationalAddressSnapshot", "district", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="Kecamatan"
+          placeholder="District"
         />
         <Field
-          label="Kode Pos"
+          label="Postal Code"
           value={form.operationalAddressSnapshot.postalCode || ""}
           onChange={(event) =>
             updateSection("operationalAddressSnapshot", "postalCode", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="Kode pos"
+          placeholder="Postal code"
         />
         <Field
-          label="Negara"
+          label="Country"
           value={form.operationalAddressSnapshot.country || ""}
           onChange={(event) =>
             updateSection("operationalAddressSnapshot", "country", event.target.value)
@@ -872,7 +883,7 @@ export default function AccountStoreApplicationPage() {
           placeholder="Indonesia"
         />
         <Field
-          label="Catatan Alamat"
+          label="Address Notes"
           multiline
           className="md:col-span-2"
           value={form.operationalAddressSnapshot.notes || ""}
@@ -880,7 +891,7 @@ export default function AccountStoreApplicationPage() {
             updateSection("operationalAddressSnapshot", "notes", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="Catatan tambahan untuk verifikasi alamat"
+          placeholder="Optional notes for address verification"
         />
       </div>
     </section>
@@ -888,55 +899,55 @@ export default function AccountStoreApplicationPage() {
 
   const renderPayoutSection = () => (
     <section className={SECTION_CARD_CLASS}>
-      <h2 className="text-lg font-semibold text-slate-950">Informasi Keuangan / Pencairan</h2>
-      <p className="mt-2 text-sm leading-6 text-slate-600">
-        Simpan informasi rekening dan channel pencairan yang direncanakan untuk toko.
+      <h2 className="text-lg font-semibold text-slate-950">Payout Details</h2>
+      <p className="mt-2 text-sm text-slate-600">
+        Add the payout method and account details used by the business.
       </p>
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         <Field
-          label="Nama Pemilik Rekening"
+          label="Account Holder Name"
           value={form.payoutPaymentSnapshot.accountHolderName || ""}
           onChange={(event) =>
             updateSection("payoutPaymentSnapshot", "accountHolderName", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="Nama pada rekening"
+          placeholder="Name on the account"
         />
         <Field
-          label="Bank / Channel"
+          label="Bank or Channel"
           value={form.payoutPaymentSnapshot.bankName || ""}
           onChange={(event) =>
             updateSection("payoutPaymentSnapshot", "bankName", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="BCA, BRI, SeaBank, QRIS, dll."
+          placeholder="BCA, BRI, SeaBank, QRIS"
         />
         <Field
-          label="Metode Pencairan"
+          label="Payout Method"
           value={form.payoutPaymentSnapshot.payoutMethod || ""}
           onChange={(event) =>
             updateSection("payoutPaymentSnapshot", "payoutMethod", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="Transfer bank, QRIS, e-wallet, dll."
+          placeholder="Bank transfer, QRIS, e-wallet"
         />
         <Field
-          label="Nomor Rekening"
+          label="Account Number"
           value={form.payoutPaymentSnapshot.accountNumber || ""}
           onChange={(event) =>
             updateSection("payoutPaymentSnapshot", "accountNumber", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="Nomor rekening"
+          placeholder="Account number"
         />
         <Field
-          label="NPWP"
+          label="Tax ID"
           value={form.complianceSnapshot.taxId || ""}
           onChange={(event) =>
             updateSection("complianceSnapshot", "taxId", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="Opsional"
+          placeholder="Optional"
         />
         <Field
           label="URL QRIS"
@@ -946,12 +957,12 @@ export default function AccountStoreApplicationPage() {
           }
           disabled={!editable || isBusy}
           placeholder="https://..."
-          hint="Opsional untuk sprint ini. Bisa diisi bila metode pencairan atau pembayaran memerlukan QRIS."
+          hint="Optional. Add this only if QRIS is part of the payout setup."
         />
         <div className="md:col-span-2">
           <CheckboxField
-            label="Nama rekening sama dengan nama pada identitas"
-            hint="Tandai jika rekening menggunakan nama legal yang sama dengan identitas pemilik."
+            label="The account holder matches the legal identity"
+            hint="Use this when the payout account is under the same legal name."
             checked={Boolean(form.payoutPaymentSnapshot.accountHolderMatchesIdentity)}
             onChange={(event) =>
               updateSection(
@@ -969,53 +980,51 @@ export default function AccountStoreApplicationPage() {
 
   const renderComplianceSection = () => (
     <section className={SECTION_CARD_CLASS}>
-      <h2 className="text-lg font-semibold text-slate-950">
-        Dokumen Pendukung, Kepatuhan, dan Persetujuan
-      </h2>
-      <p className="mt-2 text-sm leading-6 text-slate-600">
-        Jelaskan jenis produk, kontak dukungan, serta setujui pernyataan minimum sebelum submit.
+      <h2 className="text-lg font-semibold text-slate-950">Compliance</h2>
+      <p className="mt-2 text-sm text-slate-600">
+        Add support details and complete the required declarations.
       </p>
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         <Field
-          label="Email Dukungan"
+          label="Support Email"
           value={form.complianceSnapshot.supportEmail || ""}
           onChange={(event) =>
             updateSection("complianceSnapshot", "supportEmail", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="support@tokosaya.com"
+          placeholder="support@store.com"
           type="email"
         />
         <Field
-          label="Telepon Dukungan"
+          label="Support Phone"
           value={form.complianceSnapshot.supportPhone || ""}
           onChange={(event) =>
             updateSection("complianceSnapshot", "supportPhone", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="08xxxxxxxxxx"
+          placeholder="+62..."
         />
         <Field
-          label="Jenis Produk yang Dijual"
+          label="Product Types"
           value={form.complianceSnapshot.productTypes || ""}
           onChange={(event) =>
             updateSection("complianceSnapshot", "productTypes", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="Contoh: fashion muslim, makanan beku, gadget"
+          placeholder="Examples: apparel, frozen food, gadgets"
         />
         <SelectField
-          label="Brand Sendiri / Pihak Ketiga"
+          label="Brand Ownership"
           value={form.complianceSnapshot.brandOwnershipType || ""}
           onChange={(event) =>
             updateSection("complianceSnapshot", "brandOwnershipType", event.target.value)
           }
           disabled={!editable || isBusy}
           options={[
-            { value: "", label: "Pilih sumber brand" },
-            { value: "OWN_BRAND", label: "Brand sendiri" },
-            { value: "THIRD_PARTY", label: "Pihak ketiga" },
-            { value: "MIXED", label: "Campuran" },
+            { value: "", label: "Select brand ownership" },
+            { value: "OWN_BRAND", label: "Own Brand" },
+            { value: "THIRD_PARTY", label: "Third Party" },
+            { value: "MIXED", label: "Mixed" },
           ]}
         />
         <Field
@@ -1028,7 +1037,7 @@ export default function AccountStoreApplicationPage() {
           placeholder="https://..."
         />
         <Field
-          label="Link Media Sosial"
+          label="Social Profile"
           value={form.complianceSnapshot.socialMediaUrl || ""}
           onChange={(event) =>
             updateSection("complianceSnapshot", "socialMediaUrl", event.target.value)
@@ -1037,7 +1046,7 @@ export default function AccountStoreApplicationPage() {
           placeholder="https://instagram.com/..."
         />
         <Field
-          label="Catatan Tambahan"
+          label="Additional Notes"
           multiline
           className="md:col-span-2"
           value={form.complianceSnapshot.notes || ""}
@@ -1045,13 +1054,13 @@ export default function AccountStoreApplicationPage() {
             updateSection("complianceSnapshot", "notes", event.target.value)
           }
           disabled={!editable || isBusy}
-          placeholder="Informasi tambahan untuk admin review"
+          placeholder="Optional notes for review"
         />
       </div>
 
       <div className="mt-5 grid gap-3">
         <CheckboxField
-          label="Saya menyatakan produk yang diajukan asli dan dapat dipertanggungjawabkan."
+          label="I confirm the products are authentic."
           checked={Boolean(form.complianceSnapshot.authenticityConfirmed)}
           onChange={(event) =>
             updateSection(
@@ -1063,7 +1072,7 @@ export default function AccountStoreApplicationPage() {
           disabled={!editable || isBusy}
         />
         <CheckboxField
-          label="Saya menyatakan tidak menjual barang terlarang atau melanggar kebijakan platform."
+          label="I confirm the store does not sell prohibited goods."
           checked={Boolean(form.complianceSnapshot.prohibitedGoodsConfirmed)}
           onChange={(event) =>
             updateSection(
@@ -1075,7 +1084,7 @@ export default function AccountStoreApplicationPage() {
           disabled={!editable || isBusy}
         />
         <CheckboxField
-          label="Saya menyatakan data yang saya isi benar."
+          label="I confirm the submitted information is accurate."
           checked={Boolean(form.complianceSnapshot.agreedToTerms)}
           onChange={(event) =>
             updateSection("complianceSnapshot", "agreedToTerms", event.target.checked)
@@ -1083,7 +1092,7 @@ export default function AccountStoreApplicationPage() {
           disabled={!editable || isBusy}
         />
         <CheckboxField
-          label="Saya setuju pengajuan ditinjau admin."
+          label="I agree to admin review."
           checked={Boolean(form.complianceSnapshot.agreedToAdminReview)}
           onChange={(event) =>
             updateSection(
@@ -1095,7 +1104,7 @@ export default function AccountStoreApplicationPage() {
           disabled={!editable || isBusy}
         />
         <CheckboxField
-          label="Saya setuju dengan kebijakan seller / platform."
+          label="I agree to the seller and platform policies."
           checked={Boolean(form.complianceSnapshot.agreedToPlatformPolicy)}
           onChange={(event) =>
             updateSection(
@@ -1107,7 +1116,7 @@ export default function AccountStoreApplicationPage() {
           disabled={!editable || isBusy}
         />
         <CheckboxField
-          label="Saya memahami toko belum aktif sebelum disetujui admin."
+          label="I understand the store stays inactive until approval."
           checked={Boolean(form.complianceSnapshot.understandsStoreInactiveUntilApproved)}
           onChange={(event) =>
             updateSection(
@@ -1126,10 +1135,9 @@ export default function AccountStoreApplicationPage() {
     <section className={SECTION_CARD_CLASS}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-950">Ringkasan Pengajuan</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            Periksa kembali seluruh data sebelum menyimpan draft terakhir atau mengirim pengajuan
-            ke admin.
+          <h2 className="text-lg font-semibold text-slate-950">Review & Submit</h2>
+          <p className="mt-2 text-sm text-slate-600">
+            Review the application before you save or submit it.
           </p>
         </div>
         {application?.statusMeta ? (
@@ -1142,41 +1150,41 @@ export default function AccountStoreApplicationPage() {
 
       <div className="mt-5 grid gap-5">
         <div>
-          <p className="text-sm font-semibold text-slate-900">1. Data Pemilik</p>
+          <p className="text-sm font-semibold text-slate-900">1. Owner Details</p>
           <div className="mt-3 grid gap-3 md:grid-cols-2">
-            <SummaryItem label="Nama Lengkap" value={form.ownerIdentitySnapshot.fullName} />
+            <SummaryItem label="Full Name" value={form.ownerIdentitySnapshot.fullName} />
             <SummaryItem
-              label="Nama PIC / Operasional"
+              label="Primary Contact"
               value={form.ownerIdentitySnapshot.operationalContactName}
             />
-            <SummaryItem label="Email Aktif" value={form.ownerIdentitySnapshot.email} />
-            <SummaryItem label="WhatsApp / Telepon" value={form.ownerIdentitySnapshot.phoneNumber} />
-            <SummaryItem label="Tanggal Lahir" value={form.ownerIdentitySnapshot.birthDate} />
-            <SummaryItem label="Jenis Identitas" value={form.ownerIdentitySnapshot.identityType} />
-            <SummaryItem label="Nomor Identitas" value={form.complianceSnapshot.identityNumber} />
+            <SummaryItem label="Email Address" value={form.ownerIdentitySnapshot.email} />
+            <SummaryItem label="Phone Number" value={form.ownerIdentitySnapshot.phoneNumber} />
+            <SummaryItem label="Birth Date" value={form.ownerIdentitySnapshot.birthDate} />
+            <SummaryItem label="ID Type" value={form.ownerIdentitySnapshot.identityType} />
+            <SummaryItem label="ID Number" value={form.complianceSnapshot.identityNumber} />
             <SummaryItem
-              label="Nama Sesuai Identitas"
+              label="Legal Name"
               value={form.ownerIdentitySnapshot.identityLegalName}
             />
           </div>
         </div>
 
         <div>
-          <p className="text-sm font-semibold text-slate-900">2. Informasi Toko</p>
+          <p className="text-sm font-semibold text-slate-900">2. Store Information</p>
           <div className="mt-3 grid gap-3 md:grid-cols-2">
-            <SummaryItem label="Nama Toko" value={form.storeInformationSnapshot.storeName} />
-            <SummaryItem label="Slug / Handle" value={form.storeInformationSnapshot.storeSlug} />
+            <SummaryItem label="Store Name" value={form.storeInformationSnapshot.storeName} />
+            <SummaryItem label="Store Slug" value={form.storeInformationSnapshot.storeSlug} />
             <SummaryItem
-              label="Kategori Utama"
+              label="Business Category"
               value={form.storeInformationSnapshot.storeCategory}
             />
-            <SummaryItem label="Jenis Penjual" value={form.storeInformationSnapshot.sellerType} />
+            <SummaryItem label="Seller Type" value={form.storeInformationSnapshot.sellerType} />
             <SummaryItem
-              label="Produksi Sendiri"
-              value={form.storeInformationSnapshot.isSelfProduced ? "Ya" : "Tidak"}
+              label="Self Produced"
+              value={form.storeInformationSnapshot.isSelfProduced ? "Yes" : "No"}
             />
             <SummaryItem
-              label="Estimasi Produk Awal"
+              label="Initial Product Count"
               value={
                 form.storeInformationSnapshot.initialProductCount !== null
                   ? String(form.storeInformationSnapshot.initialProductCount)
@@ -1184,98 +1192,98 @@ export default function AccountStoreApplicationPage() {
               }
             />
             <SummaryItem
-              label="Deskripsi Toko"
+              label="Store Description"
               value={form.storeInformationSnapshot.description}
             />
           </div>
         </div>
 
         <div>
-          <p className="text-sm font-semibold text-slate-900">3. Alamat Operasional</p>
+          <p className="text-sm font-semibold text-slate-900">3. Business Address</p>
           <div className="mt-3 grid gap-3 md:grid-cols-2">
             <SummaryItem
-              label="Penanggung Jawab"
+              label="Contact Name"
               value={form.operationalAddressSnapshot.contactName}
             />
             <SummaryItem
-              label="Telepon Operasional"
+              label="Business Phone"
               value={form.operationalAddressSnapshot.phoneNumber}
             />
             <SummaryItem
-              label="Alamat Lengkap"
+              label="Address Line 1"
               value={form.operationalAddressSnapshot.addressLine1}
             />
             <SummaryItem
-              label="Alamat Tambahan"
+              label="Address Line 2"
               value={form.operationalAddressSnapshot.addressLine2}
             />
-            <SummaryItem label="Provinsi" value={form.operationalAddressSnapshot.province} />
-            <SummaryItem label="Kota / Kabupaten" value={form.operationalAddressSnapshot.city} />
-            <SummaryItem label="Kecamatan" value={form.operationalAddressSnapshot.district} />
-            <SummaryItem label="Kode Pos" value={form.operationalAddressSnapshot.postalCode} />
-            <SummaryItem label="Negara" value={form.operationalAddressSnapshot.country} />
-            <SummaryItem label="Catatan Alamat" value={form.operationalAddressSnapshot.notes} />
+            <SummaryItem label="Province" value={form.operationalAddressSnapshot.province} />
+            <SummaryItem label="City" value={form.operationalAddressSnapshot.city} />
+            <SummaryItem label="District" value={form.operationalAddressSnapshot.district} />
+            <SummaryItem label="Postal Code" value={form.operationalAddressSnapshot.postalCode} />
+            <SummaryItem label="Country" value={form.operationalAddressSnapshot.country} />
+            <SummaryItem label="Address Notes" value={form.operationalAddressSnapshot.notes} />
           </div>
         </div>
 
         <div>
-          <p className="text-sm font-semibold text-slate-900">4. Informasi Keuangan</p>
+          <p className="text-sm font-semibold text-slate-900">4. Payout Details</p>
           <div className="mt-3 grid gap-3 md:grid-cols-2">
             <SummaryItem
-              label="Nama Pemilik Rekening"
+              label="Account Holder Name"
               value={form.payoutPaymentSnapshot.accountHolderName}
             />
-            <SummaryItem label="Bank / Channel" value={form.payoutPaymentSnapshot.bankName} />
+            <SummaryItem label="Bank or Channel" value={form.payoutPaymentSnapshot.bankName} />
             <SummaryItem
-              label="Metode Pencairan"
+              label="Payout Method"
               value={form.payoutPaymentSnapshot.payoutMethod}
             />
-            <SummaryItem label="Nomor Rekening" value={form.payoutPaymentSnapshot.accountNumber} />
-            <SummaryItem label="NPWP" value={form.complianceSnapshot.taxId} />
+            <SummaryItem label="Account Number" value={form.payoutPaymentSnapshot.accountNumber} />
+            <SummaryItem label="Tax ID" value={form.complianceSnapshot.taxId} />
             <SummaryItem label="URL QRIS" value={form.payoutPaymentSnapshot.qrisImageUrl} />
             <SummaryItem
-              label="Nama Rekening Sama Dengan Identitas"
+              label="Account Matches Identity"
               value={
-                form.payoutPaymentSnapshot.accountHolderMatchesIdentity ? "Ya" : "Tidak"
+                form.payoutPaymentSnapshot.accountHolderMatchesIdentity ? "Yes" : "No"
               }
             />
           </div>
         </div>
 
         <div>
-          <p className="text-sm font-semibold text-slate-900">5. Kepatuhan & Persetujuan</p>
+          <p className="text-sm font-semibold text-slate-900">5. Compliance</p>
           <div className="mt-3 grid gap-3 md:grid-cols-2">
-            <SummaryItem label="Email Dukungan" value={form.complianceSnapshot.supportEmail} />
-            <SummaryItem label="Telepon Dukungan" value={form.complianceSnapshot.supportPhone} />
-            <SummaryItem label="Jenis Produk" value={form.complianceSnapshot.productTypes} />
-            <SummaryItem label="Sumber Brand" value={form.complianceSnapshot.brandOwnershipType} />
+            <SummaryItem label="Support Email" value={form.complianceSnapshot.supportEmail} />
+            <SummaryItem label="Support Phone" value={form.complianceSnapshot.supportPhone} />
+            <SummaryItem label="Product Types" value={form.complianceSnapshot.productTypes} />
+            <SummaryItem label="Brand Ownership" value={form.complianceSnapshot.brandOwnershipType} />
             <SummaryItem label="Website" value={form.complianceSnapshot.websiteUrl} />
-            <SummaryItem label="Media Sosial" value={form.complianceSnapshot.socialMediaUrl} />
-            <SummaryItem label="Catatan Tambahan" value={form.complianceSnapshot.notes} />
+            <SummaryItem label="Social Profile" value={form.complianceSnapshot.socialMediaUrl} />
+            <SummaryItem label="Additional Notes" value={form.complianceSnapshot.notes} />
             <SummaryItem
-              label="Keaslian Produk"
-              value={form.complianceSnapshot.authenticityConfirmed ? "Ya" : "Belum"}
+              label="Authentic Products"
+              value={form.complianceSnapshot.authenticityConfirmed ? "Yes" : "No"}
             />
             <SummaryItem
-              label="Tidak Menjual Barang Terlarang"
-              value={form.complianceSnapshot.prohibitedGoodsConfirmed ? "Ya" : "Belum"}
+              label="No Prohibited Goods"
+              value={form.complianceSnapshot.prohibitedGoodsConfirmed ? "Yes" : "No"}
             />
             <SummaryItem
-              label="Data Benar"
-              value={form.complianceSnapshot.agreedToTerms ? "Ya" : "Belum"}
+              label="Information Confirmed"
+              value={form.complianceSnapshot.agreedToTerms ? "Yes" : "No"}
             />
             <SummaryItem
-              label="Setuju Review Admin"
-              value={form.complianceSnapshot.agreedToAdminReview ? "Ya" : "Belum"}
+              label="Admin Review Consent"
+              value={form.complianceSnapshot.agreedToAdminReview ? "Yes" : "No"}
             />
             <SummaryItem
-              label="Setuju Kebijakan Platform"
-              value={form.complianceSnapshot.agreedToPlatformPolicy ? "Ya" : "Belum"}
+              label="Platform Policy Consent"
+              value={form.complianceSnapshot.agreedToPlatformPolicy ? "Yes" : "No"}
             />
             <SummaryItem
-              label="Memahami Toko Belum Aktif"
+              label="Inactive Until Approval"
               value={
-                form.complianceSnapshot.understandsStoreInactiveUntilApproved ? "Ya" : "Belum"
+                form.complianceSnapshot.understandsStoreInactiveUntilApproved ? "Yes" : "No"
               }
             />
           </div>
@@ -1305,11 +1313,11 @@ export default function AccountStoreApplicationPage() {
     return (
       <div className="space-y-4">
         <SectionHeader
-          title="Pengajuan Pembukaan Toko"
-          description="Memuat status pengajuan toko dan akses seller workspace."
+          title="Store Application"
+          description="Loading your store application."
         />
         <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500">
-          Memuat pengajuan toko...
+          Loading store application...
         </div>
       </div>
     );
@@ -1319,13 +1327,13 @@ export default function AccountStoreApplicationPage() {
     return (
       <div className="space-y-4">
         <SectionHeader
-          title="Pengajuan Pembukaan Toko"
-          description="Kami tidak dapat memuat status pengajuan toko saat ini."
+          title="Store Application"
+          description="We could not load the current application."
         />
         <InfoNotice tone="error">
           {applicationQuery.error?.response?.data?.message ||
             applicationQuery.error?.message ||
-            "Gagal memuat pengajuan toko."}
+            "Failed to load the store application."}
         </InfoNotice>
       </div>
     );
@@ -1335,8 +1343,8 @@ export default function AccountStoreApplicationPage() {
     return (
       <div className="space-y-5">
         <SectionHeader
-          title="Seller Workspace Sudah Tersedia"
-          description="Akun ini sudah terhubung dengan store. Pengajuan toko baru tidak diperlukan lagi dari dashboard user."
+          title="Seller Workspace Ready"
+          description="This account already has seller access for a store."
         />
         <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
           <div className="flex items-start gap-3">
@@ -1350,9 +1358,8 @@ export default function AccountStoreApplicationPage() {
               <h2 className="mt-2 text-xl font-semibold text-slate-950">
                 {ownerStore.store.name}
               </h2>
-              <p className="mt-2 text-sm leading-6 text-slate-700">
-                Store ini sudah ada di boundary seller workspace. Lanjutkan pengelolaan toko dari
-                workspace yang tersedia.
+              <p className="mt-2 text-sm text-slate-700">
+                The store is already available in seller workspace.
               </p>
               <div className="mt-4 flex flex-wrap gap-3">
                 {workspaceHref ? (
@@ -1360,14 +1367,14 @@ export default function AccountStoreApplicationPage() {
                     to={workspaceHref}
                     className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
                   >
-                    Masuk ke Seller Workspace
+                    Go to Seller Workspace
                   </Link>
                 ) : null}
                 <Link
                   to="/user/dashboard"
                   className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
                 >
-                  Kembali ke Dashboard
+                  Back to Dashboard
                 </Link>
               </div>
             </div>
@@ -1381,8 +1388,8 @@ export default function AccountStoreApplicationPage() {
     return (
       <div className="space-y-5">
         <SectionHeader
-          title="Mulai Jualan di Platform Kami"
-          description="Ajukan pembukaan toko untuk mulai menjual produk Anda. Lengkapi data toko dan verifikasi identitas agar tim admin dapat meninjau pengajuan Anda."
+          title="Start Selling"
+          description="Complete your store details and submit for review."
         />
         {flash ? (
           <InfoNotice tone={flash.type === "error" ? "error" : "info"}>
@@ -1396,11 +1403,9 @@ export default function AccountStoreApplicationPage() {
                 <BriefcaseBusiness className="h-5 w-5" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-slate-950">Pengajuan toko belum dibuat</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Buat draft pengajuan lebih dulu. Draft ini menyimpan data ke backend
-                  `store_applications`, jadi tetap aman saat browser di-refresh atau Anda kembali
-                  lagi nanti.
+                <h2 className="text-lg font-semibold text-slate-950">No application yet</h2>
+                <p className="mt-2 text-sm text-slate-600">
+                  Start a draft first, then complete the remaining steps later.
                 </p>
               </div>
             </div>
@@ -1419,25 +1424,25 @@ export default function AccountStoreApplicationPage() {
                 ) : (
                   <Store className="h-4 w-4" />
                 )}
-                Ajukan Pembukaan Toko
+                Start Application
               </button>
               <Link
                 to="/user/dashboard"
                 className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
               >
                 <ArrowLeft className="h-4 w-4" />
-                Kembali ke Dashboard
+                Back to Dashboard
               </Link>
             </div>
           </div>
 
           <aside className={SECTION_CARD_CLASS}>
-            <h2 className="text-lg font-semibold text-slate-950">Section Minimum</h2>
+            <h2 className="text-lg font-semibold text-slate-950">Application Steps</h2>
             <div className="mt-4 grid gap-3">
               {STEP_CONFIG.map((step, index) => (
                 <div key={step.code} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    Langkah {index + 1}
+                    Step {index + 1}
                   </p>
                   <p className="mt-2 text-sm font-semibold text-slate-900">{step.label}</p>
                   <p className="mt-1 text-xs leading-5 text-slate-500">{step.description}</p>
@@ -1451,12 +1456,23 @@ export default function AccountStoreApplicationPage() {
   }
 
   const readOnlyStatus = !editable;
+  const activeStepMeta = STEP_CONFIG[currentStepIndex] || STEP_CONFIG[0];
+  const completionSummary = `${application.completeness.completedFields}/${application.completeness.totalFields}`;
+  const submittedSummary = application.submittedAt ? formatDateTime(application.submittedAt) : null;
+  const reviewedSummary = application.reviewedAt ? formatDateTime(application.reviewedAt) : null;
+  const storeStatusValue = application.activation?.storeStatus || ownerStore?.store?.status || "-";
+  const storePublicValue =
+    readinessPresentation.code === "active" ? "Check storefront" : "Not Public";
+  const storeAccessValue = application.activation?.sellerAccessReady ? "Ready" : "Not Ready";
+  const canGoBack = editable && currentStepIndex > 0;
+  const canContinue = editable && currentStepIndex < STEP_CONFIG.length - 1;
+  const canSubmit = editable && activeStep === "review" && localCompleteness.isComplete;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6 pb-32">
       <SectionHeader
-        title="Pengajuan Pembukaan Toko"
-        description="Lengkapi data toko, simpan draft kapan saja, lalu kirim pengajuan untuk ditinjau admin. Status backend tetap menjadi source of truth untuk progress pengajuan."
+        title="Store Application"
+        description="Complete your store details and submit for review."
       />
 
       {flash ? (
@@ -1464,200 +1480,291 @@ export default function AccountStoreApplicationPage() {
       ) : null}
 
       {application.revisionNote ? (
-        <InfoNotice tone="warning">Catatan revisi admin: {application.revisionNote}</InfoNotice>
+        <InfoNotice tone="warning">Revision note: {application.revisionNote}</InfoNotice>
       ) : null}
 
       {application.rejectReason ? (
-        <InfoNotice tone="error">Alasan penolakan terakhir: {application.rejectReason}</InfoNotice>
+        <InfoNotice tone="error">Rejection note: {application.rejectReason}</InfoNotice>
       ) : null}
 
-      <section className="grid gap-5 xl:grid-cols-[0.72fr_1.28fr]">
-        <aside className="space-y-5">
+      <section className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
+        <aside className="space-y-6 xl:sticky xl:top-6 xl:self-start">
           <div className={SECTION_CARD_CLASS}>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">
-                  Status Pengajuan
+                  Application Steps
                 </p>
-                <h2 className="mt-2 text-lg font-semibold text-slate-950">
-                  {application.statusMeta.label}
-                </h2>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  {application.statusMeta.description}
-                </p>
+                <h2 className="mt-2 text-lg font-semibold text-slate-950">{activeStepMeta.label}</h2>
+                <p className="mt-1 text-sm text-slate-600">Move step by step and save when needed.</p>
               </div>
-              <StatusBadge
-                label={application.statusMeta.label}
-                tone={application.statusMeta.tone}
-              />
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                {Math.max(currentStepIndex + 1, 1)} / {STEP_CONFIG.length}
+              </span>
             </div>
 
-            <div className="mt-5 grid gap-3">
-              <SummaryItem label="Current Step" value={application.currentStepMeta.label} />
-              <SummaryItem
-                label="Kelengkapan Backend"
-                value={`${application.completeness.completedFields}/${application.completeness.totalFields}`}
-              />
-              <SummaryItem label="Terakhir Diupdate" value={formatDateTime(application.updatedAt)} />
-              <SummaryItem label="Dikirim" value={formatDateTime(application.submittedAt)} />
-              <SummaryItem label="Direview" value={formatDateTime(application.reviewedAt)} />
-            </div>
-
-            {application.workflow?.sourceOfTruth ? (
-              <p className="mt-4 text-xs leading-5 text-slate-500">
-                {application.workflow.sourceOfTruth}
-              </p>
-            ) : null}
-          </div>
-
-          <div className={SECTION_CARD_CLASS}>
-            <h2 className="text-lg font-semibold text-slate-950">Aksi</h2>
-            <div className="mt-4 flex flex-col gap-3">
-              {application.status === "approved" ? (
-                workspaceHref ? (
-                  <Link
-                    to={workspaceHref}
-                    className="inline-flex items-center justify-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-                  >
-                    Masuk ke Seller Workspace
-                  </Link>
-                ) : (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                    Pengajuan sudah disetujui. Jika seller workspace belum muncul, muat ulang
-                    halaman ini atau dashboard untuk menarik boundary seller terbaru dari backend.
-                  </div>
-                )
-              ) : null}
-
-              {(application.status === "rejected" || application.status === "cancelled") &&
-              !ownerStore ? (
-                <button
-                  type="button"
-                  onClick={handleRestart}
-                  disabled={createDraftMutation.isPending}
-                  className="inline-flex items-center justify-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {createDraftMutation.isPending ? (
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Store className="h-4 w-4" />
-                  )}
-                  {application.status === "rejected" ? "Ajukan Ulang" : "Ajukan Pembukaan Toko"}
-                </button>
-              ) : null}
-
-              {application.workflow?.canCancel ? (
-                <button
-                  type="button"
-                  onClick={handleCancelApplication}
-                  disabled={cancelMutation.isPending || isBusy}
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {cancelMutation.isPending ? (
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <XCircle className="h-4 w-4" />
-                  )}
-                  Batalkan Pengajuan
-                </button>
-              ) : null}
-
-              <Link
-                to="/user/dashboard"
-                className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Kembali ke Dashboard
-              </Link>
-            </div>
-          </div>
-
-          <div className={SECTION_CARD_CLASS}>
-            <h2 className="text-lg font-semibold text-slate-950">Langkah Form</h2>
-            <div className="mt-4 grid gap-2">
+            <div className="mt-5 space-y-1">
               {STEP_CONFIG.map((step, index) => {
                 const isActive = step.code === activeStep;
                 const isComplete =
                   index < currentStepIndex ||
                   (step.code === "review" && localCompleteness.isComplete);
+                const stateClass = isActive
+                  ? "border-emerald-200 bg-emerald-50 shadow-sm"
+                  : "border-transparent bg-transparent hover:border-slate-200 hover:bg-slate-50";
+                const lineClass = isComplete
+                  ? "bg-emerald-200"
+                  : isActive
+                    ? "bg-emerald-100"
+                    : "bg-slate-200";
                 return (
                   <button
                     key={step.code}
                     type="button"
                     onClick={() => setActiveStep(step.code)}
-                    className={`rounded-xl border px-4 py-3 text-left transition ${
-                      isActive
-                        ? "border-emerald-300 bg-emerald-50"
-                        : "border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white"
-                    }`}
+                    className={`relative flex w-full items-start gap-3 rounded-2xl border px-3 py-3 text-left transition ${stateClass}`}
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                          Langkah {index + 1}
-                        </p>
-                        <p className="mt-1 text-sm font-semibold text-slate-900">{step.label}</p>
-                      </div>
-                      {isComplete ? (
-                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                      ) : (
-                        <FileText className="h-4 w-4 text-slate-400" />
-                      )}
+                    <div className="relative flex w-7 flex-col items-center">
+                      <span
+                        className={`z-10 flex h-7 w-7 items-center justify-center rounded-full border text-xs font-semibold ${
+                          isComplete
+                            ? "border-emerald-200 bg-emerald-500 text-white"
+                            : isActive
+                              ? "border-emerald-200 bg-white text-emerald-700"
+                              : "border-slate-200 bg-white text-slate-400"
+                        }`}
+                      >
+                        {isComplete ? <CheckCircle2 className="h-4 w-4" /> : index + 1}
+                      </span>
+                      {index < STEP_CONFIG.length - 1 ? (
+                        <span className={`mt-1 h-8 w-px ${lineClass}`} aria-hidden="true" />
+                      ) : null}
                     </div>
-                    <p className="mt-2 text-xs leading-5 text-slate-500">{step.description}</p>
+                    <div className="min-w-0 flex-1 pt-0.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-slate-900">{step.label}</p>
+                        <span
+                          className={`text-[11px] font-semibold uppercase tracking-[0.16em] ${
+                            isComplete
+                              ? "text-emerald-600"
+                              : isActive
+                                ? "text-emerald-700"
+                                : "text-slate-400"
+                          }`}
+                        >
+                          {isComplete ? "Done" : isActive ? "Current" : "Next"}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-slate-500">{step.description}</p>
+                    </div>
                   </button>
                 );
               })}
             </div>
           </div>
         </aside>
-        <div className="space-y-5">
+        <div className="space-y-6">
           {readOnlyStatus ? (
             <InfoNotice tone="info">
               {application.status === "submitted" || application.status === "under_review"
-                ? "Pengajuan sedang ditinjau. Data dikunci sementara dan tidak bisa diubah sampai ada keputusan review berikutnya."
+                ? "This application is being reviewed. Editing is temporarily locked."
                 : application.status === "approved"
                   ? workspaceHref
-                    ? "Pengajuan sudah disetujui dan seller workspace untuk store ini sudah tersedia."
-                    : "Pengajuan sudah disetujui. Sinkronisasi seller workspace membaca boundary backend yang sama dan bisa perlu refresh singkat."
+                    ? "This application is approved and seller workspace is available."
+                    : "This application is approved. Seller workspace may still need a refresh."
                   : application.status === "rejected"
-                    ? "Pengajuan ditutup dengan status ditolak. Anda dapat membuat pengajuan baru dari halaman ini."
+                    ? "This application was rejected. You can start a new one from this page."
                     : application.status === "cancelled"
-                      ? "Pengajuan dibatalkan. Anda dapat membuat draft baru kapan saja."
-                      : "Status saat ini tidak mengizinkan pengeditan draft."}
+                      ? "This application was cancelled. You can create a new draft any time."
+                      : "Editing is not available for the current status."}
             </InfoNotice>
           ) : null}
+
+          <section className={SECTION_CARD_CLASS}>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">
+                  Application Overview
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <h2 className="text-lg font-semibold text-slate-950">
+                    {applicationPresentation.label}
+                  </h2>
+                  <StatusBadge
+                    label={applicationPresentation.label}
+                    tone={applicationPresentation.tone}
+                  />
+                </div>
+                <p className="mt-1 text-sm text-slate-600">
+                  {applicationPresentation.shortDescription}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {application.status === "approved" ? (
+                  workspaceHref ? (
+                    <Link
+                      to={workspaceHref}
+                      className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                    >
+                      Go to Seller Workspace
+                    </Link>
+                  ) : (
+                    <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
+                      Workspace syncing
+                    </span>
+                  )
+                ) : null}
+
+                {(application.status === "rejected" || application.status === "cancelled") &&
+                !ownerStore ? (
+                  <button
+                    type="button"
+                    onClick={handleRestart}
+                    disabled={createDraftMutation.isPending}
+                    className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {createDraftMutation.isPending ? (
+                      <LoaderCircle className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Store className="h-4 w-4" />
+                    )}
+                    {application.status === "rejected" ? "Start New Application" : "Start Application"}
+                  </button>
+                ) : null}
+
+                {application.workflow?.canCancel ? (
+                  <button
+                    type="button"
+                    onClick={handleCancelApplication}
+                    disabled={cancelMutation.isPending || isBusy}
+                    className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {cancelMutation.isPending ? (
+                      <LoaderCircle className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <XCircle className="h-4 w-4" />
+                    )}
+                    Cancel Application
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <SummaryItem label="Application Status" value={applicationPresentation.label} />
+              <SummaryItem label="Completion" value={completionSummary} />
+              <SummaryItem label="Last Updated" value={formatDateTime(application.updatedAt)} />
+              <SummaryItem label="Current Step" value={application.currentStepMeta.label} />
+              {submittedSummary ? <SummaryItem label="Submitted" value={submittedSummary} /> : null}
+              {reviewedSummary ? <SummaryItem label="Reviewed" value={reviewedSummary} /> : null}
+            </div>
+
+            <div className="mt-5 flex flex-wrap gap-3 text-sm text-slate-600">
+              <Link
+                to="/user/dashboard"
+                className="inline-flex items-center gap-2 font-semibold text-slate-700"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Dashboard
+              </Link>
+              {application.status === "approved" && !workspaceHref ? (
+                <span>Approval is recorded. Seller access may still be syncing.</span>
+              ) : null}
+              {(application.status === "submitted" || application.status === "under_review") && (
+                <span>Review is in progress.</span>
+              )}
+            </div>
+          </section>
 
           {renderCurrentStep()}
 
           <section className={SECTION_CARD_CLASS}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-semibold text-slate-950">Kontrol Draft</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Simpan draft kapan saja. Draft yang tersimpan tetap tersedia saat browser
-                  di-refresh karena dibaca ulang dari backend `store_applications`.
+                <h2 className="text-lg font-semibold text-slate-950">Missing Required Fields</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Complete the required items before submission.
                 </p>
               </div>
-              <StatusBadge
-                label={application.statusMeta.label}
-                tone={application.statusMeta.tone}
-              />
+              <StatusBadge label={completionSummary} tone={localCompleteness.isComplete ? "emerald" : "amber"} />
             </div>
 
             {!localCompleteness.isComplete ? (
-              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-                Field yang masih perlu dilengkapi sebelum submit:
-                {" "}
-                {localCompleteness.missingFields.map((field) => field.label).join(", ")}.
-              </div>
+              <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+                {localCompleteness.missingFields.map((field) => (
+                  <li
+                    key={field.key}
+                    className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700"
+                  >
+                    {field.label}
+                  </li>
+                ))}
+              </ul>
             ) : (
               <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                Draft lokal sudah memenuhi field minimum untuk submit.
+                All required fields are complete.
               </div>
             )}
 
-            <div className="mt-5 flex flex-wrap gap-3">
+            <div className="mt-4 flex flex-wrap gap-3 text-sm text-slate-600">
+              <span>
+                {editable && activeStep !== "review"
+                  ? "Submit from the final step."
+                  : application.status === "revision_requested"
+                    ? "Update the requested changes before resubmitting."
+                    : "Ready for the next action."}
+              </span>
+            </div>
+          </section>
+
+          <section className={SECTION_CARD_CLASS}>
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-950">Store Status</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Approval does not guarantee public visibility.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <SummaryItem label="Public" value={storePublicValue} />
+              <SummaryItem label="Access" value={storeAccessValue} />
+              <SummaryItem label="Status" value={storeStatusValue} />
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <div className="fixed inset-x-0 bottom-4 z-30 px-4">
+        <div className="mx-auto max-w-6xl rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap gap-2">
+              {editable ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    canGoBack ? setActiveStep(STEP_CONFIG[currentStepIndex - 1].code) : null
+                  }
+                  disabled={isBusy || !canGoBack}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Back
+                </button>
+              ) : (
+                <Link
+                  to="/user/dashboard"
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Back to Dashboard
+                </Link>
+              )}
+
               {editable ? (
                 <button
                   type="button"
@@ -1673,7 +1780,21 @@ export default function AccountStoreApplicationPage() {
                   ) : (
                     <Save className="h-4 w-4" />
                   )}
-                  Simpan Draft
+                  Save Draft
+                </button>
+              ) : null}
+            </div>
+
+            <div className="flex flex-wrap gap-2 lg:justify-end">
+              {editable && canContinue ? (
+                <button
+                  type="button"
+                  onClick={() => setActiveStep(STEP_CONFIG[currentStepIndex + 1].code)}
+                  disabled={isBusy}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Continue
+                  <ArrowRight className="h-4 w-4" />
                 </button>
               ) : null}
 
@@ -1684,7 +1805,7 @@ export default function AccountStoreApplicationPage() {
                     setFlash(null);
                     submitMutation.mutate();
                   }}
-                  disabled={isBusy || activeStep !== "review" || !localCompleteness.isComplete}
+                  disabled={isBusy || !canSubmit}
                   className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {submitMutation.isPending ? (
@@ -1693,81 +1814,14 @@ export default function AccountStoreApplicationPage() {
                     <SendHorizonal className="h-4 w-4" />
                   )}
                   {application.status === "revision_requested"
-                    ? "Submit Ulang Pengajuan"
-                    : "Submit Pengajuan"}
-                </button>
-              ) : null}
-
-              {editable && currentStepIndex > 0 ? (
-                <button
-                  type="button"
-                  onClick={() => setActiveStep(STEP_CONFIG[currentStepIndex - 1].code)}
-                  disabled={isBusy}
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  Langkah Sebelumnya
-                </button>
-              ) : null}
-
-              {editable && currentStepIndex < STEP_CONFIG.length - 1 ? (
-                <button
-                  type="button"
-                  onClick={() => setActiveStep(STEP_CONFIG[currentStepIndex + 1].code)}
-                  disabled={isBusy}
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Langkah Berikutnya
-                  <ArrowRight className="h-4 w-4" />
+                    ? "Resubmit Application"
+                    : "Submit Application"}
                 </button>
               ) : null}
             </div>
-
-            {editable && activeStep !== "review" ? (
-              <p className="mt-4 text-xs leading-5 text-slate-500">
-                Tombol submit aktif di langkah Ringkasan setelah seluruh field minimum terisi.
-              </p>
-            ) : null}
-
-            {application.status === "approved" && !workspaceHref ? (
-              <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-700">
-                Status pengajuan sudah approved. Jika seller workspace belum muncul, sinkronkan
-                ulang halaman ini agar akses seller terbaru dari backend terbaca.
-              </div>
-            ) : null}
-
-            {application.status === "submitted" || application.status === "under_review" ? (
-              <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-700">
-                Dashboard akan tetap menampilkan status peninjauan yang sama sampai backend review
-                mengubah status pengajuan.
-              </div>
-            ) : null}
-          </section>
-
-          <section className={SECTION_CARD_CLASS}>
-            <div className="flex items-start gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
-                <ShieldCheck className="h-5 w-5" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-slate-950">Boundary Workflow</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Draft dan submission hanya menyimpan snapshot onboarding. Approval dapat
-                  memprovision seller workspace boundary, tetapi store publik tetap tidak aktif
-                  otomatis dan tetap mengikuti status store serta readiness backend.
-                </p>
-              </div>
-            </div>
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <SummaryItem label="Source of Truth" value={application.contract.sourceOfTruth} />
-              <SummaryItem
-                label="Transition Saat Ini"
-                value={(application.workflow.nextAllowedTransitions || []).join(", ")}
-              />
-            </div>
-          </section>
+          </div>
         </div>
-      </section>
+      </div>
     </div>
   );
 }
