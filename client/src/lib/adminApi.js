@@ -722,6 +722,15 @@ const normalizeAdminAttribute = (value) => {
     displayName: value.displayName ?? value.display_name ?? null,
     type: String(value.type || "dropdown").trim().toLowerCase() || "dropdown",
     published: Boolean(value.published),
+    scope: String(value.scope || "global").trim().toLowerCase() === "store" ? "store" : "global",
+    status: String(value.status || "active").trim().toLowerCase() === "archived" ? "archived" : "active",
+    storeId: Number(value.storeId || 0) || null,
+    storeName: value.storeName || null,
+    storeSlug: value.storeSlug || null,
+    createdByRole:
+      String(value.createdByRole || "admin").trim().toLowerCase() === "seller"
+        ? "seller"
+        : "admin",
     values,
     valueCount:
       Number(value.valueCount || 0) ||
@@ -810,9 +819,27 @@ export const bulkAdminAttributes = async (action, ids) => {
   return data;
 };
 
-export const exportAdminAttributes = async (format = "json") => {
+export const exportAdminAttributes = async (format = "json", filters = {}) => {
   const normalizedFormat = String(format || "json").trim().toLowerCase() === "csv" ? "csv" : "json";
-  const endpoint = `/api/admin/attributes/export?type=${encodeURIComponent(normalizedFormat)}`;
+  const params = new URLSearchParams();
+  params.set("format", normalizedFormat);
+  [
+    ["q", String(filters?.q ?? "").trim()],
+    ["type", String(filters?.type ?? "").trim().toLowerCase()],
+    ["scope", String(filters?.scope ?? "").trim().toLowerCase()],
+    ["status", String(filters?.status ?? "").trim().toLowerCase()],
+    ["createdByRole", String(filters?.createdByRole ?? "").trim().toLowerCase()],
+    ["storeId", String(filters?.storeId ?? "").trim()],
+    [
+      "published",
+      typeof filters?.published === "boolean"
+        ? String(filters.published)
+        : String(filters?.published ?? "").trim(),
+    ],
+  ].forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+  const endpoint = `/api/admin/attributes/export?${params.toString()}`;
   const response = await fetch(endpoint, { credentials: "include" });
 
   if (!response.ok) {

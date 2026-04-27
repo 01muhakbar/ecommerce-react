@@ -124,6 +124,8 @@ const SellerMemberLifecyclePage = lazy(() =>
   import("./pages/seller/SellerMemberLifecyclePage.jsx")
 );
 const SellerCatalogPage = lazy(() => import("./pages/seller/SellerCatalogPage.jsx"));
+const SellerAttributesPage = lazy(() => import("./pages/seller/SellerAttributesPage.jsx"));
+const SellerAttributeValuesPage = lazy(() => import("./pages/seller/SellerAttributeValuesPage.jsx"));
 const SellerProductDetailPage = lazy(() => import("./pages/seller/SellerProductDetailPage.jsx"));
 const SellerProductAuthoringPage = lazy(() =>
   import("./pages/seller/SellerProductAuthoringPage.jsx")
@@ -383,6 +385,11 @@ export default function App() {
             <Route path="catalog" element={<LegacySellerCatalogRedirect />} />
             <Route path="catalog/new" element={<LegacySellerProductCreateRedirect />} />
             <Route path="catalog/products" element={<SellerCatalogPage />} />
+            <Route path="catalog/attributes" element={<SellerAttributesPage />} />
+            <Route
+              path="catalog/attributes/:attributeId/values"
+              element={<SellerAttributeValuesPage />}
+            />
             <Route
               path="catalog/products/new"
               element={<SellerProductAuthoringPage mode="create" />}

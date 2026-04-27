@@ -120,6 +120,14 @@ async function login(client: CookieClient, email: string, password: string, labe
   assertStatus(response, 200, label);
 }
 
+async function loginAdmin(client: CookieClient, email: string, password: string, label: string) {
+  const response = await client.request("/api/auth/admin/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+  assertStatus(response, 200, label);
+}
+
 const buildDraftPayload = (label: string) => ({
   currentStep: "review",
   ownerIdentitySnapshot: {
@@ -270,7 +278,7 @@ async function run() {
   const revisionClient = new CookieClient();
   const rejectedClient = new CookieClient();
 
-  await login(adminClient, admin.email, admin.password, "admin login");
+  await loginAdmin(adminClient, admin.email, admin.password, "admin login");
   await login(approvedClient, approvedApplicant.email, approvedApplicant.password, "approved applicant login");
   await login(revisionClient, revisionApplicant.email, revisionApplicant.password, "revision applicant login");
   await login(rejectedClient, rejectedApplicant.email, rejectedApplicant.password, "rejected applicant login");

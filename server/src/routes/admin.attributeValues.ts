@@ -1,6 +1,6 @@
-import { Router } from "express";
+import { Request, Router } from "express";
 import { Op, QueryTypes } from "sequelize";
-import { Product, sequelize } from "../models/index.js";
+import { Attribute, Product, sequelize } from "../models/index.js";
 
 const router = Router();
 
@@ -11,6 +11,13 @@ const parseId = (value: any) => {
 
 const createHttpError = (statusCode: number, message: string) =>
   Object.assign(new Error(message), { statusCode });
+
+const isSuperAdminRequest = (req: Request) => {
+  const normalized = String((req as any).user?.role || "")
+    .trim()
+    .toLowerCase();
+  return ["super_admin", "superadmin", "super-admin", "super admin"].includes(normalized);
+};
 
 const normalizeValueText = (value: unknown) => String(value ?? "").trim();
 
@@ -106,11 +113,13 @@ const findAttributeValueById = async (id: number) => {
     id: number;
     attribute_id: number;
     value: string;
+    scope?: string;
   }>(
     `
-      SELECT id, attribute_id, value
-      FROM attribute_values
-      WHERE id = ?
+      SELECT av.id, av.attribute_id, av.value, a.scope
+      FROM attribute_values av
+      INNER JOIN attributes a ON a.id = av.attribute_id
+      WHERE av.id = ?
       LIMIT 1
     `,
     {
@@ -121,18 +130,33 @@ const findAttributeValueById = async (id: number) => {
   return rows[0] || null;
 };
 
+const assertAdminOwnsAttribute = async (attributeId: number, options: { allowStore?: boolean } = {}) => {
+  const attribute = await Attribute.findByPk(attributeId);
+  if (!attribute) {
+    throw createHttpError(404, "Attribute not found");
+  }
+  const scope = String((attribute as any).get?.("scope") ?? attribute.getDataValue("scope") ?? "global")
+    .trim()
+    .toLowerCase();
+  if (scope !== "global" && !options.allowStore) {
+    throw createHttpError(403, "Store attributes are view-only in Admin.");
+  }
+};
+
 // GET /api/admin/attributes/:id/values
 router.get("/attributes/:id/values", async (req, res, next) => {
   try {
+    const actorIsSuperAdmin = isSuperAdminRequest(req);
     const attributeId = parseId(req.params.id);
     if (!attributeId) {
       return res
         .status(400)
         .json({ success: false, message: "Invalid attribute id" });
     }
+    await assertAdminOwnsAttribute(attributeId, { allowStore: actorIsSuperAdmin });
 
     const rows = await sequelize.query(
-      "SELECT id, attribute_id, value FROM attribute_values WHERE attribute_id = ? ORDER BY value ASC",
+      "SELECT id, attribute_id, value FROM attribute_values WHERE attribute_id = ? AND status = 'active' ORDER BY value ASC",
       { replacements: [attributeId], type: QueryTypes.SELECT },
     );
 
@@ -155,12 +179,14 @@ router.get("/attributes/:id/values", async (req, res, next) => {
 // POST /api/admin/attributes/:id/values
 router.post("/attributes/:id/values", async (req, res, next) => {
   try {
+    const actorIsSuperAdmin = isSuperAdminRequest(req);
     const attributeId = parseId(req.params.id);
     if (!attributeId) {
       return res
         .status(400)
         .json({ success: false, message: "Invalid attribute id" });
     }
+    await assertAdminOwnsAttribute(attributeId, { allowStore: actorIsSuperAdmin });
     const value = normalizeValueText(req.body?.value);
     if (!value || value.length > 120) {
       return res
@@ -205,6 +231,7 @@ router.post("/attributes/:id/values", async (req, res, next) => {
 // PATCH /api/admin/attribute-values/:id
 router.patch("/attribute-values/:id", async (req, res, next) => {
   try {
+    const actorIsSuperAdmin = isSuperAdminRequest(req);
     const id = parseId(req.params.id);
     if (!id) {
       return res
@@ -224,6 +251,9 @@ router.patch("/attribute-values/:id", async (req, res, next) => {
       return res
         .status(404)
         .json({ success: false, message: "Value not found" });
+    }
+    if (String(current.scope || "global").trim().toLowerCase() !== "global" && !actorIsSuperAdmin) {
+      return res.status(403).json({ success: false, message: "Only Super Admin can edit seller attribute values from Admin." });
     }
 
     try {
@@ -275,6 +305,7 @@ router.patch("/attribute-values/:id", async (req, res, next) => {
 // POST /api/admin/attribute-values/bulk-delete
 router.post("/attribute-values/bulk-delete", async (req, res, next) => {
   try {
+    const actorIsSuperAdmin = isSuperAdminRequest(req);
     const incoming = Array.isArray(req.body?.ids) ? req.body.ids : [];
     const ids: number[] = Array.from(
       new Set(
@@ -292,6 +323,13 @@ router.post("/attribute-values/bulk-delete", async (req, res, next) => {
 
     for (const id of ids) {
       await assertAttributeValueUnused(id);
+    }
+    const values = await Promise.all(ids.map((id) => findAttributeValueById(id)));
+    if (
+      values.some((entry) => entry && String(entry.scope || "global").trim().toLowerCase() !== "global") &&
+      !actorIsSuperAdmin
+    ) {
+      return res.status(403).json({ success: false, message: "Only Super Admin can delete seller attribute values from Admin." });
     }
 
     const placeholders = ids.map(() => "?").join(", ");
@@ -322,11 +360,21 @@ router.post("/attribute-values/bulk-delete", async (req, res, next) => {
 // DELETE /api/admin/attribute-values/:id
 router.delete("/attribute-values/:id", async (req, res, next) => {
   try {
+    const actorIsSuperAdmin = isSuperAdminRequest(req);
     const id = parseId(req.params.id);
     if (!id) {
       return res
         .status(400)
         .json({ success: false, message: "Invalid value id" });
+    }
+    const current = await findAttributeValueById(id);
+    if (!current) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Value not found" });
+    }
+    if (String(current.scope || "global").trim().toLowerCase() !== "global" && !actorIsSuperAdmin) {
+      return res.status(403).json({ success: false, message: "Only Super Admin can delete seller attribute values from Admin." });
     }
 
     try {

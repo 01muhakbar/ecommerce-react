@@ -150,6 +150,11 @@ const resolveCartMutationTarget = (target: any) => {
   };
 };
 
+const isAmbiguousRemoteVariantTarget = (target: {
+  cartItemId?: number | null;
+  variantKey?: string | null;
+}) => Boolean(target?.variantKey) && !Number(target?.cartItemId);
+
 export const normalizeCartProducts = (cart: any): NormalizedCartProduct[] => {
   const items = cart?.Products ?? [];
   return (Array.isArray(items) ? items : [])
@@ -551,6 +556,11 @@ export function useCart() {
         setIsLoading(false);
         return;
       }
+      if (isAmbiguousRemoteVariantTarget(resolved)) {
+        await refreshCart(false);
+        setIsLoading(false);
+        return;
+      }
       try {
         await cartApi.setCartItemQty(
           Number(resolved.cartItemId ?? resolved.productId),
@@ -594,6 +604,11 @@ export function useCart() {
           variantKey: resolved.variantKey,
         });
         refreshGuest();
+        setIsLoading(false);
+        return;
+      }
+      if (isAmbiguousRemoteVariantTarget(resolved)) {
+        await refreshCart(false);
         setIsLoading(false);
         return;
       }

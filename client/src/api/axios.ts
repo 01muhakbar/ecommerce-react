@@ -34,7 +34,11 @@ api.interceptors.response.use(
   (err) => {
     const status = err?.response?.status;
     const url = err?.config?.url || "";
-    const isAuthMe = typeof url === "string" && url.includes("/auth/me");
+    const isAuthMe =
+      typeof url === "string" &&
+      (url.includes("/auth/me") ||
+        url.includes("/auth/account/me") ||
+        url.includes("/auth/admin/me"));
     const isAuthFormEndpoint =
       typeof url === "string" &&
       [

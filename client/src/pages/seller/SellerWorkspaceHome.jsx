@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { Component, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -29,6 +29,8 @@ import {
   SellerWorkspaceDetailItem,
   SellerWorkspaceNotice,
   SellerWorkspacePanel,
+  sellerPrimaryButtonClass,
+  sellerSecondaryButtonClass,
   SellerWorkspaceSectionCard,
   SellerWorkspaceStatePanel,
   SellerWorkspaceStatCard,
@@ -431,7 +433,46 @@ function EmptyStateNotice({ title, description, ctaLabel, to, type = "info" }) {
   );
 }
 
-export default function SellerWorkspaceHome() {
+class SellerWorkspaceHomeErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error) {
+    console.error("SellerWorkspaceHome crashed", error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <SellerWorkspaceStatePanel
+          title="Seller overview is temporarily unavailable"
+          description="The dashboard hit a render error. Reload the page to try again."
+          tone="error"
+          Icon={Store}
+          action={
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className={sellerSecondaryButtonClass}
+            >
+              Reload dashboard
+            </button>
+          }
+        />
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+function SellerWorkspaceHomeContent() {
   const { sellerContext, workspaceStoreId: storeId, workspaceRoutes } =
     useSellerWorkspaceRoute();
   const permissionKeys = sellerContext?.access?.permissionKeys || [];
@@ -533,7 +574,6 @@ export default function SellerWorkspaceHome() {
   const analyticsCouponSnapshot = analytics?.couponSnapshot;
   const analyticsCouponAttributionSnapshot = analytics?.couponAttributionSnapshot;
   const analyticsProductSnapshot = analytics?.productSnapshot;
-  const analyticsInsights = Array.isArray(analytics?.insights) ? analytics.insights : [];
   const couponAttributionReadiness = analytics?.couponAttributionReadiness;
   const backendActions = Array.isArray(summary?.nextActions) ? summary.nextActions : [];
   const weeklyPanelItems = Array.isArray(weeklySalesQuery.data?.items) ? weeklySalesQuery.data.items : [];
@@ -864,6 +904,42 @@ export default function SellerWorkspaceHome() {
         />
       </section>
 
+      <section className="grid gap-3 sm:grid-cols-3">
+        {canEditStore ? (
+          <Link to={workspaceRoutes.storeProfile()} className={sellerPrimaryButtonClass}>
+            <Store className="h-4 w-4" />
+            Complete Profile
+          </Link>
+        ) : (
+          <div className={`${sellerSecondaryButtonClass} opacity-60`}>
+            <Store className="h-4 w-4" />
+            Complete Profile
+          </div>
+        )}
+        {canViewPaymentProfile ? (
+          <Link to={workspaceRoutes.paymentProfile()} className={sellerSecondaryButtonClass}>
+            <CreditCard className="h-4 w-4" />
+            Setup Payment
+          </Link>
+        ) : (
+          <div className={`${sellerSecondaryButtonClass} opacity-60`}>
+            <CreditCard className="h-4 w-4" />
+            Setup Payment
+          </div>
+        )}
+        {canCreateProductDraft ? (
+          <Link to={workspaceRoutes.productCreate()} className={sellerSecondaryButtonClass}>
+            <FolderPlus className="h-4 w-4" />
+            Add Product
+          </Link>
+        ) : (
+          <div className={`${sellerSecondaryButtonClass} opacity-60`}>
+            <FolderPlus className="h-4 w-4" />
+            Add Product
+          </div>
+        )}
+      </section>
+
       <section className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
         <SellerWorkspacePanel className="overflow-hidden border-slate-900 bg-[linear-gradient(135deg,#0f172a_0%,#111827_52%,#164e63_100%)] px-4 py-4 text-white sm:px-5">
           <div className="flex h-full flex-col justify-between gap-5">
@@ -900,38 +976,38 @@ export default function SellerWorkspaceHome() {
                 <h2 className="mt-2 text-[1.9rem] font-semibold tracking-tight">
                   {summary?.store?.name || sellerContext?.store?.name || "Seller Workspace"}
                 </h2>
-                <p className="mt-2.5 max-w-2xl text-sm leading-5 text-white/72">
-                  Start here to see what needs attention first for the active store, then jump
-                  straight into orders, payment review, payment setup, or store profile.
-                </p>
               </div>
 
               <div className="grid gap-3 md:grid-cols-3">
-                <div className="rounded-xl border border-white/10 bg-white/10 px-3.5 py-3.5">
+                <div className="rounded-xl border border-white/10 bg-white/10 px-3.5 py-3">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/60">
-                    Main Focus
+                    Payment Setup
                   </p>
-                  <p className="mt-2 text-base font-semibold text-white">{primaryFocus.label}</p>
-                  <p className="mt-2 text-sm leading-6 text-white/70">{primaryFocus.hint}</p>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-white">
+                      {paymentReadiness?.label || primaryFocus.label}
+                    </p>
+                    {canViewPaymentProfile ? (
+                      <Link to={workspaceRoutes.paymentProfile()} className="text-xs font-semibold text-white/80 hover:text-white">
+                        Open
+                      </Link>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="rounded-xl border border-white/10 bg-white/10 px-3.5 py-3.5">
+                <div className="rounded-xl border border-white/10 bg-white/10 px-3.5 py-3">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/60">
-                    Your View
+                    Role
                   </p>
-                  <p className="mt-2 text-base font-semibold text-white">{roleFocusLabel}</p>
-                  <p className="mt-2 text-sm leading-6 text-white/70">
-                    This page only shows what your current seller role can safely access.
+                  <p className="mt-2 text-sm font-semibold text-white">
+                    {summary?.store?.roleCode || sellerContext?.access?.roleCode || roleFocusLabel}
                   </p>
                 </div>
-                <div className="rounded-xl border border-white/10 bg-white/10 px-3.5 py-3.5">
+                <div className="rounded-xl border border-white/10 bg-white/10 px-3.5 py-3">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/60">
-                    Store Scope
+                    Scope
                   </p>
-                  <p className="mt-2 text-base font-semibold text-white">
+                  <p className="mt-2 text-sm font-semibold text-white">
                     {summary?.store?.slug || sellerContext?.store?.slug || "store"}
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-white/70">
-                    Everything below belongs to this active store only.
                   </p>
                 </div>
               </div>
@@ -962,7 +1038,6 @@ export default function SellerWorkspaceHome() {
 
         <SellerWorkspaceSectionCard
           title="What needs attention"
-          hint="The highest-priority seller tasks come first."
           Icon={ShieldCheck}
         >
           <div className="space-y-3">
@@ -975,17 +1050,14 @@ export default function SellerWorkspaceHome() {
                   priorityToneClass(action.tone)
                 )}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-sm font-semibold text-slate-900">
                         {index + 1}. {action.label}
                       </p>
                       <SellerWorkspaceBadge label={action.priority} tone={action.tone} />
                     </div>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      {action.description || "Open this seller lane for the next step."}
-                    </p>
                   </div>
                   <ArrowRight className="mt-1 h-4 w-4 text-slate-500" />
                 </div>
@@ -998,7 +1070,6 @@ export default function SellerWorkspaceHome() {
       <section className="grid gap-5 xl:grid-cols-[0.82fr_1.18fr]">
         <SellerWorkspaceSectionCard
           title="Workspace readiness"
-          hint="This backend checklist shows the minimum seller onboarding state for the active store."
           Icon={ShieldCheck}
           actions={[
             <SellerWorkspaceBadge
@@ -1016,47 +1087,29 @@ export default function SellerWorkspaceHome() {
           <p className="text-[2rem] font-semibold leading-none text-slate-900">
             {readinessSummary?.completionPercent || 0}%
           </p>
-          <p className="mt-2 text-sm text-slate-600">
-            {readinessSummary?.description ||
-              "Seller onboarding summary is derived from backend readiness signals."}
-          </p>
+          <p className="mt-2 text-sm font-medium text-slate-500">ready</p>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <SellerWorkspaceDetailItem
               label="Store Profile"
               value={storeProfileChecklist?.status?.label || "-"}
-              hint={storeProfileChecklist?.status?.description || "-"}
             />
             <SellerWorkspaceDetailItem
               label="Shipping Setup"
               value={shippingSetupChecklist?.status?.label || "-"}
-              hint={shippingSetupChecklist?.status?.description || "-"}
             />
             <SellerWorkspaceDetailItem
               label="Payment Profile"
               value={paymentChecklist?.status?.label || "-"}
-              hint={paymentChecklist?.status?.description || "-"}
             />
             <SellerWorkspaceDetailItem
               label="Products"
               value={productChecklist?.status?.label || "-"}
-              hint={productChecklist?.status?.description || "-"}
-            />
-            <SellerWorkspaceDetailItem
-              label="Next Step"
-              value={readinessNextStep?.label || "No action required"}
-              hint={readinessNextStep?.description || "-"}
             />
           </div>
-          {readiness?.boundaries?.sourceOfTruth ? (
-            <SellerWorkspaceNotice type="info" className="mt-5">
-              {readiness.boundaries.sourceOfTruth}
-            </SellerWorkspaceNotice>
-          ) : null}
         </SellerWorkspaceSectionCard>
 
         <SellerWorkspaceSectionCard
           title="Onboarding checklist"
-          hint="Each checklist item stays tied to an existing seller lane. No new workflow is introduced here."
           Icon={Store}
         >
           <div className="space-y-3">
@@ -1074,7 +1127,7 @@ export default function SellerWorkspaceHome() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-sm font-semibold text-slate-900">
-                          {index + 1}. {item.label}
+                          {item.label}
                         </p>
                         <SellerWorkspaceBadge
                           label={item.status?.label || "Unknown"}
@@ -1084,22 +1137,9 @@ export default function SellerWorkspaceHome() {
                           <SellerWorkspaceBadge label="Info only" tone="sky" />
                         ) : null}
                       </div>
-                      <p className="mt-2 text-sm leading-6 text-slate-600">
-                        {item.status?.description || "Review this checklist item in its current lane."}
-                      </p>
                       {item.progress?.total ? (
                         <p className="mt-2 text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
-                          Progress {item.progress.completed}/{item.progress.total}
-                        </p>
-                      ) : null}
-                      {item.progress?.missingFields?.length ? (
-                        <p className="mt-2 text-xs leading-5 text-slate-500">
-                          Missing: {item.progress.missingFields.map((field) => field.label).join(", ")}
-                        </p>
-                      ) : null}
-                      {item.reviewStatus?.label ? (
-                        <p className="mt-2 text-xs leading-5 text-slate-500">
-                          Review: {item.reviewStatus.label}
+                          {item.progress.completed}/{item.progress.total}
                         </p>
                       ) : null}
                     </div>
@@ -1123,7 +1163,6 @@ export default function SellerWorkspaceHome() {
       <section className="space-y-5">
         <SellerWorkspaceSectionCard
           title="Analytics baseline"
-          hint="A simple seller baseline for orders, revenue, coupons, and products in the active store."
           Icon={BarChart3}
           actions={[
             <SellerWorkspaceBadge
@@ -1147,38 +1186,9 @@ export default function SellerWorkspaceHome() {
             </SellerWorkspaceNotice>
           ) : (
             <div className="space-y-5">
-              <div className="grid gap-3 md:grid-cols-2">
-                {analyticsInsights.map((insight) => (
-                  <Link
-                    key={insight.code}
-                    to={routeByLane(workspaceRoutes, insight.lane)}
-                    className={joinClassNames(
-                      "block rounded-2xl border px-4 py-4 transition hover:border-slate-300",
-                      priorityToneClass(insight.tone)
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-semibold text-slate-900">{insight.label}</p>
-                          <SellerWorkspaceBadge
-                            label={insight.tone === "emerald" ? "good" : insight.tone}
-                            tone={insight.tone}
-                          />
-                        </div>
-                        <p className="mt-2 text-sm leading-6 text-slate-600">
-                          {insight.description || "Open the related seller lane for details."}
-                        </p>
-                      </div>
-                      <ArrowRight className="mt-1 h-4 w-4 text-slate-500" />
-                    </div>
-                  </Link>
-                ))}
-              </div>
-
               <div className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-4">
                 <SellerWorkspaceStatCard
-                  label="Total Orders"
+                  label="Orders"
                   value={
                     analyticsOrderSnapshot?.visible
                       ? String(analyticsOrderSnapshot.totalOrders || 0)
@@ -1186,25 +1196,15 @@ export default function SellerWorkspaceHome() {
                         ? "0"
                         : "Role limited"
                   }
-                  hint={
-                    analyticsOrderSnapshot?.visible
-                      ? analyticsOrderSnapshot.hint
-                      : "Order analytics are limited to seller roles with order visibility."
-                  }
                   Icon={ShoppingBag}
                   tone={(analyticsOrderSnapshot?.totalOrders || 0) > 0 ? "emerald" : "stone"}
                 />
                 <SellerWorkspaceStatCard
-                  label="Paid Revenue"
+                  label="Revenue"
                   value={
                     analyticsRevenueSnapshot?.visible
                       ? formatCurrency(analyticsRevenueSnapshot.paidGrossAmount || 0)
                       : "Role limited"
-                  }
-                  hint={
-                    analyticsRevenueSnapshot?.visible
-                      ? analyticsRevenueSnapshot.hint
-                      : "Revenue baseline follows order visibility."
                   }
                   Icon={WalletCards}
                   tone={
@@ -1212,31 +1212,25 @@ export default function SellerWorkspaceHome() {
                   }
                 />
                 <SellerWorkspaceStatCard
-                  label="Average Order Value"
+                  label="AOV"
                   value={
                     analyticsRevenueSnapshot?.visible
                       ? formatCurrency(analyticsRevenueSnapshot.averageOrderValue || 0)
                       : "Role limited"
                   }
-                  hint="Derived from paid store-owned suborders only, not from settlement data."
                   Icon={BarChart3}
                   tone={
                     (analyticsRevenueSnapshot?.averageOrderValue || 0) > 0 ? "sky" : "stone"
                   }
                 />
                 <SellerWorkspaceStatCard
-                  label="Active Coupons"
+                  label="Coupons"
                   value={
                     analyticsCouponSnapshot?.visible
                       ? String(analyticsCouponSnapshot.activeCoupons || 0)
                       : canViewCoupons
                         ? "0"
                         : "Role limited"
-                  }
-                  hint={
-                    analyticsCouponSnapshot?.visible
-                      ? analyticsCouponSnapshot.hint
-                      : "Coupon baseline is limited to roles with coupon visibility."
                   }
                   Icon={TicketPercent}
                   tone={
@@ -1247,8 +1241,7 @@ export default function SellerWorkspaceHome() {
 
               <div className="grid gap-5 xl:grid-cols-2">
                 <SellerWorkspaceSectionCard
-                  title="Operational order snapshot"
-                  hint="This baseline focuses on store-owned suborders and their current lifecycle."
+                  title="Operational snapshot"
                   Icon={ShoppingBag}
                 >
                   {analyticsOrderSnapshot?.visible && analyticsRevenueSnapshot?.visible ? (
@@ -1277,22 +1270,16 @@ export default function SellerWorkspaceHome() {
                         <SellerWorkspaceDetailItem
                           label="Completed Revenue"
                           value={formatCurrency(analyticsRevenueSnapshot.completedGrossAmount || 0)}
-                          hint="Paid suborders already delivered in the current seller scope."
                         />
                         <SellerWorkspaceDetailItem
                           label="In-flight Revenue"
                           value={formatCurrency(analyticsRevenueSnapshot.processingGrossAmount || 0)}
-                          hint="Paid suborders still in processing or shipped state."
                         />
                         <SellerWorkspaceDetailItem
                           label="Average Order Value"
                           value={formatCurrency(analyticsRevenueSnapshot.averageOrderValue || 0)}
                         />
                       </div>
-                      <SellerWorkspaceNotice type="warning" className="mt-5">
-                        {analyticsRevenueSnapshot.boundaryNote ||
-                          "This seller baseline is operational only and not a payout or settlement statement."}
-                      </SellerWorkspaceNotice>
                     </>
                   ) : (
                     <EmptyStateNotice
@@ -1306,8 +1293,7 @@ export default function SellerWorkspaceHome() {
                 </SellerWorkspaceSectionCard>
 
                 <SellerWorkspaceSectionCard
-                  title="Coupon and product snapshot"
-                  hint="A quick check on coupon inventory, discount activity, and the products currently leading the store."
+                  title="Coupon attribution"
                   Icon={Package}
                 >
                   <div className="space-y-5">
@@ -1315,40 +1301,28 @@ export default function SellerWorkspaceHome() {
                       <>
                         <div className="grid gap-3 sm:grid-cols-2">
                           <SellerWorkspaceDetailItem
-                            label="Total Coupons"
-                            value={String(analyticsCouponSnapshot.totalCoupons || 0)}
+                            label="Attributed Orders"
+                            value={String(analyticsCouponAttributionSnapshot?.attributedSuborders || 0)}
                           />
                           <SellerWorkspaceDetailItem
-                            label="Active"
-                            value={String(analyticsCouponSnapshot.activeCoupons || 0)}
+                            label="Attributed Discount"
+                            value={formatCurrency(analyticsCouponAttributionSnapshot?.paidDiscountAmount || 0)}
                           />
                           <SellerWorkspaceDetailItem
-                            label="Scheduled"
-                            value={String(analyticsCouponSnapshot.scheduledCoupons || 0)}
+                            label="Coverage"
+                            value={`${String(analyticsCouponAttributionSnapshot?.coverage?.attributedCoveragePercent || 0)}%`}
                           />
                           <SellerWorkspaceDetailItem
-                            label="Inactive / Expired"
-                            value={String(
-                              (analyticsCouponSnapshot.inactiveCoupons || 0) +
-                                (analyticsCouponSnapshot.expiredCoupons || 0)
-                            )}
-                          />
-                          <SellerWorkspaceDetailItem
-                            label="Discount Activity"
-                            value={String(analyticsCouponSnapshot.discountedOrders || 0)}
-                            hint="Best-effort discounted-order activity inside this store scope, not per-code attribution."
-                          />
-                          <SellerWorkspaceDetailItem
-                            label="Paid Discount Activity"
-                            value={String(analyticsCouponSnapshot.discountedPaidOrders || 0)}
+                            label="Status"
+                            value={analyticsCouponAttributionSnapshot?.label || "No data"}
                           />
                         </div>
-                        <SellerWorkspaceNotice type="info" className="mt-5">
-                          {analyticsCouponSnapshot.boundaryNote ||
-                            "Coupon baseline shows store inventory and discounted-order activity only."}
-                        </SellerWorkspaceNotice>
                         {analyticsCouponAttributionSnapshot?.visible ? (
-                          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                          <details className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                            <summary className="cursor-pointer list-none text-sm font-semibold text-slate-900">
+                              Deep analytics
+                            </summary>
+                            <div className="mt-4">
                             <div className="flex flex-wrap items-center gap-2">
                               <p className="text-sm font-semibold text-slate-900">
                                 Coupon attribution snapshot
@@ -1513,14 +1487,19 @@ export default function SellerWorkspaceHome() {
                                 {analyticsCouponAttributionSnapshot.boundaryNote}
                               </SellerWorkspaceNotice>
                             ) : null}
-                          </div>
+                            </div>
+                          </details>
                         ) : analyticsCouponSnapshot?.visible ? (
                           <SellerWorkspaceNotice type="warning" className="mt-4">
                             Coupon attribution snapshot follows both coupon and order visibility, so it stays hidden for roles that cannot read store-owned suborders.
                           </SellerWorkspaceNotice>
                         ) : null}
                         {couponAttributionReadiness?.visible ? (
-                          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                          <details className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                            <summary className="cursor-pointer list-none text-sm font-semibold text-slate-900">
+                              Attribution readiness
+                            </summary>
+                            <div className="mt-4">
                             <div className="flex flex-wrap items-center gap-2">
                               <p className="text-sm font-semibold text-slate-900">
                                 Coupon attribution readiness
@@ -1568,7 +1547,8 @@ export default function SellerWorkspaceHome() {
                                 {couponAttributionReadiness.recommendedNextStep}
                               </SellerWorkspaceNotice>
                             ) : null}
-                          </div>
+                            </div>
+                          </details>
                         ) : null}
                       </>
                     ) : (
@@ -1607,14 +1587,13 @@ export default function SellerWorkspaceHome() {
                         </div>
 
                         {analyticsProductSnapshot.topProducts?.length ? (
-                          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                          <details className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                            <summary className="cursor-pointer list-none text-sm font-semibold text-slate-900">
+                              Top products
+                            </summary>
+                            <div className="mt-4">
                             <div className="flex items-center justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-semibold text-slate-900">Top products</p>
-                                <p className="mt-1 text-xs text-slate-500">
-                                  Ranked from paid store-owned suborder items only. This is an operational seller snapshot, not a merchandising report.
-                                </p>
-                              </div>
+                              <div />
                               {canViewCatalog ? (
                                 <Link
                                   to={workspaceRoutes.catalog()}
@@ -1636,11 +1615,7 @@ export default function SellerWorkspaceHome() {
                                         {index + 1}. {product.name}
                                       </p>
                                       <p className="mt-1 text-xs text-slate-500">
-                                        Sold {product.qtySold} item(s) • Revenue{" "}
-                                        {formatCurrency(product.revenueAmount || 0)}
-                                      </p>
-                                      <p className="mt-1 text-xs text-slate-500">
-                                        Status {product.status} • Stock {product.stock}
+                                        {product.qtySold} sold • {formatCurrency(product.revenueAmount || 0)}
                                       </p>
                                     </div>
                                     <SellerWorkspaceBadge
@@ -1668,7 +1643,8 @@ export default function SellerWorkspaceHome() {
                                 );
                               })}
                             </div>
-                          </div>
+                            </div>
+                          </details>
                         ) : (
                           <EmptyStateNotice
                             title="No top product signal yet"
@@ -1703,7 +1679,6 @@ export default function SellerWorkspaceHome() {
           <section className="grid gap-5 xl:grid-cols-2">
             <SellerWorkspaceSectionCard
               title="Payment review"
-              hint="Use this to see whether buyer proof review needs attention today."
               Icon={BadgeCheck}
             >
               {canViewPaymentReview ? (
@@ -1727,13 +1702,12 @@ export default function SellerWorkspaceHome() {
                         (paymentReviewCounts.rejected || 0) +
                           (paymentReviewCounts.exceptionCount || 0)
                       )}
-                      hint="Includes rejected, failed, and expired latest payment records."
                     />
                   </div>
                 ) : (
                   <EmptyStateNotice
-                    title="No buyer payment proof is waiting yet"
-                    description="This store does not have visible payment review records right now. New proof submissions will appear here as buyers complete payment."
+                    title="No pending"
+                    description="Nothing to review right now."
                     ctaLabel="Open payment review"
                     to={workspaceRoutes.paymentReview()}
                   />
@@ -1748,8 +1722,7 @@ export default function SellerWorkspaceHome() {
             </SellerWorkspaceSectionCard>
 
             <SellerWorkspaceSectionCard
-              title="Order payment snapshot"
-              hint="A fast view of store-owned orders and their payment state."
+              title="Orders"
               Icon={ShoppingBag}
             >
               {canViewOrders ? (
@@ -1778,13 +1751,12 @@ export default function SellerWorkspaceHome() {
                     <SellerWorkspaceDetailItem
                       label="Paid Gross"
                       value={formatCurrency(suborderSummary.paidGrossAmount || 0)}
-                      hint="This is the gross total of store-owned suborders already marked as paid."
                     />
                   </div>
                 ) : (
                   <EmptyStateNotice
-                    title="No store orders are visible yet"
-                    description="Once this store receives orders, their payment progress will appear here so the team can monitor what is still unpaid, waiting, or already settled."
+                    title="No orders"
+                    description="No store orders yet."
                     ctaLabel="Open orders"
                     to={workspaceRoutes.orders()}
                   />
@@ -1802,7 +1774,6 @@ export default function SellerWorkspaceHome() {
           <section className="grid gap-6 xl:grid-cols-2">
             <SellerWorkspaceSectionCard
               title="Payment setup readiness"
-              hint="A simple check of whether the store payment destination is ready."
               Icon={CreditCard}
               actions={[
                 <SellerWorkspaceBadge
@@ -1828,9 +1799,8 @@ export default function SellerWorkspaceHome() {
                         value={`${paymentReadiness.completedFields || 0}/${paymentReadiness.totalFields || 0}`}
                       />
                       <SellerWorkspaceDetailItem
-                        label="Next Step"
-                        value={paymentReadiness.nextStep?.label || "-"}
-                        hint={paymentReadiness.nextStep?.description || paymentReadiness.description}
+                        label="Status"
+                        value={paymentReadiness.nextStep?.label || paymentReadiness.label || "-"}
                       />
                       <SellerWorkspaceDetailItem
                         label="Provider"
@@ -1843,14 +1813,19 @@ export default function SellerWorkspaceHome() {
                     </div>
 
                     {paymentReadiness.missingFields?.length ? (
-                      <SellerWorkspaceNotice type="warning" className="mt-5">
-                        Missing setup fields:{" "}
-                        {paymentReadiness.missingFields.map((field) => field.label).join(", ")}.
-                      </SellerWorkspaceNotice>
+                      <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">
+                          Missing
+                        </p>
+                        <ul className="mt-2 space-y-1 text-sm text-amber-900">
+                          {paymentReadiness.missingFields.map((field) => (
+                            <li key={field.label}>- {field.label}</li>
+                          ))}
+                        </ul>
+                      </div>
                     ) : paymentReadiness.isReady ? (
                       <SellerWorkspaceNotice type="success" className="mt-5">
-                        Payment setup is ready. The next day-to-day focus usually shifts to orders
-                        and payment review.
+                        Payment setup is ready.
                       </SellerWorkspaceNotice>
                     ) : null}
                   </>
@@ -1871,8 +1846,7 @@ export default function SellerWorkspaceHome() {
             </SellerWorkspaceSectionCard>
 
             <SellerWorkspaceSectionCard
-              title="Estimated paid orders snapshot"
-              hint="A quick paid-order snapshot to support follow-up, not a withdrawal total."
+              title="Paid orders snapshot"
               Icon={WalletCards}
               actions={[
                 <SellerWorkspaceBadge
@@ -1902,20 +1876,16 @@ export default function SellerWorkspaceHome() {
                         label="In Progress"
                         value={String(eligiblePaidSummary.inProgressCount || 0)}
                       />
-                      <SellerWorkspaceDetailItem
-                        label="Delivered"
-                        value={String(eligiblePaidSummary.deliveredCount || 0)}
-                      />
-                    </div>
-                    <SellerWorkspaceNotice type="warning" className="mt-5">
-                      {eligiblePaidSummary.boundaryNote ||
-                        "This is only a paid-order snapshot and not a final payout total."}
-                    </SellerWorkspaceNotice>
-                  </>
-                ) : (
-                  <EmptyStateNotice
-                    title="No paid order matches this snapshot yet"
-                    description="Paid store orders will appear here after payment is settled and the order still fits the current snapshot rules. This helps the team follow up fulfillment, not request payout."
+                    <SellerWorkspaceDetailItem
+                      label="Delivered"
+                      value={String(eligiblePaidSummary.deliveredCount || 0)}
+                    />
+                  </div>
+                </>
+              ) : (
+                <EmptyStateNotice
+                    title="No paid orders"
+                    description="No paid snapshot yet."
                     ctaLabel="Open orders"
                     to={workspaceRoutes.orders()}
                   />
@@ -1932,25 +1902,15 @@ export default function SellerWorkspaceHome() {
         </>
       ) : (
         <SellerWorkspaceSectionCard
-          title="What this role is meant to handle"
-          hint="The active seller role has a focused scope inside the workspace."
+          title="Role focus"
           Icon={ShieldCheck}
         >
           <div className="space-y-4">
-            <SellerWorkspaceNotice type="info">
-              This role does not manage order handling or finance review. The most useful next
-              step here is usually keeping the store profile and storefront-facing details current.
-            </SellerWorkspaceNotice>
             <div className="grid gap-3 sm:grid-cols-2">
               <SellerWorkspaceDetailItem label="Main Role Focus" value={roleFocusLabel} />
               <SellerWorkspaceDetailItem
                 label="Recommended Lane"
                 value={canEditStore ? "Store Profile" : "Workspace Overview"}
-                hint={
-                  canEditStore
-                    ? "Use Store Profile to review seller-managed identity, contact, and profile details."
-                    : "This role has a narrower read-only seller scope."
-                }
               />
             </div>
             {canEditStore ? (
@@ -1969,50 +1929,20 @@ export default function SellerWorkspaceHome() {
       <section className="grid gap-6 xl:grid-cols-2">
         <SellerWorkspaceSectionCard
           title="Store context"
-          hint="Reference details for the active store."
           Icon={Store}
         >
           <div className="grid gap-3 sm:grid-cols-2">
             <SellerWorkspaceDetailItem label="Store" value={summary?.store?.name} />
-            <SellerWorkspaceDetailItem label="Slug" value={summary?.store?.slug} />
-            <SellerWorkspaceDetailItem label="Store Status" value={summary?.store?.status} />
+            <SellerWorkspaceDetailItem label="Status" value={summary?.store?.status} />
             <SellerWorkspaceDetailItem label="Role" value={summary?.store?.roleCode || "-"} />
-            <SellerWorkspaceDetailItem
-              label="Access Mode"
-              value={summary?.store?.accessMode || "-"}
-            />
-            <SellerWorkspaceDetailItem
-              label="Membership"
-              value={summary?.store?.membershipStatus || "-"}
-            />
-          </div>
-        </SellerWorkspaceSectionCard>
-
-        <SellerWorkspaceSectionCard
-          title="How to read this page"
-          hint="Simple boundaries so the summary stays clear and safe."
-          Icon={ShieldCheck}
-        >
-          <div className="space-y-3">
-            <SellerWorkspaceNotice type="info">
-              {summary?.boundaries?.tenantScope ||
-                "Everything on this page belongs to the active store only."}
-            </SellerWorkspaceNotice>
-            <SellerWorkspaceNotice type="warning">
-              {summary?.boundaries?.payoutDisclaimer ||
-                "Paid-order estimates here are not payout or withdrawal totals."}
-            </SellerWorkspaceNotice>
-            <SellerWorkspaceNotice type="info">
-              {summary?.boundaries?.adminAuthority ||
-                "Admin payment review and payment audit still remain the main finance authority."}
-            </SellerWorkspaceNotice>
+            <SellerWorkspaceDetailItem label="Mode" value={summary?.store?.accessMode || "-"} />
+            <SellerWorkspaceDetailItem label="Scope" value={summary?.store?.slug} />
           </div>
         </SellerWorkspaceSectionCard>
       </section>
 
       <SellerWorkspaceSectionCard
         title="Quick links"
-        hint="Jump straight into the seller lanes that matter for this role."
         Icon={Package}
       >
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -2029,7 +1959,6 @@ export default function SellerWorkspaceHome() {
                       <entry.Icon className="h-4 w-4" />
                     </div>
                     <p className="mt-4 text-base font-semibold text-slate-900">{entry.label}</p>
-                    <p className="mt-2 text-sm leading-6 text-slate-500">{entry.description}</p>
                   </div>
                   <ArrowRight className="mt-1 h-4 w-4 text-slate-400" />
                 </div>
@@ -2048,7 +1977,6 @@ export default function SellerWorkspaceHome() {
                       <p className="text-base font-semibold text-slate-700">{entry.label}</p>
                       <SellerWorkspaceBadge label="Role limited" tone="stone" />
                     </div>
-                    <p className="mt-2 text-sm leading-6 text-slate-500">{entry.reason}</p>
                   </div>
                 </div>
               </div>
@@ -2057,5 +1985,13 @@ export default function SellerWorkspaceHome() {
         </div>
       </SellerWorkspaceSectionCard>
     </div>
+  );
+}
+
+export default function SellerWorkspaceHome() {
+  return (
+    <SellerWorkspaceHomeErrorBoundary>
+      <SellerWorkspaceHomeContent />
+    </SellerWorkspaceHomeErrorBoundary>
   );
 }

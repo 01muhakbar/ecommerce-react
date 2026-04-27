@@ -1,7 +1,18 @@
-import { Op } from "sequelize";
+import { Op, type Order } from "sequelize";
 import { Router } from "express";
+import multer from "multer";
 import requireSellerStoreAccess from "../middleware/requireSellerStoreAccess.js";
-import { Category, Product, ProductCategory, Store } from "../models/index.js";
+import {
+  CartItem,
+  Category,
+  OrderItem,
+  Product,
+  ProductCategory,
+  ProductReview,
+  Store,
+  SuborderItem,
+  sequelize,
+} from "../models/index.js";
 import {
   buildProductVisibilitySnapshot,
   isStorefrontStoreActive,
@@ -9,8 +20,16 @@ import {
 import { sellerHasPermission } from "../services/seller/resolveSellerAccess.js";
 import { buildPublicStoreOperationalReadiness } from "../services/sharedContracts/publicStoreIdentity.js";
 import { STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES } from "../services/sharedContracts/storePaymentProfileCompat.js";
+import {
+  logProductActivity,
+  PRODUCT_ACTIVITY_LOG_ACTIONS,
+} from "../services/productActivityLog.service.js";
 
 const router = Router();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024 },
+});
 
 const getAttr = (row: any, key: string) =>
   row?.getDataValue?.(key) ?? row?.get?.(key) ?? row?.dataValues?.[key];
@@ -135,6 +154,12 @@ const allowedVisibilityStates = new Set([
   "published_blocked",
 ]);
 const allowedSellerBulkActions = new Set(["submit_review", "resubmit_review"]);
+const allowedSellerSorts = new Set([
+  "price_asc",
+  "price_desc",
+  "date_added",
+  "date_updated",
+]);
 
 const normalizeProductStatus = (value: unknown) => {
   const normalized = normalizeString(value).toLowerCase();
@@ -172,6 +197,34 @@ const normalizePositiveIdList = (value: unknown, max = 200) => {
   ).slice(0, max) as number[];
 };
 
+const normalizePositiveIdFilterList = (value: unknown, max = 200) => {
+  const entries = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split(",")
+      : typeof value === "number"
+        ? [value]
+        : [];
+
+  return Array.from(
+    new Set(
+      entries
+        .map((entry) => parseOptionalPositiveId(entry))
+        .filter((entry) => entry !== null)
+    )
+  ).slice(0, max) as number[];
+};
+
+const normalizeSellerSort = (value: unknown) => {
+  const normalized = normalizeString(value).toLowerCase();
+  return allowedSellerSorts.has(normalized) ? normalized : "";
+};
+
+const normalizeSellerExportFormat = (value: unknown) => {
+  const normalized = normalizeString(value).toLowerCase();
+  return normalized === "json" ? "json" : "csv";
+};
+
 const buildProductSlugBase = (value: unknown) => {
   const normalized =
     normalizeString(value)
@@ -179,6 +232,68 @@ const buildProductSlugBase = (value: unknown) => {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "") || "product";
   return normalized.slice(0, 180);
+};
+
+const DUPLICATE_VARIATION_STRIP_KEYS = new Set([
+  "productId",
+  "product_id",
+  "variantId",
+  "variant_id",
+  "createdAt",
+  "created_at",
+  "updatedAt",
+  "updated_at",
+]);
+
+const sanitizeDuplicateStructuredValue = (value: unknown): any => {
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizeDuplicateStructuredValue(entry));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>).reduce(
+      (acc, [key, entryValue]) => {
+        if (DUPLICATE_VARIATION_STRIP_KEYS.has(key)) return acc;
+        acc[key] = sanitizeDuplicateStructuredValue(entryValue);
+        return acc;
+      },
+      {} as Record<string, unknown>
+    );
+  }
+
+  return value;
+};
+
+const normalizeDuplicateName = (value: unknown) => {
+  const name = normalizeString(value) || "Product";
+  return `${name} (Copy)`.slice(0, 255);
+};
+
+const resolveUniqueDuplicateSku = async (
+  value: unknown,
+  excludeProductId?: number | null
+) => {
+  const sourceSku = normalizeString(value);
+  if (!sourceSku) return null;
+
+  for (let index = 0; index < 200; index += 1) {
+    const suffix = index === 0 ? "-COPY" : `-COPY-${index + 1}`;
+    const trimmedBase = sourceSku.slice(0, Math.max(0, 100 - suffix.length));
+    const candidate = `${trimmedBase}${suffix}`;
+    const existing = await Product.findOne({
+      where: {
+        sku: candidate,
+        ...(excludeProductId && excludeProductId > 0
+          ? { id: { [Op.ne]: excludeProductId } }
+          : {}),
+      } as any,
+      attributes: ["id"],
+    });
+
+    if (!existing) return candidate;
+  }
+
+  return null;
 };
 
 const resolveUniqueProductSlug = async (name: unknown, excludeProductId?: number | null) => {
@@ -325,11 +440,13 @@ const resolveSellerCategorySelection = async (input: any) => {
 
 const syncProductCategoryAssignments = async (
   productId: number,
-  categoryIds: number[]
+  categoryIds: number[],
+  transaction?: any
 ) => {
   const existingRows = await ProductCategory.findAll({
     where: { productId } as any,
     attributes: ["categoryId"],
+    ...(transaction ? { transaction } : {}),
   });
   const existingIds = existingRows
     .map((row: any) => Number(getAttr(row, "categoryId")))
@@ -343,13 +460,17 @@ const syncProductCategoryAssignments = async (
   if (idsToDelete.length > 0) {
     await ProductCategory.destroy({
       where: { productId, categoryId: { [Op.in]: idsToDelete } } as any,
+      ...(transaction ? { transaction } : {}),
     });
   }
 
   if (idsToCreate.length > 0) {
     await ProductCategory.bulkCreate(
       idsToCreate.map((categoryId) => ({ productId, categoryId })) as any,
-      { ignoreDuplicates: true }
+      {
+        ignoreDuplicates: true,
+        ...(transaction ? { transaction } : {}),
+      }
     );
   }
 };
@@ -760,6 +881,112 @@ const buildSellerSubmissionResetPatch = () => ({
   sellerRevisionNote: null,
 });
 
+const resolveReferencedSellerProductIds = async (productIds: number[]) => {
+  if (!productIds.length) return [];
+
+  const [orderRefs, suborderRefs, reviewRefs] = await Promise.all([
+    OrderItem.findAll({
+      where: { productId: { [Op.in]: productIds } } as any,
+      attributes: ["productId"],
+      group: ["productId"],
+      raw: true,
+    }),
+    SuborderItem.findAll({
+      where: { productId: { [Op.in]: productIds } } as any,
+      attributes: ["productId"],
+      group: ["productId"],
+      raw: true,
+    }),
+    ProductReview.findAll({
+      where: { productId: { [Op.in]: productIds } } as any,
+      attributes: ["productId"],
+      group: ["productId"],
+      raw: true,
+    }),
+  ]);
+
+  return Array.from(
+    new Set(
+      [...orderRefs, ...suborderRefs, ...reviewRefs]
+        .map((entry: any) => Number(entry?.productId))
+        .filter((value) => Number.isInteger(value) && value > 0)
+    )
+  );
+};
+
+const deleteSellerProductsSafely = async (productIds: number[]) => {
+  const uniqueIds = Array.from(
+    new Set(productIds.filter((value) => Number.isInteger(value) && value > 0))
+  );
+  if (!uniqueIds.length) {
+    return {
+      affected: 0,
+      blockedIds: [],
+    };
+  }
+
+  const blockedIds = await resolveReferencedSellerProductIds(uniqueIds);
+  const deletableIds = uniqueIds.filter((id) => !blockedIds.includes(id));
+
+  if (!deletableIds.length) {
+    return {
+      affected: 0,
+      blockedIds,
+    };
+  }
+
+  const affected = await sequelize.transaction(async (transaction) => {
+    await ProductCategory.destroy({
+      where: { productId: { [Op.in]: deletableIds } } as any,
+      transaction,
+    });
+    await CartItem.destroy({
+      where: { productId: { [Op.in]: deletableIds } } as any,
+      transaction,
+    });
+    return Product.destroy({
+      where: { id: { [Op.in]: deletableIds } } as any,
+      transaction,
+    });
+  });
+
+  return {
+    affected,
+    blockedIds,
+  };
+};
+
+const archiveSellerProductsSafely = async (productIds: number[]) => {
+  const uniqueIds = Array.from(
+    new Set(productIds.filter((value) => Number.isInteger(value) && value > 0))
+  );
+  if (!uniqueIds.length) {
+    return {
+      affected: 0,
+      archivedIds: [],
+    };
+  }
+
+  await sequelize.transaction(async (transaction) => {
+    await Product.update(
+      {
+        isPublished: false,
+        status: "inactive",
+        ...buildSellerSubmissionResetPatch(),
+      } as any,
+      {
+        where: { id: { [Op.in]: uniqueIds } } as any,
+        transaction,
+      }
+    );
+  });
+
+  return {
+    affected: uniqueIds.length,
+    archivedIds: uniqueIds,
+  };
+};
+
 const resolveSellerPublishReadiness = (product: any) => {
   const blockers: Array<{ field: string; code: string; message: string }> = [];
   const name = normalizeString(getAttr(product, "name"));
@@ -1099,7 +1326,7 @@ const buildCatalogGovernance = (sellerAccess: any = null, options: any = {}) => 
     roleCode: sellerAccess?.roleCode ? String(sellerAccess.roleCode) : null,
     canCreate: permissions.canCreateDraft,
     canEdit: permissions.canEditDrafts,
-    canDelete: false,
+    canDelete: sellerHasPermission(sellerAccess, "PRODUCT_ARCHIVE"),
     canPublish: permissions.canPublishProducts,
     canManagePricing: true,
     canManageInventory: true,
@@ -1501,15 +1728,18 @@ const buildSellerProductSummary = async (
 
 const parseSellerProductsFilterInput = (source: any = {}) => ({
   keyword: normalizeString(source?.keyword),
+  categoryIds: normalizePositiveIdFilterList(source?.categoryIds),
   status: normalizeString(source?.status).toLowerCase(),
   published: parseBooleanFilter(source?.published),
   submissionStatus: normalizeSellerSubmissionFilter(source?.submissionStatus),
   visibilityState: normalizeVisibilityStateFilter(source?.visibilityState),
+  sort: normalizeSellerSort(source?.sort),
 });
 
-const buildSellerProductsWhere = (options: any = {}) => {
+const buildSellerProductsWhere = async (options: any = {}) => {
   const andConditions: any[] = [];
   const ids = Array.isArray(options?.ids) ? options.ids : [];
+  const categoryIds = Array.isArray(options?.categoryIds) ? options.categoryIds : [];
   const storeActive =
     typeof options?.storefrontOperational === "boolean"
       ? options.storefrontOperational
@@ -1578,6 +1808,41 @@ const buildSellerProductsWhere = (options: any = {}) => {
     });
   }
 
+  if (categoryIds.length > 0) {
+    const categoryRows = await ProductCategory.findAll({
+      where: {
+        categoryId: {
+          [Op.in]: categoryIds,
+        },
+      } as any,
+      attributes: ["productId"],
+      raw: true,
+    });
+    const categoryProductIds = Array.from(
+      new Set(
+        categoryRows
+          .map((row: any) => toNumber(row?.productId, 0))
+          .filter((productId) => productId > 0)
+      )
+    );
+    const categoryScopes: any[] = [
+      { categoryId: { [Op.in]: categoryIds } },
+      { defaultCategoryId: { [Op.in]: categoryIds } },
+    ];
+
+    if (categoryProductIds.length > 0) {
+      categoryScopes.push({
+        id: {
+          [Op.in]: categoryProductIds,
+        },
+      });
+    }
+
+    andConditions.push({
+      [Op.or]: categoryScopes,
+    });
+  }
+
   if (ids.length > 0) {
     andConditions.push({
       id: {
@@ -1590,6 +1855,38 @@ const buildSellerProductsWhere = (options: any = {}) => {
     storeId: Number(options?.storeId),
     ...(andConditions.length > 0 ? { [Op.and]: andConditions } : {}),
   };
+};
+
+const buildSellerProductsOrder = (sort: unknown): Order => {
+  const normalizedSort = normalizeSellerSort(sort);
+
+  if (normalizedSort === "price_asc") {
+    return [
+      ["price", "ASC"],
+      ["updatedAt", "DESC"],
+      ["id", "DESC"],
+    ];
+  }
+
+  if (normalizedSort === "price_desc") {
+    return [
+      ["price", "DESC"],
+      ["updatedAt", "DESC"],
+      ["id", "DESC"],
+    ];
+  }
+
+  if (normalizedSort === "date_added") {
+    return [
+      ["createdAt", "DESC"],
+      ["id", "DESC"],
+    ];
+  }
+
+  return [
+    ["updatedAt", "DESC"],
+    ["id", "DESC"],
+  ];
 };
 
 const loadSellerStorefrontVisibilityContext = async (storeId: number) => {
@@ -1661,7 +1958,7 @@ const fetchSellerProductListRows = async (where: any, options: any = {}) =>
     where,
     attributes: [...sellerProductListAttributes],
     include: [...sellerProductListInclude],
-    order: [["updatedAt", "DESC"]],
+    order: buildSellerProductsOrder(options?.sort),
     ...(typeof options?.limit === "number" ? { limit: options.limit } : {}),
     ...(typeof options?.offset === "number" ? { offset: options.offset } : {}),
   });
@@ -1713,6 +2010,363 @@ const buildSellerProductsCsv = (
   });
 
   return [header, ...rows].map((row) => row.map(toCsvCell).join(",")).join("\n");
+};
+
+const toSellerProductExportItem = (
+  product: any,
+  sellerAccess: any = null,
+  storeContext: any = null
+) => {
+  const item = serializeProductListItem(product, sellerAccess, storeContext);
+  const imagePaths = normalizeStoredImagePathList(getAttr(product, "imagePaths"));
+  const previewImageUrl = resolveProductPreviewImage(product);
+
+  return {
+    id: item.id,
+    storeId: item.storeId,
+    name: item.name,
+    slug: item.slug,
+    sku: item.sku,
+    categoryId: item.category?.id ?? null,
+    categoryCode: item.category?.code ?? null,
+    categoryName: item.category?.name ?? null,
+    price: item.pricing?.price ?? 0,
+    salePrice: item.pricing?.salePrice ?? null,
+    stock: item.inventory?.stock ?? 0,
+    status: item.status,
+    published: Boolean(item.published),
+    submissionStatus: item.submission?.status ?? "none",
+    submissionLabel: item.submission?.label ?? "Not submitted",
+    inventoryStatus: item.inventory?.stateCode ?? null,
+    inventoryLabel: item.inventory?.label ?? null,
+    storefrontVisibility: item.visibility?.stateCode ?? null,
+    storefrontVisibilityLabel:
+      item.visibility?.sellerLabel || item.visibility?.label || "Private",
+    previewImageUrl,
+    imagePaths,
+    imageUrls:
+      previewImageUrl && !imagePaths.includes(previewImageUrl)
+        ? [previewImageUrl, ...imagePaths]
+        : imagePaths,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+  };
+};
+
+const splitCsvLine = (line: string) => {
+  const cells: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const nextChar = line[index + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        current += '"';
+        index += 1;
+        continue;
+      }
+      inQuotes = !inQuotes;
+      continue;
+    }
+
+    if (char === "," && !inQuotes) {
+      cells.push(current);
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (inQuotes) {
+    const error = new Error("CSV contains an unclosed quoted field.");
+    (error as any).status = 400;
+    (error as any).code = "SELLER_PRODUCT_IMPORT_CSV_INVALID";
+    throw error;
+  }
+
+  cells.push(current);
+  return cells.map((cell) => cell.trim());
+};
+
+const parseCsvImportRows = (text: string) => {
+  const normalizedText = String(text || "").replace(/^\uFEFF/, "").trim();
+  if (!normalizedText) {
+    const error = new Error("Import file is empty.");
+    (error as any).status = 400;
+    (error as any).code = "SELLER_PRODUCT_IMPORT_EMPTY";
+    throw error;
+  }
+
+  const lines = normalizedText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length < 2) {
+    const error = new Error("CSV import requires a header row and at least one data row.");
+    (error as any).status = 400;
+    (error as any).code = "SELLER_PRODUCT_IMPORT_CSV_EMPTY";
+    throw error;
+  }
+
+  const header = splitCsvLine(lines[0]).map((cell) => normalizeString(cell).toLowerCase());
+  if (!header.length) {
+    const error = new Error("CSV import header is missing.");
+    (error as any).status = 400;
+    (error as any).code = "SELLER_PRODUCT_IMPORT_CSV_HEADER_REQUIRED";
+    throw error;
+  }
+
+  return lines.slice(1).map((line) => {
+    const values = splitCsvLine(line);
+    const row: Record<string, unknown> = {};
+    header.forEach((key, index) => {
+      row[key] = values[index] ?? "";
+    });
+    return row;
+  });
+};
+
+const parseSellerImportPayload = (file: any) => {
+  const buffer = file?.buffer;
+  if (!buffer) {
+    const error = new Error("No file uploaded.");
+    (error as any).status = 400;
+    (error as any).code = "SELLER_PRODUCT_IMPORT_FILE_REQUIRED";
+    throw error;
+  }
+
+  const originalName = normalizeString(file?.originalname).toLowerCase();
+  const mimetype = normalizeString(file?.mimetype).toLowerCase();
+  const rawText = buffer.toString("utf8");
+  const looksLikeJson =
+    originalName.endsWith(".json") ||
+    mimetype === "application/json" ||
+    mimetype.endsWith("+json");
+  const looksLikeCsv =
+    originalName.endsWith(".csv") ||
+    mimetype === "text/csv" ||
+    mimetype === "application/csv" ||
+    mimetype === "application/vnd.ms-excel";
+
+  if (looksLikeJson) {
+    let parsedPayload: any;
+    try {
+      parsedPayload = JSON.parse(rawText);
+    } catch {
+      const error = new Error("Invalid JSON file.");
+      (error as any).status = 400;
+      (error as any).code = "SELLER_PRODUCT_IMPORT_JSON_INVALID";
+      throw error;
+    }
+
+    const items = Array.isArray(parsedPayload)
+      ? parsedPayload
+      : Array.isArray(parsedPayload?.items)
+        ? parsedPayload.items
+        : null;
+
+    if (!items) {
+      const error = new Error(
+        "Import file must be a JSON array or an object with an `items` array."
+      );
+      (error as any).status = 400;
+      (error as any).code = "SELLER_PRODUCT_IMPORT_JSON_ITEMS_REQUIRED";
+      throw error;
+    }
+
+    return items;
+  }
+
+  if (looksLikeCsv) {
+    return parseCsvImportRows(rawText);
+  }
+
+  const error = new Error("Seller import only accepts CSV or JSON files.");
+  (error as any).status = 400;
+  (error as any).code = "SELLER_PRODUCT_IMPORT_TYPE_UNSUPPORTED";
+  throw error;
+};
+
+const normalizeSellerImportRow = (raw: any) => {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("Each imported product row must be an object.");
+  }
+
+  const getRowValue = (...keys: string[]) => {
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(raw, key)) {
+        return raw[key];
+      }
+    }
+    return undefined;
+  };
+
+  const name =
+    nullableString(
+      getRowValue("title", "name", "productName", "product_name", "productname")
+    ) || null;
+  const slug = nullableString(getRowValue("slug"));
+  const sku = nullableString(getRowValue("sku"));
+  const barcode = nullableString(getRowValue("barcode"));
+  const description = nullableString(getRowValue("description"));
+  const storeId = parseOptionalPositiveId(getRowValue("storeId", "store_id", "storeid"));
+
+  const categoryId =
+    parseOptionalPositiveId(
+      getRowValue(
+        "categoryId",
+        "category_id",
+        "categoryid",
+        "defaultCategoryId",
+        "default_category_id",
+        "defaultcategoryid"
+      )
+    ) ?? null;
+  const categoryCode =
+    nullableString(
+      getRowValue(
+        "categoryCode",
+        "category_code",
+        "categorycode",
+        "defaultCategoryCode",
+        "default_category_code",
+        "defaultcategorycode"
+      )
+    ) ?? null;
+  const categoryName =
+    nullableString(
+      getRowValue(
+        "categoryName",
+        "category_name",
+        "categoryname",
+        "defaultCategoryName",
+        "default_category_name",
+        "defaultcategoryname",
+        "category",
+        "defaultCategory"
+      )
+    ) ?? null;
+
+  const price =
+    getRowValue("price") === null ||
+    typeof getRowValue("price") === "undefined" ||
+    getRowValue("price") === ""
+      ? undefined
+      : normalizeOptionalMoney(getRowValue("price"));
+  const salePrice =
+    getRowValue("salePrice", "sale_price", "saleprice") === null ||
+    typeof getRowValue("salePrice", "sale_price", "saleprice") === "undefined" ||
+    getRowValue("salePrice", "sale_price", "saleprice") === ""
+      ? undefined
+      : normalizeOptionalMoney(getRowValue("salePrice", "sale_price", "saleprice"));
+  const stock =
+    getRowValue("stock") === null ||
+    typeof getRowValue("stock") === "undefined" ||
+    getRowValue("stock") === ""
+      ? undefined
+      : normalizeOptionalInteger(getRowValue("stock"));
+
+  const tagsInput = getRowValue("tags");
+  const imageUrlsInput = getRowValue("imageUrls", "image_urls", "imageurls");
+
+  const tags = Array.isArray(tagsInput)
+    ? tagsInput
+    : typeof tagsInput === "string"
+      ? tagsInput
+          .split("|")
+          .map((value: string) => value.trim())
+          .filter(Boolean)
+      : undefined;
+
+  const imageUrls = Array.isArray(imageUrlsInput)
+    ? imageUrlsInput
+    : typeof imageUrlsInput === "string"
+      ? imageUrlsInput
+          .split("|")
+          .map((value: string) => value.trim())
+          .filter(Boolean)
+      : undefined;
+
+  return {
+    name,
+    slug,
+    sku,
+    barcode,
+    description,
+    storeId,
+    categoryId,
+    categoryCode,
+    categoryName,
+    price,
+    salePrice,
+    stock,
+    tags,
+    imageUrls,
+  };
+};
+
+const resolveUniqueImportedSku = async (value: unknown) => {
+  const sourceSku = normalizeString(value);
+  if (!sourceSku) return null;
+
+  for (let index = 0; index < 200; index += 1) {
+    const suffix = index === 0 ? "" : index === 1 ? "-IMP" : `-IMP-${index}`;
+    const candidate = `${sourceSku.slice(0, Math.max(0, 100 - suffix.length))}${suffix}`;
+    const existing = await Product.findOne({
+      where: { sku: candidate } as any,
+      attributes: ["id"],
+    });
+
+    if (!existing) return candidate;
+  }
+
+  return null;
+};
+
+const resolveSellerImportCategoryId = async (input: {
+  categoryId?: number | null;
+  categoryCode?: string | null;
+  categoryName?: string | null;
+}) => {
+  if (input.categoryId) {
+    const category = await Category.findOne({
+      where: { id: input.categoryId, published: true } as any,
+      attributes: ["id"],
+    });
+    if (!category) {
+      throw new Error(`Category id ${input.categoryId} was not found.`);
+    }
+    return Number((category as any).id);
+  }
+
+  if (input.categoryCode) {
+    const category = await Category.findOne({
+      where: { code: input.categoryCode, published: true } as any,
+      attributes: ["id"],
+    });
+    if (!category) {
+      throw new Error(`Category code ${input.categoryCode} was not found.`);
+    }
+    return Number((category as any).id);
+  }
+
+  if (input.categoryName) {
+    const category = await Category.findOne({
+      where: { name: input.categoryName, published: true } as any,
+      attributes: ["id"],
+    });
+    if (!category) {
+      throw new Error(`Category name ${input.categoryName} was not found.`);
+    }
+    return Number((category as any).id);
+  }
+
+  return null;
 };
 
 const validateSellerBulkSubmissionAction = (product: any, action: string) => {
@@ -1856,6 +2510,18 @@ router.post(
 
       const detail = await findSellerScopedProductDetail(storeId, Number((product as any).id));
       const storeContext = await loadSellerStorefrontVisibilityContext(storeId);
+      await logProductActivity({
+        storeId,
+        entityId: Number((product as any).id),
+        action: PRODUCT_ACTIVITY_LOG_ACTIONS.CREATED,
+        actorType: "seller",
+        actorId: actorUserId,
+        after: detail || product,
+        metadata: {
+          source: "manual",
+          lane: "seller",
+        },
+      });
 
       return res.status(201).json({
         success: true,
@@ -1892,6 +2558,7 @@ router.patch(
       const sellerAccess = (req as any).sellerAccess;
       const storeId = Number(req.params.storeId);
       const productId = Number(req.params.productId);
+      const actorUserId = Number((req as any).user?.id || 0);
 
       if (!Number.isInteger(productId) || productId <= 0) {
         return res.status(400).json({
@@ -1937,6 +2604,8 @@ router.patch(
         });
       }
 
+      const beforeSnapshot = product.get?.({ plain: true }) ?? product;
+
       const nextSlug =
         normalizeString(getAttr(product, "name")) !== payload.name ||
         normalizeString(getAttr(product, "slug")) !== normalizeString(payload.slug)
@@ -1979,6 +2648,19 @@ router.patch(
 
       const detail = await findSellerScopedProductDetail(storeId, productId);
       const storeContext = await loadSellerStorefrontVisibilityContext(storeId);
+      await logProductActivity({
+        storeId,
+        entityId: productId,
+        action: PRODUCT_ACTIVITY_LOG_ACTIONS.UPDATED,
+        actorType: "seller",
+        actorId: actorUserId,
+        before: beforeSnapshot,
+        after: detail || product,
+        metadata: {
+          source: "manual",
+          lane: "seller",
+        },
+      });
 
       return res.json({
         success: true,
@@ -2015,6 +2697,7 @@ router.patch(
       const sellerAccess = (req as any).sellerAccess;
       const storeId = Number(req.params.storeId);
       const productId = Number(req.params.productId);
+      const actorUserId = Number((req as any).user?.id || 0);
       const nextPublished = parseBooleanFilter(req.body?.published);
 
       if (!Number.isInteger(productId) || productId <= 0) {
@@ -2042,6 +2725,8 @@ router.patch(
           message: "Product not found for this seller store.",
         });
       }
+
+      const beforeSnapshot = product?.get?.({ plain: true }) ?? product;
 
       const currentSubmissionStatus = normalizeSellerSubmissionStatus(
         getAttr(product, "sellerSubmissionStatus")
@@ -2094,6 +2779,21 @@ router.patch(
 
       const detail = await findSellerScopedProductDetail(storeId, productId);
       const storeContext = await loadSellerStorefrontVisibilityContext(storeId);
+      await logProductActivity({
+        storeId,
+        entityId: productId,
+        action: nextPublished
+          ? PRODUCT_ACTIVITY_LOG_ACTIONS.PUBLISHED
+          : PRODUCT_ACTIVITY_LOG_ACTIONS.UNPUBLISHED,
+        actorType: "seller",
+        actorId: actorUserId,
+        before: beforeSnapshot,
+        after: detail || product,
+        metadata: {
+          source: "manual",
+          lane: "seller",
+        },
+      });
 
       return res.json({
         success: true,
@@ -2166,6 +2866,8 @@ router.post(
         });
       }
 
+      const beforeSnapshot = product.get?.({ plain: true }) ?? product;
+
       await product.update({
         sellerSubmissionStatus: "submitted",
         sellerSubmittedAt: new Date(),
@@ -2177,6 +2879,19 @@ router.post(
 
       const detail = await findSellerScopedProductDetail(storeId, productId);
       const storeContext = await loadSellerStorefrontVisibilityContext(storeId);
+      await logProductActivity({
+        storeId,
+        entityId: productId,
+        action: PRODUCT_ACTIVITY_LOG_ACTIONS.SUBMITTED_FOR_REVIEW,
+        actorType: "seller",
+        actorId: actorUserId,
+        before: beforeSnapshot,
+        after: detail || product,
+        metadata: {
+          source: "manual",
+          lane: "seller",
+        },
+      });
 
       return res.json({
         success: true,
@@ -2190,6 +2905,549 @@ router.post(
       return res.status(500).json({
         success: false,
         message: "Failed to submit seller product draft for review.",
+      });
+    }
+  }
+);
+
+router.post(
+  "/stores/:storeId/products/:productId/duplicate",
+  requireSellerStoreAccess(["PRODUCT_CREATE"]),
+  async (req, res) => {
+    try {
+      const sellerAccess = (req as any).sellerAccess;
+      const storeId = Number(req.params.storeId);
+      const productId = Number(req.params.productId);
+      const actorUserId = Number((req as any).user?.id || 0);
+
+      if (!Number.isInteger(productId) || productId <= 0) {
+        return res.status(400).json({
+          success: false,
+          code: "INVALID_PRODUCT_ID",
+          message: "Invalid product id.",
+        });
+      }
+
+      const sourceProduct = await findSellerScopedProductDetail(storeId, productId);
+
+      if (!sourceProduct) {
+        return res.status(404).json({
+          success: false,
+          code: "SELLER_PRODUCT_NOT_FOUND",
+          message: "Product not found for this seller store.",
+        });
+      }
+
+      const sourcePlain: any = sourceProduct.get
+        ? sourceProduct.get({ plain: true })
+        : sourceProduct;
+      const sourceCategoryIds = Array.isArray(sourcePlain?.categories)
+        ? sourcePlain.categories
+            .map((category: any) => parseOptionalPositiveId(category?.id))
+            .filter((value: number | null) => value !== null)
+        : [];
+      const defaultCategoryId =
+        parseOptionalPositiveId(sourcePlain?.defaultCategoryId) ??
+        parseOptionalPositiveId(sourcePlain?.categoryId);
+      const nextCategoryIds =
+        sourceCategoryIds.length > 0
+          ? sourceCategoryIds
+          : defaultCategoryId
+            ? [defaultCategoryId]
+            : [];
+      const nextDefaultCategoryId =
+        defaultCategoryId && nextCategoryIds.includes(defaultCategoryId)
+          ? defaultCategoryId
+          : nextCategoryIds[0] ?? null;
+      const nextSlug = await resolveUniqueProductSlug(
+        `${normalizeString(sourcePlain?.slug || sourcePlain?.name || `product-${productId}`)}-copy`
+      );
+      const nextSku = await resolveUniqueDuplicateSku(sourcePlain?.sku, productId);
+      const imagePaths = normalizeStoredImagePathList(sourcePlain?.imagePaths);
+      const promoImagePath =
+        normalizeProductImageUrl(sourcePlain?.promoImagePath) || imagePaths[0] || null;
+      const duplicateOwnerId =
+        actorUserId > 0 ? actorUserId : toNumber(sourcePlain?.userId, 0) || 0;
+
+      const duplicated = await sequelize.transaction(async (transaction) => {
+        const created = await Product.create(
+          {
+            name: normalizeDuplicateName(sourcePlain?.name),
+            slug: nextSlug,
+            sku: nextSku,
+            barcode: null,
+            gtin: null,
+            price: toNumber(sourcePlain?.price, 0),
+            salePrice:
+              sourcePlain?.salePrice === null || typeof sourcePlain?.salePrice === "undefined"
+                ? null
+                : toNumber(sourcePlain?.salePrice, 0),
+            stock: toNumber(sourcePlain?.stock, 0),
+            userId: duplicateOwnerId,
+            storeId,
+            categoryId: nextDefaultCategoryId,
+            defaultCategoryId: nextDefaultCategoryId,
+            status: "draft",
+            isPublished: false,
+            sellerSubmissionStatus: "none",
+            sellerSubmittedAt: null,
+            sellerSubmittedByUserId: null,
+            sellerRevisionRequestedAt: null,
+            sellerRevisionRequestedByUserId: null,
+            sellerRevisionNote: null,
+            description: sourcePlain?.description ?? null,
+            promoImagePath,
+            imagePaths,
+            videoPath: normalizeProductImageUrl(sourcePlain?.videoPath) || null,
+            tags: sourcePlain?.tags ?? [],
+            weight:
+              sourcePlain?.weight === null || typeof sourcePlain?.weight === "undefined"
+                ? null
+                : toNumber(sourcePlain?.weight, 0),
+            notes: sourcePlain?.notes ?? null,
+            parentSku: sourcePlain?.parentSku ?? null,
+            condition: sourcePlain?.condition ?? null,
+            length:
+              sourcePlain?.length === null || typeof sourcePlain?.length === "undefined"
+                ? null
+                : toNumber(sourcePlain?.length, 0),
+            width:
+              sourcePlain?.width === null || typeof sourcePlain?.width === "undefined"
+                ? null
+                : toNumber(sourcePlain?.width, 0),
+            height:
+              sourcePlain?.height === null || typeof sourcePlain?.height === "undefined"
+                ? null
+                : toNumber(sourcePlain?.height, 0),
+            dangerousProduct: Boolean(sourcePlain?.dangerousProduct),
+            preOrder: Boolean(sourcePlain?.preOrder),
+            preorderDays:
+              sourcePlain?.preorderDays === null ||
+              typeof sourcePlain?.preorderDays === "undefined"
+                ? null
+                : toNumber(sourcePlain?.preorderDays, 0),
+            youtubeLink: sourcePlain?.youtubeLink ?? null,
+            seo: sourcePlain?.seo ?? null,
+            variations:
+              sourcePlain?.variations === null || typeof sourcePlain?.variations === "undefined"
+                ? null
+                : sanitizeDuplicateStructuredValue(sourcePlain.variations),
+            wholesale:
+              sourcePlain?.wholesale === null || typeof sourcePlain?.wholesale === "undefined"
+                ? null
+                : sanitizeDuplicateStructuredValue(sourcePlain.wholesale),
+          } as any,
+          { transaction }
+        );
+
+        if (nextCategoryIds.length > 0) {
+          await syncProductCategoryAssignments(
+            Number((created as any).id),
+            nextCategoryIds,
+            transaction
+          );
+        }
+
+        return Product.findByPk(Number((created as any).id), {
+          transaction,
+        });
+      });
+
+      const detail = await findSellerScopedProductDetail(
+        storeId,
+        Number((duplicated as any)?.id || 0)
+      );
+      const storeContext = await loadSellerStorefrontVisibilityContext(storeId);
+      await logProductActivity({
+        storeId,
+        entityId: Number((duplicated as any)?.id || 0),
+        action: PRODUCT_ACTIVITY_LOG_ACTIONS.DUPLICATED,
+        actorType: "seller",
+        actorId: actorUserId,
+        after: detail || duplicated,
+        metadata: {
+          source: "duplicate",
+          lane: "seller",
+          sourceProductId: productId,
+          sourceProductName: normalizeString(sourcePlain?.name) || null,
+        },
+      });
+
+      return res.status(201).json({
+        success: true,
+        data: {
+          ...serializeProductDetail(detail || duplicated, sellerAccess, storeContext),
+          contract: buildCatalogReadContract(),
+        },
+      });
+    } catch (error) {
+      console.error("[seller/products/duplicate] error", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to duplicate seller product.",
+      });
+    }
+  }
+);
+
+router.delete(
+  "/stores/:storeId/products/:productId",
+  requireSellerStoreAccess(["PRODUCT_ARCHIVE"]),
+  async (req, res) => {
+    try {
+      const sellerAccess = (req as any).sellerAccess;
+      const storeId = Number(req.params.storeId);
+      const productId = Number(req.params.productId);
+      const actorUserId = Number((req as any).user?.id || 0);
+
+      if (!Number.isInteger(productId) || productId <= 0) {
+        return res.status(400).json({
+          success: false,
+          code: "INVALID_PRODUCT_ID",
+          message: "Invalid product id.",
+        });
+      }
+
+      const product = await findSellerScopedProductDetail(storeId, productId);
+
+      if (!product) {
+        const existingProduct = await Product.findByPk(productId, {
+          attributes: ["id", "storeId"],
+        });
+
+        if (existingProduct) {
+          return res.status(404).json({
+            success: false,
+            code: "SELLER_PRODUCT_NOT_FOUND",
+            message: "Product not found for this seller store.",
+          });
+        }
+
+        return res.json({
+          success: true,
+          data: {
+            id: productId,
+            deleted: true,
+            alreadyDeleted: true,
+            archived: false,
+            message: "Product was already removed from this seller store.",
+          },
+        });
+      }
+
+      const currentSubmissionStatus = normalizeSellerSubmissionStatus(
+        getAttr(product, "sellerSubmissionStatus")
+      );
+      const beforeSnapshot = product?.get?.({ plain: true }) ?? product;
+
+      if (currentSubmissionStatus !== "none") {
+        return res.status(409).json({
+          success: false,
+          code: "SELLER_PRODUCT_DELETE_REVIEW_LOCKED",
+          message:
+            "This product is currently in the seller review lane. Finish the review workflow before deleting or archiving it.",
+        });
+      }
+
+      const isPublished = Boolean(getAttr(product, "isPublished"));
+      const referencedIds = await resolveReferencedSellerProductIds([productId]);
+      const hasHistory = referencedIds.includes(productId);
+
+      if (hasHistory || isPublished) {
+        const archiveResult = await archiveSellerProductsSafely([productId]);
+        const detail = await findSellerScopedProductDetail(storeId, productId);
+        const storeContext = await loadSellerStorefrontVisibilityContext(storeId);
+        await logProductActivity({
+          storeId,
+          entityId: productId,
+          action: PRODUCT_ACTIVITY_LOG_ACTIONS.ARCHIVED,
+          actorType: "seller",
+          actorId: actorUserId,
+          before: beforeSnapshot,
+          after: detail || product,
+          metadata: {
+            source: "manual",
+            lane: "seller",
+            archiveReason: hasHistory ? "ORDER_OR_REVIEW_HISTORY" : "PUBLISHED_PRODUCT",
+          },
+        });
+
+        return res.json({
+          success: true,
+          data: {
+            id: productId,
+            deleted: false,
+            archived: archiveResult.affected > 0,
+            archivedIds: archiveResult.archivedIds,
+            archiveReason: hasHistory ? "ORDER_OR_REVIEW_HISTORY" : "PUBLISHED_PRODUCT",
+            message: hasHistory
+              ? "This product has order, review, or suborder history, so it was archived instead of deleted."
+              : "Published seller products are archived instead of being hard deleted.",
+            product:
+              detail &&
+              serializeProductDetail(detail, sellerAccess, storeContext),
+            contract: buildCatalogReadContract(),
+          },
+        });
+      }
+
+      const deletion = await deleteSellerProductsSafely([productId]);
+
+      if (deletion.blockedIds.includes(productId)) {
+        const archiveResult = await archiveSellerProductsSafely([productId]);
+        const detail = await findSellerScopedProductDetail(storeId, productId);
+        const storeContext = await loadSellerStorefrontVisibilityContext(storeId);
+        await logProductActivity({
+          storeId,
+          entityId: productId,
+          action: PRODUCT_ACTIVITY_LOG_ACTIONS.ARCHIVED,
+          actorType: "seller",
+          actorId: actorUserId,
+          before: beforeSnapshot,
+          after: detail || product,
+          metadata: {
+            source: "manual",
+            lane: "seller",
+            archiveReason: "ORDER_OR_REVIEW_HISTORY",
+          },
+        });
+
+        return res.json({
+          success: true,
+          data: {
+            id: productId,
+            deleted: false,
+            archived: archiveResult.affected > 0,
+            archivedIds: archiveResult.archivedIds,
+            archiveReason: "ORDER_OR_REVIEW_HISTORY",
+            message:
+              "This product has order, review, or suborder history, so it was archived instead of deleted.",
+            product:
+              detail &&
+              serializeProductDetail(detail, sellerAccess, storeContext),
+            contract: buildCatalogReadContract(),
+          },
+        });
+      }
+
+      if (deletion.affected <= 0) {
+        return res.status(409).json({
+          success: false,
+          code: "SELLER_PRODUCT_DELETE_FAILED",
+          message: "Delete failed. Please try again.",
+        });
+      }
+
+      await logProductActivity({
+        storeId,
+        entityId: productId,
+        action: PRODUCT_ACTIVITY_LOG_ACTIONS.DELETED,
+        actorType: "seller",
+        actorId: actorUserId,
+        before: beforeSnapshot,
+        after: null,
+        metadata: {
+          source: "manual",
+          lane: "seller",
+        },
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          id: productId,
+          deleted: true,
+          archived: false,
+          message: "Product deleted successfully.",
+        },
+      });
+    } catch (error) {
+      console.error("[seller/products/delete] error", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to delete seller product.",
+      });
+    }
+  }
+);
+
+router.post(
+  "/stores/:storeId/products/import",
+  requireSellerStoreAccess(["PRODUCT_CREATE"]),
+  upload.single("file"),
+  async (req, res) => {
+    try {
+      const sellerAccess = (req as any).sellerAccess;
+      const storeId = Number(req.params.storeId);
+      const actorUserId = Number((req as any).user?.id || 0);
+      const items = parseSellerImportPayload(req.file);
+
+      if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({
+          success: false,
+          code: "SELLER_PRODUCT_IMPORT_EMPTY",
+          message: "Import file must contain at least one product row.",
+        });
+      }
+
+      let created = 0;
+      let failed = 0;
+      const errors: Array<{ row: number; slug: string | null; message: string }> = [];
+
+      for (let index = 0; index < items.length; index += 1) {
+        const rawRow = items[index];
+
+        try {
+          const row = normalizeSellerImportRow(rawRow);
+
+          if (row.storeId && row.storeId !== storeId) {
+            throw new Error(
+              `Row storeId ${row.storeId} does not match the active seller store ${storeId}.`
+            );
+          }
+
+          if (!row.name) {
+            throw new Error("Imported seller products require `title` or `name`.");
+          }
+
+          if (typeof row.price === "undefined") {
+            throw new Error("Imported seller products require `price`.");
+          }
+
+          const resolvedCategoryId = await resolveSellerImportCategoryId({
+            categoryId: row.categoryId,
+            categoryCode: row.categoryCode,
+            categoryName: row.categoryName,
+          });
+
+          if (!resolvedCategoryId) {
+            throw new Error(
+              "Imported seller products require `categoryId`, `categoryCode`, `categoryName`, or `category`."
+            );
+          }
+
+          const payload = await parseSellerProductDraftPayload({
+            name: row.name,
+            slug: row.slug || row.name,
+            sku: row.sku,
+            barcode: row.barcode,
+            description: row.description,
+            price: row.price,
+            salePrice: row.salePrice,
+            stock: row.stock,
+            categoryIds: [resolvedCategoryId],
+            defaultCategoryId: resolvedCategoryId,
+            imageUrls: row.imageUrls,
+            tags: row.tags,
+          });
+
+          const nextSlug = await resolveUniqueProductSlug(payload.slug || payload.name);
+          const nextSku = await resolveUniqueImportedSku(payload.sku);
+
+          const createdProduct = await sequelize.transaction(async (transaction) => {
+            const createdProduct = await Product.create(
+              {
+                name: payload.name,
+                slug: nextSlug,
+                description: payload.description || undefined,
+                sku: nextSku,
+                barcode: payload.barcode,
+                status: "draft",
+                isPublished: false,
+                sellerSubmissionStatus: "none",
+                sellerSubmittedAt: null,
+                sellerSubmittedByUserId: null,
+                sellerRevisionRequestedAt: null,
+                sellerRevisionRequestedByUserId: null,
+                sellerRevisionNote: null,
+                price: payload.price ?? 0,
+                salePrice:
+                  typeof payload.salePrice === "undefined" ? null : payload.salePrice,
+                stock: payload.stock ?? 0,
+                categoryId: payload.categoryId,
+                defaultCategoryId: payload.defaultCategoryId,
+                promoImagePath: Array.isArray(payload.imageUrls)
+                  ? payload.imageUrls[0] || null
+                  : null,
+                imagePaths: Array.isArray(payload.imageUrls) ? payload.imageUrls : [],
+                tags: Array.isArray(payload.tags) ? payload.tags : undefined,
+                userId: actorUserId,
+                storeId,
+              } as any,
+              { transaction }
+            );
+
+            if (payload.categoryIds.length > 0) {
+              await syncProductCategoryAssignments(
+                Number((createdProduct as any).id),
+                payload.categoryIds,
+                transaction
+              );
+            }
+
+            return Product.findByPk(Number((createdProduct as any).id), {
+              transaction,
+            });
+          });
+
+          await logProductActivity({
+            storeId,
+            entityId: Number((createdProduct as any)?.id || 0),
+            action: PRODUCT_ACTIVITY_LOG_ACTIONS.IMPORTED,
+            actorType: "seller",
+            actorId: actorUserId,
+            after: createdProduct,
+            metadata: {
+              source: "import",
+              importFormat: String(req.file?.originalname || "").toLowerCase().endsWith(".json")
+                ? "json"
+                : "csv",
+              lane: "seller",
+            },
+          });
+          created += 1;
+        } catch (error: any) {
+          failed += 1;
+          errors.push({
+            row: index + 1,
+            slug:
+              nullableString(rawRow?.slug ?? rawRow?.name ?? rawRow?.title ?? rawRow?.productName) ||
+              null,
+            message: error?.message || "Import row failed.",
+          });
+        }
+      }
+
+      const storeContext = await loadSellerStorefrontVisibilityContext(storeId);
+
+      return res.json({
+        success: true,
+        data: {
+          totalRows: items.length,
+          created,
+          failed,
+          errors,
+          governance: buildCatalogGovernance(sellerAccess),
+          storefrontVisibility: {
+            storeStatus: storeContext.status,
+            operational: storeContext.isOperational,
+          },
+        },
+      });
+    } catch (error) {
+      const status = Number((error as any)?.status || 500);
+      if (status >= 400 && status < 500) {
+        return res.status(status).json({
+          success: false,
+          code: (error as any)?.code || "SELLER_PRODUCT_IMPORT_FAILED",
+          message: (error as any)?.message || "Failed to import seller products.",
+        });
+      }
+
+      console.error("[seller/products/import] error", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to import seller products.",
       });
     }
   }
@@ -2266,7 +3524,21 @@ router.post(
           continue;
         }
 
+        const beforeSnapshot = product.get?.({ plain: true }) ?? product;
         await product.update(buildSellerBulkSubmissionPatch(actorUserId) as any);
+        await logProductActivity({
+          storeId,
+          entityId: id,
+          action: PRODUCT_ACTIVITY_LOG_ACTIONS.SUBMITTED_FOR_REVIEW,
+          actorType: "seller",
+          actorId: actorUserId,
+          before: beforeSnapshot,
+          after: product,
+          metadata: {
+            source: action === "resubmit_review" ? "resubmit" : "bulk_submit",
+            lane: "seller",
+          },
+        });
 
         results.push({
           id,
@@ -2334,14 +3606,17 @@ router.post(
       }
 
       const filters = parseSellerProductsFilterInput(req.body?.filters);
-      const where = buildSellerProductsWhere({
+      const format = normalizeSellerExportFormat(req.body?.format);
+      const where = await buildSellerProductsWhere({
         storeId,
         storeStatus: storeContext.status,
         storefrontOperational: storeContext.isOperational,
         ...filters,
         ids,
       });
-      const rows = await fetchSellerProductListRows(where);
+      const rows = await fetchSellerProductListRows(where, {
+        sort: filters.sort,
+      });
 
       if (hasSelectedIds) {
         const foundIds = new Set(
@@ -2359,9 +3634,36 @@ router.post(
         }
       }
 
-      const csv = `\uFEFF${buildSellerProductsCsv(rows, sellerAccess, storeContext)}`;
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
       const scopeLabel = hasSelectedIds ? "selected" : "filtered";
+      if (format === "json") {
+        const payload = {
+          format: "seller-products.v1",
+          exportedAt: new Date().toISOString(),
+          total: rows.length,
+          filters: {
+            keyword: filters.keyword || null,
+            categoryIds: filters.categoryIds,
+            status: filters.status || null,
+            published: typeof filters.published === "boolean" ? filters.published : null,
+            submissionStatus: filters.submissionStatus || null,
+            visibilityState: filters.visibilityState || null,
+            sort: filters.sort || null,
+          },
+          items: rows.map((product) =>
+            toSellerProductExportItem(product, sellerAccess, storeContext)
+          ),
+        };
+
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="seller-products-${storeId}-${scopeLabel}-${timestamp}.json"`
+        );
+        return res.status(200).send(JSON.stringify(payload, null, 2));
+      }
+
+      const csv = `\uFEFF${buildSellerProductsCsv(rows, sellerAccess, storeContext)}`;
 
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader(
@@ -2392,15 +3694,18 @@ router.get(
       const limit = parsePositiveInt(req.query.limit, 20, 1, 50);
       const offset = (page - 1) * limit;
       const keyword = normalizeString(req.query.keyword);
+      const categoryIds = normalizePositiveIdFilterList(req.query.categoryIds, 50);
       const status = normalizeString(req.query.status).toLowerCase();
       const published = parseBooleanFilter(req.query.published);
       const submissionStatus = normalizeSellerSubmissionFilter(req.query.submissionStatus);
       const visibilityState = normalizeVisibilityStateFilter(req.query.visibilityState);
-      const where = buildSellerProductsWhere({
+      const sort = normalizeSellerSort(req.query.sort);
+      const where = await buildSellerProductsWhere({
         storeId,
         storeStatus: storeContext.status,
         storefrontOperational: storeContext.isOperational,
         keyword,
+        categoryIds,
         status,
         published,
         submissionStatus,
@@ -2446,7 +3751,7 @@ router.get(
               required: false,
             },
           ],
-          order: [["updatedAt", "DESC"]],
+          order: buildSellerProductsOrder(sort),
           limit,
           offset,
           distinct: true,
@@ -2465,10 +3770,12 @@ router.get(
           summary,
           filters: {
             keyword,
+            categoryIds,
             status: allowedStatuses.has(status) ? status : "",
             published,
             submissionStatus,
             visibilityState,
+            sort,
           },
           pagination: {
             page,

@@ -439,7 +439,12 @@ export default function ProductForm({ mode = "page", onClose, onSuccess, product
   const attributesQuery = useQuery({
     queryKey: ["admin-product-attributes"],
     queryFn: async () => {
-      const response = await fetchAdminAttributes();
+        const response = await fetchAdminAttributes({
+          scope: "global",
+          status: "active",
+          published: true,
+          limit: 250,
+        });
       return Array.isArray(response?.data) ? response.data : [];
     },
   });

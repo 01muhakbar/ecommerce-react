@@ -6,6 +6,7 @@ import { formatCurrency } from "../../utils/format.js";
 import { resolveProductImageUrl } from "../../utils/productImage.js";
 import { resolveAssetUrl } from "../../lib/assetUrl.js";
 import { productHasVariantSelections } from "../../utils/publicProductVariations.js";
+import VariantQuickAddModal from "../store/VariantQuickAddModal.jsx";
 
 const FALLBACK_IMAGE = "/demo/placeholder-product.svg";
 
@@ -36,6 +37,7 @@ export default function ProductCardKacha({ product }) {
   );
   const [imageSrc, setImageSrc] = useState(resolvedSrc || FALLBACK_IMAGE);
   const [isAdding, setIsAdding] = useState(false);
+  const [isVariantModalOpen, setIsVariantModalOpen] = useState(false);
   const timerRef = useRef(null);
 
   const productName = product?.name || product?.title || "Product";
@@ -80,7 +82,10 @@ export default function ProductCardKacha({ product }) {
   const handleAdd = (event) => {
     event.preventDefault();
     event.stopPropagation();
-    if (hasVariants) return;
+    if (hasVariants) {
+      setIsVariantModalOpen(true);
+      return;
+    }
     if (isAdding || !product?.id || !isPurchasable) return;
     setIsAdding(true);
     add(product.id, 1, {
@@ -139,19 +144,19 @@ export default function ProductCardKacha({ product }) {
               onClick={handleAdd}
               aria-label={
                 hasVariants
-                  ? "Select options on the product page"
+                  ? "Select variant options"
                   : !isPurchasable
                     ? "Unavailable"
                     : "Add to cart"
               }
               title={
                 hasVariants
-                  ? "Select options on the product page"
+                  ? "Select variant options"
                   : !isPurchasable
                     ? purchaseLabel || "Unavailable"
                     : "Add to cart"
               }
-              disabled={isAdding || isLoading || !isPurchasable || hasVariants}
+              disabled={isAdding || isLoading || !isPurchasable}
               className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-70 sm:h-10 sm:w-10"
             >
               {!isPurchasable ? "!" : isAdding ? "✓" : <ShoppingCart className="h-4.5 w-4.5" />}
@@ -186,6 +191,12 @@ export default function ProductCardKacha({ product }) {
           ) : null}
         </div>
       </div>
+      <VariantQuickAddModal
+        open={isVariantModalOpen}
+        onClose={() => setIsVariantModalOpen(false)}
+        product={product}
+        fallbackImageSrc={imageSrc}
+      />
     </article>
   );
 }

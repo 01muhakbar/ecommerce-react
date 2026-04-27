@@ -18,7 +18,6 @@ import {
   ChevronDown,
   Copy,
   Download,
-  MoreHorizontal,
   Pencil,
   Plus,
   RotateCcw,
@@ -29,6 +28,11 @@ import {
   X,
 } from "lucide-react";
 import ProductForm from "./ProductForm.jsx";
+import ProductFilterBar from "../../components/Products/ProductFilterBar.jsx";
+import ProductInventoryBadge from "../../components/Products/ProductInventoryBadge.jsx";
+import ProductManagementHeader from "../../components/Products/ProductManagementHeader.jsx";
+import ProductPublishedToggle from "../../components/Products/ProductPublishedToggle.jsx";
+import ProductRowActionsMenu from "../../components/Products/ProductRowActionsMenu.jsx";
 
 const FALLBACK_THUMBNAIL = "/demo/placeholder-product.svg";
 const MAX_IMPORT_FILE_SIZE = 2 * 1024 * 1024;
@@ -1203,16 +1207,11 @@ export default function AdminProductsPage() {
         </div>
       ) : null}
 
-      <div className="rounded-[18px] border border-slate-200 bg-white px-5 py-3 shadow-sm">
-        <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-          <div className="min-w-0 flex-1 space-y-1">
-            <h1 className="text-[24px] font-semibold tracking-tight text-slate-900">Products</h1>
-            <p className="whitespace-nowrap text-[12px] leading-4 text-slate-500">
-              Manage your products inventory
-            </p>
-          </div>
-
-          <div className="flex w-full flex-wrap items-center justify-end gap-1 xl:w-auto xl:flex-nowrap xl:gap-1 xl:shrink-0">
+      <ProductManagementHeader
+        title="Products"
+        subtitle="Manage your products inventory"
+        subtitleClassName="whitespace-nowrap"
+      >
               <div className="relative" data-products-export-menu>
                 <button
                   type="button"
@@ -1369,12 +1368,10 @@ export default function AdminProductsPage() {
                 <Plus className="h-3.5 w-3.5" />
                 Add Product
               </button>
-          </div>
-        </div>
-      </div>
+      </ProductManagementHeader>
 
-      <div className="rounded-[18px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
-        <div className="flex flex-col gap-1.5 xl:flex-row xl:items-center xl:justify-between">
+      <ProductFilterBar
+        controls={
           <div className="grid min-w-0 flex-1 gap-1 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,0.62fr)_minmax(0,0.62fr)]">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -1530,8 +1527,9 @@ export default function AdminProductsPage() {
               ) : null}
             </div>
           </div>
-
-          <div className="flex shrink-0 items-center justify-end gap-2">
+        }
+        actions={
+          <>
             <button
               type="button"
               onClick={resetFilters}
@@ -1602,14 +1600,10 @@ export default function AdminProductsPage() {
                 </div>
               ) : null}
             </div>
-          </div>
-        </div>
-
-        {categoriesQuery.isError ? (
-          <p className="mt-2 text-xs text-rose-500">Failed to load categories.</p>
-        ) : null}
-
-      </div>
+          </>
+        }
+        footer={categoriesQuery.isError ? <p className="text-xs text-rose-500">Failed to load categories.</p> : null}
+      />
       {productsQuery.isLoading ? (
         <div className="rounded-[18px] border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
           Loading products...
@@ -1778,11 +1772,10 @@ export default function AdminProductsPage() {
 
                       {columnVisibility.status ? (
                         <td className={tableCell}>
-                          <span
-                            className={`inline-flex min-h-5 items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${inventoryMeta.className}`}
-                          >
-                            {inventoryMeta.label}
-                          </span>
+                          <ProductInventoryBadge
+                            label={inventoryMeta.label}
+                            className={inventoryMeta.className}
+                          />
                         </td>
                       ) : null}
 
@@ -1801,82 +1794,65 @@ export default function AdminProductsPage() {
 
                       {columnVisibility.published ? (
                         <td className={`${tableCell} text-center`}>
-                          <button
-                            type="button"
+                          <ProductPublishedToggle
+                            checked={isPublished}
                             onClick={() => handleTogglePublished(product)}
                             disabled={publishToggleDisabled}
-                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${
-                              isPublished ? "bg-emerald-500" : "bg-slate-300"
-                            } disabled:cursor-not-allowed disabled:opacity-60`}
-                            aria-label={publishToggleTitle}
-                            aria-busy={publishingIds.has(productId)}
+                            ariaLabel={publishToggleTitle}
                             title={publishToggleTitle}
-                          >
-                            <span
-                              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
-                                isPublished ? "translate-x-4" : "translate-x-0.5"
-                              }`}
-                            />
-                          </button>
+                            busy={publishingIds.has(productId)}
+                          />
                         </td>
                       ) : null}
 
                       {columnVisibility.actions ? (
                         <td className={`${tableCell} text-center`}>
-                          <div className="relative inline-flex" data-products-row-menu>
+                          <ProductRowActionsMenu
+                            open={rowMenuOpen}
+                            onToggle={() =>
+                              setRowMenuOpenId((prev) => (prev === productId ? null : productId))
+                            }
+                            containerProps={{ "data-products-row-menu": true }}
+                          >
                             <button
                               type="button"
-                              onClick={() =>
-                                setRowMenuOpenId((prev) => (prev === productId ? null : productId))
-                              }
-                              className="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
-                              title="Row actions"
+                              onClick={() => {
+                                closeFloatingMenus();
+                                openProductDetailPage(product.id);
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50"
                             >
-                              <MoreHorizontal className="h-3 w-3" />
+                              <Search className="h-3.5 w-3.5" />
+                              View
                             </button>
-                            {rowMenuOpen ? (
-                              <div className="absolute right-0 top-full z-20 mt-2 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    closeFloatingMenus();
-                                    openProductDetailPage(product.id);
-                                  }}
-                                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50"
-                                >
-                                  <Search className="h-3.5 w-3.5" />
-                                  View
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDuplicateProduct(product)}
-                                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50"
-                                >
-                                  <Copy className="h-3.5 w-3.5" />
-                                  Duplicate
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    closeFloatingMenus();
-                                    openEditDrawer(product.id);
-                                  }}
-                                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50"
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                  Edit
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteOne(product.id)}
-                                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-rose-600 transition hover:bg-rose-50"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                  Delete
-                                </button>
-                              </div>
-                            ) : null}
-                          </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDuplicateProduct(product)}
+                              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                            >
+                              <Copy className="h-3.5 w-3.5" />
+                              Duplicate
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                closeFloatingMenus();
+                                openEditDrawer(product.id);
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteOne(product.id)}
+                              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-rose-600 transition hover:bg-rose-50"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Delete
+                            </button>
+                          </ProductRowActionsMenu>
                         </td>
                       ) : null}
                     </tr>

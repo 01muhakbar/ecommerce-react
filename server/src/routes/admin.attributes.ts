@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Request, Router } from "express";
 import multer from "multer";
 import { Op, QueryTypes, Transaction } from "sequelize";
 import { z } from "zod";
@@ -19,6 +19,13 @@ type AttributeRow = {
   displayName: string | null;
   type: AttributeType;
   published: boolean;
+  scope: "global" | "store";
+  storeId: number | null;
+  createdByRole: "admin" | "seller";
+  createdByUserId: number | null;
+  status: "active" | "archived";
+  storeName: string | null;
+  storeSlug: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 };
@@ -59,6 +66,13 @@ const toTrimmedText = (value: unknown) => String(value ?? "").trim();
 
 const createHttpError = (statusCode: number, message: string) =>
   Object.assign(new Error(message), { statusCode });
+
+const isSuperAdminRequest = (req: Request) => {
+  const normalized = String((req as any).user?.role || "")
+    .trim()
+    .toLowerCase();
+  return ["super_admin", "superadmin", "super-admin", "super admin"].includes(normalized);
+};
 
 const parseId = (value: unknown) => {
   const id = Number(value);
@@ -191,6 +205,14 @@ const normalizeAttributeRow = (row: any): AttributeRow => ({
   displayName: toTrimmedText(row?.displayName) || null,
   type: normalizeAttributeType(row?.type, "dropdown") || "dropdown",
   published: Boolean(row?.published),
+  scope: String(row?.scope || "global").trim().toLowerCase() === "store" ? "store" : "global",
+  storeId: parseId(row?.storeId) ?? null,
+  createdByRole:
+    String(row?.createdByRole || "admin").trim().toLowerCase() === "seller" ? "seller" : "admin",
+  createdByUserId: parseId(row?.createdByUserId) ?? null,
+  status: String(row?.status || "active").trim().toLowerCase() === "archived" ? "archived" : "active",
+  storeName: toTrimmedText(row?.storeName) || null,
+  storeSlug: toTrimmedText(row?.storeSlug) || null,
   createdAt: row?.createdAt ?? null,
   updatedAt: row?.updatedAt ?? null,
 });
@@ -208,10 +230,23 @@ const csvRow = (values: unknown[]) => values.map((value) => csvEscape(value)).jo
 const parseListOptions = (query: Record<string, unknown>) => {
   const q = toTrimmedText(query.q);
   const type = toTrimmedText(query.type).toLowerCase();
+  const scope = toTrimmedText(query.scope).toLowerCase();
+  const status = toTrimmedText(query.status).toLowerCase();
+  const createdByRole = toTrimmedText(query.createdByRole).toLowerCase();
+  const storeId = parseId(query.storeId);
   const publishedValue = parseOptionalBoolean(query.published);
 
   if (type && !(ATTRIBUTE_TYPES as readonly string[]).includes(type)) {
     throw createHttpError(400, `Type filter must be one of: ${ATTRIBUTE_TYPES.join(", ")}.`);
+  }
+  if (scope && !["global", "store"].includes(scope)) {
+    throw createHttpError(400, "Scope filter must be global or store.");
+  }
+  if (status && !["active", "archived"].includes(status)) {
+    throw createHttpError(400, "Status filter must be active or archived.");
+  }
+  if (createdByRole && !["admin", "seller"].includes(createdByRole)) {
+    throw createHttpError(400, "Created by filter must be admin or seller.");
   }
   if (hasOwn(query, "published") && typeof publishedValue !== "boolean") {
     throw createHttpError(400, "Published filter must be a boolean.");
@@ -258,6 +293,10 @@ const parseListOptions = (query: Record<string, unknown>) => {
   return {
     q,
     type: (type || null) as AttributeType | null,
+    scope: (scope || null) as "global" | "store" | null,
+    status: (status || null) as "active" | "archived" | null,
+    createdByRole: (createdByRole || null) as "admin" | "seller" | null,
+    storeId,
     published: typeof publishedValue === "boolean" ? publishedValue : null,
     paginate,
     page,
@@ -279,6 +318,7 @@ const loadAttributeValuesByIds = async (
       SELECT id, attribute_id AS attributeId, value
       FROM attribute_values
       WHERE attribute_id IN (${buildSqlInClause(attributeIds)})
+        AND status = 'active'
       ORDER BY value ASC
     `,
     {
@@ -322,15 +362,23 @@ const loadAttributeRowById = async (id: number, transaction?: Transaction) => {
   const rows = await sequelize.query(
     `
       SELECT
-        id,
-        name,
-        display_name AS displayName,
-        type,
-        published,
-        created_at AS createdAt,
-        updated_at AS updatedAt
-      FROM attributes
-      WHERE id = ?
+        a.id,
+        a.name,
+        a.display_name AS displayName,
+        a.type,
+        a.published,
+        a.scope,
+        a.store_id AS storeId,
+        a.created_by_role AS createdByRole,
+        a.created_by_user_id AS createdByUserId,
+        a.status,
+        s.name AS storeName,
+        s.slug AS storeSlug,
+        a.created_at AS createdAt,
+        a.updated_at AS updatedAt
+      FROM attributes a
+      LEFT JOIN stores s ON s.id = a.store_id
+      WHERE a.id = ?
       LIMIT 1
     `,
     {
@@ -367,6 +415,22 @@ const listAttributeReadModels = async (
     whereClauses.push("a.type = ?");
     replacements.push(options.type);
   }
+  if (options.scope) {
+    whereClauses.push("a.scope = ?");
+    replacements.push(options.scope);
+  }
+  if (options.status) {
+    whereClauses.push("a.status = ?");
+    replacements.push(options.status);
+  }
+  if (options.createdByRole) {
+    whereClauses.push("a.created_by_role = ?");
+    replacements.push(options.createdByRole);
+  }
+  if (options.storeId) {
+    whereClauses.push("a.store_id = ?");
+    replacements.push(options.storeId);
+  }
   if (typeof options.published === "boolean") {
     whereClauses.push("a.published = ?");
     replacements.push(options.published ? 1 : 0);
@@ -394,11 +458,22 @@ const listAttributeReadModels = async (
           a.display_name AS displayName,
           a.type,
           a.published,
+          a.scope,
+          a.store_id AS storeId,
+          a.created_by_role AS createdByRole,
+          a.created_by_user_id AS createdByUserId,
+          a.status,
+          s.name AS storeName,
+          s.slug AS storeSlug,
           a.created_at AS createdAt,
           a.updated_at AS updatedAt
         FROM attributes a
+        LEFT JOIN stores s ON s.id = a.store_id
         ${whereSql}
-        ORDER BY ${options.sortColumn} ${options.sortDirection}, a.id ASC
+        ORDER BY
+          CASE WHEN a.scope = 'store' THEN 0 ELSE 1 END ASC,
+          ${options.sortColumn} ${options.sortDirection},
+          a.id ASC
         ${options.paginate ? "LIMIT ? OFFSET ?" : ""}
       `,
       {
@@ -658,12 +733,16 @@ const parseImportPayload = (req: any) => {
   if (req.file?.buffer) {
     try {
       const parsed = JSON.parse(req.file.buffer.toString("utf8"));
+      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed?.data)) return parsed.data;
+      if (Array.isArray(parsed?.items)) return parsed.items;
       return parsed;
     } catch {
       throw createHttpError(400, "Invalid JSON file.");
     }
   }
   if (Array.isArray(req.body)) return req.body;
+  if (Array.isArray(req.body?.data)) return req.body.data;
   if (Array.isArray(req.body?.items)) return req.body.items;
   return req.body;
 };
@@ -674,7 +753,7 @@ const upsertImportedAttribute = async (
 ) => {
   const parsed = parseAttributeInput(rowInput, { requireName: true });
   const existing = await Attribute.findOne({
-    where: { name: parsed.name! } as any,
+    where: { name: parsed.name!, scope: "global" } as any,
     transaction,
   });
 
@@ -685,6 +764,11 @@ const upsertImportedAttribute = async (
         displayName: parsed.displayNameProvided ? parsed.displayName : parsed.name!,
         type: parsed.type || "dropdown",
         published: parsed.publishedProvided ? Boolean(parsed.published) : true,
+        scope: "global",
+        storeId: null,
+        createdByRole: "admin",
+        createdByUserId: null,
+        status: "active",
       } as any,
       { transaction }
     );
@@ -734,9 +818,13 @@ router.get("/", async (req, res, next) => {
 // GET /api/admin/attributes/export?type=csv|json
 router.get("/export", async (req, res, next) => {
   try {
-    const exportType = String(req.query.type || "json").trim().toLowerCase() === "csv" ? "csv" : "json";
+    const exportType =
+      String(req.query.format || req.query.type || "json").trim().toLowerCase() === "csv"
+        ? "csv"
+        : "json";
     const exportFilters = { ...(req.query as Record<string, unknown>) };
     delete exportFilters.type;
+    delete exportFilters.format;
     const result = await listAttributeReadModels({
       ...exportFilters,
       page: undefined,
@@ -748,6 +836,10 @@ router.get("/export", async (req, res, next) => {
     if (exportType === "csv") {
       const header = csvRow([
         "id",
+        "scope",
+        "storeId",
+        "createdByRole",
+        "status",
         "name",
         "displayName",
         "type",
@@ -758,6 +850,10 @@ router.get("/export", async (req, res, next) => {
       const body = rows.map((row) =>
         csvRow([
           row.id,
+          row.scope,
+          row.storeId ?? "",
+          row.createdByRole,
+          row.status,
           row.name,
           row.displayName || "",
           row.type,
@@ -838,43 +934,127 @@ router.post("/import", upload.single("file"), async (req, res, next) => {
 
 // POST /api/admin/attributes/bulk
 router.post("/bulk", async (req, res, next) => {
+  const transaction = await sequelize.transaction();
   try {
+    const actorIsSuperAdmin = isSuperAdminRequest(req);
     const { action, ids } = bulkActionSchema.parse(req.body || {});
     const uniqueIds = Array.from(new Set(ids.map((value) => Number(value))));
+    const attributes = await Attribute.findAll({
+      where: {
+        id: {
+          [Op.in]: uniqueIds,
+        },
+      } as any,
+      transaction,
+    });
+    const globalIds = attributes
+      .filter((attribute) => String((attribute as any).get?.("scope") ?? attribute.getDataValue("scope") ?? "global") === "global")
+      .map((attribute) => Number((attribute as any).get?.("id") ?? attribute.getDataValue("id") ?? 0))
+      .filter(Boolean);
+    const storeIds = attributes
+      .filter((attribute) => String((attribute as any).get?.("scope") ?? attribute.getDataValue("scope") ?? "global") === "store")
+      .map((attribute) => Number((attribute as any).get?.("id") ?? attribute.getDataValue("id") ?? 0))
+      .filter(Boolean);
 
     if (action === "delete") {
-      await assertAttributesUnused(uniqueIds);
-      const [_rows, meta] = await sequelize.query(
-        `
-          DELETE FROM attributes
-          WHERE id IN (${buildSqlInClause(uniqueIds)})
-        `,
-        {
-          replacements: uniqueIds,
+      if (globalIds.length > 0) {
+        await assertAttributesUnused(globalIds);
+        await sequelize.query(
+          `
+            DELETE FROM attributes
+            WHERE id IN (${buildSqlInClause(globalIds)})
+          `,
+          {
+            replacements: globalIds,
+            transaction,
+          }
+        );
+      }
+      if (storeIds.length > 0) {
+        if (!actorIsSuperAdmin) {
+          await transaction.rollback();
+          return res.status(403).json({
+            success: false,
+            message: "Only Super Admin can archive seller attributes from Admin.",
+          });
         }
-      );
+        await Attribute.update(
+          { status: "archived", published: false } as any,
+          {
+            where: {
+              id: {
+                [Op.in]: storeIds,
+              },
+            } as any,
+            transaction,
+          }
+        );
+        await sequelize.query(
+          `
+            UPDATE attribute_values
+            SET status = 'archived', updated_at = NOW()
+            WHERE attribute_id IN (${buildSqlInClause(storeIds)})
+          `,
+          {
+            replacements: storeIds,
+            transaction,
+          }
+        );
+      }
+      await transaction.commit();
       return res.json({
         success: true,
-        affected: Number((meta as any)?.affectedRows || 0),
+        affected: uniqueIds.length,
       });
     }
 
-    const [updatedCount] = await Attribute.update(
-      { published: action === "publish" } as any,
-      {
-        where: {
-          id: {
-            [Op.in]: uniqueIds,
-          },
-        } as any,
-      }
-    );
+    let affected = 0;
+    if (globalIds.length > 0) {
+      const [updatedCount] = await Attribute.update(
+        { published: action === "publish" } as any,
+        {
+          where: {
+            id: {
+              [Op.in]: globalIds,
+            },
+            scope: "global",
+          } as any,
+          transaction,
+        }
+      );
+      affected += Number(updatedCount || 0);
+    }
 
+    if (storeIds.length > 0) {
+      if (!actorIsSuperAdmin) {
+        await transaction.rollback();
+        return res.status(403).json({
+          success: false,
+          message: "Only Super Admin can update seller attributes from Admin.",
+        });
+      }
+      const [updatedCount] = await Attribute.update(
+        { published: action === "publish" } as any,
+        {
+          where: {
+            id: {
+              [Op.in]: storeIds,
+            },
+            scope: "store",
+          } as any,
+          transaction,
+        }
+      );
+      affected += Number(updatedCount || 0);
+    }
+
+    await transaction.commit();
     return res.json({
       success: true,
-      affected: Number(updatedCount || 0),
+      affected,
     });
   } catch (error: any) {
+    await transaction.rollback();
     if ((error as any)?.name === "ZodError") {
       return res.status(400).json({
         success: false,
@@ -903,6 +1083,11 @@ router.post("/", async (req, res, next) => {
         displayName: parsed.displayNameProvided ? parsed.displayName : parsed.name!,
         type: parsed.type || "dropdown",
         published: parsed.publishedProvided ? Boolean(parsed.published) : true,
+        scope: "global",
+        storeId: null,
+        createdByRole: "admin",
+        createdByUserId: null,
+        status: "active",
       } as any,
       { transaction }
     );
@@ -930,6 +1115,7 @@ router.post("/", async (req, res, next) => {
 router.patch("/:id", async (req, res, next) => {
   const transaction = await sequelize.transaction();
   try {
+    const actorIsSuperAdmin = isSuperAdminRequest(req);
     const id = parseId(req.params.id);
     if (!id) {
       await transaction.rollback();
@@ -940,6 +1126,16 @@ router.patch("/:id", async (req, res, next) => {
     if (!attribute) {
       await transaction.rollback();
       return res.status(404).json({ success: false, message: "Attribute not found" });
+    }
+    const scope = String((attribute as any).get?.("scope") ?? attribute.getDataValue("scope") ?? "global")
+      .trim()
+      .toLowerCase();
+    if (scope === "store" && !actorIsSuperAdmin) {
+      await transaction.rollback();
+      return res.status(403).json({
+        success: false,
+        message: "Only Super Admin can edit seller attributes from Admin.",
+      });
     }
 
     const parsed = parseAttributeInput(req.body, { requireName: false });
@@ -983,21 +1179,54 @@ router.patch("/:id", async (req, res, next) => {
 
 // DELETE /api/admin/attributes/:id
 router.delete("/:id", async (req, res, next) => {
+  const transaction = await sequelize.transaction();
   try {
+    const actorIsSuperAdmin = isSuperAdminRequest(req);
     const id = parseId(req.params.id);
     if (!id) {
+      await transaction.rollback();
       return res.status(400).json({ success: false, message: "Invalid attribute id" });
     }
 
-    const attribute = await Attribute.findByPk(id);
+    const attribute = await Attribute.findByPk(id, { transaction });
     if (!attribute) {
+      await transaction.rollback();
       return res.status(404).json({ success: false, message: "Attribute not found" });
     }
 
+    const scope = String((attribute as any).get?.("scope") ?? attribute.getDataValue("scope") ?? "global")
+      .trim()
+      .toLowerCase();
+    if (scope === "store") {
+      if (!actorIsSuperAdmin) {
+        await transaction.rollback();
+        return res.status(403).json({
+          success: false,
+          message: "Only Super Admin can archive seller attributes from Admin.",
+        });
+      }
+      await attribute.update({ status: "archived", published: false } as any, { transaction });
+      await sequelize.query(
+        `
+          UPDATE attribute_values
+          SET status = 'archived', updated_at = NOW()
+          WHERE attribute_id = ?
+        `,
+        {
+          replacements: [id],
+          transaction,
+        }
+      );
+      await transaction.commit();
+      return res.json({ success: true, archived: true });
+    }
+
     await assertAttributesUnused([id]);
-    await attribute.destroy();
+    await attribute.destroy({ transaction });
+    await transaction.commit();
     return res.json({ success: true });
   } catch (error: any) {
+    await transaction.rollback();
     const code = error?.original?.code || error?.parent?.code || error?.code;
     if (code === "ER_NO_SUCH_TABLE") {
       return res.status(200).json({

@@ -58,6 +58,11 @@ type VariantRecord = {
   image: string;
 };
 
+type ExpectedVariantLine = {
+  variant: VariantRecord;
+  qty: number;
+};
+
 class CookieClient {
   private cookie = "";
 
@@ -366,6 +371,30 @@ async function fetchCart(customerClient: CookieClient, label: string) {
   return Array.isArray(response.body?.Products) ? response.body.Products : [];
 }
 
+async function setCartItemQtyById(input: {
+  customerClient: CookieClient;
+  cartItemId: number;
+  qty: number;
+  label: string;
+}) {
+  const response = await input.customerClient.request(`/api/cart/items/by-id/${input.cartItemId}`, {
+    method: "PUT",
+    body: JSON.stringify({ qty: input.qty }),
+  });
+  assertStatus(response, 200, input.label);
+}
+
+async function removeCartItemById(input: {
+  customerClient: CookieClient;
+  cartItemId: number;
+  label: string;
+}) {
+  const response = await input.customerClient.request(`/api/cart/items/by-id/${input.cartItemId}`, {
+    method: "DELETE",
+  });
+  assertStatus(response, 200, input.label);
+}
+
 async function previewCheckout(customerClient: CookieClient, label: string) {
   const response = await customerClient.request("/api/checkout/preview", {
     method: "POST",
@@ -471,8 +500,17 @@ const sortByVariantLabel = (items: any[]) =>
 const normalizeCartSnapshotItems = (products: any[]) =>
   products.map((product: any) => {
     const cartItem = product?.CartItem ?? product?.cartItem ?? {};
+    const qty = toNumber(cartItem?.quantity, 0);
+    const unitPrice = toNumber(
+      cartItem?.unitSalePriceSnapshot ?? cartItem?.unitPriceSnapshot ?? product?.salePrice ?? product?.price,
+      0
+    );
     return {
+      cartItemId: toNumber(cartItem?.id, 0) || null,
       productId: toNumber(product?.id, 0),
+      qty,
+      price: unitPrice,
+      lineTotal: unitPrice * qty,
       variantKey: String(cartItem?.variantKey || "").trim() || null,
       variantLabel: String(cartItem?.variantLabel || "").trim() || null,
       variantSelections: Array.isArray(cartItem?.variantSelections)
@@ -480,6 +518,103 @@ const normalizeCartSnapshotItems = (products: any[]) =>
         : [],
     };
   });
+
+const buildExpectedVariantLine = (variant: VariantRecord, qty: number): ExpectedVariantLine => ({
+  variant,
+  qty,
+});
+
+const sortByVariantKey = (items: any[]) =>
+  [...items].sort((left, right) =>
+    String(left?.variantKey || "").localeCompare(String(right?.variantKey || ""))
+  );
+
+const resolveLineQty = (item: any) =>
+  toNumber(item?.qty ?? item?.quantity ?? item?.CartItem?.quantity, 0);
+
+const resolveLinePrice = (item: any) => {
+  const candidates = [
+    item?.price,
+    item?.priceSnapshot,
+    item?.unitSalePriceSnapshot,
+    item?.unitPriceSnapshot,
+  ];
+  for (const candidate of candidates) {
+    const value = Number(candidate);
+    if (Number.isFinite(value)) return value;
+  }
+  return 0;
+};
+
+const resolveLineTotal = (item: any) => {
+  const candidates = [item?.lineTotal, item?.totalPrice];
+  for (const candidate of candidates) {
+    const value = Number(candidate);
+    if (Number.isFinite(value)) return value;
+  }
+  return resolveLineQty(item) * resolveLinePrice(item);
+};
+
+const assertVariantLineDetails = (
+  items: any[],
+  expectedLines: ExpectedVariantLine[],
+  label: string,
+  options: { checkLineTotal?: boolean } = {}
+) => {
+  assert.equal(items.length, expectedLines.length, `${label}: item count mismatch`);
+  const actual = sortByVariantKey(items);
+  const expected = sortByVariantKey(
+    expectedLines.map((entry) => ({
+      variantKey: entry.variant.combinationKey,
+      variantLabel: entry.variant.combination,
+      variantSelections: entry.variant.selections,
+      qty: entry.qty,
+      price: entry.variant.salePrice,
+      lineTotal: entry.variant.salePrice * entry.qty,
+    }))
+  );
+
+  actual.forEach((item, index) => {
+    const expectedItem = expected[index];
+    assert.equal(
+      String(item?.variantKey || ""),
+      String(expectedItem.variantKey || ""),
+      `${label}: variantKey mismatch`
+    );
+    assert.equal(
+      String(item?.variantLabel || ""),
+      String(expectedItem.variantLabel || ""),
+      `${label}: variantLabel mismatch`
+    );
+    assert.deepEqual(
+      normalizeVariantSelectionsSnapshot(item?.variantSelections),
+      expectedItem.variantSelections,
+      `${label}: variantSelections mismatch for ${expectedItem.variantLabel}`
+    );
+    assert.equal(
+      resolveLineQty(item),
+      expectedItem.qty,
+      `${label}: qty mismatch for ${expectedItem.variantLabel}`
+    );
+    assert.equal(
+      resolveLinePrice(item),
+      expectedItem.price,
+      `${label}: price mismatch for ${expectedItem.variantLabel}`
+    );
+    if (options.checkLineTotal) {
+      assert.equal(
+        resolveLineTotal(item),
+        expectedItem.lineTotal,
+        `${label}: lineTotal mismatch for ${expectedItem.variantLabel}`
+      );
+    }
+  });
+};
+
+const findCartLineByVariant = (products: any[], variantKey: string) =>
+  normalizeCartSnapshotItems(products).find(
+    (item) => String(item?.variantKey || "") === String(variantKey || "")
+  ) || null;
 
 const normalizeVariantSelectionsSnapshot = (value: unknown) => {
   if (Array.isArray(value)) return value;
@@ -694,12 +829,197 @@ async function run() {
 
   const cartItems = await fetchCart(buyerClient, "fetch cart");
   assert.equal(cartItems.length, 2, "variant cart: expected two cart lines");
-  assertVariantSnapshotItems(
+  assertVariantLineDetails(
     normalizeCartSnapshotItems(cartItems),
-    product.variants,
-    "variant cart snapshot"
+    [
+      buildExpectedVariantLine(product.variants[0], 1),
+      buildExpectedVariantLine(product.variants[1], 1),
+    ],
+    "variant cart snapshot",
+    { checkLineTotal: true }
   );
   logPass("cart stores two variants of the same product separately");
+
+  const initialBlueLine = findCartLineByVariant(cartItems, product.variants[0].combinationKey);
+  const initialGreenLine = findCartLineByVariant(cartItems, product.variants[1].combinationKey);
+  const initialBlueCartItemId = toNumber(initialBlueLine?.cartItemId, 0);
+  const initialGreenCartItemId = toNumber(initialGreenLine?.cartItemId, 0);
+  assert.ok(initialBlueCartItemId > 0, "blue variant cartItemId missing");
+  assert.ok(initialGreenCartItemId > 0, "green variant cartItemId missing");
+
+  logStep("updating only one variant line by cartItemId");
+  await setCartItemQtyById({
+    customerClient: buyerClient,
+    cartItemId: initialBlueCartItemId,
+    qty: 3,
+    label: "set blue variant qty to 3",
+  });
+  const updatedCartItems = await fetchCart(buyerClient, "fetch cart after blue qty update");
+  assertVariantLineDetails(
+    normalizeCartSnapshotItems(updatedCartItems),
+    [
+      buildExpectedVariantLine(product.variants[0], 3),
+      buildExpectedVariantLine(product.variants[1], 1),
+    ],
+    "variant cart after qty update",
+    { checkLineTotal: true }
+  );
+  assert.equal(
+    toNumber(findCartLineByVariant(updatedCartItems, product.variants[0].combinationKey)?.cartItemId, 0),
+    initialBlueCartItemId,
+    "blue cartItemId should stay stable after qty update"
+  );
+  assert.equal(
+    toNumber(findCartLineByVariant(updatedCartItems, product.variants[1].combinationKey)?.cartItemId, 0),
+    initialGreenCartItemId,
+    "green cartItemId should stay stable after blue qty update"
+  );
+  logPass("qty update only mutates the targeted variant line");
+
+  logStep("removing only one variant line by cartItemId");
+  await removeCartItemById({
+    customerClient: buyerClient,
+    cartItemId: initialGreenCartItemId,
+    label: "remove green variant by cart item id",
+  });
+  const cartAfterRemove = await fetchCart(buyerClient, "fetch cart after green remove");
+  assertVariantLineDetails(
+    normalizeCartSnapshotItems(cartAfterRemove),
+    [buildExpectedVariantLine(product.variants[0], 3)],
+    "variant cart after removing sibling line",
+    { checkLineTotal: true }
+  );
+  assert.equal(
+    toNumber(findCartLineByVariant(cartAfterRemove, product.variants[0].combinationKey)?.cartItemId, 0),
+    initialBlueCartItemId,
+    "blue cartItemId should survive green line removal"
+  );
+  logPass("removing one variant line does not delete the sibling variant");
+
+  logStep("previewing checkout after sibling variant removal");
+  const singleVariantPreview = await previewCheckout(
+    buyerClient,
+    "variant checkout preview after remove"
+  );
+  const singleVariantPreviewGroups = Array.isArray(singleVariantPreview?.groups)
+    ? singleVariantPreview.groups
+    : [];
+  assert.equal(
+    singleVariantPreviewGroups.length,
+    1,
+    "single variant checkout preview: expected one store group"
+  );
+  const singleVariantPreviewItems = Array.isArray(singleVariantPreviewGroups[0]?.items)
+    ? singleVariantPreviewGroups[0].items
+    : [];
+  assertVariantLineDetails(
+    singleVariantPreviewItems,
+    [buildExpectedVariantLine(product.variants[0], 3)],
+    "single variant checkout preview snapshot",
+    { checkLineTotal: true }
+  );
+  logPass("checkout preview keeps the surviving variant line intact after sibling removal");
+
+  logStep("creating checkout order after sibling variant removal");
+  const singleVariantCheckoutOrder = await createCheckout(
+    buyerClient,
+    "variant checkout create after remove"
+  );
+  const singleVariantOrderId = toNumber(singleVariantCheckoutOrder?.orderId, 0);
+  const singleVariantInvoiceNo = String(
+    singleVariantCheckoutOrder?.invoiceNo || singleVariantCheckoutOrder?.ref || ""
+  );
+  assert.ok(singleVariantOrderId > 0, "single variant checkout create: orderId missing");
+  assert.ok(singleVariantInvoiceNo, "single variant checkout create: invoiceNo missing");
+  createdOrderIds.push(singleVariantOrderId);
+  const singleVariantCheckoutGroups = Array.isArray(singleVariantCheckoutOrder?.groups)
+    ? singleVariantCheckoutOrder.groups
+    : [];
+  assert.equal(
+    singleVariantCheckoutGroups.length,
+    1,
+    "single variant checkout create: expected one store group"
+  );
+  const singleVariantCheckoutItems = Array.isArray(singleVariantCheckoutGroups[0]?.items)
+    ? singleVariantCheckoutGroups[0].items
+    : [];
+  assertVariantLineDetails(
+    singleVariantCheckoutItems,
+    [buildExpectedVariantLine(product.variants[0], 3)],
+    "single variant checkout create snapshot",
+    { checkLineTotal: true }
+  );
+  const singleVariantSuborderId = toNumber(singleVariantCheckoutGroups[0]?.suborderId, 0);
+  assert.ok(singleVariantSuborderId > 0, "single variant checkout create: suborderId missing");
+
+  const singleVariantOrderItems = await OrderItem.findAll({
+    where: { orderId: singleVariantOrderId } as any,
+    order: [["id", "ASC"]],
+  });
+  assertVariantLineDetails(
+    singleVariantOrderItems as any[],
+    [buildExpectedVariantLine(product.variants[0], 3)],
+    "stored OrderItems single variant snapshot"
+  );
+
+  const singleVariantSuborderItems = await SuborderItem.findAll({
+    where: { suborderId: singleVariantSuborderId } as any,
+    order: [["id", "ASC"]],
+  });
+  assertVariantLineDetails(
+    singleVariantSuborderItems as any[],
+    [buildExpectedVariantLine(product.variants[0], 3)],
+    "stored SuborderItems single variant snapshot",
+    { checkLineTotal: true }
+  );
+
+  const buyerSingleVariantDetail = await fetchBuyerOrderDetail(
+    buyerClient,
+    singleVariantOrderId,
+    "buyer single variant order detail"
+  );
+  assertVariantLineDetails(
+    Array.isArray(buyerSingleVariantDetail?.items) ? buyerSingleVariantDetail.items : [],
+    [buildExpectedVariantLine(product.variants[0], 3)],
+    "buyer single variant order detail snapshot",
+    { checkLineTotal: true }
+  );
+
+  const sellerSingleVariantDetail = await fetchSellerOrderDetail(
+    sellerClient,
+    store.id,
+    singleVariantSuborderId,
+    "seller single variant order detail"
+  );
+  assertVariantLineDetails(
+    Array.isArray(sellerSingleVariantDetail?.items) ? sellerSingleVariantDetail.items : [],
+    [buildExpectedVariantLine(product.variants[0], 3)],
+    "seller single variant order detail snapshot",
+    { checkLineTotal: true }
+  );
+
+  const adminSingleVariantDetail = await fetchAdminOrderDetail(
+    adminClient,
+    singleVariantInvoiceNo,
+    "admin single variant order detail"
+  );
+  assertVariantLineDetails(
+    Array.isArray(adminSingleVariantDetail?.items) ? adminSingleVariantDetail.items : [],
+    [buildExpectedVariantLine(product.variants[0], 3)],
+    "admin single variant order detail snapshot",
+    { checkLineTotal: true }
+  );
+
+  const cartAfterSingleVariantCheckout = await fetchCart(
+    buyerClient,
+    "fetch cart after single variant checkout"
+  );
+  assert.equal(
+    cartAfterSingleVariantCheckout.length,
+    0,
+    "single variant checkout cleanup: cart should be empty"
+  );
+  logPass("checkout after sibling removal preserves variant snapshot, qty, price, and clears cart safely");
 
   logStep("rejecting an invalid variant selection before checkout");
   const invalidVariantAdd = await addVariantToCartExpectFailure({
@@ -717,6 +1037,19 @@ async function run() {
   logPass("invalid variant selection is rejected before checkout");
 
   logStep("blocking checkout when a cart line loses its variant snapshot");
+  await resetCartForUser(buyerUser.id);
+  await addVariantToCart({
+    customerClient: buyerClient,
+    productId: product.id,
+    variant: product.variants[0],
+    label: "prepare corrupted blue variant",
+  });
+  await addVariantToCart({
+    customerClient: buyerClient,
+    productId: product.id,
+    variant: product.variants[1],
+    label: "prepare corrupted green variant",
+  });
   const corruptedCartLine = await CartItem.findOne({
     where: {
       productId: product.id,
@@ -781,7 +1114,15 @@ async function run() {
   assert.equal(previewGroups.length, 1, "variant checkout preview: expected one store group");
   const previewItems = Array.isArray(previewGroups[0]?.items) ? previewGroups[0].items : [];
   assert.equal(previewItems.length, 2, "variant checkout preview: expected two preview items");
-  assertVariantSnapshotItems(previewItems, product.variants, "variant checkout preview snapshot");
+  assertVariantLineDetails(
+    previewItems,
+    [
+      buildExpectedVariantLine(product.variants[0], 1),
+      buildExpectedVariantLine(product.variants[1], 1),
+    ],
+    "variant checkout preview snapshot",
+    { checkLineTotal: true }
+  );
   logPass("checkout preview keeps both variant lines");
 
   logStep("creating checkout order");
@@ -795,7 +1136,15 @@ async function run() {
   assert.equal(checkoutGroups.length, 1, "variant checkout create: expected one store group");
   const checkoutItems = Array.isArray(checkoutGroups[0]?.items) ? checkoutGroups[0].items : [];
   assert.equal(checkoutItems.length, 2, "variant checkout create: expected two order items");
-  assertVariantSnapshotItems(checkoutItems, product.variants, "variant checkout create snapshot");
+  assertVariantLineDetails(
+    checkoutItems,
+    [
+      buildExpectedVariantLine(product.variants[0], 1),
+      buildExpectedVariantLine(product.variants[1], 1),
+    ],
+    "variant checkout create snapshot",
+    { checkLineTotal: true }
+  );
   const suborderId = toNumber(checkoutGroups[0]?.suborderId, 0);
   assert.ok(suborderId > 0, "variant checkout create: suborderId missing");
   logPass("checkout create keeps two variant lines");
@@ -804,16 +1153,27 @@ async function run() {
     where: { orderId } as any,
     order: [["id", "ASC"]],
   });
-  assertVariantSnapshotItems(storedOrderItems as any[], product.variants, "stored OrderItems snapshot");
+  assertVariantLineDetails(
+    storedOrderItems as any[],
+    [
+      buildExpectedVariantLine(product.variants[0], 1),
+      buildExpectedVariantLine(product.variants[1], 1),
+    ],
+    "stored OrderItems snapshot"
+  );
 
   const storedSuborderItems = await SuborderItem.findAll({
     where: { suborderId } as any,
     order: [["id", "ASC"]],
   });
-  assertVariantSnapshotItems(
+  assertVariantLineDetails(
     storedSuborderItems as any[],
-    product.variants,
-    "stored SuborderItems snapshot"
+    [
+      buildExpectedVariantLine(product.variants[0], 1),
+      buildExpectedVariantLine(product.variants[1], 1),
+    ],
+    "stored SuborderItems snapshot",
+    { checkLineTotal: true }
   );
 
   const refreshedProduct = await Product.findByPk(product.id);
@@ -831,16 +1191,28 @@ async function run() {
     )?.quantity,
     0
   );
-  assert.equal(blueQuantity, product.variants[0].quantity - 1, "blue variant quantity should decrement");
-  assert.equal(greenQuantity, product.variants[1].quantity - 1, "green variant quantity should decrement");
+  assert.equal(
+    blueQuantity,
+    product.variants[0].quantity - 4,
+    "blue variant quantity should decrement across both checkout scenarios"
+  );
+  assert.equal(
+    greenQuantity,
+    product.variants[1].quantity - 1,
+    "green variant quantity should decrement only for the dual-line checkout"
+  );
   logPass("variant stock snapshots persist through checkout create");
 
   logStep("verifying buyer, seller, and admin order detail snapshots");
   const buyerDetail = await fetchBuyerOrderDetail(buyerClient, orderId, "buyer order detail");
-  assertVariantSnapshotItems(
+  assertVariantLineDetails(
     Array.isArray(buyerDetail?.items) ? buyerDetail.items : [],
-    product.variants,
-    "buyer order detail snapshot"
+    [
+      buildExpectedVariantLine(product.variants[0], 1),
+      buildExpectedVariantLine(product.variants[1], 1),
+    ],
+    "buyer order detail snapshot",
+    { checkLineTotal: true }
   );
 
   const sellerDetail = await fetchSellerOrderDetail(
@@ -849,10 +1221,14 @@ async function run() {
     suborderId,
     "seller order detail"
   );
-  assertVariantSnapshotItems(
+  assertVariantLineDetails(
     Array.isArray(sellerDetail?.items) ? sellerDetail.items : [],
-    product.variants,
-    "seller order detail snapshot"
+    [
+      buildExpectedVariantLine(product.variants[0], 1),
+      buildExpectedVariantLine(product.variants[1], 1),
+    ],
+    "seller order detail snapshot",
+    { checkLineTotal: true }
   );
 
   const adminDetail = await fetchAdminOrderDetail(
@@ -860,12 +1236,20 @@ async function run() {
     invoiceNo,
     "admin order detail"
   );
-  assertVariantSnapshotItems(
+  assertVariantLineDetails(
     Array.isArray(adminDetail?.items) ? adminDetail.items : [],
-    product.variants,
-    "admin order detail snapshot"
+    [
+      buildExpectedVariantLine(product.variants[0], 1),
+      buildExpectedVariantLine(product.variants[1], 1),
+    ],
+    "admin order detail snapshot",
+    { checkLineTotal: true }
   );
   logPass("buyer seller admin order detail snapshot stays in sync");
+
+  const postCheckoutCart = await fetchCart(buyerClient, "fetch cart after dual variant checkout");
+  assert.equal(postCheckoutCart.length, 0, "dual variant checkout cleanup: cart should be empty");
+  logPass("post-checkout cleanup clears the committed variant lines without sibling drift");
 
   console.log("[mvf-checkout-variants] OK");
 }

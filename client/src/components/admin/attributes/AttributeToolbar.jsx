@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Filter, PlusCircle, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
+import { Check, ChevronDown, Filter, PlusCircle, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
 
 const btnBase =
-  "inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-[11px] font-medium transition";
+  "inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 text-[10px] font-medium transition";
 const btnOutline = `${btnBase} border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50`;
 const btnSoft = `${btnBase} bg-slate-50 text-slate-600 hover:bg-slate-100`;
 
@@ -15,6 +15,21 @@ const FILTER_OPTIONS = [
 const PUBLISHED_OPTIONS = [
   { value: "true", label: "Published" },
   { value: "false", label: "Unpublished" },
+];
+
+const SCOPE_OPTIONS = [
+  { value: "global", label: "Global" },
+  { value: "store", label: "Store" },
+];
+
+const CREATED_BY_OPTIONS = [
+  { value: "admin", label: "Admin" },
+  { value: "seller", label: "Seller" },
+];
+
+const STATUS_OPTIONS = [
+  { value: "active", label: "Active" },
+  { value: "archived", label: "Archived" },
 ];
 
 function FilterPopover({
@@ -92,11 +107,20 @@ export default function AttributeToolbar({
   const viewMenuRef = useRef(null);
   const optionFilterRef = useRef(null);
   const publishedFilterRef = useRef(null);
+  const scopeFilterRef = useRef(null);
+  const createdByFilterRef = useRef(null);
+  const statusFilterRef = useRef(null);
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const [optionFilterOpen, setOptionFilterOpen] = useState(false);
   const [publishedFilterOpen, setPublishedFilterOpen] = useState(false);
+  const [scopeFilterOpen, setScopeFilterOpen] = useState(false);
+  const [createdByFilterOpen, setCreatedByFilterOpen] = useState(false);
+  const [statusFilterOpen, setStatusFilterOpen] = useState(false);
   const [optionSearch, setOptionSearch] = useState("");
   const [publishedSearch, setPublishedSearch] = useState("");
+  const [scopeSearch, setScopeSearch] = useState("");
+  const [createdBySearch, setCreatedBySearch] = useState("");
+  const [statusSearch, setStatusSearch] = useState("");
 
   useEffect(() => {
     if (!viewMenuOpen) return undefined;
@@ -134,6 +158,42 @@ export default function AttributeToolbar({
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, [publishedFilterOpen]);
 
+  useEffect(() => {
+    if (!scopeFilterOpen) return undefined;
+    const handleOutsideClick = (event) => {
+      if (!scopeFilterRef.current) return;
+      if (!scopeFilterRef.current.contains(event.target)) {
+        setScopeFilterOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [scopeFilterOpen]);
+
+  useEffect(() => {
+    if (!createdByFilterOpen) return undefined;
+    const handleOutsideClick = (event) => {
+      if (!createdByFilterRef.current) return;
+      if (!createdByFilterRef.current.contains(event.target)) {
+        setCreatedByFilterOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [createdByFilterOpen]);
+
+  useEffect(() => {
+    if (!statusFilterOpen) return undefined;
+    const handleOutsideClick = (event) => {
+      if (!statusFilterRef.current) return;
+      if (!statusFilterRef.current.contains(event.target)) {
+        setStatusFilterOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [statusFilterOpen]);
+
   const filteredTypeOptions = useMemo(() => {
     const keyword = String(optionSearch || "").trim().toLowerCase();
     if (!keyword) return FILTER_OPTIONS;
@@ -150,10 +210,28 @@ export default function AttributeToolbar({
     );
   }, [publishedSearch]);
 
+  const filteredScopeOptions = useMemo(() => {
+    const keyword = String(scopeSearch || "").trim().toLowerCase();
+    if (!keyword) return SCOPE_OPTIONS;
+    return SCOPE_OPTIONS.filter((option) => option.label.toLowerCase().includes(keyword));
+  }, [scopeSearch]);
+
+  const filteredCreatedByOptions = useMemo(() => {
+    const keyword = String(createdBySearch || "").trim().toLowerCase();
+    if (!keyword) return CREATED_BY_OPTIONS;
+    return CREATED_BY_OPTIONS.filter((option) => option.label.toLowerCase().includes(keyword));
+  }, [createdBySearch]);
+
+  const filteredStatusOptions = useMemo(() => {
+    const keyword = String(statusSearch || "").trim().toLowerCase();
+    if (!keyword) return STATUS_OPTIONS;
+    return STATUS_OPTIONS.filter((option) => option.label.toLowerCase().includes(keyword));
+  }, [statusSearch]);
+
   return (
     <div className="rounded-[22px] border border-slate-200 bg-white p-3 shadow-sm">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div className="grid gap-2 xl:flex-1 xl:grid-cols-[minmax(0,1.2fr)_auto_auto]">
+        <div className="grid gap-2 xl:flex-1 xl:grid-cols-[minmax(0,1.2fr)_auto_auto_auto_auto_auto_auto]">
           <div className="relative min-w-0">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
@@ -177,14 +255,16 @@ export default function AttributeToolbar({
                 setOptionFilterOpen((prev) => !prev);
                 setPublishedFilterOpen(false);
               }}
-              className={`inline-flex h-9 min-w-[112px] items-center gap-2 rounded-lg border border-dashed px-3 text-sm font-medium transition ${
+              className={`inline-flex h-9 min-w-[126px] items-center gap-1.5 rounded-lg border border-dashed px-2.5 text-[13px] font-medium transition ${
                 optionFilterOpen || draftFilters.type
                   ? "border-teal-300 bg-teal-50 text-teal-700"
                   : "border-slate-300 bg-white text-slate-700 hover:border-slate-400"
               }`}
             >
               <PlusCircle className="h-4 w-4 shrink-0" />
-              <span>{draftFilters.type ? FILTER_OPTIONS.find((option) => option.value === draftFilters.type)?.label || "Option Type" : "Option Type"}</span>
+              <span className="whitespace-nowrap">
+                {draftFilters.type ? FILTER_OPTIONS.find((option) => option.value === draftFilters.type)?.label || "Option Type" : "Option Type"}
+              </span>
             </button>
 
             <FilterPopover
@@ -208,15 +288,18 @@ export default function AttributeToolbar({
               onClick={() => {
                 setPublishedFilterOpen((prev) => !prev);
                 setOptionFilterOpen(false);
+                setScopeFilterOpen(false);
+                setCreatedByFilterOpen(false);
+                setStatusFilterOpen(false);
               }}
-              className={`inline-flex h-9 min-w-[112px] items-center gap-2 rounded-lg border border-dashed px-3 text-sm font-medium transition ${
+              className={`inline-flex h-9 min-w-[108px] items-center gap-1.5 rounded-lg border border-dashed px-2.5 text-[13px] font-medium transition ${
                 publishedFilterOpen || draftFilters.published
                   ? "border-teal-300 bg-teal-50 text-teal-700"
                   : "border-slate-300 bg-white text-slate-700 hover:border-slate-400"
               }`}
             >
               <PlusCircle className="h-4 w-4 shrink-0" />
-              <span>
+              <span className="whitespace-nowrap">
                 {draftFilters.published
                   ? PUBLISHED_OPTIONS.find((option) => option.value === draftFilters.published)?.label || "Published"
                   : "Published"}
@@ -237,6 +320,136 @@ export default function AttributeToolbar({
               }}
             />
           </div>
+
+          <div ref={scopeFilterRef} className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setScopeFilterOpen((prev) => !prev);
+                setOptionFilterOpen(false);
+                setPublishedFilterOpen(false);
+                setCreatedByFilterOpen(false);
+                setStatusFilterOpen(false);
+              }}
+              className={`inline-flex h-9 min-w-[110px] items-center gap-1.5 rounded-lg border border-dashed px-2.5 text-[13px] font-medium transition ${
+                scopeFilterOpen || draftFilters.scope
+                  ? "border-teal-300 bg-teal-50 text-teal-700"
+                  : "border-slate-300 bg-white text-slate-700 hover:border-slate-400"
+              }`}
+            >
+              <PlusCircle className="h-4 w-4 shrink-0" />
+              <span className="whitespace-nowrap">
+                {draftFilters.scope
+                  ? SCOPE_OPTIONS.find((option) => option.value === draftFilters.scope)?.label || "Scope"
+                  : "Scope"}
+              </span>
+              <ChevronDown className="h-4 w-4 shrink-0" />
+            </button>
+
+            <FilterPopover
+              open={scopeFilterOpen}
+              title="Scope"
+              placeholder="Scope"
+              options={filteredScopeOptions}
+              selectedValue={draftFilters.scope}
+              searchValue={scopeSearch}
+              onSearchChange={setScopeSearch}
+              onSelect={(value) => {
+                onDraftFiltersChange?.((prev) => ({ ...prev, scope: value }));
+                setScopeFilterOpen(false);
+              }}
+            />
+          </div>
+
+          <div ref={createdByFilterRef} className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setCreatedByFilterOpen((prev) => !prev);
+                setOptionFilterOpen(false);
+                setPublishedFilterOpen(false);
+                setScopeFilterOpen(false);
+                setStatusFilterOpen(false);
+              }}
+              className={`inline-flex h-9 min-w-[126px] items-center gap-1.5 rounded-lg border border-dashed px-2.5 text-[13px] font-medium transition ${
+                createdByFilterOpen || draftFilters.createdByRole
+                  ? "border-teal-300 bg-teal-50 text-teal-700"
+                  : "border-slate-300 bg-white text-slate-700 hover:border-slate-400"
+              }`}
+            >
+              <PlusCircle className="h-4 w-4 shrink-0" />
+              <span className="whitespace-nowrap">
+                {draftFilters.createdByRole
+                  ? CREATED_BY_OPTIONS.find((option) => option.value === draftFilters.createdByRole)?.label || "Created By"
+                  : "Created By"}
+              </span>
+              <ChevronDown className="h-4 w-4 shrink-0" />
+            </button>
+
+            <FilterPopover
+              open={createdByFilterOpen}
+              title="Created By"
+              placeholder="Created By"
+              options={filteredCreatedByOptions}
+              selectedValue={draftFilters.createdByRole}
+              searchValue={createdBySearch}
+              onSearchChange={setCreatedBySearch}
+              onSelect={(value) => {
+                onDraftFiltersChange?.((prev) => ({ ...prev, createdByRole: value }));
+                setCreatedByFilterOpen(false);
+              }}
+            />
+          </div>
+
+          <div ref={statusFilterRef} className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setStatusFilterOpen((prev) => !prev);
+                setOptionFilterOpen(false);
+                setPublishedFilterOpen(false);
+                setScopeFilterOpen(false);
+                setCreatedByFilterOpen(false);
+              }}
+              className={`inline-flex h-9 min-w-[112px] items-center gap-1.5 rounded-lg border border-dashed px-2.5 text-[13px] font-medium transition ${
+                statusFilterOpen || draftFilters.status
+                  ? "border-teal-300 bg-teal-50 text-teal-700"
+                  : "border-slate-300 bg-white text-slate-700 hover:border-slate-400"
+              }`}
+            >
+              <PlusCircle className="h-4 w-4 shrink-0" />
+              <span className="whitespace-nowrap">
+                {draftFilters.status
+                  ? STATUS_OPTIONS.find((option) => option.value === draftFilters.status)?.label || "Status"
+                  : "Status"}
+              </span>
+              <ChevronDown className="h-4 w-4 shrink-0" />
+            </button>
+
+            <FilterPopover
+              open={statusFilterOpen}
+              title="Status"
+              placeholder="Status"
+              options={filteredStatusOptions}
+              selectedValue={draftFilters.status}
+              searchValue={statusSearch}
+              onSearchChange={setStatusSearch}
+              onSelect={(value) => {
+                onDraftFiltersChange?.((prev) => ({ ...prev, status: value }));
+                setStatusFilterOpen(false);
+              }}
+            />
+          </div>
+
+          <input
+            type="search"
+            value={draftFilters.storeId}
+            onChange={(event) =>
+              onDraftFiltersChange?.((prev) => ({ ...prev, storeId: event.target.value }))
+            }
+            placeholder="Store ID"
+            className="h-9 min-w-[100px] rounded-lg border border-slate-200 bg-white px-3 text-[13px] text-slate-700 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none"
+          />
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
@@ -252,7 +465,7 @@ export default function AttributeToolbar({
             <button
               type="button"
               onClick={() => setViewMenuOpen((prev) => !prev)}
-              className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-[13px] font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
             >
               <SlidersHorizontal className="h-4 w-4" />
               View
@@ -277,6 +490,8 @@ export default function AttributeToolbar({
                     ["name", "Name"],
                     ["displayName", "Display Name"],
                     ["optionType", "Option"],
+                    ["scope", "Scope"],
+                    ["store", "Store"],
                     ["published", "Published"],
                     ["values", "Values"],
                     ["actions", "Action"],

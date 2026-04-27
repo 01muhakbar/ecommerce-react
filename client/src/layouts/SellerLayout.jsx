@@ -20,6 +20,7 @@ import {
   LogOut,
   Menu,
   Package,
+  Tags,
   Search,
   ShoppingBag,
   Store,
@@ -530,6 +531,13 @@ function SellerSidebar({
           implemented: true,
         },
         {
+          label: "Attributes",
+          to: sellerRoutes.attributes(),
+          Icon: Tags,
+          enabled: hasPermission("ATTRIBUTE_VIEW"),
+          implemented: true,
+        },
+        {
           label: "Coupons",
           to: sellerRoutes.coupons(),
           Icon: TicketPercent,
@@ -1012,12 +1020,30 @@ export default function SellerLayout() {
   const profileDropdownRef = useRef(null);
   const normalizedStoreSlug = normalizeSellerStoreParam(storeSlug);
   const isLegacyIdRoute = isLegacySellerStoreIdParam(normalizedStoreSlug);
+  const sellerActorKey = String(
+    sellerAuth.user?.id || sellerAuth.user?.email || sellerAuth.role || "guest"
+  ).trim();
+
+  const navigateToSellerLogin = () => {
+    navigate("/auth/login", {
+      replace: true,
+      state: {
+        from: `${pathname}${search}${hash}`,
+      },
+    });
+  };
+
+  const handleSellerLogout = async () => {
+    await sellerAuth.logout?.();
+    navigateToSellerLogin();
+  };
 
   const sellerContextQuery = useQuery({
     queryKey: [
       "seller",
       "workspace",
       "context",
+      sellerActorKey,
       isLegacyIdRoute ? "legacy-id" : "slug",
       normalizedStoreSlug,
     ],
@@ -1192,12 +1218,13 @@ export default function SellerLayout() {
           tone="danger"
         >
           <div className="flex flex-wrap gap-3">
-            <Link
-              to="/auth/login"
+            <button
+              type="button"
+              onClick={navigateToSellerLogin}
               className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
             >
               Storefront Login
-            </Link>
+            </button>
           </div>
         </SellerShellState>
       );
@@ -1213,12 +1240,53 @@ export default function SellerLayout() {
           )}
           tone="danger"
         >
-          {sellerAuth.isAdminSession ? (
-            <p className="text-sm leading-5 text-slate-600">
-              Admin session remains valid for admin workspace only. Seller workspace requires a
-              storefront account with seller membership on this store.
-            </p>
-          ) : null}
+          <div className="flex flex-col gap-3">
+            {sellerAuth.isAdminSession ? (
+              <p className="text-sm leading-5 text-slate-600">
+                Admin session remains valid for admin workspace only. Seller workspace requires a
+                storefront account with seller membership on this store.
+              </p>
+            ) : sellerAuth.isAuthenticated ? (
+              <p className="text-sm leading-5 text-slate-600">
+                The current storefront account is signed in, but it is not attached to this seller
+                store. Switch account to continue.
+              </p>
+            ) : null}
+            <div className="flex flex-wrap gap-3">
+              {sellerAuth.isAuthenticated ? (
+                <button
+                  type="button"
+                  onClick={handleSellerLogout}
+                  className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  Switch Account
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={navigateToSellerLogin}
+                  className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  Storefront Login
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => sellerContextQuery.refetch()}
+                className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
+              >
+                Retry
+              </button>
+              {sellerAuth.isAdminSession ? (
+                <Link
+                  to="/admin"
+                  className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
+                >
+                  Open Admin Workspace
+                </Link>
+              ) : null}
+            </div>
+          </div>
         </SellerShellState>
       );
     }
@@ -1269,11 +1337,6 @@ export default function SellerLayout() {
   const toggleMenu = (menuName) => {
     setLangOpen(false);
     setActiveMenu((prev) => (prev === menuName ? null : menuName));
-  };
-
-  const handleSellerLogout = async () => {
-    await sellerAuth.logout?.();
-    navigate("/auth/login", { replace: true });
   };
 
   const handleSellerNotificationClick = async (notification) => {
@@ -1334,10 +1397,6 @@ export default function SellerLayout() {
             >
               <Menu className="navbar__menu-icon" />
             </button>
-            <div className="navbar__title-block">
-              <p className="navbar__eyebrow">Seller Workspace</p>
-              <p className="navbar__page-title">{pageMeta.title}</p>
-            </div>
             <div className="navbar__search-shell" role="search" aria-label="Seller search">
               <Search size={16} className="navbar__search-icon" />
               <input

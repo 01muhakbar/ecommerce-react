@@ -36,6 +36,15 @@ type CartProduct = {
   imageUrl?: string | null;
 };
 
+type CartMutationTarget =
+  | number
+  | {
+      lineId?: string | null;
+      cartItemId?: number | null;
+      productId?: number | null;
+      variantKey?: string | null;
+    };
+
 type CartState = {
   items: CartItem[];
   totalQty: number;
@@ -48,8 +57,8 @@ type CartState = {
   setItems: (items: CartItem[]) => void;
   reset: () => void;
   addItem: (product: CartProduct, qty?: number) => void;
-  removeItem: (productId: number) => void;
-  updateQty: (productId: number, qty: number) => void;
+  removeItem: (target: CartMutationTarget) => void;
+  updateQty: (target: CartMutationTarget, qty: number) => void;
   clearCart: () => void;
 };
 
@@ -60,6 +69,59 @@ const computeTotals = (items: CartItem[]) => {
     0
   );
   return { totalQty, subtotal };
+};
+
+const buildCartLineId = (productId: number, variantKey?: string | null) =>
+  `${productId}:${String(variantKey || "").trim().toLowerCase() || "base"}`;
+
+const resolveLineId = (item: {
+  lineId?: string | null;
+  productId?: number | null;
+  variantKey?: string | null;
+}) => {
+  const explicitLineId = String(item?.lineId || "").trim();
+  if (explicitLineId) return explicitLineId;
+  const productId = Number(item?.productId);
+  if (!Number.isFinite(productId) || productId <= 0) return null;
+  return buildCartLineId(productId, item?.variantKey ?? null);
+};
+
+const resolveCartMutationTarget = (target: CartMutationTarget) => {
+  if (typeof target === "number") {
+    const productId = Number(target);
+    if (!Number.isFinite(productId) || productId <= 0) return null;
+    return {
+      productId,
+      cartItemId: null,
+      variantKey: null,
+      lineId: buildCartLineId(productId, null),
+      remoteTargetId: productId,
+    };
+  }
+  if (!target || typeof target !== "object") return null;
+  const productId = Number(target?.productId);
+  const cartItemId = Number(target?.cartItemId);
+  const variantKey = String(target?.variantKey || "").trim() || null;
+  const lineId = resolveLineId({
+    lineId: target?.lineId,
+    productId,
+    variantKey,
+  });
+
+  return {
+    productId: Number.isFinite(productId) && productId > 0 ? productId : null,
+    cartItemId: Number.isFinite(cartItemId) && cartItemId > 0 ? cartItemId : null,
+    variantKey,
+    lineId,
+    remoteTargetId:
+      Number.isFinite(cartItemId) && cartItemId > 0
+        ? cartItemId
+        : variantKey
+          ? null
+          : Number.isFinite(productId) && productId > 0
+            ? productId
+            : null,
+  };
 };
 
 const normalizeCartItem = (item: any): CartItem | null => {
@@ -100,9 +162,11 @@ const normalizeCartItem = (item: any): CartItem | null => {
   }
   return {
     lineId:
-      typeof item?.lineId === "string"
-        ? item.lineId
-        : `${productId}:${String(item?.variantKey || "").trim().toLowerCase() || "base"}`,
+      resolveLineId({
+        lineId: typeof item?.lineId === "string" ? item.lineId : null,
+        productId,
+        variantKey: String(item?.variantKey || "").trim() || null,
+      }) || undefined,
     cartItemId:
       item?.cartItemId !== undefined && item?.cartItemId !== null
         ? Number(item.cartItemId)
@@ -151,15 +215,31 @@ const warnDev = (...args: any[]) => {
 export const useCartStore = create<CartState>()(
   persist(
     (set, get) => {
-      let pendingQtyByProductId = new Map<number, number>();
-      let remoteBaselineQtyByProductId = new Map<number, number>();
+      let pendingQtyByLineId = new Map<
+        string,
+        {
+          remoteTargetId: number;
+          desiredQty: number;
+        }
+      >();
+      let remoteBaselineQtyByLineId = new Map<string, number>();
       let flushTimer: number | null = null;
       let refreshTimer: number | null = null;
       let remoteDirty = false;
 
       const updateRemoteBaseline = (items: CartItem[]) => {
-        remoteBaselineQtyByProductId = new Map(
-          (items || []).map((item) => [item.productId, item.qty])
+        remoteBaselineQtyByLineId = new Map(
+          (items || [])
+            .map((item) => {
+              const lineId = resolveLineId(item);
+              if (!lineId) return null;
+              return [lineId, item.qty] as const;
+            })
+            .filter(
+              (
+                entry
+              ): entry is readonly [string, number] => Boolean(entry)
+            )
         );
       };
 
@@ -209,8 +289,8 @@ export const useCartStore = create<CartState>()(
             } catch (error) {
               if (isUnauthorized(error)) {
                 get().setMode("guest");
-                pendingQtyByProductId.clear();
-                remoteBaselineQtyByProductId.clear();
+                pendingQtyByLineId.clear();
+                remoteBaselineQtyByLineId.clear();
                 cancelFlushTimer();
                 cancelRemoteRefresh();
                 return;
@@ -249,8 +329,8 @@ export const useCartStore = create<CartState>()(
 
       const flushPendingUpdateQty = () => {
         if (get().mode !== "remote") {
-          pendingQtyByProductId.clear();
-          remoteBaselineQtyByProductId.clear();
+          pendingQtyByLineId.clear();
+          remoteBaselineQtyByLineId.clear();
           cancelFlushTimer();
           cancelRemoteRefresh();
           return;
@@ -260,29 +340,33 @@ export const useCartStore = create<CartState>()(
           return;
         }
         const started = withRemoteLock(async () => {
-          const entries = Array.from(pendingQtyByProductId.entries());
-          pendingQtyByProductId.clear();
+          const entries = Array.from(pendingQtyByLineId.entries());
+          pendingQtyByLineId.clear();
           if (entries.length === 0) return;
 
           try {
             let didMutate = false;
-            for (const [productId, desiredQty] of entries) {
-              const baselineQty =
-                remoteBaselineQtyByProductId.get(productId) ?? 0;
+            for (const [lineId, entry] of entries) {
+              const baselineQty = remoteBaselineQtyByLineId.get(lineId) ?? 0;
+              if (entry.remoteTargetId <= 0) {
+                continue;
+              }
+              const desiredQty = entry.desiredQty;
               if (desiredQty === baselineQty) {
                 continue;
               }
-              await cartApi.setCartItemQty(productId, desiredQty);
+              await cartApi.setCartItemQty(entry.remoteTargetId, desiredQty);
               didMutate = true;
             }
 
             if (!didMutate) return;
 
-            for (const [productId, desiredQty] of entries) {
+            for (const [lineId, entry] of entries) {
+              const desiredQty = entry.desiredQty;
               if (desiredQty <= 0) {
-                remoteBaselineQtyByProductId.delete(productId);
+                remoteBaselineQtyByLineId.delete(lineId);
               } else {
-                remoteBaselineQtyByProductId.set(productId, desiredQty);
+                remoteBaselineQtyByLineId.set(lineId, desiredQty);
               }
             }
 
@@ -290,8 +374,8 @@ export const useCartStore = create<CartState>()(
           } catch (error) {
             if (isUnauthorized(error)) {
               get().setMode("guest");
-              pendingQtyByProductId.clear();
-              remoteBaselineQtyByProductId.clear();
+              pendingQtyByLineId.clear();
+              remoteBaselineQtyByLineId.clear();
               cancelFlushTimer();
               cancelRemoteRefresh();
               return;
@@ -304,7 +388,7 @@ export const useCartStore = create<CartState>()(
               warnDev("[cart] updateQty refresh failed", innerError);
             }
           } finally {
-            if (pendingQtyByProductId.size > 0) {
+            if (pendingQtyByLineId.size > 0) {
               scheduleFlushUpdateQty();
             }
           }
@@ -327,8 +411,8 @@ export const useCartStore = create<CartState>()(
           if (mode === "remote") {
             updateRemoteBaseline(get().items);
           } else {
-            pendingQtyByProductId.clear();
-            remoteBaselineQtyByProductId.clear();
+            pendingQtyByLineId.clear();
+            remoteBaselineQtyByLineId.clear();
             cancelFlushTimer();
             cancelRemoteRefresh();
           }
@@ -347,8 +431,8 @@ export const useCartStore = create<CartState>()(
           } catch {
             // ignore storage errors
           }
-          pendingQtyByProductId.clear();
-          remoteBaselineQtyByProductId.clear();
+          pendingQtyByLineId.clear();
+          remoteBaselineQtyByLineId.clear();
           cancelFlushTimer();
           cancelRemoteRefresh();
           set({ items: [], totalQty: 0, subtotal: 0 });
@@ -406,18 +490,28 @@ export const useCartStore = create<CartState>()(
             }
           });
         },
-        removeItem: (productId) => {
+        removeItem: (target) => {
+          const resolvedTarget = resolveCartMutationTarget(target);
+          if (!resolvedTarget) return;
           set((state) => {
             const items = state.items.filter(
-              (item) => item.productId !== productId
+              (item) =>
+                (resolvedTarget.lineId && resolveLineId(item) !== resolvedTarget.lineId) ||
+                (!resolvedTarget.lineId && item.productId !== resolvedTarget.productId)
             );
             const totals = computeTotals(items);
             return { items, ...totals };
           });
           if (get().mode !== "remote") return;
+          const remoteTargetId = resolvedTarget.remoteTargetId;
+          if (!remoteTargetId) {
+            warnDev("[cart] removeItem skipped ambiguous remote target", resolvedTarget);
+            scheduleRemoteRefreshAfterIdle();
+            return;
+          }
           withRemoteLock(async () => {
             try {
-              await cartApi.removeFromCart(productId);
+              await cartApi.removeFromCart(remoteTargetId);
               const remoteItems = await fetchRemoteCartItems();
               applyRemoteItems(remoteItems);
             } catch (error) {
@@ -435,14 +529,25 @@ export const useCartStore = create<CartState>()(
             }
           });
         },
-        updateQty: (productId, qty) => {
+        updateQty: (target, qty) => {
+          const resolvedTarget = resolveCartMutationTarget(target);
+          if (!resolvedTarget) return;
           const desiredQty = Math.max(0, Number(qty) || 0);
           set((state) => {
             const items =
               desiredQty <= 0
-                ? state.items.filter((item) => item.productId !== productId)
+                ? state.items.filter(
+                    (item) =>
+                      (resolvedTarget.lineId &&
+                        resolveLineId(item) !== resolvedTarget.lineId) ||
+                      (!resolvedTarget.lineId &&
+                        item.productId !== resolvedTarget.productId)
+                  )
                 : state.items.map((item) =>
-                    item.productId === productId
+                    (resolvedTarget.lineId &&
+                      resolveLineId(item) === resolvedTarget.lineId) ||
+                    (!resolvedTarget.lineId &&
+                      item.productId === resolvedTarget.productId)
                       ? { ...item, qty: desiredQty }
                       : item
                   );
@@ -450,8 +555,16 @@ export const useCartStore = create<CartState>()(
             return { items, totalQty, subtotal };
           });
           if (get().mode !== "remote") return;
-          // coalescing updateQty to latest per productId
-          pendingQtyByProductId.set(productId, desiredQty);
+          if (!resolvedTarget.lineId || !resolvedTarget.remoteTargetId) {
+            warnDev("[cart] updateQty skipped ambiguous remote target", resolvedTarget);
+            scheduleRemoteRefreshAfterIdle();
+            return;
+          }
+          // Coalesce remote updates per exact cart line so variants do not overwrite each other.
+          pendingQtyByLineId.set(resolvedTarget.lineId, {
+            remoteTargetId: resolvedTarget.remoteTargetId,
+            desiredQty,
+          });
           scheduleFlushUpdateQty();
         },
         clearCart: () => {
@@ -466,8 +579,23 @@ export const useCartStore = create<CartState>()(
           if (get().mode !== "remote") return;
           withRemoteLock(async () => {
             try {
-              for (const item of snapshot) {
-                await cartApi.removeFromCart(item.productId);
+              const remoteTargetIds = [
+                ...new Set(
+                  snapshot
+                    .map((item) => resolveCartMutationTarget(item)?.remoteTargetId ?? null)
+                    .filter(
+                      (value): value is number =>
+                        Number.isFinite(value) && Number(value) > 0
+                    )
+                ),
+              ];
+              if (remoteTargetIds.length === 0) {
+                const remoteItems = await fetchRemoteCartItems();
+                applyRemoteItems(remoteItems);
+                return;
+              }
+              for (const remoteTargetId of remoteTargetIds) {
+                await cartApi.removeFromCart(remoteTargetId);
               }
               const remoteItems = await fetchRemoteCartItems();
               applyRemoteItems(remoteItems);

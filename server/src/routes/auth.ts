@@ -15,7 +15,6 @@ import {
   loginSchema,
   resetPasswordSchema,
 } from "@ecommerce/schemas";
-import requireAuth from "../middleware/requireAuth.js";
 import {
   AdminPublicAuthError,
   registerAdminStaffSelfSignup,
@@ -73,15 +72,88 @@ const isAdminWorkspaceRole = (role: unknown) =>
     String(role || "").trim().toLowerCase()
   );
 
-const issueAuthSession = async (req: any, res: any, user: any) => {
+const getStorefrontAuthCookieName = () => process.env.AUTH_COOKIE_NAME || "token";
+const getAdminAuthCookieName = () =>
+  process.env.ADMIN_AUTH_COOKIE_NAME || `${getStorefrontAuthCookieName()}_admin`;
+
+const issueAuthSession = async (
+  req: any,
+  res: any,
+  user: any,
+  scope: "storefront" | "admin"
+) => {
   const secret: string = process.env.JWT_SECRET ?? "dev-secret";
   const expiresIn = (process.env.JWT_EXPIRES_IN ?? "1h") as any;
   const options: SignOptions = { expiresIn };
   const claims = await buildAuthSessionClaims(user);
   const token = jwt.sign(claims, secret, options);
-  const cookieName = process.env.AUTH_COOKIE_NAME || "token";
+  const cookieName =
+    scope === "admin" ? getAdminAuthCookieName() : getStorefrontAuthCookieName();
   res.cookie(cookieName, token, resolveAuthCookieOptions(req));
   return token;
+};
+
+const clearScopedAuthCookie = (req: any, res: any, scope: "storefront" | "admin") => {
+  const cookieName =
+    scope === "admin" ? getAdminAuthCookieName() : getStorefrontAuthCookieName();
+  res.clearCookie(cookieName, resolveAuthCookieOptions(req));
+};
+
+const loadScopedUserFromCookie = async (
+  req: any,
+  scope: "storefront" | "admin"
+) => {
+  if (!User) return null;
+  const cookieName =
+    scope === "admin" ? getAdminAuthCookieName() : getStorefrontAuthCookieName();
+  const token = req.cookies?.[cookieName];
+  if (!token) return null;
+  const claims = jwt.verify(token, process.env.JWT_SECRET ?? "dev-secret") as any;
+  const userId = Number(claims?.id ?? claims?.sub ?? 0);
+  if (!Number.isFinite(userId) || userId <= 0) return null;
+  const dbUser = await User.findByPk(userId, {
+    attributes: ["id", "email", "name", "role", "avatarUrl", "phoneNumber", "status"],
+  });
+  if (!dbUser) return null;
+  return dbUser;
+};
+
+const respondWithScopedAuthUser = async (
+  req: any,
+  res: any,
+  scope: "storefront" | "admin" | "fallback_any"
+) => {
+  if (!User) {
+    return res.status(500).json({ success: false, message: "User model not loaded" });
+  }
+
+  try {
+    let dbUser = null;
+    if (scope === "fallback_any") {
+      dbUser =
+        (await loadScopedUserFromCookie(req, "storefront")) ||
+        (await loadScopedUserFromCookie(req, "admin"));
+    } else {
+      dbUser = await loadScopedUserFromCookie(req, scope);
+    }
+
+    if (!dbUser) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const normalizedUser = await ensureClientUserActivationConsistency(dbUser);
+    if (String(normalizedUser.status || "").trim().toLowerCase() !== "active") {
+      return res.status(403).json({
+        success: false,
+        code: "ACCOUNT_NOT_ACTIVE",
+        message: "Your account is not active.",
+      });
+    }
+
+    return res.json({ success: true, data: { user: toAuthUser(normalizedUser) } });
+  } catch {
+    return res.status(401).json({ success: false, message: "Unauthorized" });
+  }
 };
 
 const getRequestContext = (req: any) => ({
@@ -206,6 +278,14 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ success: false, message: "Invalid credentials" });
     }
 
+    if (isAdminWorkspaceRole(user.role)) {
+      return res.status(403).json({
+        success: false,
+        code: "ADMIN_WORKSPACE_LOGIN_REQUIRED",
+        message: "This account uses Admin Workspace login. Sign in from /admin/login.",
+      });
+    }
+
     if (isPendingClientUser(user)) {
       const pendingVerification = await ensurePendingVerificationForLogin(String(user.email || ""));
       return res.status(403).json({
@@ -224,7 +304,7 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    await issueAuthSession(req, res, user);
+    await issueAuthSession(req, res, user, "storefront");
     logSetCookieDebug(res, "login");
 
     return res.json({
@@ -316,7 +396,7 @@ router.post("/register/verify-otp", async (req, res) => {
 
   try {
     const result = await verifyClientRegistrationOtp(parsed.data, getRequestContext(req));
-    await issueAuthSession(req, res, result.user);
+    await issueAuthSession(req, res, result.user, "storefront");
     logSetCookieDebug(res, "register_verify");
     return res.status(200).json({
       success: true,
@@ -376,47 +456,16 @@ router.post("/reset-password", async (req, res) => {
   }
 });
 
-router.get("/me", requireAuth, (req, res) => {
-  const user = (req as any).user;
-  if (!user) {
-    return res.status(401).json({ success: false, message: "Unauthorized" });
-  }
-  if (!User) {
-    return res.status(500).json({ success: false, message: "User model not loaded" });
-  }
+router.get("/me", (_req, _res) => {
+  return respondWithScopedAuthUser(_req, _res, "fallback_any");
+});
 
-  return User.findByPk(user.id, {
-    attributes: ["id", "email", "name", "role", "avatarUrl", "phoneNumber", "status"],
-  })
-    .then((dbUser: any) => {
-      if (!dbUser) {
-        return res.status(404).json({ success: false, message: "User not found" });
-      }
-      return ensureClientUserActivationConsistency(dbUser)
-        .then((normalizedUser: any) => {
-          if (String(normalizedUser.status || "").trim().toLowerCase() !== "active") {
-            return res.status(403).json({
-              success: false,
-              code: "ACCOUNT_NOT_ACTIVE",
-              message: "Your account is not active.",
-            });
-          }
-          return res.json({ success: true, data: { user: toAuthUser(normalizedUser) } });
-        })
-        .catch((error: any) => {
-          console.error(error);
-          return res.status(500).json({ success: false, message: "Internal server error" });
-        });
-    })
-    .catch((error: any) => {
-      console.error(error);
-      return res.status(500).json({ success: false, message: "Internal server error" });
-    });
+router.get("/account/me", (_req, _res) => {
+  return respondWithScopedAuthUser(_req, _res, "storefront");
 });
 
 router.post("/logout", (req, res) => {
-  const cookieName = process.env.AUTH_COOKIE_NAME || "token";
-  res.clearCookie(cookieName, resolveAuthCookieOptions(req));
+  clearScopedAuthCookie(req, res, "storefront");
   return res.json({ success: true });
 });
 
@@ -472,7 +521,7 @@ router.post("/admin/login", async (req, res) => {
       });
     }
 
-    await issueAuthSession(req, res, user);
+    await issueAuthSession(req, res, user, "admin");
     logSetCookieDebug(res, "admin_login");
 
     res.json({
@@ -490,9 +539,12 @@ router.post("/admin/login", async (req, res) => {
   }
 });
 
+router.get("/admin/me", (_req, _res) => {
+  return respondWithScopedAuthUser(_req, _res, "admin");
+});
+
 router.post("/admin/logout", (req, res) => {
-  const name = process.env.AUTH_COOKIE_NAME || "token";
-  res.clearCookie(name, resolveAuthCookieOptions(req));
+  clearScopedAuthCookie(req, res, "admin");
   res.status(204).end();
 });
 

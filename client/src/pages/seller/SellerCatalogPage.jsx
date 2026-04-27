@@ -5,23 +5,31 @@ import {
   AlertTriangle,
   Boxes,
   CheckCircle2,
+  ChevronDown,
   Clock3,
+  Copy,
   Download,
   Eye,
-  Filter,
   Layers3,
   Package,
   Pencil,
   Plus,
   RotateCcw,
   Search,
+  SlidersHorizontal,
   Send,
   Tag,
+  Trash2,
+  Upload,
 } from "lucide-react";
 import {
   bulkSubmitSellerProductsForReview,
+  deleteSellerProduct,
+  duplicateSellerProduct,
   exportSellerProducts,
+  getSellerProductAuthoringMeta,
   getSellerProducts,
+  importSellerProducts,
   setSellerProductPublished,
   submitSellerProductDraftForReview,
 } from "../../api/sellerProducts.ts";
@@ -31,19 +39,24 @@ import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
 import { useSellerWorkspaceRoute } from "../../utils/sellerWorkspaceRoute.js";
 import {
   sellerFieldClass,
-  sellerPrimaryButtonClass,
-  sellerSecondaryButtonClass,
   sellerTableWrapClass,
   SellerWorkspaceBadge,
   SellerWorkspaceEmptyState,
   SellerWorkspaceNotice,
   SellerWorkspacePanel,
-  SellerWorkspaceSectionHeader,
   SellerWorkspaceStatePanel,
 } from "../../components/seller/SellerWorkspaceFoundation.jsx";
+import ProductFilterBar from "../../components/Products/ProductFilterBar.jsx";
+import ProductInventoryBadge from "../../components/Products/ProductInventoryBadge.jsx";
+import ProductManagementHeader from "../../components/Products/ProductManagementHeader.jsx";
+import ProductPublishedToggle from "../../components/Products/ProductPublishedToggle.jsx";
+import ProductRowActionsMenu from "../../components/Products/ProductRowActionsMenu.jsx";
+import SellerProductAuthoringPage from "./SellerProductAuthoringPage.jsx";
 
 const DEFAULT_FILTERS = {
   keyword: "",
+  categoryIds: [],
+  sort: "",
   status: "",
   published: "",
   submissionStatus: "",
@@ -51,6 +64,52 @@ const DEFAULT_FILTERS = {
   page: 1,
   limit: 20,
 };
+
+const DEFAULT_COLUMN_VISIBILITY = {
+  product: true,
+  category: true,
+  price: true,
+  salePrice: true,
+  stock: true,
+  inventory: true,
+  view: true,
+  published: true,
+  actions: true,
+};
+
+const COLUMN_VISIBILITY_OPTIONS = [
+  ["product", "Product"],
+  ["category", "Category"],
+  ["price", "Price"],
+  ["salePrice", "Sale Price"],
+  ["stock", "Stock"],
+  ["inventory", "Inventory"],
+  ["view", "View"],
+  ["published", "Published"],
+  ["actions", "Actions"],
+];
+
+const UI_ONLY_CATEGORY_FALLBACK = [
+  { id: "category-fallback-fruit", name: "Fresh Fruits" },
+  { id: "category-fallback-vegetable", name: "Fresh Vegetables" },
+  { id: "category-fallback-bakery", name: "Bread & Bakery" },
+  { id: "category-fallback-dairy", name: "Milk & Dairy" },
+];
+
+const MAX_IMPORT_FILE_SIZE = 2 * 1024 * 1024;
+
+const SELLER_SORT_FILTER_GROUPS = [
+  {
+    key: "sort",
+    label: "Sort",
+    options: [
+      { value: "price_asc", label: "Low to High" },
+      { value: "price_desc", label: "High to Low" },
+      { value: "date_added", label: "Date Added" },
+      { value: "date_updated", label: "Date Updated" },
+    ],
+  },
+];
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat("id-ID", {
@@ -88,6 +147,10 @@ const getSubmissionTone = (item) => {
 const buildActiveFilterCount = (filters) =>
   [
     filters.keyword?.trim(),
+    Array.isArray(filters.categoryIds) && filters.categoryIds.length > 0
+      ? filters.categoryIds.join(",")
+      : "",
+    filters.sort,
     filters.status,
     filters.published,
     filters.submissionStatus,
@@ -154,6 +217,40 @@ const downloadBlobFile = (filename, blob) => {
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(href);
+};
+
+const formatFileSize = (value) => {
+  const size = Number(value || 0);
+  if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  if (size >= 1024) return `${Math.round(size / 1024)} KB`;
+  return `${size} B`;
+};
+
+const buildUiPreviewCategoryOptions = (items = []) => {
+  const options = Array.from(
+    new Map(
+      items
+        .map((item) => item?.category)
+        .filter((category) => category?.name)
+        .map((category) => [
+          String(category.id || category.code || category.name).trim().toLowerCase(),
+          {
+            id:
+              category.id ||
+              `category-${String(category.code || category.name).trim().toLowerCase()}`,
+            name: category.name,
+            code: category.code || null,
+          },
+        ])
+    ).values()
+  ).sort((left, right) => left.name.localeCompare(right.name, "id"));
+
+  return options.length > 0 ? options : UI_ONLY_CATEGORY_FALLBACK;
+};
+
+const getSortFilterLabel = (value) => {
+  const selected = SELLER_SORT_FILTER_GROUPS[0]?.options.find((option) => option.value === value);
+  return selected?.label || "Price";
 };
 
 function ReviewQueueCard({
@@ -312,21 +409,39 @@ const getCurrentLaneLabel = (filters) => {
 const getSubmissionReason = (submission) =>
   submission?.reviewNote || submission?.revisionReason || submission?.revisionNote || null;
 
-const compactActionButtonClass =
-  "inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60";
-const compactPrimaryActionButtonClass =
-  "inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-slate-900 px-3 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60";
 const compactTableHeadClass =
-  "px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500";
-const compactTableCellClass = "px-3 py-2.5 align-top text-sm text-slate-700";
-const compactTextLinkClass =
-  "inline-flex h-8 items-center whitespace-nowrap px-1 text-xs font-semibold text-slate-500 transition hover:text-slate-900";
+  "px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-500 whitespace-nowrap";
+const compactTableCellClass = "px-2 py-1.5 align-top text-[13px] text-slate-700";
+const compactTableIconCellClass = "px-1.5 py-1.5 align-top text-[13px] text-slate-700";
+const adminAlignedPanelClass =
+  "rounded-[18px] border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.03)]";
+const adminAlignedButtonBase =
+  "inline-flex h-[34px] items-center justify-center gap-1 rounded-lg px-2 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-60";
+const adminAlignedOutlineButton =
+  `${adminAlignedButtonBase} border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50`;
+const adminAlignedPrimaryButton =
+  `${adminAlignedButtonBase} bg-emerald-500 text-white hover:bg-emerald-600`;
+const adminAlignedDangerButton =
+  `${adminAlignedButtonBase} border border-rose-300 bg-rose-50 text-rose-700 hover:border-rose-400 hover:bg-rose-100`;
 
 const getCompactStockMeta = (item) => {
   const stock = Number(item?.inventory?.stock ?? item?.availability?.stock ?? 0);
-  if (stock <= 0) return { label: "Out of stock", toneClass: "text-rose-600" };
-  if (stock <= 10) return { label: "Low stock", toneClass: "text-amber-600" };
-  return { label: "Ready", toneClass: "text-emerald-600" };
+  if (stock <= 0) {
+    return {
+      label: "Out of Stock",
+      badgeClass: "border-rose-200 bg-rose-50 text-rose-600",
+    };
+  }
+  if (stock <= 10) {
+    return {
+      label: "Low Stock",
+      badgeClass: "border-amber-200 bg-amber-50 text-amber-700",
+    };
+  }
+  return {
+    label: "Selling",
+    badgeClass: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  };
 };
 
 const getCompactSubmissionHint = (item) => {
@@ -433,20 +548,59 @@ const getBulkActionErrorMessage = (error) =>
     fallbackMessage: "Failed to run seller bulk action.",
   });
 
+const getDuplicateActionErrorMessage = (error) =>
+  getSellerRequestErrorMessage(error, {
+    permissionMessage:
+      "Your current seller access does not include creating seller draft copies.",
+    fallbackMessage: "Failed to duplicate seller product.",
+  });
+
+const getDeleteActionErrorMessage = (error) =>
+  getSellerRequestErrorMessage(error, {
+    permissionMessage:
+      "Your current seller access does not include deleting or archiving seller products.",
+    fallbackMessage: "Failed to delete seller product.",
+  });
+
 export default function SellerCatalogPage({ variant = "catalog" }) {
   const queryClient = useQueryClient();
   const { workspaceStoreId: storeId, workspaceRoutes, sellerContext } = useSellerWorkspaceRoute();
   const permissionKeys = sellerContext?.access?.permissionKeys || [];
   const canViewProducts = permissionKeys.includes("PRODUCT_VIEW");
   const canEditProducts = permissionKeys.includes("PRODUCT_EDIT");
+  const canArchiveProducts = permissionKeys.includes("PRODUCT_ARCHIVE");
   const canPublishProducts = permissionKeys.includes("PRODUCT_PUBLISH");
   const [draftFilters, setDraftFilters] = useState(DEFAULT_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState(DEFAULT_FILTERS);
+  const [columnVisibility, setColumnVisibility] = useState(DEFAULT_COLUMN_VISIBILITY);
   const [actionNotice, setActionNotice] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [submittingProductId, setSubmittingProductId] = useState(null);
+  const [duplicatingProductId, setDuplicatingProductId] = useState(null);
+  const [deletingProductId, setDeletingProductId] = useState(null);
+  const [pendingImportFile, setPendingImportFile] = useState(null);
+  const [pendingImportSummary, setPendingImportSummary] = useState(null);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [importMenuOpen, setImportMenuOpen] = useState(false);
+  const [bulkMenuOpen, setBulkMenuOpen] = useState(false);
+  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
+  const [priceMenuOpen, setPriceMenuOpen] = useState(false);
+  const [columnMenuOpen, setColumnMenuOpen] = useState(false);
+  const [rowActionMenu, setRowActionMenu] = useState(null);
+  const [categorySearch, setCategorySearch] = useState("");
+  const [priceSearch, setPriceSearch] = useState("");
+  const [isCreateDrawerMounted, setIsCreateDrawerMounted] = useState(false);
+  const [isCreateDrawerVisible, setIsCreateDrawerVisible] = useState(false);
   const isLanding = variant === "landing";
+
+  const authoringMetaQuery = useQuery({
+    queryKey: ["seller", "products", "authoring-meta", storeId],
+    queryFn: () => getSellerProductAuthoringMeta(storeId),
+    enabled: Boolean(storeId) && canViewProducts,
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+  });
 
   const productsQuery = useQuery({
     queryKey: ["seller", "products", storeId, appliedFilters],
@@ -553,6 +707,122 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
     },
   });
 
+  const duplicateMutation = useMutation({
+    mutationFn: (productId) => duplicateSellerProduct(storeId, productId),
+    onMutate: (productId) => {
+      setDuplicatingProductId(Number(productId));
+      setActionNotice(null);
+    },
+    onSuccess: async (data) => {
+      setActionNotice({
+        type: "success",
+        title: "Duplicate created",
+        message: `${data?.name || "Product copy"} created as a seller draft copy.`,
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["seller", "products", storeId] }),
+        queryClient.invalidateQueries({
+          queryKey: ["seller", "products", "detail", storeId, data?.id],
+        }),
+      ]);
+    },
+    onError: (error) => {
+      setActionNotice({
+        type: "error",
+        title: "Duplicate failed",
+        message: getDuplicateActionErrorMessage(error),
+      });
+    },
+    onSettled: () => {
+      setDuplicatingProductId(null);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (productId) => deleteSellerProduct(storeId, productId),
+    onMutate: (productId) => {
+      setDeletingProductId(Number(productId));
+      setActionNotice(null);
+    },
+    onSuccess: async (data, productId) => {
+      setSelectedIds((current) => {
+        if (!current.has(Number(productId))) return current;
+        const next = new Set(current);
+        next.delete(Number(productId));
+        return next;
+      });
+      setActionNotice({
+        type: data?.archived ? "warning" : "success",
+        title: data?.archived ? "Product archived" : "Product deleted",
+        message:
+          data?.message ||
+          (data?.archived
+            ? "This product was archived instead of deleted."
+            : "Product deleted successfully."),
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["seller", "products", storeId] }),
+        queryClient.invalidateQueries({
+          queryKey: ["seller", "products", "detail", storeId, productId],
+        }),
+      ]);
+    },
+    onError: (error) => {
+      setActionNotice({
+        type: "error",
+        title: "Delete failed",
+        message: getDeleteActionErrorMessage(error),
+      });
+    },
+    onSettled: () => {
+      setDeletingProductId(null);
+    },
+  });
+
+  const importMutation = useMutation({
+    mutationFn: (file) => importSellerProducts(storeId, file),
+    onMutate: () => {
+      setActionNotice(null);
+    },
+    onSuccess: async (data) => {
+      const failed = Number(data?.failed || 0);
+      const created = Number(data?.created || 0);
+      const totalRows = Number(data?.totalRows || 0);
+      const errorPreview = Array.isArray(data?.errors)
+        ? data.errors.slice(0, 5).map((entry) => {
+            const rowLabel = entry?.row ? `Row ${entry.row}` : "Row";
+            const slugLabel = entry?.slug ? ` (${entry.slug})` : "";
+            return `${rowLabel}${slugLabel}: ${entry?.message || "Import row failed."}`;
+          })
+        : [];
+
+      setActionNotice({
+        type: failed > 0 ? (created > 0 ? "warning" : "error") : "success",
+        title: failed > 0 ? "Import completed with warnings" : "Import completed",
+        message: `Processed ${totalRows} row(s): ${created} created, ${failed} failed.`,
+        details: errorPreview,
+        meta:
+          failed > errorPreview.length
+            ? `${failed - errorPreview.length} additional row error(s) not shown.`
+            : null,
+      });
+      setPendingImportFile(null);
+      setPendingImportSummary(null);
+      setImportMenuOpen(false);
+      await queryClient.invalidateQueries({ queryKey: ["seller", "products", storeId] });
+    },
+    onError: (error) => {
+      setActionNotice({
+        type: "error",
+        title: "Import failed",
+        message:
+          error?.response?.data?.message ||
+          error?.message ||
+          "Import failed. Please try again.",
+      });
+    },
+  });
+
   const publishMutation = useMutation({
     mutationFn: ({ productId, published }) =>
       setSellerProductPublished(storeId, productId, published),
@@ -616,16 +886,13 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
     : [];
   const catalogGovernance = productsQuery.data?.governance ?? null;
   const authoringGovernance = catalogGovernance?.authoring ?? null;
+  const catalogCanDelete = catalogGovernance?.canDelete !== false;
   const canCreateDraft = Boolean(authoringGovernance?.canCreateDraft);
   const totalPages = Math.max(
     1,
     Math.ceil(Number(pagination.total || 0) / Number(pagination.limit || 20))
   );
   const activeFilterCount = buildActiveFilterCount(appliedFilters);
-  const appliedFilterPills = useMemo(
-    () => buildAppliedFilterPills(appliedFilters),
-    [appliedFilters]
-  );
   const itemIds = useMemo(
     () => items.map((item) => Number(item.id)).filter((id) => id > 0),
     [items]
@@ -640,8 +907,58 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
     [selectedIds]
   );
   const selectedCount = selectedIdList.length;
-  const isListRefreshing = productsQuery.isFetching && !productsQuery.isLoading;
   const allVisibleSelected = itemIds.length > 0 && itemIds.every((id) => selectedIds.has(id));
+  const visibleColumnCount = Object.values(columnVisibility).filter(Boolean).length;
+  const isToolbarBusy =
+    isExporting ||
+    bulkMutation.isPending ||
+    submitMutation.isPending ||
+    publishMutation.isPending;
+  const referencedCategories = Array.isArray(authoringMetaQuery.data?.references?.categories)
+    ? authoringMetaQuery.data.references.categories
+    : [];
+  const uiPreviewCategoryOptions = useMemo(
+    () =>
+      referencedCategories.length > 0
+        ? referencedCategories
+        : buildUiPreviewCategoryOptions(items),
+    [items, referencedCategories]
+  );
+  const filteredUiCategoryOptions = useMemo(() => {
+    const keyword = String(categorySearch || "").trim().toLowerCase();
+    if (!keyword) return uiPreviewCategoryOptions;
+    return uiPreviewCategoryOptions.filter((category) =>
+      String(category?.name || "")
+        .toLowerCase()
+        .includes(keyword)
+    );
+  }, [categorySearch, uiPreviewCategoryOptions]);
+  const selectedUiCategoryNames = useMemo(
+    () =>
+      uiPreviewCategoryOptions
+        .filter((category) =>
+          (draftFilters.categoryIds || []).includes(Number(category.id))
+        )
+        .map((category) => category.name),
+    [draftFilters.categoryIds, uiPreviewCategoryOptions]
+  );
+  const selectedUiCategoryLabel =
+    selectedUiCategoryNames.length === 0
+      ? "Category"
+      : selectedUiCategoryNames.length === 1
+        ? selectedUiCategoryNames[0]
+        : `${selectedUiCategoryNames.length} categories`;
+  const uiPreviewSelectionCount = draftFilters.sort ? 1 : 0;
+  const uiPreviewButtonLabel = getSortFilterLabel(draftFilters.sort);
+  const filteredUiPreviewGroups = useMemo(() => {
+    const keyword = String(priceSearch || "").trim().toLowerCase();
+    return SELLER_SORT_FILTER_GROUPS.map((group) => ({
+      ...group,
+      options: keyword
+        ? group.options.filter((option) => option.label.toLowerCase().includes(keyword))
+        : group.options,
+    })).filter((group) => group.options.length > 0);
+  }, [priceSearch]);
   const selectedReadyToSubmitIds = useMemo(
     () =>
       selectedIdList.filter((id) =>
@@ -656,10 +973,82 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
       ),
     [itemMap, selectedIdList]
   );
-  const selectedBlockedCount = Math.max(
-    0,
-    selectedCount - selectedReadyToSubmitIds.length - selectedRevisionIds.length
-  );
+  const closeFloatingMenus = () => {
+    setExportMenuOpen(false);
+    setImportMenuOpen(false);
+    setBulkMenuOpen(false);
+    setCategoryMenuOpen(false);
+    setPriceMenuOpen(false);
+    setColumnMenuOpen(false);
+    setRowActionMenu(null);
+  };
+
+  const openCreateDrawer = () => {
+    if (!canCreateDraft) return;
+    closeFloatingMenus();
+    setActionNotice(null);
+    setIsCreateDrawerMounted(true);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setIsCreateDrawerVisible(true));
+    });
+  };
+
+  const closeCreateDrawer = () => {
+    setIsCreateDrawerVisible(false);
+    window.setTimeout(() => {
+      setIsCreateDrawerMounted(false);
+    }, 260);
+  };
+
+  const toggleFloatingMenu = (menuName) => {
+    const menuState = {
+      export: exportMenuOpen,
+      import: importMenuOpen,
+      bulk: bulkMenuOpen,
+      category: categoryMenuOpen,
+      price: priceMenuOpen,
+      column: columnMenuOpen,
+    };
+    const shouldOpen = !menuState[menuName];
+
+    closeFloatingMenus();
+    if (!shouldOpen) return;
+
+    if (menuName === "export") setExportMenuOpen(true);
+    if (menuName === "import") setImportMenuOpen(true);
+    if (menuName === "bulk") setBulkMenuOpen(true);
+    if (menuName === "category") setCategoryMenuOpen(true);
+    if (menuName === "price") setPriceMenuOpen(true);
+    if (menuName === "column") setColumnMenuOpen(true);
+  };
+
+  const toggleRowActionMenu = (event, productId) => {
+    const id = Number(productId);
+    if (!Number.isFinite(id) || id <= 0) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const menuWidth = 176;
+    const menuHeight = 220;
+    const margin = 12;
+    const left = Math.min(
+      Math.max(margin, rect.right - menuWidth),
+      Math.max(margin, window.innerWidth - menuWidth - margin)
+    );
+    const fitsBelow = rect.bottom + 8 + menuHeight <= window.innerHeight - margin;
+    const top = fitsBelow
+      ? rect.bottom + 8
+      : Math.max(margin, rect.top - menuHeight - 8);
+
+    setExportMenuOpen(false);
+    setImportMenuOpen(false);
+    setBulkMenuOpen(false);
+    setCategoryMenuOpen(false);
+    setPriceMenuOpen(false);
+    setColumnMenuOpen(false);
+    setRowActionMenu((current) =>
+      current?.id === id ? null : { id, top, left }
+    );
+  };
 
   useEffect(() => {
     setSelectedIds((current) => {
@@ -670,47 +1059,105 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
     });
   }, [itemIds]);
 
-  const applyFilters = () => {
-    setSelectedIds(new Set());
-    setAppliedFilters((current) => ({
-      ...current,
-      keyword: String(draftFilters.keyword || "").trim(),
-      status: String(draftFilters.status || ""),
-      published: String(draftFilters.published || ""),
-      submissionStatus: String(draftFilters.submissionStatus || ""),
-      visibilityState: String(draftFilters.visibilityState || ""),
-      limit: Number(draftFilters.limit || 20) || 20,
-      page: 1,
-    }));
-  };
+  useEffect(() => {
+    const onPointerDown = (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      if (!target.closest("[data-seller-products-export-menu]")) setExportMenuOpen(false);
+      if (!target.closest("[data-seller-products-import-menu]")) setImportMenuOpen(false);
+      if (!target.closest("[data-seller-products-bulk-menu]")) setBulkMenuOpen(false);
+      if (!target.closest("[data-seller-products-category-menu]")) setCategoryMenuOpen(false);
+      if (!target.closest("[data-seller-products-price-menu]")) setPriceMenuOpen(false);
+      if (!target.closest("[data-seller-products-column-menu]")) setColumnMenuOpen(false);
+      if (!target.closest("[data-seller-products-row-menu]")) setRowActionMenu(null);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") closeFloatingMenus();
+    };
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("resize", closeFloatingMenus);
+    window.addEventListener("scroll", closeFloatingMenus);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("resize", closeFloatingMenus);
+      window.removeEventListener("scroll", closeFloatingMenus);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isCreateDrawerMounted) return undefined;
+
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        closeCreateDrawer();
+      }
+    };
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isCreateDrawerMounted]);
 
   const resetFilters = () => {
+    closeFloatingMenus();
     setDraftFilters(DEFAULT_FILTERS);
     setAppliedFilters(DEFAULT_FILTERS);
+    setCategorySearch("");
+    setPriceSearch("");
+    setActionNotice(null);
     setSelectedIds(new Set());
   };
 
   const emptyStateAction =
     activeFilterCount > 0 ? (
-      <button type="button" onClick={resetFilters} className={sellerSecondaryButtonClass}>
+      <button type="button" onClick={resetFilters} className={adminAlignedOutlineButton}>
         <RotateCcw className="h-4 w-4" />
         Reset filters
       </button>
     ) : canCreateDraft ? (
-      <Link to={workspaceRoutes.productCreate()} className={sellerPrimaryButtonClass}>
-        <Plus className="h-4 w-4" />
-        Add Product
-      </Link>
+      <button
+        type="button"
+        onClick={openCreateDrawer}
+        className={adminAlignedPrimaryButton}
+        aria-label="+ Add Product"
+      >
+        + Add Product
+      </button>
     ) : null;
 
   const updatePage = (page) => {
     setSelectedIds(new Set());
+    closeFloatingMenus();
     setDraftFilters((current) => ({ ...current, page }));
     setAppliedFilters((current) => ({ ...current, page }));
   };
 
+  const updateKeywordFilter = (value) => {
+    setSelectedIds(new Set());
+    setDraftFilters((current) => ({
+      ...current,
+      keyword: value,
+      page: 1,
+    }));
+    setAppliedFilters((current) => ({
+      ...current,
+      keyword: value,
+      page: 1,
+    }));
+  };
+
   const applyQuickLane = (nextPartial) => {
     setSelectedIds(new Set());
+    closeFloatingMenus();
     const nextDraft = {
       ...draftFilters,
       ...nextPartial,
@@ -725,15 +1172,19 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
     setAppliedFilters(nextApplied);
   };
 
-  const handleExport = async () => {
+  const handleExport = async (format = "csv") => {
     if (!storeId) return;
     setIsExporting(true);
+    closeFloatingMenus();
     setActionNotice(null);
 
     try {
       const exportPayload = await exportSellerProducts(storeId, {
+        format,
         filters: {
           keyword: appliedFilters.keyword,
+          categoryIds: appliedFilters.categoryIds,
+          sort: appliedFilters.sort,
           status: appliedFilters.status,
           published: appliedFilters.published,
           submissionStatus: appliedFilters.submissionStatus,
@@ -743,7 +1194,7 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
       downloadBlobFile(exportPayload.filename, exportPayload.blob);
       setActionNotice({
         type: "success",
-        message: "Exported the current seller product result set for this store.",
+        message: `Exported the current seller product result set as ${String(format).toUpperCase()}.`,
       });
     } catch (error) {
       setActionNotice({
@@ -756,9 +1207,130 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
     }
   };
 
+  const triggerImportPicker = () => {
+    if (!canCreateDraft) return;
+    const input = document.getElementById("seller-products-import-input");
+    input?.click();
+  };
+
+  const handleImportFileChange = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    const normalizedName = String(file.name || "").toLowerCase();
+    const normalizedType = String(file.type || "").toLowerCase();
+    const looksLikeJson =
+      normalizedName.endsWith(".json") ||
+      normalizedType === "application/json" ||
+      normalizedType.endsWith("+json");
+    const looksLikeCsv =
+      normalizedName.endsWith(".csv") ||
+      normalizedType === "text/csv" ||
+      normalizedType === "application/csv" ||
+      normalizedType === "application/vnd.ms-excel";
+
+    if (!looksLikeJson && !looksLikeCsv) {
+      setPendingImportFile(null);
+      setPendingImportSummary(null);
+      setActionNotice({
+        type: "error",
+        title: "Invalid import file",
+        message: "Seller import only accepts CSV or JSON files.",
+      });
+      return;
+    }
+
+    if (file.size <= 0) {
+      setPendingImportFile(null);
+      setPendingImportSummary(null);
+      setActionNotice({
+        type: "error",
+        title: "Empty import file",
+        message: "Choose a CSV or JSON file that contains at least one product row.",
+      });
+      return;
+    }
+
+    if (file.size > MAX_IMPORT_FILE_SIZE) {
+      setPendingImportFile(null);
+      setPendingImportSummary(null);
+      setActionNotice({
+        type: "error",
+        title: "Import file too large",
+        message: "Import file exceeds the 2 MB limit for the current seller import flow.",
+      });
+      return;
+    }
+
+    setPendingImportFile(file);
+    setPendingImportSummary({
+      name: file.name,
+      size: file.size,
+      type: file.type || "Unknown file type",
+    });
+    setActionNotice({
+      type: "success",
+      title: "Import file ready",
+      message: `${file.name} is ready for Seller product import.`,
+    });
+  };
+
+  const handleImportNow = () => {
+    if (!pendingImportFile || importMutation.isPending) return;
+    importMutation.mutate(pendingImportFile);
+  };
+
+  const toggleUiCategorySelection = (categoryId) => {
+    const nextCategoryId = Number(categoryId);
+    if (!Number.isFinite(nextCategoryId) || nextCategoryId <= 0) return;
+
+    setSelectedIds(new Set());
+    setDraftFilters((current) => {
+      const currentIds = Array.isArray(current.categoryIds) ? current.categoryIds : [];
+      const nextIds = currentIds.includes(nextCategoryId)
+        ? currentIds.filter((value) => Number(value) !== nextCategoryId)
+        : [...currentIds, nextCategoryId];
+      return {
+        ...current,
+        categoryIds: nextIds,
+        page: 1,
+      };
+    });
+    setAppliedFilters((current) => {
+      const currentIds = Array.isArray(current.categoryIds) ? current.categoryIds : [];
+      const nextIds = currentIds.includes(nextCategoryId)
+        ? currentIds.filter((value) => Number(value) !== nextCategoryId)
+        : [...currentIds, nextCategoryId];
+      return {
+        ...current,
+        categoryIds: nextIds,
+        page: 1,
+      };
+    });
+  };
+
+  const toggleUiPreviewFilter = (groupKey, value) => {
+    if (groupKey !== "sort") return;
+
+    const nextSort = draftFilters.sort === value ? "" : value;
+    setSelectedIds(new Set());
+    setDraftFilters((current) => ({
+      ...current,
+      sort: nextSort,
+      page: 1,
+    }));
+    setAppliedFilters((current) => ({
+      ...current,
+      sort: nextSort,
+      page: 1,
+    }));
+  };
+
   const handleExportSelected = async () => {
     if (!storeId || selectedCount === 0) return;
     setIsExporting(true);
+    closeFloatingMenus();
     setActionNotice(null);
 
     try {
@@ -779,6 +1351,29 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
     } finally {
       setIsExporting(false);
     }
+  };
+
+  const handleDuplicateProduct = (item) => {
+    const productId = Number(item?.id);
+    if (!productId || duplicateMutation.isPending) return;
+
+    closeFloatingMenus();
+    setActionNotice(null);
+    duplicateMutation.mutate(productId);
+  };
+
+  const handleDeleteProduct = (item) => {
+    const productId = Number(item?.id);
+    if (!productId || deleteMutation.isPending) return;
+
+    const confirmed = window.confirm(
+      `Delete product\n\n${item?.name || "This product"} will be removed from the seller catalog if it is safe to delete.\n\nThis may archive the product if it has order history.`
+    );
+    if (!confirmed) return;
+
+    closeFloatingMenus();
+    setActionNotice(null);
+    deleteMutation.mutate(productId);
   };
 
   const toggleSelectedId = (productId) => {
@@ -811,11 +1406,13 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
   };
 
   const clearSelection = () => {
+    closeFloatingMenus();
     setSelectedIds(new Set());
   };
 
   const handleApplyBulkAction = (action, ids) => {
     if (!canEditProducts || !action || !Array.isArray(ids) || ids.length === 0) return;
+    closeFloatingMenus();
     bulkMutation.mutate({
       action,
       ids,
@@ -860,56 +1457,180 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
 
   return (
     <div className="space-y-4">
-      <SellerWorkspaceSectionHeader
-        eyebrow={null}
+      <ProductManagementHeader
         title="Products"
-        description="Seller catalog for drafts, review flow, and live state."
-        actions={
-          <>
+        subtitle="Seller catalog for drafts, review flow, and live state."
+      >
+            <div className="relative" data-seller-products-export-menu>
+              <button
+                type="button"
+                onClick={() => toggleFloatingMenu("export")}
+                disabled={isToolbarBusy}
+                className={adminAlignedOutlineButton}
+              >
+                <Download className="h-4 w-4" />
+                {isExporting ? "Exporting..." : "Export"}
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+              {exportMenuOpen ? (
+                <div className="absolute right-0 z-30 mt-2 w-44 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                  <button
+                    type="button"
+                    onClick={() => handleExport("csv")}
+                    className="block w-full px-3 py-2.5 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Export to CSV
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleExport("json")}
+                    className="block w-full px-3 py-2.5 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Export to JSON
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            <div
+              className="flex min-w-0 flex-wrap items-center gap-1 xl:flex-nowrap xl:gap-1"
+              data-seller-products-import-menu
+            >
+              <button
+                type="button"
+                onClick={() => toggleFloatingMenu("import")}
+                disabled={!canCreateDraft}
+                className={adminAlignedOutlineButton}
+                title={
+                  canCreateDraft
+                    ? "Open Seller import UI"
+                    : "Seller import UI follows create-draft permission."
+                }
+              >
+                <Upload className="h-4 w-4" />
+                Import
+              </button>
+              <input
+                id="seller-products-import-input"
+                type="file"
+                accept=".csv,.json,text/csv,application/json"
+                onChange={handleImportFileChange}
+                className="hidden"
+              />
+              {importMenuOpen ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={triggerImportPicker}
+                    disabled={!canCreateDraft || importMutation.isPending}
+                    title={
+                      pendingImportSummary
+                        ? `${pendingImportSummary.name} • ${formatFileSize(pendingImportSummary.size)}`
+                        : "Select file"
+                    }
+                    className="inline-flex h-[34px] w-[136px] min-w-0 max-w-[136px] items-center gap-1 rounded-lg border border-emerald-200 border-dashed bg-white px-1.5 text-[10px] font-medium text-slate-600 transition hover:border-emerald-300 hover:bg-emerald-50/40 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Upload className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                    <span className="truncate">{pendingImportSummary?.name || "Select File"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleImportNow}
+                    disabled={!pendingImportFile || importMutation.isPending}
+                    className={`inline-flex h-[34px] items-center justify-center gap-1 whitespace-nowrap rounded-lg px-2 text-[10px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                      pendingImportFile && !importMutation.isPending
+                        ? "bg-sky-500 text-white hover:bg-sky-600"
+                        : "border border-slate-200 bg-slate-100 text-slate-400"
+                    }`}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    {importMutation.isPending ? "Importing..." : "Import Now"}
+                  </button>
+                </>
+              ) : null}
+            </div>
+
+            {canEditProducts ? (
+              <div className="relative" data-seller-products-bulk-menu>
+                <button
+                  type="button"
+                  onClick={() => toggleFloatingMenu("bulk")}
+                  disabled={selectedCount === 0 || bulkMutation.isPending}
+                  className={`${adminAlignedButtonBase} ${
+                    selectedCount > 0
+                      ? "border border-amber-300 bg-amber-50 text-amber-900 hover:border-amber-400 hover:bg-amber-100"
+                      : "border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                  }`}
+                >
+                  <Layers3 className="h-4 w-4" />
+                  Bulk Action
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+                {bulkMenuOpen ? (
+                  <div className="absolute right-0 z-30 mt-2 w-48 overflow-hidden rounded-xl border border-amber-200 bg-white shadow-lg">
+                    <div className="px-2.5 py-1.5">
+                      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                        Selected rows
+                      </p>
+                      <p className="mt-1 text-sm text-slate-700">
+                        {selectedCount} selected • {selectedReadyToSubmitIds.length} ready •{" "}
+                        {selectedRevisionIds.length} revision
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleApplyBulkAction("submit_review", selectedReadyToSubmitIds)
+                      }
+                      disabled={selectedReadyToSubmitIds.length === 0 || bulkMutation.isPending}
+                      className="block w-full px-3 py-2.5 text-left text-xs font-medium text-slate-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Submit drafts
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleApplyBulkAction("resubmit_review", selectedRevisionIds)
+                      }
+                      disabled={selectedRevisionIds.length === 0 || bulkMutation.isPending}
+                      className="block w-full px-3 py-2.5 text-left text-xs font-medium text-slate-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Resubmit revisions
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportSelected}
+                      disabled={selectedCount === 0 || isExporting}
+                      className="block w-full px-3 py-2.5 text-left text-xs font-medium text-slate-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Export selected rows
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
             <button
               type="button"
-              onClick={handleExport}
-              disabled={isExporting || bulkMutation.isPending}
-              className={sellerSecondaryButtonClass}
+              disabled
+              title="Bulk delete is deferred in the current Seller workspace contract."
+              className={adminAlignedDangerButton}
             >
-              <Download className="h-4 w-4" />
-              {isExporting ? "Exporting..." : "Export"}
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete
             </button>
+
             {canCreateDraft ? (
-              <Link to={workspaceRoutes.productCreate()} className={sellerPrimaryButtonClass}>
-                <Plus className="h-4 w-4" />
-                Add Product
-              </Link>
+              <button
+                type="button"
+                onClick={openCreateDrawer}
+                className={`${adminAlignedPrimaryButton} min-w-[118px]`}
+                aria-label="+ Add Product"
+              >
+                + Add Product
+              </button>
             ) : null}
-          </>
-        }
-      >
-        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-          <span>{pagination.total} in result</span>
-          <span className="text-slate-300">/</span>
-          <span>{summary.totalProducts} in store</span>
-          <span className="text-slate-300">/</span>
-          <span>{getCurrentLaneLabel(appliedFilters)}</span>
-          {activeFilterCount > 0 ? (
-            <>
-              <span className="text-slate-300">/</span>
-              <span>{activeFilterCount} filters</span>
-            </>
-          ) : null}
-          {selectedCount > 0 ? (
-            <>
-              <span className="text-slate-300">/</span>
-              <span>{selectedCount} selected</span>
-            </>
-          ) : null}
-          {isListRefreshing ? (
-            <>
-              <span className="text-slate-300">/</span>
-              <span className="font-medium text-slate-700">Refreshing...</span>
-            </>
-          ) : null}
-        </div>
-      </SellerWorkspaceSectionHeader>
+      </ProductManagementHeader>
 
       {actionNotice ? (
         <SellerWorkspaceNotice type={actionNotice.type}>
@@ -932,543 +1653,310 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
         </SellerWorkspaceNotice>
       ) : null}
 
-      <SellerWorkspacePanel className="p-3.5 sm:p-4">
-        <div className="space-y-4">
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
-            <CompactSummaryItem label="Total" value={String(summary.totalProducts)} />
-            <CompactSummaryItem
-              label="Result set"
-              value={String(pagination.total)}
-              tone={activeFilterCount > 0 ? "sky" : "slate"}
-              Icon={Filter}
-            />
-            <CompactSummaryItem
-              label="Drafts"
-              value={String(summary.drafts)}
-              tone="amber"
-              Icon={Pencil}
-            />
-            {canEditProducts ? (
-              <CompactSummaryItem
-                label="Ready"
-                value={String(summary.readyToSubmit || 0)}
-                tone="emerald"
-                Icon={CheckCircle2}
-              />
-            ) : null}
-            <CompactSummaryItem
-              label="Review queue"
-              value={String(summary.reviewQueue)}
-              tone="sky"
-              Icon={Clock3}
-            />
-            <CompactSummaryItem
-              label="Needs revision"
-              value={String(summary.needsRevision)}
-              tone="amber"
-              Icon={AlertTriangle}
-            />
-            <CompactSummaryItem
-              label="Visible"
-              value={String(summary.storefrontVisible)}
-              tone="emerald"
-              Icon={Eye}
-            />
-            <CompactSummaryItem
-              label="Blocked"
-              value={String(summary.publishedBlocked)}
-              tone="amber"
-              Icon={AlertTriangle}
-            />
-            <CompactSummaryItem
-              label="Hidden"
-              value={String(summary.internalOnly)}
-              Icon={Boxes}
-            />
+      <ProductFilterBar
+        controls={
+          <div className="grid min-w-0 flex-1 gap-1 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,0.62fr)_minmax(0,0.62fr)]">
+                  <div>
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="search"
+                        value={draftFilters.keyword}
+                        onChange={(event) => updateKeywordFilter(event.target.value)}
+                        placeholder="Search name, slug, or SKU"
+                        className={`${sellerFieldClass} h-[38px] rounded-xl pl-9`}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="relative" data-seller-products-category-menu>
+                    <button
+                      type="button"
+                      onClick={() => toggleFloatingMenu("category")}
+                      className={`inline-flex h-[38px] w-full items-center justify-start gap-2 rounded-xl border border-dashed px-3 text-sm font-semibold transition ${
+                        selectedUiCategoryNames.length > 0
+                          ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-current/30">
+                        <Plus className="h-3 w-3" />
+                      </span>
+                      <span className="truncate text-left">{selectedUiCategoryLabel}</span>
+                    </button>
+                    {categoryMenuOpen ? (
+                      <div className="absolute left-0 z-30 mt-2 w-[280px] max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_18px_38px_rgba(15,23,42,0.12)]">
+                        <div className="relative">
+                          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                          <input
+                            type="search"
+                            value={categorySearch}
+                            onChange={(event) => setCategorySearch(event.target.value)}
+                            placeholder="Category"
+                            className={`${sellerFieldClass} h-[40px] rounded-xl pl-9`}
+                          />
+                        </div>
+                        <div className="mt-2 max-h-64 space-y-0.5 overflow-auto pr-1">
+                          {filteredUiCategoryOptions.length > 0 ? (
+                            filteredUiCategoryOptions.map((category) => {
+                              const checked = (draftFilters.categoryIds || []).includes(
+                                Number(category.id)
+                              );
+                              return (
+                                <label
+                                  key={String(category.id)}
+                                  className={`flex cursor-pointer items-center gap-3 rounded-xl px-2.5 py-2 text-sm transition ${
+                                    checked ? "bg-emerald-50 text-emerald-800" : "hover:bg-slate-50"
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => toggleUiCategorySelection(category.id)}
+                                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300"
+                                  />
+                                  <span className="min-w-0">
+                                    <span className="block truncate font-medium">
+                                      {category.name}
+                                    </span>
+                                    {category.code ? (
+                                      <span className="block text-xs text-slate-400">
+                                        {category.code}
+                                      </span>
+                                    ) : null}
+                                  </span>
+                                </label>
+                              );
+                            })
+                          ) : (
+                            <div className="px-2.5 py-3 text-sm text-slate-500">
+                              No category options found.
+                            </div>
+                          )}
+                        </div>
+                        <div className="mt-2 flex items-center justify-between border-t border-slate-100 px-1 pt-2">
+                          <span className="text-[11px] font-medium text-slate-500">
+                            {selectedUiCategoryNames.length > 0
+                              ? `${selectedUiCategoryNames.length} selected`
+                              : authoringMetaQuery.isError
+                                ? "Category reference unavailable"
+                                : "No category selected"}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedIds(new Set());
+                              setDraftFilters((current) => ({
+                                ...current,
+                                categoryIds: [],
+                                page: 1,
+                              }));
+                              setAppliedFilters((current) => ({
+                                ...current,
+                                categoryIds: [],
+                                page: 1,
+                              }));
+                            }}
+                            className="text-xs font-semibold text-slate-600 transition hover:text-slate-900"
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="relative" data-seller-products-price-menu>
+                    <button
+                      type="button"
+                      onClick={() => toggleFloatingMenu("price")}
+                      className={`inline-flex h-[38px] w-full items-center justify-start gap-2 rounded-xl border border-dashed px-3 text-sm font-semibold transition ${
+                        uiPreviewSelectionCount > 0
+                          ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-current/30">
+                        <Plus className="h-3 w-3" />
+                      </span>
+                      <span className="truncate text-left">{uiPreviewButtonLabel}</span>
+                    </button>
+                    {priceMenuOpen ? (
+                      <div className="absolute left-0 z-30 mt-2 w-[280px] max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_18px_38px_rgba(15,23,42,0.12)]">
+                        <div className="relative">
+                          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                          <input
+                            type="search"
+                            value={priceSearch}
+                            onChange={(event) => setPriceSearch(event.target.value)}
+                            placeholder="Price"
+                            className={`${sellerFieldClass} h-[40px] rounded-xl pl-9`}
+                          />
+                        </div>
+                        <div className="mt-2 max-h-64 space-y-0.5 overflow-auto pr-1">
+                          {filteredUiPreviewGroups.length > 0 ? (
+                            filteredUiPreviewGroups.map((group) => (
+                              <div key={group.key} className="space-y-1">
+                                <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+                                  {group.label}
+                                </p>
+                                {group.options.map((option) => {
+                                  const checked = draftFilters.sort === option.value;
+                                  return (
+                                    <button
+                                      key={option.value}
+                                      type="button"
+                                      onClick={() => toggleUiPreviewFilter(group.key, option.value)}
+                                      className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left text-sm transition ${
+                                        checked
+                                          ? "bg-emerald-50 text-emerald-800"
+                                          : "hover:bg-slate-50"
+                                      }`}
+                                    >
+                                      <span
+                                        className={`inline-flex h-4 w-4 shrink-0 rounded border ${
+                                          checked
+                                            ? "border-emerald-500 bg-emerald-100"
+                                            : "border-slate-300 bg-white"
+                                        }`}
+                                      />
+                                      <span className="truncate">{option.label}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ))
+                          ) : (
+                            <div className="px-2.5 py-3 text-sm text-slate-500">
+                              No preview filter options found.
+                            </div>
+                          )}
+                        </div>
+                        <div className="mt-2 flex items-center justify-between border-t border-slate-100 px-1 pt-2">
+                          <span className="text-[11px] font-medium text-slate-500">
+                            {draftFilters.sort
+                              ? `Sorted by ${getSortFilterLabel(draftFilters.sort)}`
+                              : "Default sort"}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedIds(new Set());
+                              setDraftFilters((current) => ({
+                                ...current,
+                                sort: "",
+                                page: 1,
+                              }));
+                              setAppliedFilters((current) => ({
+                                ...current,
+                                sort: "",
+                                page: 1,
+                              }));
+                            }}
+                            className="text-xs font-semibold text-slate-600 transition hover:text-slate-900"
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
           </div>
+        }
+        actions={
+          <>
+                  <button
+                    type="button"
+                    onClick={resetFilters}
+                    className="inline-flex h-[34px] items-center justify-center gap-1.5 rounded-lg border border-transparent bg-transparent px-2 text-sm font-medium text-slate-500 transition hover:bg-slate-50 hover:text-slate-700"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Reset
+                  </button>
+                  <div className="relative" data-seller-products-column-menu>
+                    <button
+                      type="button"
+                      onClick={() => toggleFloatingMenu("column")}
+                      className="inline-flex h-[34px] items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                      title={`Visible columns (${visibleColumnCount}/${COLUMN_VISIBILITY_OPTIONS.length})`}
+                    >
+                      <SlidersHorizontal className="h-4 w-4" />
+                      View
+                    </button>
+                    {columnMenuOpen ? (
+                      <div className="absolute right-0 z-30 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                            Visible columns
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setColumnVisibility(DEFAULT_COLUMN_VISIBILITY)}
+                            className="text-xs font-semibold text-slate-600 transition hover:text-slate-900"
+                          >
+                            Reset
+                          </button>
+                        </div>
+                        <div className="mt-3 space-y-1.5">
+                          {COLUMN_VISIBILITY_OPTIONS.map(([key, label]) => (
+                            <label
+                              key={key}
+                              className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2 transition hover:bg-slate-50"
+                            >
+                              <input
+                                type="checkbox"
+                                disabled={visibleColumnCount === 1 && Boolean(columnVisibility[key])}
+                                checked={Boolean(columnVisibility[key])}
+                                onChange={() =>
+                                  setColumnVisibility((current) => {
+                                    const nextVisibleCount = Object.values(current).filter(Boolean)
+                                      .length;
+                                    if (current[key] && nextVisibleCount === 1) return current;
+                                    return {
+                                      ...current,
+                                      [key]: !current[key],
+                                    };
+                                  })
+                                }
+                                className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300"
+                              />
+                              <span className="text-sm text-slate-700">{label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+          </>
+        }
+      />
 
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-            <div className="w-full xl:max-w-md">
-              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                Search
-              </p>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="search"
-                  value={draftFilters.keyword}
-                  onChange={(event) =>
-                    setDraftFilters((current) => ({
-                      ...current,
-                      keyword: event.target.value,
-                    }))
-                  }
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") applyFilters();
-                  }}
-                  placeholder="Search name, slug, or SKU"
-                  className={`${sellerFieldClass} h-10 pl-9`}
-                />
-              </div>
-            </div>
-            <div className="flex flex-wrap items-end gap-2 xl:justify-end">
-              <div>
-                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                  Lifecycle
-                </p>
-                <select
-                  value={draftFilters.status}
-                  onChange={(event) =>
-                    setDraftFilters((current) => ({
-                      ...current,
-                      status: event.target.value,
-                    }))
-                  }
-                  className={`${sellerFieldClass} h-10 w-full sm:w-[148px]`}
-                >
-                  <option value="">All lifecycle</option>
-                  <option value="draft">Draft</option>
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </div>
-              <div>
-                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                  Submission
-                </p>
-                <select
-                  value={draftFilters.submissionStatus}
-                  onChange={(event) =>
-                    setDraftFilters((current) => ({
-                      ...current,
-                      submissionStatus: event.target.value,
-                    }))
-                  }
-                  className={`${sellerFieldClass} h-10 w-full sm:w-[172px]`}
-                >
-                  <option value="">All submission</option>
-                  {canEditProducts ? (
-                    <option value="ready_to_submit">Ready to submit</option>
-                  ) : null}
-                  <option value="none">Not submitted</option>
-                  <option value="submitted">Submitted for review</option>
-                  <option value="needs_revision">Needs revision</option>
-                  <option value="review_queue">Review queue</option>
-                </select>
-              </div>
-              <div>
-                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                  Publish
-                </p>
-                <select
-                  value={draftFilters.published}
-                  onChange={(event) =>
-                    setDraftFilters((current) => ({
-                      ...current,
-                      published: event.target.value,
-                    }))
-                  }
-                  className={`${sellerFieldClass} h-10 w-full sm:w-[156px]`}
-                >
-                  <option value="">All publish states</option>
-                  <option value="true">Published</option>
-                  <option value="false">Unpublished</option>
-                </select>
-              </div>
-              <div>
-                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                  Visibility
-                </p>
-                <select
-                  value={draftFilters.visibilityState}
-                  onChange={(event) =>
-                    setDraftFilters((current) => ({
-                      ...current,
-                      visibilityState: event.target.value,
-                    }))
-                  }
-                  className={`${sellerFieldClass} h-10 w-full sm:w-[172px]`}
-                >
-                  <option value="">All visibility</option>
-                  <option value="internal_only">Hidden from storefront</option>
-                  <option value="storefront_visible">Storefront visible</option>
-                  <option value="published_blocked">Visibility blocked</option>
-                </select>
-              </div>
-              <select
-                value={String(draftFilters.limit || 20)}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({
-                    ...current,
-                    limit: Number(event.target.value) || 20,
-                  }))
-                }
-                className={`${sellerFieldClass} h-10 w-full sm:w-[128px]`}
-              >
-                <option value="20">20 rows</option>
-                <option value="30">30 rows</option>
-                <option value="50">50 rows</option>
-              </select>
-              <button type="button" onClick={applyFilters} className={sellerPrimaryButtonClass}>
-                <Filter className="h-4 w-4" />
-                Apply
-              </button>
-              <button type="button" onClick={resetFilters} className={sellerSecondaryButtonClass}>
-                <RotateCcw className="h-4 w-4" />
-                Reset
-              </button>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-3.5 py-3">
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-              <span className="font-semibold uppercase tracking-[0.08em] text-slate-700">
-                View
-              </span>
-              <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-700">
-                {getCurrentLaneLabel(appliedFilters)}
-              </span>
-              <span>{pagination.total} matching rows</span>
-              {activeFilterCount > 0 ? <span>{activeFilterCount} active filter(s)</span> : null}
-              {selectedCount > 0 ? <span>{selectedCount} selected</span> : null}
-            </div>
-          </div>
-
-          <div className="grid gap-3 border-t border-slate-100 pt-3 xl:grid-cols-[170px_minmax(0,1fr)] xl:items-start">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                Submission lane
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <ReviewQueueCard
-                label="All"
-                count={summary.totalProducts}
-                Icon={Boxes}
-                active={
-                  !appliedFilters.status &&
-                  !appliedFilters.published &&
-                  !appliedFilters.submissionStatus &&
-                  !appliedFilters.visibilityState
-                }
-                onClick={() =>
-                  applyQuickLane({
-                    status: "",
-                    submissionStatus: "",
-                    visibilityState: "",
-                  })
-                }
-              />
-              <ReviewQueueCard
-                label="Draft"
-                count={summary.drafts}
-                tone="amber"
-                Icon={Pencil}
-                active={appliedFilters.status === "draft"}
-                onClick={() =>
-                  applyQuickLane({
-                    status: "draft",
-                    submissionStatus: "",
-                    visibilityState: "",
-                  })
-                }
-              />
-              {canEditProducts ? (
-                <ReviewQueueCard
-                  label="Ready"
-                  count={summary.readyToSubmit || 0}
-                  tone="emerald"
-                  Icon={CheckCircle2}
-                  active={appliedFilters.submissionStatus === "ready_to_submit"}
-                  onClick={() =>
-                    applyQuickLane({
-                      status: "",
-                      submissionStatus: "ready_to_submit",
-                      visibilityState: "",
-                    })
-                  }
-                />
-              ) : null}
-              <ReviewQueueCard
-                label="Submitted"
-                count={summary.submitted}
-                tone="sky"
-                Icon={Clock3}
-                active={appliedFilters.submissionStatus === "submitted"}
-                onClick={() =>
-                  applyQuickLane({
-                    status: "",
-                    submissionStatus: "submitted",
-                    visibilityState: "",
-                  })
-                }
-              />
-              <ReviewQueueCard
-                label="Review queue"
-                count={summary.reviewQueue}
-                tone="sky"
-                Icon={Clock3}
-                active={appliedFilters.submissionStatus === "review_queue"}
-                onClick={() =>
-                  applyQuickLane({
-                    status: "",
-                    submissionStatus: "review_queue",
-                    visibilityState: "",
-                  })
-                }
-              />
-              <ReviewQueueCard
-                label="Needs revision"
-                count={summary.needsRevision}
-                tone="amber"
-                Icon={AlertTriangle}
-                active={appliedFilters.submissionStatus === "needs_revision"}
-                onClick={() =>
-                  applyQuickLane({
-                    status: "",
-                    submissionStatus: "needs_revision",
-                    visibilityState: "",
-                  })
-                }
-              />
-            </div>
-          </div>
-
-          <div className="grid gap-3 xl:grid-cols-[170px_minmax(0,1fr)] xl:items-start">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                Catalog state
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <ReviewQueueCard
-                label="Active"
-                count={summary.active}
-                tone="emerald"
-                Icon={CheckCircle2}
-                active={appliedFilters.status === "active"}
-                onClick={() =>
-                  applyQuickLane({
-                    status: "active",
-                    submissionStatus: "",
-                    visibilityState: "",
-                  })
-                }
-              />
-              <ReviewQueueCard
-                label="Visible"
-                count={summary.storefrontVisible}
-                tone="emerald"
-                Icon={Eye}
-                active={appliedFilters.visibilityState === "storefront_visible"}
-                onClick={() =>
-                  applyQuickLane({
-                    status: "",
-                    submissionStatus: "",
-                    visibilityState: "storefront_visible",
-                  })
-                }
-              />
-              <ReviewQueueCard
-                label="Blocked"
-                count={summary.publishedBlocked}
-                tone="amber"
-                Icon={AlertTriangle}
-                active={appliedFilters.visibilityState === "published_blocked"}
-                onClick={() =>
-                  applyQuickLane({
-                    status: "",
-                    submissionStatus: "",
-                    visibilityState: "published_blocked",
-                  })
-                }
-              />
-              <ReviewQueueCard
-                label="Inactive"
-                count={summary.inactive}
-                Icon={Boxes}
-                active={appliedFilters.status === "inactive"}
-                onClick={() =>
-                  applyQuickLane({
-                    status: "inactive",
-                    submissionStatus: "",
-                    visibilityState: "",
-                  })
-                }
-              />
-            </div>
-          </div>
-
-          {appliedFilterPills.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
-              <span className="text-xs font-medium uppercase tracking-[0.08em] text-slate-500">
-                Applied
-              </span>
-              {appliedFilterPills.map((pill) => (
-                <span
-                  key={pill}
-                  className="inline-flex h-8 items-center rounded-full border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-700"
-                >
-                  {pill}
-                </span>
-              ))}
-              <button type="button" onClick={resetFilters} className={compactTextLinkClass}>
-                Clear filters
-              </button>
-            </div>
-          ) : null}
-
-          {authoringGovernance?.note || catalogGovernance?.note || contractNotes.length > 0 ? (
-            <details className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-              <summary className="cursor-pointer list-none font-semibold text-slate-700">
-                Workspace rules
-              </summary>
-              <div className="mt-2 space-y-2">
-                {authoringGovernance?.note || catalogGovernance?.note ? (
-                  <p>{authoringGovernance?.note || catalogGovernance?.note}</p>
-                ) : null}
-                {contractNotes.map((note) => (
-                  <p key={note}>{note}</p>
-                ))}
-              </div>
-            </details>
-          ) : null}
-        </div>
-      </SellerWorkspacePanel>
-
-      <SellerWorkspacePanel className="p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold text-slate-900">Product list</h3>
-            <p className="mt-1 text-xs text-slate-500">
-              {pagination.total} row(s) in this result set
-              <span className="mx-1.5 text-slate-300">/</span>
-              {summary.totalProducts} total in this store
-            </p>
-          </div>
-          {isListRefreshing ? (
-            <span className="text-xs font-medium text-slate-500">Refreshing result set...</span>
-          ) : null}
-        </div>
-
+      <SellerWorkspacePanel className={`${adminAlignedPanelClass} p-3`}>
         {items.length > 0 ? (
-          <div className="mt-3">
-            {canEditProducts ? (
-              <div className="mb-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
-                {selectedCount > 0 ? (
-                  <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <CompactMetricPill
-                        label="Selected"
-                        value={selectedCount}
-                        Icon={Layers3}
-                        title="Selected rows"
-                      />
-                      <CompactMetricPill
-                        label="Ready"
-                        value={selectedReadyToSubmitIds.length}
-                        tone="emerald"
-                        Icon={CheckCircle2}
-                        title="Draft rows ready to submit"
-                      />
-                      <CompactMetricPill
-                        label="Revision"
-                        value={selectedRevisionIds.length}
-                        tone="sky"
-                        Icon={Clock3}
-                        title="Revision rows ready to resubmit"
-                      />
-                      {selectedBlockedCount > 0 ? (
-                        <CompactMetricPill
-                          label="Blocked"
-                          value={selectedBlockedCount}
-                          tone="amber"
-                          Icon={AlertTriangle}
-                          title="Selected rows that cannot run the current seller action"
-                        />
-                      ) : null}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleApplyBulkAction("submit_review", selectedReadyToSubmitIds)
-                        }
-                        disabled={
-                          bulkMutation.isPending ||
-                          !canEditProducts ||
-                          selectedReadyToSubmitIds.length === 0
-                        }
-                        className={compactPrimaryActionButtonClass}
-                      >
-                        <Send className="h-3.5 w-3.5" />
-                        {bulkMutation.isPending
-                          ? "Submitting..."
-                          : `Submit drafts (${selectedReadyToSubmitIds.length})`}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleApplyBulkAction("resubmit_review", selectedRevisionIds)
-                        }
-                        disabled={
-                          bulkMutation.isPending ||
-                          !canEditProducts ||
-                          selectedRevisionIds.length === 0
-                        }
-                        className={compactActionButtonClass}
-                      >
-                        <Send className="h-3.5 w-3.5" />
-                        {bulkMutation.isPending
-                          ? "Resubmitting..."
-                          : `Resubmit revisions (${selectedRevisionIds.length})`}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleExportSelected}
-                        disabled={isExporting || selectedCount === 0}
-                        className={compactActionButtonClass}
-                        title="Export selected rows"
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                        {isExporting ? "Exporting..." : "Export"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={clearSelection}
-                        className={compactActionButtonClass}
-                        title="Clear current selection"
-                      >
-                        <RotateCcw className="h-3.5 w-3.5" />
-                        Clear
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                    <CompactMetricPill label="Select rows" value="Bulk" Icon={Layers3} />
-                    <CompactMetricPill
-                      label="Seller actions"
-                      value="Submit / Resubmit / Export"
-                      Icon={Send}
-                      title="Seller bulk actions stay limited to review submission flow"
-                    />
-                  </div>
-                )}
+          <div>
+            {productsQuery.isFetching && !productsQuery.isLoading ? (
+              <div
+                className="mb-2.5 h-1 overflow-hidden rounded-full bg-slate-100"
+                aria-label="Refreshing product list"
+              >
+                <div className="h-full w-1/3 animate-pulse rounded-full bg-emerald-400" />
               </div>
-            ) : (
-              <div className="mb-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-3 text-xs text-slate-500">
-                This role can review the current seller result set, but draft submit actions stay
-                hidden.
+            ) : null}
+            {!canEditProducts ? (
+              <div className="mb-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-xs text-slate-500">
+                This role can review the current seller result set.
               </div>
-            )}
+            ) : null}
 
-            <div className={`${sellerTableWrapClass} overflow-x-auto`}>
-              <table className="w-full min-w-[980px] text-left">
-                <thead className="bg-slate-50">
+            <div
+              className={`${sellerTableWrapClass} w-full overflow-x-hidden rounded-[18px] shadow-[0_1px_2px_rgba(15,23,42,0.03)]`}
+              aria-busy={productsQuery.isFetching}
+            >
+              <table className="w-full table-fixed border-separate border-spacing-0 text-left text-sm">
+                <thead className="bg-slate-50/90">
                   <tr>
                     {canEditProducts ? (
-                      <th className={`${compactTableHeadClass} w-[4%]`}>
+                      <th className={`${compactTableHeadClass} w-[40px]`}>
                         <input
                           type="checkbox"
                           aria-label="Select visible seller products"
@@ -1478,22 +1966,65 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                         />
                       </th>
                     ) : null}
-                    <th className={`${compactTableHeadClass} ${canEditProducts ? "w-[30%]" : "w-[32%]"}`}>
-                      Product
-                    </th>
-                    <th className={`${compactTableHeadClass} w-[12%]`}>Category</th>
-                    <th className={`${compactTableHeadClass} w-[10%] text-right`}>Price</th>
-                    <th className={`${compactTableHeadClass} w-[9%] text-right`}>Sale</th>
-                    <th className={`${compactTableHeadClass} w-[8%]`}>Stock</th>
-                    <th className={`${compactTableHeadClass} w-[11%]`}>Status</th>
-                    <th className={`${compactTableHeadClass} w-[5%] text-center`}>View</th>
-                    <th className={`${compactTableHeadClass} w-[6%] text-center`}>Published</th>
-                    <th className={`${compactTableHeadClass} w-[9%]`}>Actions</th>
+                    {columnVisibility.product ? (
+                      <th className={compactTableHeadClass}>
+                        Product
+                      </th>
+                    ) : null}
+                    {columnVisibility.category ? (
+                      <th className={`${compactTableHeadClass} w-[128px]`}>Category</th>
+                    ) : null}
+                    {columnVisibility.price ? (
+                      <th className={`${compactTableHeadClass} w-[92px] text-right`}>Price</th>
+                    ) : null}
+                    {columnVisibility.salePrice ? (
+                      <th className={`${compactTableHeadClass} w-[96px] text-right`}>
+                        Sale Price
+                      </th>
+                    ) : null}
+                    {columnVisibility.stock ? (
+                      <th className={`${compactTableHeadClass} w-[72px] text-right`}>Stock</th>
+                    ) : null}
+                    {columnVisibility.inventory ? (
+                      <th className={`${compactTableHeadClass} w-[96px] text-center`}>
+                        Inventory
+                      </th>
+                    ) : null}
+                    {columnVisibility.view ? (
+                      <th className={`${compactTableHeadClass} w-[56px] text-center`}>View</th>
+                    ) : null}
+                    {columnVisibility.published ? (
+                      <th className={`${compactTableHeadClass} w-[76px] text-center`}>
+                        Published
+                      </th>
+                    ) : null}
+                    {columnVisibility.actions ? (
+                      <th className={`${compactTableHeadClass} w-[60px] text-center`}>Actions</th>
+                    ) : null}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 bg-white">
                   {items.map((item) => {
                     const canEditDraft = Boolean(item.authoring?.canEditDraft && canEditProducts);
+                    const canDuplicate = Boolean(canCreateDraft);
+                    const waitingForAdmin = item.submission?.status === "submitted";
+                    const needsRevision = item.submission?.status === "needs_revision";
+                    const canDeleteProduct = Boolean(
+                      canArchiveProducts &&
+                        catalogCanDelete &&
+                        item.submission?.status === "none"
+                    );
+                    const editBlockedTitle = waitingForAdmin
+                      ? "This product is currently with admin review, so editing is locked for now."
+                      : item.authoring?.editBlockedReason === "PRODUCT_EDIT_PERMISSION_REQUIRED"
+                        ? "Your current seller access cannot edit products in this store."
+                        : "This product cannot be edited from the current seller state.";
+                    const deleteBlockedTitle =
+                      !canArchiveProducts || !catalogCanDelete
+                        ? "Your current seller access cannot delete or archive products."
+                        : waitingForAdmin || needsRevision
+                          ? "Products in the review lane cannot be deleted or archived yet."
+                          : "Delete product";
                     const canSubmit = Boolean(
                       canEditProducts &&
                         (item.submission?.canSubmit || item.submission?.canResubmit)
@@ -1505,6 +2036,10 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                     const isPublishing =
                       publishMutation.isPending &&
                       Number(publishMutation.variables?.productId) === Number(item.id);
+                    const isDuplicating =
+                      duplicateMutation.isPending && duplicatingProductId === Number(item.id);
+                    const isDeleting =
+                      deleteMutation.isPending && deletingProductId === Number(item.id);
                     const publishedState = getPublishedStateMeta(item);
                     const canTogglePublished = canPublish || canUnpublish;
                     const publishToggleTitle = canTogglePublished
@@ -1514,39 +2049,14 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                       : item.publishing?.hint ||
                         item.submission?.nextActionDescription ||
                         publishedState.hint;
-                    const submissionReason = getSubmissionReason(item.submission);
-                    const waitingForAdmin = item.submission?.status === "submitted";
-                    const needsRevision = item.submission?.status === "needs_revision";
-                    const readyToSubmit = isReadyToSubmitItem(item);
                     const stockMeta = getCompactStockMeta(item);
-                    const submissionHint =
-                      item.submission?.nextActionDescription || getCompactSubmissionHint(item);
-                    const submissionTimelineLabel = waitingForAdmin
-                      ? item.submission?.submittedAt
-                        ? `Sent ${formatDateTime(item.submission.submittedAt)}`
-                        : "Waiting in admin review"
-                      : needsRevision && item.submission?.revisionRequestedAt
-                        ? `Requested ${formatDateTime(item.submission.revisionRequestedAt)}`
-                        : null;
-                    const rowStateLabel = waitingForAdmin
-                      ? "Submitted for review"
-                      : needsRevision
-                        ? "Revise and resubmit"
-                        : item.visibility?.storefrontVisible
-                          ? "Visible"
-                          : item.status === "inactive"
-                            ? "Hidden"
-                            : item.status === "draft"
-                              ? "Draft"
-                              : null;
-
                     return (
                       <tr
                         key={item.id}
                         className={`transition ${isSelected ? "bg-emerald-50/50" : "hover:bg-slate-50/80"}`}
                       >
                         {canEditProducts ? (
-                          <td className={`${compactTableCellClass} align-top`}>
+                          <td className={`${compactTableIconCellClass} align-top`}>
                             <input
                               type="checkbox"
                               aria-label={`Select ${item.name}`}
@@ -1556,143 +2066,100 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                             />
                           </td>
                         ) : null}
-                        <td className={compactTableCellClass}>
-                          <div className="flex items-start gap-3">
-                            {item.mediaPreviewUrl ? (
-                              <img
-                                src={resolveAssetUrl(item.mediaPreviewUrl)}
-                                alt={item.name}
-                                className="h-12 w-12 rounded-xl border border-slate-200 object-cover"
-                              />
-                            ) : (
-                              <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-400">
-                                <Boxes className="h-4 w-4" />
-                              </div>
-                            )}
-                            <div className="min-w-0">
-                              <Link
-                                to={workspaceRoutes.productDetail(item.id)}
-                                className="line-clamp-2 text-sm font-semibold text-slate-900 hover:text-emerald-600"
-                                title={item.name}
-                              >
-                                {item.name}
-                              </Link>
-                              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                                <CompactMetaItem Icon={Tag} label={item.slug} title={item.slug} />
-                                {item.sku ? (
-                                  <CompactMetaItem
-                                    Icon={Tag}
-                                    label={item.sku}
-                                    title={`SKU ${item.sku}`}
+                        {columnVisibility.product ? (
+                          <td className={`${compactTableCellClass}`}>
+                            <div className="flex items-start gap-2">
+                              {item.mediaPreviewUrl ? (
+                                <img
+                                  src={resolveAssetUrl(item.mediaPreviewUrl)}
+                                  alt={item.name}
+                                  className="h-8 w-8 rounded-md border border-slate-200 object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-400">
+                                  <Boxes className="h-3.5 w-3.5" />
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <Link
+                                  to={workspaceRoutes.productDetail(item.id)}
+                                  className="block truncate text-[13px] font-semibold leading-5 text-slate-900 hover:text-emerald-600"
+                                  title={item.name}
+                                >
+                                  {item.name}
+                                </Link>
+                                <div className="mt-1 flex flex-wrap items-center gap-1">
+                                  <SellerWorkspaceBadge
+                                    label={getCompactLifecycleLabel(item)}
+                                    tone={getLifecycleTone(item)}
+                                    className="px-2 py-0.5 text-[10px]"
                                   />
-                                ) : null}
-                                <CompactMetaItem Icon={Clock3} label={formatDateTime(item.updatedAt)} />
-                              </div>
-                              <div className="mt-2 flex flex-wrap items-center gap-2">
-                                <SellerWorkspaceBadge
-                                  label={getCompactLifecycleLabel(item)}
-                                  tone={getLifecycleTone(item)}
-                                  className="px-2.5 py-1 text-[11px]"
-                                />
-                                <SellerWorkspaceBadge
-                                  label={getCompactSubmissionLabel(item)}
-                                  tone={getSubmissionTone(item)}
-                                  className="px-2.5 py-1 text-[11px]"
-                                />
-                                <SellerWorkspaceBadge
-                                  label={getCompactVisibilityLabel(item)}
-                                  tone={getVisibilityTone(item.visibility)}
-                                  className="px-2.5 py-1 text-[11px]"
-                                />
-                                {item.pricing?.salePrice ? (
-                                  <span
-                                    className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700"
-                                    title="Promo price active"
-                                  >
-                                    <Tag className="h-3.5 w-3.5" />
-                                    Promo
-                                  </span>
-                                ) : null}
+                                  {waitingForAdmin || needsRevision ? (
+                                    <SellerWorkspaceBadge
+                                      label={getCompactSubmissionLabel(item)}
+                                      tone={getSubmissionTone(item)}
+                                      className="px-2 py-0.5 text-[10px]"
+                                    />
+                                  ) : null}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </td>
-                        <td className={compactTableCellClass}>
-                          <span
-                            className="inline-flex min-h-6 items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700"
-                            title={item.category?.name || "Uncategorized"}
-                          >
-                            <Layers3 className="h-3.5 w-3.5" />
-                            {item.category?.name || "Uncategorized"}
-                          </span>
-                          {item.category?.code ? (
-                            <p className="mt-1 text-xs text-slate-400">{item.category.code}</p>
-                          ) : null}
-                        </td>
-                        <td className={`${compactTableCellClass} text-right font-semibold text-slate-900`}>
-                          <div className="space-y-0.5">
+                          </td>
+                        ) : null}
+                        {columnVisibility.category ? (
+                          <td className={compactTableCellClass}>
+                            <p className="truncate text-[12px] font-medium text-slate-700">
+                              {item.category?.name || "Uncategorized"}
+                            </p>
+                          </td>
+                        ) : null}
+                        {columnVisibility.price ? (
+                          <td className={`${compactTableCellClass} text-right font-semibold text-slate-900`}>
                             <div>{formatCurrency(item.pricing?.price)}</div>
-                            <div className="text-[10px] font-medium text-slate-400">Base</div>
-                          </div>
-                        </td>
-                        <td className={`${compactTableCellClass} text-right`}>
-                          {item.pricing?.salePrice ? (
-                            <div className="space-y-0.5">
-                              <div className="font-semibold text-emerald-700">
+                          </td>
+                        ) : null}
+                        {columnVisibility.salePrice ? (
+                          <td className={`${compactTableCellClass} text-right`}>
+                            {item.pricing?.salePrice ? (
+                              <span className="font-semibold text-emerald-700">
                                 {formatCurrency(item.pricing.salePrice)}
-                              </div>
-                              <div className="text-[10px] font-medium text-emerald-600">Promo</div>
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">-</span>
+                            )}
+                          </td>
+                        ) : null}
+                        {columnVisibility.stock ? (
+                          <td className={`${compactTableCellClass} text-right`}>
+                            <div className="font-semibold tabular-nums text-slate-900">
+                              {item.inventory?.stock ?? item.availability?.stock ?? 0}
                             </div>
-                          ) : (
-                            <span className="text-slate-400">No sale</span>
-                          )}
-                        </td>
-                        <td className={compactTableCellClass}>
-                          <p className="inline-flex items-center gap-1.5 font-medium text-slate-900">
-                            <Package className="h-3.5 w-3.5 text-slate-400" />
-                            {item.inventory?.stock ?? item.availability?.stock ?? 0}
-                          </p>
-                          <p
-                            className={`mt-1 text-xs font-medium ${stockMeta.toneClass}`}
-                            title={stockMeta.label}
-                          >
-                            {stockMeta.label}
-                          </p>
-                        </td>
-                        <td className={compactTableCellClass}>
-                          <div className="space-y-1.5">
-                            <SellerWorkspaceBadge
-                              label={getCompactLifecycleLabel(item)}
-                              tone={getLifecycleTone(item)}
-                              className="px-2.5 py-1 text-[11px]"
+                          </td>
+                        ) : null}
+                        {columnVisibility.inventory ? (
+                          <td className={`${compactTableCellClass} text-center`}>
+                            <ProductInventoryBadge
+                              label={stockMeta.label}
+                              title={stockMeta.label}
+                              className={stockMeta.badgeClass}
                             />
-                            <p
-                              className="text-[11px] font-medium text-slate-600"
-                              title={submissionHint}
+                          </td>
+                        ) : null}
+                        {columnVisibility.view ? (
+                          <td className={`${compactTableIconCellClass} text-center`}>
+                            <Link
+                              to={workspaceRoutes.productDetail(item.id)}
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
+                              title="View product"
                             >
-                              {rowStateLabel || getCompactSubmissionLabel(item)}
-                            </p>
-                            <p
-                              className="line-clamp-2 text-[11px] text-slate-400"
-                              title={submissionTimelineLabel || getCompactVisibilityHint(item)}
-                            >
-                              {submissionTimelineLabel || getCompactVisibilityHint(item)}
-                            </p>
-                          </div>
-                        </td>
-                        <td className={`${compactTableCellClass} text-center`}>
-                          <Link
-                            to={workspaceRoutes.productDetail(item.id)}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
-                            title="Open product detail"
-                          >
-                            <Search className="h-3.5 w-3.5" />
-                          </Link>
-                        </td>
-                        <td className={`${compactTableCellClass} text-center`}>
-                          <div className="flex flex-col items-center gap-1.5">
-                            <button
-                              type="button"
+                              <Search className="h-3.5 w-3.5" />
+                            </Link>
+                          </td>
+                        ) : null}
+                        {columnVisibility.published ? (
+                          <td className={`${compactTableIconCellClass} text-center`}>
+                            <ProductPublishedToggle
+                              checked={publishedState.published}
                               onClick={() =>
                                 canTogglePublished &&
                                 publishMutation.mutate({
@@ -1701,120 +2168,125 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
                                 })
                               }
                               disabled={!canTogglePublished || isPublishing}
-                              className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${
-                                publishedState.published ? "bg-emerald-500" : "bg-slate-300"
-                              } disabled:cursor-not-allowed disabled:opacity-60`}
-                              aria-label={publishToggleTitle}
+                              ariaLabel={publishToggleTitle}
                               title={publishToggleTitle}
+                            />
+                          </td>
+                        ) : null}
+                        {columnVisibility.actions ? (
+                          <td className={`${compactTableIconCellClass} text-center`}>
+                            <ProductRowActionsMenu
+                              open={rowActionMenu?.id === Number(item.id)}
+                              onToggle={(event) => toggleRowActionMenu(event, item.id)}
+                              containerProps={{ "data-seller-products-row-menu": true }}
+                              menuPositionClassName="fixed z-[70]"
+                              menuStyle={{
+                                top: `${rowActionMenu?.top ?? 0}px`,
+                                left: `${rowActionMenu?.left ?? 0}px`,
+                              }}
                             >
-                              <span
-                                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
-                                  publishedState.published ? "translate-x-4" : "translate-x-0.5"
-                                }`}
-                              />
-                            </button>
-                            <p className="text-[10px] text-slate-400">{publishedState.label}</p>
-                          </div>
-                        </td>
-                        <td className={`${compactTableCellClass} whitespace-nowrap`}>
-                            <div className="space-y-1.5">
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                {canPublish ? (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      publishMutation.mutate({
-                                        productId: item.id,
-                                        published: true,
-                                      })
-                                    }
-                                    disabled={isPublishing}
-                                    className={compactPrimaryActionButtonClass}
-                                  >
-                                    <Eye className="h-3.5 w-3.5" />
-                                    {isPublishing ? "Publishing..." : "Publish"}
-                                  </button>
-                                ) : null}
-                                {canUnpublish ? (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      publishMutation.mutate({
-                                        productId: item.id,
-                                        published: false,
-                                      })
-                                    }
-                                    disabled={isPublishing}
-                                    className={compactActionButtonClass}
-                                  >
-                                    <Boxes className="h-3.5 w-3.5" />
-                                    {isPublishing ? "Updating..." : "Unpublish"}
-                                  </button>
-                                ) : null}
-                                {readyToSubmit && canSubmit ? (
-                                  <button
-                                    type="button"
-                                  onClick={() => submitMutation.mutate(item.id)}
-                                  disabled={isSubmitting}
-                                  className={compactPrimaryActionButtonClass}
+                              <Link
+                                to={workspaceRoutes.productDetail(item.id)}
+                                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                              >
+                                <Search className="h-3.5 w-3.5" />
+                                View
+                              </Link>
+                              {canDuplicate ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDuplicateProduct(item)}
+                                  disabled={duplicateMutation.isPending}
+                                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
-                                  <Send className="h-3.5 w-3.5" />
-                                  {isSubmitting ? "Submitting..." : "Submit"}
+                                  <Copy className="h-3.5 w-3.5" />
+                                  {isDuplicating ? "Duplicating..." : "Duplicate"}
                                 </button>
                               ) : null}
                               {canEditDraft ? (
                                 <Link
                                   to={workspaceRoutes.productEdit(item.id)}
-                                  className={
-                                    needsRevision || !readyToSubmit
-                                      ? compactPrimaryActionButtonClass
-                                      : compactActionButtonClass
-                                  }
+                                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50"
                                 >
                                   <Pencil className="h-3.5 w-3.5" />
-                                  {needsRevision ? "Revise" : "Edit"}
+                                  Edit
                                 </Link>
-                              ) : null}
-                              {canSubmit && !readyToSubmit ? (
+                              ) : canEditProducts ? (
                                 <button
                                   type="button"
-                                  onClick={() => submitMutation.mutate(item.id)}
-                                  disabled={isSubmitting}
-                                  className={compactActionButtonClass}
+                                  disabled
+                                  title={editBlockedTitle}
+                                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-slate-400 disabled:cursor-not-allowed"
                                 >
-                                  <Send className="h-3.5 w-3.5" />
-                                  {isSubmitting
-                                    ? "Submitting..."
-                                    : needsRevision
-                                      ? "Resubmit"
-                                      : "Submit"}
+                                  <Pencil className="h-3.5 w-3.5" />
+                                  {waitingForAdmin ? "Edit locked" : "Edit"}
                                 </button>
                               ) : null}
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2 text-[10px] font-medium">
-                              {rowStateLabel ? (
-                                <span
-                                  className={
-                                    waitingForAdmin
-                                      ? "text-sky-700"
-                                      : needsRevision
-                                        ? "text-amber-700"
-                                        : item.visibility?.storefrontVisible
-                                          ? "text-emerald-700"
-                                          : "text-slate-500"
-                                  }
+                              {canSubmit ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setRowActionMenu(null);
+                                    submitMutation.mutate(item.id);
+                                  }}
+                                  disabled={isSubmitting}
+                                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
-                                  {rowStateLabel}
-                                </span>
+                                  <Send className="h-3.5 w-3.5" />
+                                  {needsRevision ? "Resubmit" : "Submit"}
+                                </button>
                               ) : null}
-                              <span className="text-slate-400">
-                                {item.publishing?.nextActionLabel ||
-                                  item.submission?.nextActionLabel ||
-                                  "Check status"}
-                              </span>
-                            </div>
-                          </div>
-                        </td>
+                              {canPublish ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setRowActionMenu(null);
+                                    publishMutation.mutate({
+                                      productId: item.id,
+                                      published: true,
+                                    });
+                                  }}
+                                  disabled={isPublishing}
+                                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                  Publish
+                                </button>
+                              ) : null}
+                              {canUnpublish ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setRowActionMenu(null);
+                                    publishMutation.mutate({
+                                      productId: item.id,
+                                      published: false,
+                                    });
+                                  }}
+                                  disabled={isPublishing}
+                                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  <Boxes className="h-3.5 w-3.5" />
+                                  Unpublish
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteProduct(item)}
+                                disabled={!canDeleteProduct || isDeleting}
+                                title={deleteBlockedTitle}
+                                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                {isDeleting
+                                  ? "Deleting..."
+                                  : waitingForAdmin || needsRevision
+                                    ? "Delete locked"
+                                    : "Delete"}
+                              </button>
+                            </ProductRowActionsMenu>
+                          </td>
+                        ) : null}
                       </tr>
                     );
                   })}
@@ -1832,7 +2304,7 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
               }
               description={
                 activeFilterCount > 0
-                  ? "Try widening lifecycle, submission, visibility, or keyword filters."
+                  ? "Try broadening the current search or reset the visible product filters."
                   : canCreateDraft
                     ? "Create the first draft product for this seller store."
                     : "Confirm whether this store already owns product rows in the current workspace."
@@ -1843,16 +2315,16 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
           </div>
         )}
 
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-5">
+        <div className="mt-5 flex items-center justify-between text-sm">
           <p className="text-sm text-slate-500">
-            Page {pagination.page} of {totalPages} · Total rows {pagination.total}
+            Page {pagination.page} of {totalPages}
           </p>
           <div className="flex gap-2">
             <button
               type="button"
               onClick={() => updatePage(Math.max(1, appliedFilters.page - 1))}
               disabled={appliedFilters.page <= 1}
-              className={sellerSecondaryButtonClass}
+              className="rounded-full border border-slate-200 px-3 py-1.5 text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
             >
               Previous
             </button>
@@ -1860,13 +2332,49 @@ export default function SellerCatalogPage({ variant = "catalog" }) {
               type="button"
               onClick={() => updatePage(Math.min(totalPages, appliedFilters.page + 1))}
               disabled={appliedFilters.page >= totalPages}
-              className={sellerSecondaryButtonClass}
+              className="rounded-full border border-slate-200 px-3 py-1.5 text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
             >
               Next
             </button>
           </div>
         </div>
       </SellerWorkspacePanel>
+
+      {isCreateDrawerMounted ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close seller product drawer"
+            onClick={closeCreateDrawer}
+            className={`fixed inset-0 z-40 bg-slate-900/35 transition-opacity duration-200 ${
+              isCreateDrawerVisible ? "opacity-100" : "opacity-0"
+            }`}
+          />
+          <div className="pointer-events-none fixed inset-0 z-50">
+            <div
+              className={`pointer-events-auto absolute inset-y-0 right-0 w-full max-w-full overflow-hidden border-l border-slate-200 bg-white shadow-2xl transition-transform duration-300 ease-out sm:w-[92vw] md:w-[860px] ${
+                isCreateDrawerVisible ? "translate-x-0" : "translate-x-full"
+              }`}
+            >
+              <SellerProductAuthoringPage
+                mode="create"
+                presentation="drawer"
+                onClose={closeCreateDrawer}
+                onSuccess={() => {
+                  closeCreateDrawer();
+                  setActionNotice({
+                    type: "success",
+                    message: "Draft created in seller workspace.",
+                  });
+                  queryClient.invalidateQueries({
+                    queryKey: ["seller", "products", storeId],
+                  });
+                }}
+              />
+            </div>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

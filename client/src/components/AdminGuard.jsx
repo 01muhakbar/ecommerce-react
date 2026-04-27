@@ -8,7 +8,7 @@ import {
 } from "../auth/authSessionNotice.js";
 
 const fetchMe = async () => {
-  const res = await fetch("/api/auth/me");
+  const res = await fetch("/api/auth/admin/me");
   if (!res.ok) {
     const error = new Error("Failed to fetch me");
     error.status = res.status;

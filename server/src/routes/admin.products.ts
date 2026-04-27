@@ -17,6 +17,10 @@ import {
 import { buildProductVisibilitySnapshot } from "../services/productVisibility.js";
 import { buildPublicStoreOperationalReadiness } from "../services/sharedContracts/publicStoreIdentity.js";
 import { STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES } from "../services/sharedContracts/storePaymentProfileCompat.js";
+import {
+  logProductActivity,
+  PRODUCT_ACTIVITY_LOG_ACTIONS,
+} from "../services/productActivityLog.service.js";
 
 const router = Router();
 router.use(requireStaffOrAdmin);
@@ -2340,6 +2344,7 @@ router.post(
       let updated = 0;
       let failed = 0;
       const errors: Array<{ row: number; slug: string | null; message: string }> = [];
+      const actorUserId = Number((req as any).user?.id || 0) || null;
 
       for (let index = 0; index < items.length; index += 1) {
         const rawRow = items[index];
@@ -2368,6 +2373,7 @@ router.post(
           });
 
           if (existing) {
+            const beforeSnapshot = existing.get?.({ plain: true }) ?? existing;
             const patch: any = {};
             if (row.name) patch.name = row.name;
             patch.slug = row.slug;
@@ -2399,6 +2405,21 @@ router.post(
                 );
               }
             });
+            await logProductActivity({
+              storeId: getAdminProductStoreId(existing),
+              entityId: Number((existing as any)?.id || 0),
+              action: PRODUCT_ACTIVITY_LOG_ACTIONS.IMPORTED,
+              actorType: "admin",
+              actorId: actorUserId,
+              before: beforeSnapshot,
+              after: existing,
+              metadata: {
+                source: "import",
+                importFormat: "json",
+                lane: "admin",
+                importMode: "update",
+              },
+            });
             updated += 1;
             continue;
           }
@@ -2410,7 +2431,7 @@ router.post(
             throw new Error("New products require `price`.");
           }
 
-          await sequelize.transaction(async (transaction) => {
+          const createdProduct = await sequelize.transaction(async (transaction) => {
             const createdProduct = await Product.create({
               name: row.name,
               slug: row.slug,
@@ -2437,6 +2458,24 @@ router.post(
                 transaction
               );
             }
+            return Product.findByPk(Number((createdProduct as any).id), {
+              include: buildAdminProductIncludes(),
+              transaction,
+            });
+          });
+          await logProductActivity({
+            storeId: getAdminProductStoreId(createdProduct),
+            entityId: Number((createdProduct as any)?.id || 0),
+            action: PRODUCT_ACTIVITY_LOG_ACTIONS.IMPORTED,
+            actorType: "admin",
+            actorId: actorUserId,
+            after: createdProduct,
+            metadata: {
+              source: "import",
+              importFormat: "json",
+              lane: "admin",
+              importMode: "create",
+            },
           });
           created += 1;
         } catch (error: any) {
@@ -2565,6 +2604,7 @@ router.post(
         include: buildAdminProductIncludes(),
       });
       if (!product) return res.status(404).json({ message: "Not found" });
+      const beforeSnapshot = product.get?.({ plain: true }) ?? product;
 
       const plain = product.get ? product.get({ plain: true }) : product;
       const priceFields = resolveAdminPriceFields(plain);
@@ -2653,6 +2693,21 @@ router.post(
       const storeReadinessById = await loadAdminStoreOperationalReadinessByIds([
         getAdminProductStoreId(duplicated),
       ]);
+      await logProductActivity({
+        storeId: getAdminProductStoreId(duplicated),
+        entityId: Number((duplicated as any)?.id || 0),
+        action: PRODUCT_ACTIVITY_LOG_ACTIONS.DUPLICATED,
+        actorType: "admin",
+        actorId: Number((req as any).user?.id || 0) || null,
+        before: beforeSnapshot,
+        after: duplicated,
+        metadata: {
+          source: "duplicate",
+          lane: "admin",
+          sourceProductId: idNum,
+          sourceProductName: String(plain?.name || "").trim() || null,
+        },
+      });
       return res.status(201).json({
         data: toAdminProductDetail(
           duplicated,
@@ -2748,6 +2803,18 @@ router.post(
       const storeReadinessById = await loadAdminStoreOperationalReadinessByIds([
         getAdminProductStoreId(created),
       ]);
+      await logProductActivity({
+        storeId: getAdminProductStoreId(created),
+        entityId: Number((created as any)?.id || 0),
+        action: PRODUCT_ACTIVITY_LOG_ACTIONS.CREATED,
+        actorType: "admin",
+        actorId: Number((req as any).user?.id || 0) || null,
+        after: created,
+        metadata: {
+          source: "manual",
+          lane: "admin",
+        },
+      });
       return res.status(201).json({
         data: toAdminProductDetail(
           created,
@@ -2789,6 +2856,10 @@ router.patch(
       if (!product) {
         return res.status(404).json({ message: "Not found" });
       }
+      const beforeSnapshot = product.get?.({ plain: true }) ?? product;
+      const currentSubmissionStatus = normalizeSellerSubmissionStatus(
+        (product as any).get?.("sellerSubmissionStatus") ?? (product as any).sellerSubmissionStatus
+      );
       const seo =
         typeof body.seo !== "undefined"
           ? sanitizeAdminProductSeo(mergeAdminProductSeoInput((product as any).get?.("seo"), body.seo))
@@ -2863,6 +2934,64 @@ router.patch(
       const storeReadinessById = await loadAdminStoreOperationalReadinessByIds([
         getAdminProductStoreId(updated),
       ]);
+      const actorUserId = Number((req as any).user?.id || 0) || null;
+      await logProductActivity({
+        storeId: getAdminProductStoreId(updated),
+        entityId: idNum,
+        action: PRODUCT_ACTIVITY_LOG_ACTIONS.UPDATED,
+        actorType: "admin",
+        actorId: actorUserId,
+        before: beforeSnapshot,
+        after: updated,
+        metadata: {
+          source: "manual",
+          lane: "admin",
+        },
+      });
+      if (body.published === true) {
+        if (currentSubmissionStatus === "submitted") {
+          await logProductActivity({
+            storeId: getAdminProductStoreId(updated),
+            entityId: idNum,
+            action: PRODUCT_ACTIVITY_LOG_ACTIONS.REVIEW_APPROVED,
+            actorType: "admin",
+            actorId: actorUserId,
+            before: beforeSnapshot,
+            after: updated,
+            metadata: {
+              source: "manual",
+              lane: "admin",
+            },
+          });
+        }
+        await logProductActivity({
+          storeId: getAdminProductStoreId(updated),
+          entityId: idNum,
+          action: PRODUCT_ACTIVITY_LOG_ACTIONS.PUBLISHED,
+          actorType: "admin",
+          actorId: actorUserId,
+          before: beforeSnapshot,
+          after: updated,
+          metadata: {
+            source: "manual",
+            lane: "admin",
+          },
+        });
+      } else if (body.published === false) {
+        await logProductActivity({
+          storeId: getAdminProductStoreId(updated),
+          entityId: idNum,
+          action: PRODUCT_ACTIVITY_LOG_ACTIONS.UNPUBLISHED,
+          actorType: "admin",
+          actorId: actorUserId,
+          before: beforeSnapshot,
+          after: updated,
+          metadata: {
+            source: "manual",
+            lane: "admin",
+          },
+        });
+      }
       return res.json({
         data: toAdminProductDetail(
           updated,
@@ -2894,6 +3023,7 @@ router.patch(
         include: buildAdminProductIncludes(),
       });
       if (!product) return res.status(404).json({ message: "Not found" });
+      const beforeSnapshot = product.get?.({ plain: true }) ?? product;
 
       const currentSubmissionStatus = normalizeSellerSubmissionStatus(
         (product as any).get?.("sellerSubmissionStatus") ?? (product as any).sellerSubmissionStatus
@@ -2925,6 +3055,20 @@ router.patch(
       const storeReadinessById = await loadAdminStoreOperationalReadinessByIds([
         getAdminProductStoreId(updated),
       ]);
+      await logProductActivity({
+        storeId: getAdminProductStoreId(updated),
+        entityId: idNum,
+        action: PRODUCT_ACTIVITY_LOG_ACTIONS.REVIEW_REJECTED,
+        actorType: "admin",
+        actorId: Number((req as any).user?.id || 0) || null,
+        before: beforeSnapshot,
+        after: updated,
+        metadata: {
+          source: "manual",
+          lane: "admin",
+          note: note ?? null,
+        },
+      });
       return res.json({
         data: toAdminProductDetail(
           updated,
@@ -2951,6 +3095,10 @@ router.patch(
       const { published } = updatePublishedSchema.parse(req.body);
       const product = await Product.findByPk(idNum);
       if (!product) return res.status(404).json({ message: "Not found" });
+      const beforeSnapshot = product.get?.({ plain: true }) ?? product;
+      const currentSubmissionStatus = normalizeSellerSubmissionStatus(
+        (product as any).get?.("sellerSubmissionStatus") ?? (product as any).sellerSubmissionStatus
+      );
 
       const publishGatePatch = assertAdminPublishAllowed(product, {
         nextPublished: published,
@@ -2963,6 +3111,37 @@ router.patch(
           ...(publishGatePatch.patch || {}),
         } as any
       );
+      const afterSnapshot = product.get?.({ plain: true }) ?? product;
+      await logProductActivity({
+        storeId: getAdminProductStoreId(product),
+        entityId: idNum,
+        action: published
+          ? PRODUCT_ACTIVITY_LOG_ACTIONS.PUBLISHED
+          : PRODUCT_ACTIVITY_LOG_ACTIONS.UNPUBLISHED,
+        actorType: "admin",
+        actorId: Number((req as any).user?.id || 0) || null,
+        before: beforeSnapshot,
+        after: afterSnapshot,
+        metadata: {
+          source: "manual",
+          lane: "admin",
+        },
+      });
+      if (published && currentSubmissionStatus === "submitted") {
+        await logProductActivity({
+          storeId: getAdminProductStoreId(product),
+          entityId: idNum,
+          action: PRODUCT_ACTIVITY_LOG_ACTIONS.REVIEW_APPROVED,
+          actorType: "admin",
+          actorId: Number((req as any).user?.id || 0) || null,
+          before: beforeSnapshot,
+          after: afterSnapshot,
+          metadata: {
+            source: "manual",
+            lane: "admin",
+          },
+        });
+      }
       return res.json({
         data: {
           id: idNum,
@@ -2994,10 +3173,27 @@ router.delete(
       if (!idNum) return res.status(400).json({ message: "Invalid id" });
       const product = await Product.findByPk(idNum);
       if (!product) return res.status(404).json({ message: "Not found" });
+      const beforeSnapshot = product.get?.({ plain: true }) ?? product;
+      const actorUserId = Number((req as any).user?.id || 0) || null;
       const deletion = await deleteProductsSafely([idNum]);
       if (deletion.blockedIds.length > 0) {
         if (isSuperAdminRequest(req)) {
           const archiveResult = await archiveProductsSafely([idNum]);
+          const archivedProduct = await Product.findByPk(idNum);
+          await logProductActivity({
+            storeId: getAdminProductStoreId(product),
+            entityId: idNum,
+            action: PRODUCT_ACTIVITY_LOG_ACTIONS.ARCHIVED,
+            actorType: "admin",
+            actorId: actorUserId,
+            before: beforeSnapshot,
+            after: archivedProduct,
+            metadata: {
+              source: "manual",
+              lane: "admin",
+              archiveReason: "ORDER_OR_REVIEW_HISTORY",
+            },
+          });
           return res.json({
             ok: true,
             archived: true,
@@ -3017,6 +3213,19 @@ router.delete(
           message: "Delete failed. Please try again.",
         });
       }
+      await logProductActivity({
+        storeId: getAdminProductStoreId(product),
+        entityId: idNum,
+        action: PRODUCT_ACTIVITY_LOG_ACTIONS.DELETED,
+        actorType: "admin",
+        actorId: actorUserId,
+        before: beforeSnapshot,
+        after: null,
+        metadata: {
+          source: "manual",
+          lane: "admin",
+        },
+      });
       return res.json({ ok: true });
     } catch (err) {
       next(err);

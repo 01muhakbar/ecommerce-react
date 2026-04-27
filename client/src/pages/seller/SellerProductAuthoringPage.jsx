@@ -33,6 +33,7 @@ import {
   uploadSellerProductImage,
   updateSellerProductDraft,
 } from "../../api/sellerProducts.ts";
+import { getSellerAttributes } from "../../api/sellerAttributes.ts";
 import {
   sellerDisabledFieldClass,
   sellerSecondaryButtonClass,
@@ -211,9 +212,6 @@ function SellerCategoryTree({
         const isChecked = selectedIds.includes(nodeId);
         const hasChildren =
           Array.isArray(node?.children) && node.children.length > 0;
-        const isDefaultCategory =
-          String(nodeId) === String(defaultCategoryId || "");
-        const hierarchyLabel = depth === 0 ? "Parent category" : "Subcategory";
 
         return (
           <li
@@ -236,32 +234,6 @@ function SellerCategoryTree({
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium text-slate-900">
                   {node?.name || "Category"}
-                </span>
-                <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                  <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-slate-500">
-                    {hierarchyLabel}
-                  </span>
-                  {node?.code ? (
-                    <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-slate-500">
-                      {node.code}
-                    </span>
-                  ) : null}
-                  {isChecked ? (
-                    <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-emerald-700">
-                      Selected
-                    </span>
-                  ) : null}
-                  {isDefaultCategory ? (
-                    <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-sky-700">
-                      Default
-                    </span>
-                  ) : null}
-                  {hasChildren ? (
-                    <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-amber-700">
-                      {node.children.length} subcategor
-                      {node.children.length === 1 ? "y" : "ies"}
-                    </span>
-                  ) : null}
                 </span>
               </span>
             </label>
@@ -430,21 +402,49 @@ const drawerToneClassMap = {
 };
 
 const authoringFieldClass =
-  "h-11 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-700 transition placeholder:text-slate-400 focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100";
+  "h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 transition placeholder:text-slate-400 focus:border-emerald-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-50";
 const authoringTextareaClass =
-  "w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2.5 text-sm text-slate-700 transition placeholder:text-slate-400 focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100";
+  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 transition placeholder:text-slate-400 focus:border-emerald-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-50";
 const authoringSelectClass =
-  "mt-2 h-11 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-700 transition focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100";
+  "h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 transition focus:border-emerald-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-50";
 const authoringSurfaceClass =
   "rounded-[18px] border border-slate-200/70 bg-slate-50/45 p-3";
 const authoringActionMutedClass =
   "inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60";
 const authoringActionPrimaryClass =
   "inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-slate-900 px-3.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60";
-const authoringTopLinkClass =
-  "inline-flex h-9 items-center justify-center gap-2 rounded-lg px-2.5 text-sm font-medium text-slate-500 transition hover:bg-slate-100/80 hover:text-slate-700";
 const authoringIconButtonClass =
-  "inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-slate-700";
+  "inline-flex h-10 w-10 items-center justify-center rounded-lg border border-rose-100 bg-rose-50 text-rose-500 transition hover:bg-rose-100";
+
+function AuthoringFormRow({ label, helper = null, children }) {
+  return (
+    <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start lg:gap-5">
+      <div className="pt-2">
+        <p className="text-sm font-semibold text-slate-700">{label}</p>
+        {helper ? <p className="mt-1 text-xs text-slate-500">{helper}</p> : null}
+      </div>
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
+function AuthoringInlineField({ label, children }) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-[128px_minmax(0,1fr)] sm:items-center sm:gap-4">
+      <p className="text-sm font-semibold text-slate-700">{label}</p>
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
+function AuthoringGridField({ label, children }) {
+  return (
+    <div className="flex w-full flex-col gap-1.5">
+      <label className="text-sm font-semibold text-slate-700">{label}</label>
+      <div className="w-full min-w-0">{children}</div>
+    </div>
+  );
+}
 
 function ProductField({
   label,
@@ -457,28 +457,24 @@ function ProductField({
   const inputClasses = multiline ? authoringTextareaClass : authoringFieldClass;
 
   return (
-    <label className="block">
-      <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-        {Icon ? <Icon className="h-3.5 w-3.5" /> : null}
-        {label}
-      </span>
+    <AuthoringFormRow
+      label={label}
+      helper={hint}
+    >
       {multiline ? (
         <textarea
-          className={`${inputClasses} mt-2 min-h-[132px] ${disabled ? sellerDisabledFieldClass : ""}`}
+          className={`${inputClasses} min-h-[132px] ${disabled ? sellerDisabledFieldClass : ""}`}
           disabled={disabled}
           {...props}
         />
       ) : (
         <input
-          className={`${inputClasses} mt-2 ${disabled ? sellerDisabledFieldClass : ""}`}
+          className={`${inputClasses} ${disabled ? sellerDisabledFieldClass : ""}`}
           disabled={disabled}
           {...props}
         />
       )}
-      {hint ? (
-        <p className="mt-1.5 text-xs leading-5 text-slate-500">{hint}</p>
-      ) : null}
-    </label>
+    </AuthoringFormRow>
   );
 }
 
@@ -509,7 +505,12 @@ function FormSectionLabel({ eyebrow, title, description = null }) {
   );
 }
 
-export default function SellerProductAuthoringPage({ mode = "create" }) {
+export default function SellerProductAuthoringPage({
+  mode = "create",
+  presentation = "page",
+  onClose,
+  onSuccess,
+}) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { productId } = useParams();
@@ -522,6 +523,7 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
   const canViewProducts = permissionKeys.includes("PRODUCT_VIEW");
   const numericProductId = Number(productId);
   const isEditMode = mode === "edit";
+  const isDrawerMode = presentation === "drawer";
   const hasValidProductId =
     Number.isInteger(numericProductId) && numericProductId > 0;
 
@@ -544,6 +546,18 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
     queryFn: () => getSellerProductDetail(storeId, productId),
     enabled:
       Boolean(storeId) && canViewProducts && isEditMode && hasValidProductId,
+    retry: false,
+  });
+
+  const attributeReferenceQuery = useQuery({
+    queryKey: ["seller", "attributes", "reference", storeId],
+    queryFn: () =>
+      getSellerAttributes(storeId, {
+        page: 1,
+        limit: 250,
+        scope: "global",
+      }),
+    enabled: Boolean(storeId) && canViewProducts,
     retry: false,
   });
 
@@ -576,9 +590,43 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
   const detailAuthoring = productQuery.data?.authoring ?? null;
   const publishing = productQuery.data?.publishing ?? null;
   const submission = productQuery.data?.submission ?? null;
+  const attributeReferenceById = useMemo(() => {
+    const reference = Array.isArray(attributeReferenceQuery.data?.data)
+      ? attributeReferenceQuery.data.data
+      : [];
+    return new Map(
+      reference
+        .map((attribute) => [String(attribute?.id || "").trim(), attribute])
+        .filter(([key]) => Boolean(key)),
+    );
+  }, [attributeReferenceQuery.data?.data]);
+  const attributeReferenceByName = useMemo(() => {
+    const reference = Array.isArray(attributeReferenceQuery.data?.data)
+      ? attributeReferenceQuery.data.data
+      : [];
+    return new Map(
+      reference
+        .flatMap((attribute) => {
+          const keys = [
+            String(attribute?.name || "").trim().toLowerCase(),
+            String(attribute?.displayName || "").trim().toLowerCase(),
+          ].filter(Boolean);
+          return keys.map((key) => [key, attribute]);
+        })
+        .filter(([key]) => Boolean(key)),
+    );
+  }, [attributeReferenceQuery.data?.data]);
   const variationSummary = useMemo(
-    () => summarizeProductVariations(productQuery.data?.variations?.raw),
-    [productQuery.data?.variations?.raw],
+    () =>
+      summarizeProductVariations(productQuery.data?.variations?.raw, {
+        attributeReferenceById,
+        attributeReferenceByName,
+      }),
+    [
+      attributeReferenceById,
+      attributeReferenceByName,
+      productQuery.data?.variations?.raw,
+    ],
   );
   const submissionReason = getSubmissionReason(submission);
   const categoryReference = metaQuery.data?.references?.categories || [];
@@ -996,9 +1044,22 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
         : "Draft created in seller workspace.",
     });
 
+    if (typeof onSuccess === "function") {
+      onSuccess(saved);
+      return;
+    }
+
     if (!isEditMode) {
       navigate(workspaceRoutes.productEdit(saved.id), { replace: true });
     }
+  };
+
+  const closeForm = () => {
+    if (typeof onClose === "function") {
+      onClose();
+      return;
+    }
+    navigate(workspaceRoutes.catalog(), { replace: true });
   };
 
   const backButton = (
@@ -1010,6 +1071,19 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
       <ArrowLeft className="h-4 w-4" />
       Back to catalog
     </Link>
+  );
+  const fallbackAction = isDrawerMode ? (
+    <button
+      key="close"
+      type="button"
+      onClick={closeForm}
+      className={sellerSecondaryButtonClass}
+    >
+      <X className="h-4 w-4" />
+      Close
+    </button>
+  ) : (
+    backButton
   );
 
   if (!canViewProducts) {
@@ -1028,7 +1102,7 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
       <SellerWorkspaceStatePanel
         title="Seller product editing needs a valid product id"
         description="Open this lane from a product that belongs to the active seller store."
-        action={backButton}
+        action={fallbackAction}
         tone="warning"
         Icon={Package}
       />
@@ -1044,7 +1118,7 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
             : "Loading seller product authoring"
         }
         description="Fetching seller authoring governance for the active store."
-        action={backButton}
+        action={fallbackAction}
         Icon={Package}
       />
     );
@@ -1067,7 +1141,7 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
             ? "Failed to load seller draft."
             : "Failed to load seller draft authoring.",
         })}
-        action={backButton}
+        action={fallbackAction}
         tone="error"
         Icon={ShieldCheck}
       />
@@ -1082,7 +1156,7 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
           authoringGovernance?.note ||
           "Your current seller access does not include product creation in this store."
         }
-        action={backButton}
+        action={fallbackAction}
         tone="warning"
         Icon={ShieldCheck}
       />
@@ -1100,7 +1174,7 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
               : authoringGovernance?.note ||
                 "Your current seller access does not include product editing for this store."
           }
-          action={backButton}
+          action={fallbackAction}
           tone="warning"
           Icon={ShieldCheck}
         />
@@ -1148,7 +1222,7 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
       ? isNeedsRevision
         ? "Save Revision"
         : "Save"
-      : "Save Draft";
+      : "Add Product";
   const publishActionLabel = publishMutation.isPending
     ? "Publishing..."
     : isEditMode
@@ -1156,37 +1230,61 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
       : "Create & Publish";
 
   return (
-    <div className="-mx-4 -mt-4 min-h-[calc(100vh-4rem)] bg-slate-100/80 px-3 py-4 md:-mx-6 md:-mt-6 md:px-6 md:py-6">
-      <div className="ml-auto max-w-[1080px] rounded-[28px] bg-white">
-        <div className="border-b border-slate-200/80 px-4 py-4 md:px-6">
+    <div
+      className={
+        isDrawerMode
+          ? "flex h-full min-h-0 flex-col bg-white"
+          : "-mx-4 -mt-4 min-h-[calc(100vh-4rem)] bg-slate-100/80 px-3 py-4 md:-mx-6 md:-mt-6 md:px-6 md:py-6"
+      }
+    >
+      <div
+        className={
+          isDrawerMode
+            ? "flex min-h-0 flex-1 flex-col overflow-hidden bg-white"
+            : "ml-auto max-w-[1080px] overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_20px_45px_-30px_rgba(15,23,42,0.35)]"
+        }
+      >
+        <div className="border-b border-slate-200 px-4 py-4 sm:px-5 md:px-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold text-slate-900 md:text-3xl">
+            <div className="space-y-1">
+              <h1 className="text-2xl font-semibold leading-tight text-slate-900">
                 {isEditMode ? "Edit Product" : "Add Product"}
               </h1>
+              <p className="text-sm text-slate-500">
+                {isEditMode
+                  ? "Update your seller draft information from here."
+                  : "Add your product and necessary information from here"}
+              </p>
             </div>
 
-            <div className="flex items-center gap-2 self-start">
-              <Link
-                to={workspaceRoutes.catalog()}
-                className={authoringTopLinkClass}
+            <div className="flex items-center gap-3 self-start md:self-auto">
+              <select
+                defaultValue="en"
+                className="h-10 rounded-lg border border-emerald-200 bg-white px-3 text-sm text-slate-700 outline-none"
+                aria-label="Language"
               >
-                <ArrowLeft className="h-4 w-4" />
-                Back
-              </Link>
-              <Link
-                to={workspaceRoutes.catalog()}
+                <option value="en">en</option>
+              </select>
+              <button
+                type="button"
+                onClick={closeForm}
                 className={authoringIconButtonClass}
                 aria-label="Close seller product editor"
                 title="Close"
               >
                 <X className="h-4 w-4" />
-              </Link>
+              </button>
             </div>
           </div>
         </div>
 
-        <div className="space-y-4 px-4 py-4 md:px-6">
+        <div
+          className={
+            isDrawerMode
+              ? "min-h-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden px-4 py-4 sm:px-5 md:px-6"
+              : "space-y-4 overflow-x-hidden px-4 py-4 sm:px-5 md:px-6"
+          }
+        >
           {status ? (
             <SellerWorkspaceNotice type={status.type}>
               {status.message}
@@ -1199,6 +1297,7 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
             </SellerWorkspaceNotice>
           ) : null}
 
+          {isEditMode ? (
           <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/85 px-4 py-3">
             <div className="flex flex-wrap items-center gap-2">
               <DrawerChip
@@ -1229,6 +1328,7 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
               <p>Slug: {form.slug || slugify(form.name) || "-"}</p>
             </div>
           </div>
+          ) : null}
 
           {isNeedsRevision ? (
             <SellerWorkspaceNotice type="warning">
@@ -1253,145 +1353,108 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
 
           <section className="space-y-5">
             <div className="border border-slate-200/70 bg-white px-4 py-5 md:px-5">
-              <form className="space-y-5" onSubmit={handleSubmit}>
+              <form className="space-y-6 overflow-x-hidden" onSubmit={handleSubmit}>
+                <div className="border-b border-slate-200 pb-0">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
+                      <button
+                        type="button"
+                        className="inline-flex h-10 shrink-0 items-center justify-center border-b-2 border-emerald-600 px-4 text-sm font-semibold text-emerald-700"
+                      >
+                        Basic Info
+                      </button>
+                      <button
+                        type="button"
+                        disabled
+                        title="SEO fields are not available in Seller authoring yet."
+                        className="inline-flex h-10 shrink-0 cursor-not-allowed items-center justify-center border-b-2 border-transparent px-4 text-sm font-semibold text-slate-300"
+                      >
+                        SEO
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
                 <ProductField
-                  label="Name"
+                  label="Product Title/Name"
                   icon={FileText}
                   value={form.name}
                   onChange={handleNameChange}
                   disabled={mutation.isPending}
                   maxLength={255}
-                  placeholder="Product name"
+                  placeholder="Product Title/Name"
                 />
 
                 <ProductField
-                  label="Description"
+                  label="Product Description"
                   icon={FileText}
                   value={form.description}
                   onChange={handleChange("description")}
                   disabled={mutation.isPending}
                   multiline
-                  placeholder="Short product description"
+                  placeholder="Product Description"
                 />
 
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <ProductField
-                    label="SKU"
-                    icon={Hash}
-                    value={form.sku}
-                    onChange={handleChange("sku")}
-                    disabled={mutation.isPending}
-                    maxLength={100}
-                    placeholder="Store SKU"
-                  />
-                  <ProductField
-                    label="Barcode"
-                    icon={Hash}
-                    value={form.barcode}
-                    onChange={handleChange("barcode")}
-                    disabled={mutation.isPending}
-                    maxLength={100}
-                    placeholder="EAN / UPC"
-                  />
-                  <ProductField
-                    label="Slug"
-                    icon={Tag}
-                    value={form.slug}
-                    onChange={handleSlugChange}
-                    disabled={mutation.isPending}
-                    placeholder="product-slug"
-                    hint="Auto-filled until you change it."
-                  />
-                </div>
+                <AuthoringFormRow label="Product SKU / Barcode">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-slate-700">
+                        Product SKU
+                      </label>
+                      <input
+                        className={`${authoringFieldClass} ${
+                          mutation.isPending ? sellerDisabledFieldClass : ""
+                        }`}
+                        value={form.sku}
+                        onChange={handleChange("sku")}
+                        disabled={mutation.isPending}
+                        maxLength={100}
+                        placeholder="Product SKU"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-slate-700">
+                        Product Barcode
+                      </label>
+                      <input
+                        className={`${authoringFieldClass} ${
+                          mutation.isPending ? sellerDisabledFieldClass : ""
+                        }`}
+                        value={form.barcode}
+                        onChange={handleChange("barcode")}
+                        disabled={mutation.isPending}
+                        maxLength={100}
+                        placeholder="Product Barcode"
+                      />
+                    </div>
+                  </div>
+                </AuthoringFormRow>
 
-                <FormSectionLabel
-                  eyebrow="Placement"
-                  title="Categories"
-                  description="Choose the published categories you want to use for this product."
-                />
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <label className="block lg:col-span-2">
-                    <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                      <Layers3 className="h-3.5 w-3.5" />
-                      Categories
-                    </span>
-                    <div className="mt-2 space-y-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2">
-                        <div className="space-y-0.5">
-                          <p className="text-sm font-medium text-slate-800">
-                            {selectedCategories.length > 0
-                              ? `${selectedCategories.length} categor${
-                                  selectedCategories.length === 1 ? "y" : "ies"
-                                } selected`
-                              : "No categories selected"}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            {selectedCategories.length > 0
-                              ? `Default category: ${defaultCategoryLabel}`
-                              : "Select at least one category to enable the default choice."}
-                          </p>
-                        </div>
-                        <div className="text-right text-xs text-slate-500">
-                          <p>
-                            {normalizedCategorySearch
-                              ? `${filteredCategoryCount} matching entries`
-                              : `${categoryTreeCount} available entries`}
-                          </p>
-                          <p>Published catalog only</p>
-                        </div>
-                      </div>
-
-                      {selectedCategories.length > 0 ? (
-                        <div className="flex flex-wrap gap-1.5">
-                          {selectedCategories.slice(0, 4).map((category) => {
-                            const isDefault =
-                              String(category?.id) === String(form.defaultCategoryId);
-                            return (
-                              <DrawerChip
-                                key={category.id}
-                                icon={Layers3}
-                                label={`${category.name}${isDefault ? " • Default" : ""}`}
-                                tone={isDefault ? "emerald" : "sky"}
-                              />
-                            );
-                          })}
-                          {selectedCategories.length > 4 ? (
-                            <DrawerChip
-                              icon={Layers3}
-                              label={`+${selectedCategories.length - 4} more`}
-                              tone="slate"
-                            />
+                <section className="border-t border-slate-200 pt-5">
+                  <div className="space-y-5">
+                    <AuthoringFormRow label="Category">
+                      <div className="space-y-3">
+                        <div className="relative">
+                          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                          <input
+                            type="search"
+                            value={categorySearch}
+                            onChange={(event) => setCategorySearch(event.target.value)}
+                            placeholder="Select one or more categories"
+                            className="h-11 w-full rounded-lg border border-emerald-200 bg-white pl-10 pr-10 text-sm text-slate-700 transition focus:border-emerald-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-50"
+                          />
+                          {categorySearch ? (
+                            <button
+                              type="button"
+                              onClick={() => setCategorySearch("")}
+                              className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                              aria-label="Clear category search"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
                           ) : null}
                         </div>
-                      ) : null}
-
-                      <div className="rounded-xl border border-slate-200 bg-white">
-                        <div className="border-b border-slate-200 px-3 py-2.5">
-                          <div className="relative">
-                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                            <input
-                              type="search"
-                              value={categorySearch}
-                              onChange={(event) => setCategorySearch(event.target.value)}
-                              placeholder="Search category name or code"
-                              className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-10 text-sm text-slate-700 transition focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-100"
-                            />
-                            {categorySearch ? (
-                              <button
-                                type="button"
-                                onClick={() => setCategorySearch("")}
-                                className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-                                aria-label="Clear category search"
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                            ) : null}
-                          </div>
-                          <p className="mt-2 text-xs text-slate-500">
-                            Pick one or more categories. The default category must be one of your selections.
-                          </p>
-                        </div>
-                        <div className="max-h-60 overflow-auto p-2">
+                        <div className="max-h-60 overflow-auto rounded-lg border border-slate-200 bg-white p-2">
                           {categoryReference.length === 0 ? (
                             <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-500">
                               No published categories are available for seller assignment yet.
@@ -1410,109 +1473,106 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
                           )}
                         </div>
                       </div>
+                    </AuthoringFormRow>
 
-                      <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-xs text-slate-500">
-                        Parent categories group related subcategories. Choose the most specific category that fits this product.
+                    <AuthoringFormRow label="Default Category">
+                      <select
+                        value={form.defaultCategoryId}
+                        onChange={handleChange("defaultCategoryId")}
+                        disabled={
+                          mutation.isPending || selectedCategories.length === 0
+                        }
+                        className={`${authoringSelectClass} max-w-[260px] ${
+                          mutation.isPending || selectedCategories.length === 0
+                            ? sellerDisabledFieldClass
+                            : ""
+                        }`}
+                      >
+                        <option value="">Default Category</option>
+                        {defaultCategoryOptions.map((category) => (
+                          <option key={category.id} value={String(category.id)}>
+                            {category.name}
+                          </option>
+                        ))}
+                      </select>
+                    </AuthoringFormRow>
+                  </div>
+                </section>
+
+                <section className="border-t border-slate-200 pt-5">
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <AuthoringFormRow label="Product Price">
+                      <div className="flex h-11 w-full max-w-none items-center overflow-hidden rounded-lg border border-slate-200 bg-white">
+                        <span className="inline-flex h-11 w-12 items-center justify-center border-r border-slate-200 bg-slate-50 text-xs font-semibold text-slate-500">
+                          Rp
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={form.price}
+                          onChange={handleChange("price")}
+                          disabled={mutation.isPending}
+                          placeholder="0"
+                          className={`h-11 w-full min-w-0 flex-1 bg-transparent px-3 text-sm text-slate-700 placeholder:text-slate-400 focus:bg-white focus:outline-none ${
+                            mutation.isPending ? sellerDisabledFieldClass : ""
+                          }`}
+                        />
                       </div>
-                    </div>
-                  </label>
+                    </AuthoringFormRow>
 
-                  <label className="block">
-                    <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                      <Layers3 className="h-3.5 w-3.5" />
-                      Default Category
-                    </span>
-                    <select
-                      value={form.defaultCategoryId}
-                      onChange={handleChange("defaultCategoryId")}
-                      disabled={
-                        mutation.isPending || selectedCategories.length === 0
-                      }
-                      className={`${authoringSelectClass} ${
-                        mutation.isPending || selectedCategories.length === 0
-                          ? sellerDisabledFieldClass
-                          : ""
-                      }`}
-                    >
-                      <option value="">Choose default category</option>
-                      {defaultCategoryOptions.map((category) => (
-                        <option key={category.id} value={String(category.id)}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="mt-1.5 text-xs text-slate-500">
-                      The first selected category becomes the fallback default until you choose a different one.
-                    </p>
-                  </label>
+                    <AuthoringFormRow label="Sale Price">
+                      <div className="flex h-11 w-full max-w-none items-center overflow-hidden rounded-lg border border-slate-200 bg-white">
+                        <span className="inline-flex h-11 w-12 items-center justify-center border-r border-slate-200 bg-slate-50 text-xs font-semibold text-slate-500">
+                          Rp
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={form.salePrice}
+                          onChange={handleChange("salePrice")}
+                          disabled={mutation.isPending}
+                          placeholder=""
+                          className={`h-11 w-full min-w-0 flex-1 bg-transparent px-3 text-sm text-slate-700 placeholder:text-slate-400 focus:bg-white focus:outline-none ${
+                            mutation.isPending ? sellerDisabledFieldClass : ""
+                          }`}
+                        />
+                      </div>
+                    </AuthoringFormRow>
+                  </div>
+                </section>
 
-                  <div className="lg:col-span-2">
-                    <FormSectionLabel eyebrow="Commercial" title="Pricing" />
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-[1fr_1fr] lg:col-span-2">
-                    <ProductField
-                      label="Base Price"
-                      icon={DollarSign}
-                      value={form.price}
-                      onChange={handleChange("price")}
-                      disabled={mutation.isPending}
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="0"
-                    />
+                <section className="border-t border-slate-200 pt-5">
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <AuthoringFormRow label="Product Quantity">
+                      <input
+                        className={`${authoringFieldClass} ${
+                          mutation.isPending ? sellerDisabledFieldClass : ""
+                        }`}
+                        value={form.stock}
+                        onChange={handleChange("stock")}
+                        disabled={mutation.isPending}
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder=""
+                      />
+                    </AuthoringFormRow>
 
-                    <ProductField
-                      label="Sale Price"
-                      icon={DollarSign}
-                      value={form.salePrice}
-                      onChange={handleChange("salePrice")}
-                      disabled={mutation.isPending}
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="Optional"
-                      hint="Must stay below base price."
-                    />
+                    <AuthoringFormRow label="Product Slug">
+                      <input
+                        className={`${authoringFieldClass} ${
+                          mutation.isPending ? sellerDisabledFieldClass : ""
+                        }`}
+                        value={form.slug}
+                        onChange={handleSlugChange}
+                        disabled={mutation.isPending}
+                        placeholder="Product Slug"
+                      />
+                    </AuthoringFormRow>
                   </div>
-                </div>
-                <FormSectionLabel eyebrow="Operations" title="Inventory" />
-                <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
-                  <ProductField
-                    label="Stock"
-                    icon={Package}
-                    value={form.stock}
-                    onChange={handleChange("stock")}
-                    disabled={mutation.isPending}
-                    type="number"
-                    min="0"
-                    step="1"
-                    placeholder="0"
-                  />
-                  <div className="space-y-1.5 pb-1">
-                    <div className="space-y-1.5 text-sm text-slate-500">
-                      <p className="inline-flex items-center gap-2 font-medium text-slate-600">
-                        {isStorefrontVisible ? (
-                          <Eye className="h-4 w-4 text-emerald-600" />
-                        ) : (
-                          <EyeOff className="h-4 w-4 text-slate-400" />
-                        )}
-                        {visibilityLabel}
-                      </p>
-                      {!governance?.canPublish ? (
-                        <p className="inline-flex items-center gap-2 text-amber-700">
-                          <Globe2 className="h-4 w-4" />
-                          Publish unavailable
-                        </p>
-                      ) : null}
-                    </div>
-                    {submissionReason ? (
-                      <p className="mt-2 text-xs text-slate-500">
-                        {submissionReason}
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
+                </section>
 
                 {isEditMode ? (
                   <div className="space-y-3">
@@ -1533,10 +1593,10 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
                   </div>
                 ) : null}
 
-                <FormSectionLabel eyebrow="Media" title="Images" />
-
                 {canManageMedia ? (
-                  <div className={`space-y-2.5 ${authoringSurfaceClass}`}>
+                  <section className="space-y-4 border-t border-slate-200 pt-6">
+                    <AuthoringFormRow label="Product Images">
+                    <div className={`space-y-2.5 ${authoringSurfaceClass}`}>
                     <div className="flex flex-wrap items-start justify-between gap-2.5">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
@@ -1639,22 +1699,31 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
                         ))}
                       </div>
                     ) : (
-                      <div className="rounded-lg border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-400">
-                        Add product images. JPG and PNG only, up to 2MB each.
+                      <div className="rounded-xl border-2 border-dashed border-slate-300 bg-white px-4 py-5 text-center text-sm text-slate-400">
+                        <div className="flex flex-col items-center gap-2">
+                          <Upload className="h-7 w-7 text-slate-300" />
+                          <span className="font-medium text-slate-600">Drag your images here</span>
+                          <span>JPG and PNG only, up to 2MB each.</span>
+                        </div>
                       </div>
                     )}
-                  </div>
+                    </div>
+                    </AuthoringFormRow>
+                  </section>
                 ) : (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  <section className="space-y-4 border-t border-slate-200 pt-6">
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                     <div className="inline-flex items-center gap-2">
                       <AlertTriangle className="h-4 w-4" />
                       <span>Media deferred</span>
                     </div>
-                  </div>
+                    </div>
+                  </section>
                 )}
 
-                <FormSectionLabel eyebrow="Metadata" title="Tags" />
-                <div className="space-y-2.5 rounded-[18px] border border-slate-200/70 bg-white px-3 py-3">
+                <section className="space-y-4 border-t border-slate-200 pt-6">
+                  <AuthoringFormRow label="Product Tags">
+                  <div className="space-y-2.5 rounded-[18px] border border-slate-200/70 bg-white px-3 py-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
                       <Tag className="h-3.5 w-3.5" />
@@ -1668,7 +1737,7 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
                     value={tagInput}
                     onChange={(event) => setTagInput(event.target.value)}
                     onKeyDown={handleTagKeyDown}
-                    placeholder="Add tag"
+                    placeholder="Product Tag (Write then press enter to add new tag)"
                     className={authoringFieldClass}
                     disabled={mutation.isPending}
                   />
@@ -1689,7 +1758,9 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
                       ))}
                     </div>
                   ) : null}
-                </div>
+                  </div>
+                  </AuthoringFormRow>
+                </section>
 
                 {showPublishBlockers ? (
                   <div className="rounded-[20px] border border-amber-200 bg-amber-50/90 px-3.5 py-3 text-sm text-amber-900">
@@ -1713,27 +1784,24 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
                   </div>
                 ) : null}
 
-                <div className="sticky bottom-0 -mx-1 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white/98 px-1 py-3 backdrop-blur">
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                      Final Action
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {visibilityLabel}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
+                <div className="sticky bottom-0 -mx-1 flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 bg-white/98 px-1 py-3 backdrop-blur">
+                  <div className="flex flex-wrap gap-2 sm:ml-auto">
                     <Link
                       to={workspaceRoutes.catalog()}
-                      className={authoringActionMutedClass}
+                      onClick={(event) => {
+                        if (isDrawerMode) {
+                          event.preventDefault();
+                          closeForm();
+                        }
+                      }}
+                      className="inline-flex h-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
                     >
-                      <X className="h-4 w-4" />
                       Cancel
                     </Link>
                     <button
                       type="submit"
                       disabled={mutation.isPending}
-                      className={authoringActionMutedClass}
+                      className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {isEditMode ? (
                         <Save className="h-4 w-4" />
@@ -1742,7 +1810,7 @@ export default function SellerProductAuthoringPage({ mode = "create" }) {
                       )}
                       {saveActionLabel}
                     </button>
-                    {canManagePublish ? (
+                    {isEditMode && canManagePublish ? (
                       <button
                         type="button"
                         disabled={

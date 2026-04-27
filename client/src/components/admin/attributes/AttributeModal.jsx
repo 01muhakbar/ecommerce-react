@@ -53,7 +53,7 @@ export default function AttributeModal({
     setLanguage("en");
   }, [open, attribute]);
 
-  const heading = mode === "edit" ? "Update Attribute Value" : "Add Attribute Value";
+  const heading = mode === "edit" ? "Update Attribute" : "Add Attribute";
   const actionLabel = mode === "edit" ? "Update Attribute" : "Add Attribute";
   const finalError = validationError || submitError;
   const isValid = useMemo(

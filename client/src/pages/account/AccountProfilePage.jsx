@@ -9,7 +9,7 @@ import { resolveAssetUrl } from "../../lib/assetUrl.js";
 import { uploadUserProfileImage } from "../../api/userMe.ts";
 
 const fetchMe = async () => {
-  const { data } = await api.get("/auth/me");
+  const { data } = await api.get("/auth/account/me");
   return data;
 };
 

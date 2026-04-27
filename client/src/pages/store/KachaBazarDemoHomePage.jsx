@@ -710,6 +710,7 @@ export default function KachaBazarDemoHomePage() {
         const slug = raw?.slug ?? String(raw?.id ?? "");
 
         return {
+          ...raw,
           id: raw?.id,
           title,
           name: raw?.name ?? title,
@@ -724,9 +725,14 @@ export default function KachaBazarDemoHomePage() {
           createdAt: raw?.createdAt ?? null,
           updatedAt: raw?.updatedAt ?? null,
           category: categoryObj,
+          categoryId: raw?.categoryId ?? categoryObj?.id ?? null,
           imageUrl,
           image: imageUrl,
           slug,
+          routeSlug: raw?.routeSlug ?? slug,
+          variations: raw?.variations ?? null,
+          purchaseState: raw?.purchaseState ?? null,
+          stock: raw?.stock ?? null,
         };
       }),
     [popularProducts, categoriesById]
@@ -764,6 +770,7 @@ export default function KachaBazarDemoHomePage() {
         const slug = raw?.slug ?? String(raw?.id ?? "");
 
         return {
+          ...raw,
           id: raw?.id,
           title,
           name: raw?.name ?? title,
@@ -778,9 +785,14 @@ export default function KachaBazarDemoHomePage() {
           createdAt: raw?.createdAt ?? null,
           updatedAt: raw?.updatedAt ?? null,
           category: categoryObj,
+          categoryId: raw?.categoryId ?? categoryObj?.id ?? null,
           imageUrl,
           image: imageUrl,
           slug,
+          routeSlug: raw?.routeSlug ?? slug,
+          variations: raw?.variations ?? null,
+          purchaseState: raw?.purchaseState ?? null,
+          stock: raw?.stock ?? null,
         };
       }),
     [rawDiscountedProducts, categoriesById]

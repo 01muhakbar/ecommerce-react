@@ -10,6 +10,7 @@ type SellerProductsQuery = {
   page?: number;
   limit?: number;
   keyword?: string;
+  categoryIds?: number[];
   status?: string;
   published?: "" | "true" | "false";
   submissionStatus?:
@@ -20,11 +21,16 @@ type SellerProductsQuery = {
     | "review_queue"
     | "ready_to_submit";
   visibilityState?: "" | "internal_only" | "storefront_visible" | "published_blocked";
+  sort?: "" | "price_asc" | "price_desc" | "date_added" | "date_updated";
 };
 
 type SellerBulkSubmissionAction = "submit_review" | "resubmit_review";
 
 type SellerProductDraftPayload = ProductWriteDTO;
+type ProductActivityQuery = {
+  limit?: number;
+  offset?: number;
+};
 
 const PRODUCT_STATUSES = new Set(["active", "inactive", "draft"]);
 
@@ -199,6 +205,14 @@ const normalizeProductDetail = (item: any) => {
   return mapSellerProductDetailDto(item);
 };
 
+const normalizeProductActivityItem = (item: any) => ({
+  action: normalizeText(item?.action) || "PRODUCT_UPDATED",
+  actorType: normalizeText(item?.actorType) || "system",
+  actorName: normalizeText(item?.actorName) || "System",
+  createdAt: normalizeText(item?.createdAt) || null,
+  metadata: item?.metadata && typeof item.metadata === "object" ? item.metadata : {},
+});
+
 export const getSellerProducts = async (
   storeId: number | string,
   query: SellerProductsQuery = {}
@@ -208,10 +222,15 @@ export const getSellerProducts = async (
       page: query.page,
       limit: query.limit,
       keyword: query.keyword || undefined,
+      categoryIds:
+        Array.isArray(query.categoryIds) && query.categoryIds.length > 0
+          ? normalizePositiveIds(query.categoryIds, 50)
+          : undefined,
       status: query.status || undefined,
       published: query.published || undefined,
       submissionStatus: query.submissionStatus || undefined,
       visibilityState: query.visibilityState || undefined,
+      sort: query.sort || undefined,
     },
   });
   const payload = data?.data ?? null;
@@ -238,14 +257,17 @@ export const exportSellerProducts = async (
   options: {
     ids?: number[];
     filters?: SellerProductsQuery;
+    format?: "csv" | "json";
   } = {}
 ) => {
+  const format = options.format === "json" ? "json" : "csv";
   try {
     const response = await api.post(
       `/seller/stores/${storeId}/products/export`,
       {
         ...(Array.isArray(options.ids) ? { ids: normalizePositiveIds(options.ids, 500) } : {}),
         filters: options.filters || {},
+        format,
       },
       {
         responseType: "blob",
@@ -256,7 +278,8 @@ export const exportSellerProducts = async (
 
     return {
       blob: response.data as Blob,
-      filename: filenameMatch?.groups?.filename || `seller-products-${storeId}.csv`,
+      filename:
+        filenameMatch?.groups?.filename || `seller-products-${storeId}.${format}`,
     };
   } catch (error: any) {
     const blob = error?.response?.data;
@@ -324,6 +347,29 @@ export const getSellerProductDetail = async (
 ) => {
   const { data } = await api.get(`/seller/stores/${storeId}/products/${productId}`);
   return normalizeProductDetail(data?.data ?? null);
+};
+
+export const getProductActivity = async (
+  productId: number | string,
+  query: ProductActivityQuery = {}
+) => {
+  const { data } = await api.get(`/products/${productId}/activity`, {
+    params: {
+      limit: query.limit,
+      offset: query.offset,
+    },
+  });
+  const payload = data?.data ?? null;
+  return {
+    items: Array.isArray(payload?.items)
+      ? payload.items.map(normalizeProductActivityItem)
+      : [],
+    pagination: {
+      limit: asNumber(payload?.pagination?.limit, asNumber(query.limit, 20)),
+      offset: asNumber(payload?.pagination?.offset, asNumber(query.offset, 0)),
+      total: asNumber(payload?.pagination?.total, 0),
+    },
+  };
 };
 
 export const getSellerProductAuthoringMeta = async (storeId: number | string) => {
@@ -414,6 +460,59 @@ export const submitSellerProductDraftForReview = async (
     `/seller/stores/${storeId}/products/${productId}/submit-review`
   );
   return normalizeProductDetail(data?.data ?? null);
+};
+
+export const duplicateSellerProduct = async (
+  storeId: number | string,
+  productId: number | string
+) => {
+  const { data } = await api.post(
+    `/seller/stores/${storeId}/products/${productId}/duplicate`
+  );
+  return normalizeProductDetail(data?.data ?? null);
+};
+
+export const importSellerProducts = async (
+  storeId: number | string,
+  file: File
+) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await api.post(`/seller/stores/${storeId}/products/import`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  const payload = data?.data ?? null;
+
+  return {
+    totalRows: asNumber(payload?.totalRows, 0),
+    created: asNumber(payload?.created, 0),
+    failed: asNumber(payload?.failed, 0),
+    errors: Array.isArray(payload?.errors)
+      ? payload.errors.map((entry: any) => ({
+          row: asNumber(entry?.row, 0),
+          slug: normalizeText(entry?.slug) || null,
+          message: normalizeText(entry?.message) || "Import row failed.",
+        }))
+      : [],
+  };
+};
+
+export const deleteSellerProduct = async (
+  storeId: number | string,
+  productId: number | string
+) => {
+  const { data } = await api.delete(`/seller/stores/${storeId}/products/${productId}`);
+  const payload = data?.data ?? null;
+
+  return {
+    id: asNumber(payload?.id, 0),
+    deleted: Boolean(payload?.deleted),
+    archived: Boolean(payload?.archived),
+    alreadyDeleted: Boolean(payload?.alreadyDeleted),
+    archiveReason: normalizeText(payload?.archiveReason) || null,
+    message: normalizeText(payload?.message) || null,
+    product: payload?.product ? normalizeProductDetail(payload.product) : null,
+  };
 };
 
 export const setSellerProductPublished = async (

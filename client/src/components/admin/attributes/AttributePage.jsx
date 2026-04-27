@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { ChevronDown, Plus, Trash2 } from "lucide-react";
+import { useAdminAuth } from "../../../auth/authDomainHooks.js";
 import { UiErrorState, UiSkeleton } from "../../primitives/state/index.js";
 import {
   bulkAdminAttributes,
@@ -21,6 +22,10 @@ const defaultFilters = {
   q: "",
   type: "",
   published: "",
+  scope: "",
+  status: "",
+  createdByRole: "",
+  storeId: "",
   page: 1,
   limit: 20,
 };
@@ -30,6 +35,8 @@ const DEFAULT_COLUMN_VISIBILITY = {
   name: true,
   displayName: true,
   optionType: true,
+  scope: true,
+  store: true,
   published: true,
   values: true,
   actions: true,
@@ -80,11 +87,19 @@ const validateImportFile = async (file) => {
     throw new Error("Invalid JSON file.");
   }
 
-  if (!Array.isArray(payload) || payload.length === 0) {
+  const items = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.data)
+      ? payload.data
+      : Array.isArray(payload?.items)
+        ? payload.items
+        : null;
+
+  if (!Array.isArray(items) || items.length === 0) {
     throw new Error("Import JSON must be a non-empty array.");
   }
 
-  payload.forEach((entry, index) => {
+  items.forEach((entry, index) => {
     const name = toText(entry?.name);
     const type = toText(entry?.type).toLowerCase();
     const values = Array.isArray(entry?.values) ? entry.values : [];
@@ -100,7 +115,7 @@ const validateImportFile = async (file) => {
   });
 
   return {
-    count: payload.length,
+    count: items.length,
   };
 };
 
@@ -108,6 +123,11 @@ export default function AttributePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const bulkMenuRef = useRef(null);
+  const { role } = useAdminAuth();
+  const isSuperAdmin =
+    ["super_admin", "superadmin", "super-admin", "super admin"].includes(
+      String(role || "").trim().toLowerCase()
+    );
 
   const [draftFilters, setDraftFilters] = useState(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
@@ -131,6 +151,10 @@ export default function AttributePage() {
       limit: appliedFilters.limit,
       q: toText(appliedFilters.q) || undefined,
       type: toText(appliedFilters.type) || undefined,
+      scope: toText(appliedFilters.scope) || undefined,
+      status: toText(appliedFilters.status) || undefined,
+      createdByRole: toText(appliedFilters.createdByRole) || undefined,
+      storeId: toText(appliedFilters.storeId) || undefined,
       published:
         appliedFilters.published === ""
           ? undefined
@@ -212,8 +236,13 @@ export default function AttributePage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => deleteAdminAttribute(id),
-    onSuccess: () => {
-      setNotice({ type: "success", message: "Attribute deleted successfully." });
+    onSuccess: (result) => {
+      setNotice({
+        type: "success",
+        message: result?.archived
+          ? "Store attribute archived successfully."
+          : "Attribute deleted successfully.",
+      });
       queryClient.invalidateQueries({ queryKey: ["admin", "attributes"] });
     },
     onError: (error) => {
@@ -307,6 +336,10 @@ export default function AttributePage() {
       q: draftFilters.q,
       type: draftFilters.type,
       published: draftFilters.published,
+      scope: draftFilters.scope,
+      status: draftFilters.status,
+      createdByRole: draftFilters.createdByRole,
+      storeId: draftFilters.storeId,
       page: 1,
     }));
     setSelectedIds([]);
@@ -401,7 +434,7 @@ export default function AttributePage() {
   const handleExport = async (format) => {
     try {
       setExportingFormat(format);
-      const response = await exportAdminAttributes(format);
+      const response = await exportAdminAttributes(format, queryParams);
       await downloadResponse(response, `attributes-export.${format}`);
       setNotice({
         type: "success",
@@ -596,6 +629,7 @@ export default function AttributePage() {
           togglePendingId={
             togglePublishedMutation.isPending ? togglePublishedMutation.variables?.id : null
           }
+          canManageStoreAttributes={isSuperAdmin}
         />
       ) : null}
 

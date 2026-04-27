@@ -23,6 +23,9 @@ const normalizeFiniteNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const normalizeReferenceMap = (value) =>
+  value instanceof Map ? value : new Map();
+
 const createAttributeBucket = (key, name = "") => ({
   key,
   name: normalizeText(name) || "Attribute",
@@ -88,6 +91,20 @@ const normalizeSelectionEntry = (value, index = 0) => {
   };
 };
 
+const resolveReferenceAttribute = (referenceById, referenceByName, key, name) => {
+  const normalizedKey = normalizeText(key);
+  if (normalizedKey && referenceById.has(normalizedKey)) {
+    return referenceById.get(normalizedKey) || null;
+  }
+
+  const normalizedName = normalizeText(name).toLowerCase();
+  if (normalizedName && referenceByName.has(normalizedName)) {
+    return referenceByName.get(normalizedName) || null;
+  }
+
+  return null;
+};
+
 const buildVariantLabel = (variant, selections) => {
   const directLabel =
     normalizeText(variant?.combination) ||
@@ -103,9 +120,11 @@ const buildVariantLabel = (variant, selections) => {
   return "Variant";
 };
 
-export const summarizeProductVariations = (rawValue) => {
+export const summarizeProductVariations = (rawValue, options = {}) => {
   const normalizedRootValue = normalizeStructuredValue(rawValue);
   const rootObject = normalizePlainObject(normalizedRootValue);
+  const referenceById = normalizeReferenceMap(options.attributeReferenceById);
+  const referenceByName = normalizeReferenceMap(options.attributeReferenceByName);
   const rootVariants = Array.isArray(normalizedRootValue)
     ? normalizedRootValue
     : Array.isArray(rootObject?.variants)
@@ -140,9 +159,20 @@ export const summarizeProductVariations = (rawValue) => {
     const plain = normalizePlainObject(entry);
     if (!plain) return;
     const key = resolveAttributeKey(plain.id ?? plain.attributeId, `attribute-${index + 1}`);
-    getAttributeBucket(
+    const reference = resolveReferenceAttribute(
+      referenceById,
+      referenceByName,
       key,
       plain.displayName || plain.attributeName || plain.display_name || plain.name
+    );
+    getAttributeBucket(
+      key,
+      reference?.displayName ||
+        reference?.name ||
+        plain.displayName ||
+        plain.attributeName ||
+        plain.display_name ||
+        plain.name
     );
   });
 
@@ -150,10 +180,26 @@ export const summarizeProductVariations = (rawValue) => {
     const plain = normalizePlainObject(entry);
     if (!plain) return;
     const key = resolveAttributeKey(plain.attributeId, `attribute-values-${index + 1}`);
-    const bucket = getAttributeBucket(key, plain.attributeName || plain.name);
+    const reference = resolveReferenceAttribute(
+      referenceById,
+      referenceByName,
+      key,
+      plain.attributeName || plain.name
+    );
+    const bucket = getAttributeBucket(
+      key,
+      reference?.displayName || reference?.name || plain.attributeName || plain.name
+    );
     const values = Array.isArray(plain.values) ? plain.values : [];
     values.forEach((item, valueIndex) => {
-      const label = normalizeAttributeValueLabel(item);
+      const rawLabel = normalizeAttributeValueLabel(item);
+      const referenceLabel = Array.isArray(reference?.values)
+        ? reference.values.find(
+            (candidate) =>
+              normalizeText(candidate).toLowerCase() === rawLabel.toLowerCase()
+          )
+        : "";
+      const label = referenceLabel || rawLabel;
       if (!label) return;
       bucket.values.set(
         resolveAttributeKey(
@@ -178,7 +224,22 @@ export const summarizeProductVariations = (rawValue) => {
           : [];
     const selections = rawSelections
       .map((item, selectionIndex) => normalizeSelectionEntry(item, selectionIndex))
-      .filter(Boolean);
+      .filter(Boolean)
+      .map((selection) => {
+        const reference = resolveReferenceAttribute(
+          referenceById,
+          referenceByName,
+          selection.key,
+          selection.name
+        );
+        return {
+          ...selection,
+          name:
+            reference?.displayName ||
+            reference?.name ||
+            selection.name,
+        };
+      });
 
     selections.forEach((selection) => {
       const bucket = getAttributeBucket(selection.key, selection.name);

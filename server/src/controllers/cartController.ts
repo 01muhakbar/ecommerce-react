@@ -440,7 +440,10 @@ const resolveCartItemLookup = async (
   cartId: number,
   idOrProductId: number,
   transaction?: any,
-  supportedFields?: Set<keyof typeof CART_ITEM_VARIANT_FIELD_COLUMN_MAP>
+  supportedFields?: Set<keyof typeof CART_ITEM_VARIANT_FIELD_COLUMN_MAP>,
+  options?: {
+    strictItemId?: boolean;
+  }
 ) => {
   const queryAttributes = buildCartItemQueryAttributes(
     supportedFields ?? (await getCartItemSupportedVariantFields())
@@ -456,6 +459,14 @@ const resolveCartItemLookup = async (
       cartItem: byItemId,
       resolvedProductId: Number(getAttr(byItemId, "productId") ?? 0),
       lookupMode: "itemId",
+    };
+  }
+
+  if (options?.strictItemId) {
+    return {
+      cartItem: null,
+      resolvedProductId: 0,
+      lookupMode: null,
     };
   }
 
@@ -790,12 +801,14 @@ export const removeFromCart = async (
       res.status(500).json({ message: "Failed to resolve cart id." });
       return;
     }
+    const strictItemIdLookup = String((req.route as any)?.path || "").includes("/by-id/");
 
     const resolved = await resolveCartItemLookup(
       cartId,
       id,
       undefined,
-      await getCartItemSupportedVariantFields()
+      await getCartItemSupportedVariantFields(),
+      { strictItemId: strictItemIdLookup }
     );
     if (!resolved.cartItem) {
       res.status(404).json({ message: "Item not found in cart." });
@@ -906,6 +919,8 @@ export const setCartItemQty = async (
       return;
     }
 
+    const strictItemIdLookup = String((req.route as any)?.path || "").includes("/by-id/");
+
     await sequelize.transaction(async (t) => {
       const supportedVariantFields = await getCartItemSupportedVariantFields();
       let cart = await Cart.findOne({
@@ -915,7 +930,11 @@ export const setCartItemQty = async (
       });
 
       if (!cart) {
-        if (qty <= 0) return;
+        if (qty <= 0 || strictItemIdLookup) {
+          const error: any = new Error("Item not found in cart.");
+          error.statusCode = 404;
+          throw error;
+        }
         cart = await Cart.create({ userId }, { transaction: t });
       }
       const cartId = await resolveCartId(cart, userId);
@@ -927,7 +946,8 @@ export const setCartItemQty = async (
         cartId,
         targetId,
         t,
-        supportedVariantFields
+        supportedVariantFields,
+        { strictItemId: strictItemIdLookup }
       );
       const cartItem = resolved.cartItem;
 
@@ -936,6 +956,12 @@ export const setCartItemQty = async (
           await cartItem.destroy({ transaction: t });
         }
         return;
+      }
+
+      if (strictItemIdLookup && !cartItem) {
+        const error: any = new Error("Item not found in cart.");
+        error.statusCode = 404;
+        throw error;
       }
 
       const product = await loadCartProductForMutation(resolved.resolvedProductId, t);

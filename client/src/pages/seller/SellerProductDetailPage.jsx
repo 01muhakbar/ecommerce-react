@@ -14,6 +14,7 @@ import {
   Wallet,
 } from "lucide-react";
 import {
+  getProductActivity,
   getSellerProductDetail,
   setSellerProductPublished,
   submitSellerProductDraftForReview,
@@ -52,6 +53,36 @@ const formatDateTime = (value) =>
         timeStyle: "short",
       }).format(new Date(value))
     : "-";
+
+const getActivityLabel = (entry) => {
+  const actor = entry?.actorName || "Unknown actor";
+  switch (entry?.action) {
+    case "PRODUCT_CREATED":
+      return `Product created by ${actor}`;
+    case "PRODUCT_UPDATED":
+      return `Product updated by ${actor}`;
+    case "PRODUCT_DUPLICATED":
+      return `Product duplicated by ${actor}`;
+    case "PRODUCT_DELETED":
+      return `Product deleted by ${actor}`;
+    case "PRODUCT_ARCHIVED":
+      return `Product archived by ${actor}`;
+    case "PRODUCT_IMPORTED":
+      return `Product imported by ${actor}`;
+    case "PRODUCT_SUBMITTED_FOR_REVIEW":
+      return `Submitted for review by ${actor}`;
+    case "PRODUCT_REVIEW_APPROVED":
+      return `Review approved by ${actor}`;
+    case "PRODUCT_REVIEW_REJECTED":
+      return `Review rejected by ${actor}`;
+    case "PRODUCT_PUBLISHED":
+      return `Product published by ${actor}`;
+    case "PRODUCT_UNPUBLISHED":
+      return `Product unpublished by ${actor}`;
+    default:
+      return `${entry?.action || "Activity"} by ${actor}`;
+  }
+};
 
 const getStatusTone = (status) =>
   status === "active" ? "emerald" : status === "draft" ? "amber" : "stone";
@@ -169,6 +200,13 @@ export default function SellerProductDetailPage() {
     retry: false,
   });
 
+  const activityQuery = useQuery({
+    queryKey: ["products", "activity", productId],
+    queryFn: () => getProductActivity(productId, { limit: 20, offset: 0 }),
+    enabled: hasValidProductId && canViewProducts,
+    retry: false,
+  });
+
   const submitMutation = useMutation({
     mutationFn: () => submitSellerProductDraftForReview(storeId, productId),
     onSuccess: async (data) => {
@@ -185,6 +223,9 @@ export default function SellerProductDetailPage() {
         queryClient.invalidateQueries({ queryKey: ["seller", "products", storeId] }),
         queryClient.invalidateQueries({
           queryKey: ["seller", "products", "authoring-meta", storeId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["products", "activity", productId],
         }),
       ]);
     },
@@ -212,6 +253,9 @@ export default function SellerProductDetailPage() {
         queryClient.invalidateQueries({ queryKey: ["seller", "products", storeId] }),
         queryClient.invalidateQueries({
           queryKey: ["seller", "products", "authoring-meta", storeId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["products", "activity", productId],
         }),
       ]);
     },
@@ -684,6 +728,58 @@ export default function SellerProductDetailPage() {
             value={sellerLaneVisibilityLabel}
           />
         </div>
+      </SellerWorkspaceSectionCard>
+
+      <SellerWorkspaceSectionCard
+        title="Activity"
+        hint="Recent product activity across seller and admin lanes."
+        Icon={FileText}
+      >
+        {activityQuery.isLoading ? (
+          <p className="text-sm text-slate-500">Loading product activity…</p>
+        ) : activityQuery.isError ? (
+          <SellerWorkspaceNotice type="warning">
+            Failed to load product activity.
+          </SellerWorkspaceNotice>
+        ) : activityQuery.data?.items?.length ? (
+          <div className="space-y-3">
+            {activityQuery.data.items.map((entry, index) => (
+              <div
+                key={`${entry.action}-${entry.createdAt}-${index}`}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-slate-900">
+                    {getActivityLabel(entry)}
+                  </p>
+                  <span className="text-xs text-slate-500">
+                    {formatDateTime(entry.createdAt)}
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
+                  {entry.metadata?.productName ? (
+                    <span>Product: {entry.metadata.productName}</span>
+                  ) : null}
+                  {entry.metadata?.newStatus ? (
+                    <span>Status: {entry.metadata.newStatus}</span>
+                  ) : null}
+                  {typeof entry.metadata?.newPublished === "boolean" ? (
+                    <span>
+                      Published: {entry.metadata.newPublished ? "true" : "false"}
+                    </span>
+                  ) : null}
+                  {entry.metadata?.source ? <span>Source: {entry.metadata.source}</span> : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <SellerWorkspaceEmptyState
+            title="No product activity yet"
+            description="This product has no recorded activity events yet."
+            icon={FileText}
+          />
+        )}
       </SellerWorkspaceSectionCard>
 
       <section className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">

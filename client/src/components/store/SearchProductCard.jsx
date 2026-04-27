@@ -5,6 +5,7 @@ import { useCart } from "../../hooks/useCart.ts";
 import { formatCurrency } from "../../utils/format.js";
 import { resolveProductImageUrl } from "../../utils/productImage.js";
 import { productHasVariantSelections } from "../../utils/publicProductVariations.js";
+import VariantQuickAddModal from "./VariantQuickAddModal.jsx";
 
 export default function SearchProductCard({ product, variant = "grid" }) {
   const navigate = useNavigate();
@@ -12,6 +13,7 @@ export default function SearchProductCard({ product, variant = "grid" }) {
   const resolvedImage = useMemo(() => resolveProductImageUrl(product), [product]);
   const [imageSrc, setImageSrc] = useState(resolvedImage);
   const [isAdding, setIsAdding] = useState(false);
+  const [isVariantModalOpen, setIsVariantModalOpen] = useState(false);
   const timerRef = useRef(null);
 
   const productId = product?.id ?? product?.slug;
@@ -70,7 +72,7 @@ export default function SearchProductCard({ product, variant = "grid" }) {
     event.preventDefault();
     event.stopPropagation();
     if (hasVariants) {
-      openProduct();
+      setIsVariantModalOpen(true);
       return;
     }
     if (isAdding || !isPurchasable) return;
@@ -156,13 +158,13 @@ export default function SearchProductCard({ product, variant = "grid" }) {
               type="button"
               aria-label={
                 hasVariants
-                  ? `Select ${productName} options on the product page`
+                  ? `Select ${productName} variant options`
                   : !isPurchasable
                     ? `${productName} is unavailable`
                     : `Add ${productName} to cart`
               }
               onClick={handleAdd}
-              disabled={isAdding || isLoading || !isPurchasable || hasVariants}
+              disabled={isAdding || isLoading || !isPurchasable}
               className="absolute bottom-3 right-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 sm:h-10 sm:w-10"
             >
               {!isPurchasable ? (
@@ -218,7 +220,9 @@ export default function SearchProductCard({ product, variant = "grid" }) {
                 <button
                   type="button"
                   aria-label={
-                    !isPurchasable
+                    hasVariants
+                      ? `Select ${productName} variant options`
+                      : !isPurchasable
                       ? `${productName} is unavailable`
                       : `Add ${productName} to cart`
                   }
@@ -272,6 +276,12 @@ export default function SearchProductCard({ product, variant = "grid" }) {
           )}
         </div>
       </div>
+      <VariantQuickAddModal
+        open={isVariantModalOpen}
+        onClose={() => setIsVariantModalOpen(false)}
+        product={product}
+        fallbackImageSrc={imageSrc}
+      />
     </article>
   );
 }

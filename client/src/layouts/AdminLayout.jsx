@@ -1,15 +1,16 @@
 import { Link, Outlet, useNavigate, useOutletContext } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { api } from "../api/axios.ts";
+import { useAdminAuth } from "../auth/authDomainHooks.js";
 
 export default function AdminLayout() {
   const { user } = useOutletContext() || {};
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { logout } = useAdminAuth();
 
   const handleLogout = async () => {
     try {
-      await api.post("/auth/logout");
+      await logout?.("admin");
     } catch {
       // ignore logout errors, still redirect
     } finally {
