@@ -429,7 +429,8 @@ export function useCart() {
       const shouldForceRemote = withLoading === false;
       const hasAuthSignal = hasAuthSessionSignal();
       const shouldAttemptRemote =
-        hasAuthSignal && (mode === "remote" || shouldForceRemote || readRemoteHint());
+        hasAuthSignal &&
+        (mode === "remote" || shouldForceRemote || readRemoteHint() || withLoading);
       if (!shouldAttemptRemote) {
         if (mode !== "guest") {
           setMode("guest");
@@ -495,9 +496,11 @@ export function useCart() {
       const safeQty = Math.max(1, Number(qty) || 1);
       if (!Number.isFinite(id) || id <= 0) return;
       const fromPath = `${location.pathname}${location.search}${location.hash}`;
+      const shouldUseRemoteCart =
+        mode === "remote" || hasAuthSessionSignal() || readRemoteHint();
       setIsLoading(true);
       setError(null);
-      if (mode !== "remote") {
+      if (!shouldUseRemoteCart) {
         addGuestItemSnapshot(id, safeQty, snapshot as any);
         refreshGuest();
         setIsLoading(false);
@@ -509,6 +512,12 @@ export function useCart() {
         await refreshCart(false);
       } catch (err: any) {
         if (isUnauthorized(err)) {
+          if (mode !== "remote") {
+            writeRemoteHint(false);
+            addGuestItemSnapshot(id, safeQty, snapshot as any);
+            refreshGuest();
+            return;
+          }
           writeRemoteHint(false);
           stashPendingAdd({
             productId: id,

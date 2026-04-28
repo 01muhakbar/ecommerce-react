@@ -88,6 +88,127 @@ router.post("/", requireAdmin, async (req, res, next) => {
   }
 });
 
+// CSV export/import
+function toCsvValue(v: any) {
+  if (v === null || v === undefined) return "";
+  const s = String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+router.get("/export", requireStaffOrAdmin, async (req, res, next) => {
+  try {
+    const q = String(req.query.q || "").trim();
+    const parentsOnly = parseBool(req.query.parentsOnly);
+    const published = parseBool(req.query.published);
+    const sort = String(req.query.sort || "created_at:desc");
+    const [sortKey, sortDirRaw] = sort.split(":");
+    const sortDir = (sortDirRaw || "desc").toUpperCase() === "ASC" ? "ASC" : "DESC";
+    const format =
+      String(req.query.format || "json").trim().toLowerCase() === "csv" ? "csv" : "json";
+
+    const where: any = {};
+    if (q) where.name = { [Op.like]: `%${q}%` };
+    if (parentsOnly === true) where.parent_id = { [Op.is]: null };
+    if (published !== undefined) where.published = published;
+
+    const rows = await Category.findAll({
+      where,
+      order: [[sortKey, sortDir]],
+      include: [{ model: Category, as: "parent", attributes: ["id", "name", "code"] }],
+    });
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+
+    if (format === "json") {
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="categories-export-${timestamp}.json"`
+      );
+      return res.status(200).json({
+        format: "admin-categories.v1",
+        exportedAt: new Date().toISOString(),
+        total: rows.length,
+        filters: {
+          q: q || null,
+          parentsOnly: typeof parentsOnly === "boolean" ? parentsOnly : null,
+          published: typeof published === "boolean" ? published : null,
+          sort,
+        },
+        items: rows.map((row: any) => ({
+          id: row.id,
+          code: row.code,
+          name: row.name,
+          description: row.description ?? "",
+          icon: row.icon ?? "",
+          published: Boolean(row.published),
+          parentId: row.parentId ?? row.parent_id ?? null,
+          parent: row.parent
+            ? {
+                id: row.parent.id,
+                code: row.parent.code,
+                name: row.parent.name,
+              }
+            : null,
+          createdAt: row.createdAt ?? null,
+          updatedAt: row.updatedAt ?? null,
+        })),
+      });
+    }
+
+    const header = "code,name,description,icon,published,parent_code\n";
+    const body = rows
+      .map((r: any) =>
+        [r.code, r.name, r.description ?? "", r.icon ?? "", r.published ? "true" : "false", r.parent?.code ?? ""]
+          .map(toCsvValue)
+          .join(",")
+      )
+      .join("\n");
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="categories-export-${timestamp}.csv"`
+    );
+    res.send(header + body + "\n");
+  } catch (err) {
+    next(err);
+  }
+});
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
+router.post("/import", upload.single("file"), async (req, res, next) => {
+  try {
+    const buf = req.file?.buffer;
+    if (!buf) return res.status(400).json({ success: false, message: "No file uploaded" });
+    const text = buf.toString("utf8").trim();
+    const lines = text.split(/\r?\n/);
+    const header = lines.shift();
+    if (!header || !/^code,?name,?description,?icon,?published,?parent_code/i.test(header.replace(/\s+/g, ""))) {
+      return res.status(400).json({ success: false, message: "Invalid CSV header" });
+    }
+    let created = 0;
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const cols = parseCsvLine(line);
+      const [code, name, description, icon, published, parent_code] = cols;
+      if (!code || !name) continue;
+      let parentId: number | null = null;
+      if (parent_code) {
+        const parent = await Category.findOne({ where: { code: parent_code } });
+        parentId = (parent as any)?.id ?? null;
+      }
+      try {
+        await Category.create({ code, name, description, icon, published: String(published).toLowerCase() === "true", parentId } as any);
+        created++;
+      } catch (_) {
+        // ignore duplicates
+      }
+    }
+    res.json({ data: { created } });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/admin/categories/:id
 router.get("/:id", requireStaffOrAdmin, async (req, res, next) => {
   try {
@@ -194,67 +315,6 @@ router.post("/bulk", requireAdmin, async (req, res, next) => {
       await Category.update({ published: false } as any, { where: { id: { [Op.in]: body.ids } } as any });
     }
     res.json({ ok: true });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// CSV export/import
-function toCsvValue(v: any) {
-  if (v === null || v === undefined) return "";
-  const s = String(v);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
-router.get("/export", async (_req, res, next) => {
-  try {
-    const rows = await Category.findAll({ include: [{ model: Category, as: "parent", attributes: ["code"] }] });
-    const header = "code,name,description,icon,published,parent_code\n";
-    const body = rows
-      .map((r: any) =>
-        [r.code, r.name, r.description ?? "", r.icon ?? "", r.published ? "true" : "false", r.parent?.code ?? ""]
-          .map(toCsvValue)
-          .join(",")
-      )
-      .join("\n");
-    res.setHeader("Content-Type", "text/csv");
-    res.setHeader("Content-Disposition", "attachment; filename=categories.csv");
-    res.send(header + body + "\n");
-  } catch (err) {
-    next(err);
-  }
-});
-
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
-router.post("/import", upload.single("file"), async (req, res, next) => {
-  try {
-    const buf = req.file?.buffer;
-    if (!buf) return res.status(400).json({ success: false, message: "No file uploaded" });
-    const text = buf.toString("utf8").trim();
-    const lines = text.split(/\r?\n/);
-    const header = lines.shift();
-    if (!header || !/^code,?name,?description,?icon,?published,?parent_code/i.test(header.replace(/\s+/g, ""))) {
-      return res.status(400).json({ success: false, message: "Invalid CSV header" });
-    }
-    let created = 0;
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      const cols = parseCsvLine(line);
-      const [code, name, description, icon, published, parent_code] = cols;
-      if (!code || !name) continue;
-      let parentId: number | null = null;
-      if (parent_code) {
-        const parent = await Category.findOne({ where: { code: parent_code } });
-        parentId = (parent as any)?.id ?? null;
-      }
-      try {
-        await Category.create({ code, name, description, icon, published: String(published).toLowerCase() === "true", parentId } as any);
-        created++;
-      } catch (_) {
-        // ignore duplicates
-      }
-    }
-    res.json({ data: { created } });
   } catch (err) {
     next(err);
   }

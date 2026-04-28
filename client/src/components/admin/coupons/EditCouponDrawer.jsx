@@ -5,7 +5,7 @@ import { resolveAssetUrl } from "../../../lib/assetUrl.js";
 import { GENERIC_ERROR, UPDATING } from "../../../constants/uiMessages.js";
 
 const toNumber = (value) => {
-  const numeric = Number(String(value ?? "").replace(/[^\d.]/g, ""));
+  const numeric = Number(String(value ?? "").replace(/[^\d]/g, ""));
   return Number.isFinite(numeric) ? numeric : 0;
 };
 
@@ -61,6 +61,8 @@ export default function EditCouponDrawer({
   const [language, setLanguage] = useState("en");
   const [scopeType, setScopeType] = useState("PLATFORM");
   const [storeId, setStoreId] = useState("");
+  const [campaignName, setCampaignName] = useState("");
+  const [code, setCode] = useState("");
   const [discountType, setDiscountType] = useState("percent");
   const [amount, setAmount] = useState("");
   const [minSpend, setMinSpend] = useState("");
@@ -89,6 +91,8 @@ export default function EditCouponDrawer({
     setLanguage("en");
     setScopeType(coupon?.governance?.scopeType || coupon?.scopeType || "PLATFORM");
     setStoreId(String(coupon?.governance?.storeId ?? coupon?.storeId ?? ""));
+    setCampaignName(String(coupon?.campaignName || coupon?.name || coupon?.code || "").trim());
+    setCode(String(coupon?.code || "").trim().toUpperCase());
     setDiscountType(coupon.discountType || "percent");
     setAmount(String(coupon.amount ?? ""));
     setMinSpend(String(coupon.minSpend ?? ""));
@@ -163,9 +167,19 @@ export default function EditCouponDrawer({
     event.preventDefault();
     const parsedAmount = toNumber(amount);
     const parsedMinSpend = toNumber(minSpend);
+    const normalizedCampaignName = String(campaignName || "").trim();
+    const normalizedCode = String(code || "").trim().toUpperCase().replace(/\s+/g, "");
 
     if (bannerUploading) {
       setValidationError("Wait for the banner image upload to finish before updating.");
+      return;
+    }
+    if (!normalizedCampaignName) {
+      setValidationError("Campaign Name is required.");
+      return;
+    }
+    if (!normalizedCode) {
+      setValidationError("Campaign Code is required.");
       return;
     }
     if (bannerPreview && !bannerImageUrl) {
@@ -209,6 +223,8 @@ export default function EditCouponDrawer({
 
     setValidationError("");
     onSubmit({
+      campaignName: normalizedCampaignName,
+      code: normalizedCode,
       scopeType,
       storeId: scopeType === "STORE" ? Number(storeId) : null,
       discountType,
@@ -316,12 +332,28 @@ export default function EditCouponDrawer({
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Campaign Name
+                  </label>
+                  <input
+                    value={campaignName}
+                    onChange={(event) => {
+                      setValidationError("");
+                      setCampaignName(event.target.value);
+                    }}
+                    className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Campaign Code
                   </label>
                   <input
-                    value={coupon.code || ""}
-                    readOnly
-                    className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700"
+                    value={code}
+                    onChange={(event) => {
+                      setValidationError("");
+                      setCode(event.target.value.toUpperCase().replace(/\s+/g, ""));
+                    }}
+                    className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm uppercase text-slate-700 focus:border-emerald-500 focus:outline-none"
                   />
                 </div>
                 {scopeType === "STORE" ? (

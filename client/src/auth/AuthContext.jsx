@@ -22,13 +22,18 @@ export const AuthContext = createContext(null);
 const ADMIN_ROUTE_PREFIX = "/admin";
 const ACCOUNT_SESSION_KEY = "accountSessionHint";
 const ADMIN_SESSION_KEY = "adminSessionHint";
+const LEGACY_ACCOUNT_SESSION_KEY = "authSessionHint";
 
 const getScopeStorageKey = (scope) =>
   scope === "admin" ? ADMIN_SESSION_KEY : ACCOUNT_SESSION_KEY;
 
 const readAuthHint = (scope) => {
   try {
-    return localStorage.getItem(getScopeStorageKey(scope)) === "true";
+    const keys = [getScopeStorageKey(scope)];
+    if (!keys.includes(LEGACY_ACCOUNT_SESSION_KEY)) {
+      keys.push(LEGACY_ACCOUNT_SESSION_KEY);
+    }
+    return keys.some((key) => localStorage.getItem(key) === "true");
   } catch {
     return false;
   }
@@ -39,8 +44,14 @@ const writeAuthHint = (scope, value) => {
     const key = getScopeStorageKey(scope);
     if (value) {
       localStorage.setItem(key, "true");
+      if (scope !== "admin") {
+        localStorage.setItem(LEGACY_ACCOUNT_SESSION_KEY, "true");
+      }
     } else {
       localStorage.removeItem(key);
+      if (scope !== "admin") {
+        localStorage.removeItem(LEGACY_ACCOUNT_SESSION_KEY);
+      }
     }
   } catch {
     // ignore storage errors

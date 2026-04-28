@@ -20,7 +20,7 @@ const initialForm = {
 };
 
 const toNumber = (value) => {
-  const numeric = Number(String(value ?? "").replace(/[^\d.]/g, ""));
+  const numeric = Number(String(value ?? "").replace(/[^\d]/g, ""));
   return Number.isFinite(numeric) ? numeric : 0;
 };
 

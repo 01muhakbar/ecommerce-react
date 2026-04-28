@@ -156,6 +156,47 @@ export const bulkAdminCategories = async (action, ids) => {
   return data;
 };
 
+export const exportAdminCategories = async (params = {}) => {
+  const queryParams = new URLSearchParams();
+
+  if (params?.q) queryParams.set("q", String(params.q));
+  if (typeof params?.parentsOnly === "boolean") {
+    queryParams.set("parentsOnly", String(params.parentsOnly));
+  }
+  if (typeof params?.published === "boolean") {
+    queryParams.set("published", String(params.published));
+  }
+  if (params?.sort) queryParams.set("sort", String(params.sort));
+  if (params?.format) queryParams.set("format", String(params.format));
+
+  const query = queryParams.toString();
+  const endpoint = query
+    ? `/api/admin/categories/export?${query}`
+    : "/api/admin/categories/export";
+  const response = await fetch(endpoint, { credentials: "include" });
+
+  if (!response.ok) {
+    const fallback = `Failed to export categories (${response.status}).`;
+    try {
+      const payload = await response.json();
+      throw new Error(payload?.message || fallback);
+    } catch {
+      throw new Error(fallback);
+    }
+  }
+
+  return response;
+};
+
+export const importAdminCategories = async (file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await adminApi.post("/admin/categories/import", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+};
+
 export const createAdminProduct = async (payload) => {
   const { data } = await adminApi.post("/admin/products", payload);
   return data;

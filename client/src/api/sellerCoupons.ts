@@ -21,10 +21,13 @@ const normalizeSellerCoupon = (payload: any) => {
   return {
     id: numberOrZero(payload.id),
     code: textOrFallback(payload.code).toUpperCase(),
+    campaignName: textOrNull(payload.campaignName) || textOrFallback(payload.code).toUpperCase(),
     discountType: payload.discountType === "fixed" ? "fixed" : "percent",
     amount: numberOrZero(payload.amount),
     minSpend: numberOrZero(payload.minSpend),
     active: Boolean(payload.active),
+    published: Boolean(payload.published ?? payload.active),
+    bannerImageUrl: textOrNull(payload.bannerImageUrl),
     scopeType: "STORE",
     storeId: numberOrZero(payload.storeId),
     startsAt: payload.startsAt || null,
@@ -95,4 +98,25 @@ export const updateSellerCoupon = async (
 ) => {
   const { data } = await api.patch(`/seller/stores/${storeId}/coupons/${couponId}`, payload);
   return normalizeSellerCoupon(data?.data ?? null);
+};
+
+export const deleteSellerCoupon = async (
+  storeId: number | string,
+  couponId: number | string
+) => {
+  const { data } = await api.delete(`/seller/stores/${storeId}/coupons/${couponId}`);
+  return normalizeSellerCoupon(data?.data ?? null);
+};
+
+export const uploadSellerCouponBannerImage = async (file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await api.post<{ data?: { url?: string } }>("/upload", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  const url = textOrNull(data?.data?.url);
+  if (!url) {
+    throw new Error("Upload succeeded without URL.");
+  }
+  return url;
 };

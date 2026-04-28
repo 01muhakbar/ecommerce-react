@@ -94,9 +94,11 @@ export type StoreProductDetail = StoreProduct & {
 export type StoreCoupon = {
   id: number;
   code: string;
+  campaignName?: string | null;
   discountType: "percent" | "fixed";
   amount: number;
   minSpend: number;
+  published?: boolean;
   bannerImageUrl?: string | null;
   scopeType?: "PLATFORM" | "STORE";
   storeId?: number | null;

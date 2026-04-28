@@ -100,6 +100,8 @@ export default function Navbar({
 }) {
   const { pathname } = useLocation();
   const pageTitle = pageTitleFromPath(pathname);
+  const hideRouteSearch =
+    pathname.startsWith("/admin/catalog/coupons") || pathname.startsWith("/admin/coupons");
   const langDropdownRef = useRef(null);
   const notifyDropdownRef = useRef(null);
   const profileDropdownRef = useRef(null);
@@ -231,25 +233,27 @@ export default function Navbar({
         >
           <Menu className="navbar__menu-icon" />
         </button>
-        <button
-          type="button"
-          className={`navbar__search-shell navbar__search-trigger ${
-            isSearchPaletteOpen ? "is-open" : ""
-          }`}
-          aria-label="Open admin search"
-          aria-haspopup="dialog"
-          aria-expanded={isSearchPaletteOpen}
-          onClick={onOpenSearchPalette}
-          onFocus={onOpenSearchPalette}
-        >
-          <Search size={16} className="navbar__search-icon" />
-          <span className="navbar__search-input">
-            Search inside {pageTitle.toLowerCase()}...
-          </span>
-          <span className="navbar__search-shortcut" aria-hidden="true">
-            {searchShortcut}
-          </span>
-        </button>
+        {!hideRouteSearch ? (
+          <button
+            type="button"
+            className={`navbar__search-shell navbar__search-trigger ${
+              isSearchPaletteOpen ? "is-open" : ""
+            }`}
+            aria-label="Open admin search"
+            aria-haspopup="dialog"
+            aria-expanded={isSearchPaletteOpen}
+            onClick={onOpenSearchPalette}
+            onFocus={onOpenSearchPalette}
+          >
+            <Search size={16} className="navbar__search-icon" />
+            <span className="navbar__search-input">
+              Search inside {pageTitle.toLowerCase()}...
+            </span>
+            <span className="navbar__search-shortcut" aria-hidden="true">
+              {searchShortcut}
+            </span>
+          </button>
+        ) : null}
       </div>
       <div className="navbar__actions">
         <div className="navbar__cluster">

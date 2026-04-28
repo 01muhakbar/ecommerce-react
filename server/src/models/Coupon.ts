@@ -5,6 +5,7 @@ export type CouponScopeType = "PLATFORM" | "STORE";
 interface CouponAttributes {
   id: number;
   code: string;
+  campaignName?: string | null;
   discountType: "percent" | "fixed";
   amount: number;
   minSpend: number;
@@ -25,6 +26,7 @@ interface CouponCreationAttributes
 export class Coupon extends Model<CouponAttributes, CouponCreationAttributes> implements CouponAttributes {
   declare id: number;
   declare code: string;
+  declare campaignName: string | null;
   declare discountType: "percent" | "fixed";
   declare amount: number;
   declare minSpend: number;
@@ -57,6 +59,11 @@ export class Coupon extends Model<CouponAttributes, CouponCreationAttributes> im
           type: DataTypes.STRING,
           unique: true,
           allowNull: false,
+        },
+        campaignName: {
+          type: DataTypes.STRING(255),
+          allowNull: true,
+          field: "campaign_name",
         },
         discountType: {
           type: DataTypes.ENUM("percent", "fixed"),

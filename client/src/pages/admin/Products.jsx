@@ -60,6 +60,8 @@ const DEFAULT_COLUMN_VISIBILITY = {
   actions: true,
 };
 
+const EMPTY_PRODUCTS = [];
+
 const SORT_OPTIONS = [
   { value: "date_added", label: "Date Added" },
   { value: "date_updated", label: "Date Updated" },
@@ -525,7 +527,7 @@ export default function AdminProductsPage() {
     mutationFn: (id) => duplicateAdminProduct(id),
   });
 
-  const items = productsQuery.data?.data || [];
+  const items = productsQuery.data?.data ?? EMPTY_PRODUCTS;
   const meta = productsQuery.data?.meta || { page: 1, limit, total: 0, totalPages: 1 };
   const totalPages = Math.max(1, Number(meta.totalPages || 1));
   const categories = useMemo(() => {
@@ -1088,6 +1090,15 @@ export default function AdminProductsPage() {
       prev.forEach((id) => {
         if (visibleIds.has(Number(id))) next.add(Number(id));
       });
+      if (next.size === prev.size) {
+        let changed = false;
+        next.forEach((id) => {
+          if (!prev.has(Number(id))) changed = true;
+        });
+        if (!changed) {
+          return prev;
+        }
+      }
       return next;
     });
   }, [items]);

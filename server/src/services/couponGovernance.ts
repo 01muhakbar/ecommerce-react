@@ -15,6 +15,12 @@ const toFiniteNumber = (value: any): number | null => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const toFiniteInteger = (value: any, fallback = 0): number => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(0, Math.round(parsed));
+};
+
 const toIso = (value: any): string | null => {
   if (!value) return null;
   const parsed = new Date(String(value));
@@ -123,13 +129,16 @@ export const serializePublicCouponSnapshot = (coupon: any) => {
   return {
     id: toFiniteNumber(plain?.id ?? null),
     code: String(plain?.code || "").trim().toUpperCase(),
+    campaignName:
+      String(plain?.campaignName ?? plain?.campaign_name ?? plain?.code ?? "").trim() || null,
     discountType: plain?.discountType === "fixed" ? "fixed" : "percent",
-    amount: toFiniteNumber(plain?.amount) ?? 0,
-    minSpend: toFiniteNumber(plain?.minSpend) ?? 0,
+    amount: toFiniteInteger(plain?.amount, 0),
+    minSpend: toFiniteInteger(plain?.minSpend, 0),
     scopeType: scope.scopeType,
     storeId: scope.storeId,
     store,
     bannerImageUrl: normalizeCouponAssetUrl(plain?.bannerImageUrl ?? plain?.banner_image_url ?? null),
+    published: Boolean(plain?.active),
     scopeLabel: scope.scopeType === "STORE" ? "Store coupon" : "Platform coupon",
     applicabilityNote,
     status: {

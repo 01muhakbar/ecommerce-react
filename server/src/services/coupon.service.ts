@@ -88,6 +88,12 @@ export const parseLocaleNumber = (value: any) => {
   return Number.isFinite(n) ? n : 0;
 };
 
+export const parseCouponInteger = (value: any) => {
+  const numeric = parseLocaleNumber(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.round(numeric));
+};
+
 const normalizeStoreIds = (context?: CouponScopeContext) => {
   const rawValues = [
     ...(Array.isArray(context?.storeIds) ? context!.storeIds : []),
@@ -118,6 +124,7 @@ export const normalizeCouponRecord = (coupon: any) => {
       "discount_value",
     ]) ?? 0
   );
+  const amountInteger = parseCouponInteger(amount);
   const minSpend = parseLocaleNumber(
     getCouponField(coupon, [
       "minSpend",
@@ -130,6 +137,7 @@ export const normalizeCouponRecord = (coupon: any) => {
       "minimum_amount",
     ]) ?? 0
   );
+  const minSpendInteger = parseCouponInteger(minSpend);
   const storeIdRaw = getCouponField(coupon, ["storeId", "store_id"]);
   const storeId = Number.isFinite(Number(storeIdRaw)) ? Number(storeIdRaw) : null;
   const scopeType = normalizeCouponScopeType(
@@ -142,8 +150,8 @@ export const normalizeCouponRecord = (coupon: any) => {
   return {
     code,
     discountType,
-    amount,
-    minSpend,
+    amount: amountInteger,
+    minSpend: minSpendInteger,
     scopeType,
     storeId: scopeType === "STORE" ? storeId : null,
     startsAt:

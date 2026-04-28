@@ -2,9 +2,10 @@ import { Router } from "express";
 import { Op } from "sequelize";
 import { z } from "zod";
 import multer from "multer";
+import { col, fn, where as sequelizeWhere } from "sequelize";
 import { requireAdmin } from "../middleware/requireRole.js";
 import { Coupon, Store } from "../models/index.js";
-import { parseLocaleNumber } from "../services/coupon.service.js";
+import { parseCouponInteger } from "../services/coupon.service.js";
 import {
   normalizeCouponAssetUrl,
   serializeAdminCouponGovernance,
@@ -29,15 +30,16 @@ const parseNullableId = (value: any) => {
 
 const createSchema = z.object({
   code: z.string().min(1),
+  campaignName: z.string().trim().min(1).max(255).optional().nullable(),
   discountType: z.enum(["percent", "fixed"]).default("percent"),
   amount: z
     .union([z.string(), z.number()])
-    .transform(parseLocaleNumber)
+    .transform(parseCouponInteger)
     .refine((value) => value > 0, { message: "Amount must be greater than 0." }),
   minSpend: z
     .union([z.string(), z.number()])
     .optional()
-    .transform((value) => parseLocaleNumber(value ?? 0))
+    .transform((value) => parseCouponInteger(value ?? 0))
     .refine((value) => value >= 0, { message: "Min spend must be >= 0." })
     .default(0),
   active: z.coerce.boolean().optional().default(true),
@@ -53,15 +55,16 @@ const createSchema = z.object({
 
 const updateSchema = z.object({
   code: z.string().min(1).optional(),
+  campaignName: z.string().trim().min(1).max(255).optional().nullable(),
   discountType: z.enum(["percent", "fixed"]).optional(),
   amount: z
     .union([z.string(), z.number()])
-    .transform(parseLocaleNumber)
+    .transform(parseCouponInteger)
     .refine((value) => value > 0, { message: "Amount must be greater than 0." })
     .optional(),
   minSpend: z
     .union([z.string(), z.number()])
-    .transform(parseLocaleNumber)
+    .transform(parseCouponInteger)
     .refine((value) => value >= 0, { message: "Min spend must be >= 0." })
     .optional(),
   active: z.coerce.boolean().optional(),
@@ -82,14 +85,15 @@ const bulkActionSchema = z.object({
 
 const importRowSchema = z.object({
   code: z.string().min(1),
+  campaignName: z.string().trim().min(1).max(255).optional().nullable(),
   discountType: z.enum(["percent", "fixed"]).optional(),
   amount: z
     .union([z.string(), z.number()])
-    .transform(parseLocaleNumber)
+    .transform(parseCouponInteger)
     .optional(),
   minSpend: z
     .union([z.string(), z.number()])
-    .transform((value) => parseLocaleNumber(value))
+    .transform((value) => parseCouponInteger(value))
     .optional(),
   active: z.coerce.boolean().optional(),
   bannerImageUrl: z.string().max(255).optional().nullable(),
@@ -107,11 +111,14 @@ const serializeAdminCoupon = (coupon: any) => {
   return {
     id: plain?.id,
     code: String(plain?.code || "").trim().toUpperCase(),
-    campaignName: String(plain?.campaignName || plain?.name || plain?.code || "").trim() || null,
+    campaignName:
+      String(plain?.campaignName ?? plain?.campaign_name ?? plain?.name ?? plain?.code ?? "").trim() ||
+      null,
     discountType: plain?.discountType || "percent",
-    amount: Number(plain?.amount || 0),
-    minSpend: Number(plain?.minSpend || 0),
+    amount: parseCouponInteger(plain?.amount || 0),
+    minSpend: parseCouponInteger(plain?.minSpend || 0),
     active: Boolean(plain?.active),
+    published: Boolean(plain?.active),
     bannerImageUrl: normalizeCouponAssetUrl(
       plain?.bannerImageUrl ?? plain?.banner_image_url ?? null
     ),
@@ -129,7 +136,12 @@ const buildCouponListWhere = (req: any) => {
   const where: any = {};
 
   if (q) {
-    where.code = { [Op.like]: `%${q.toUpperCase()}%` };
+    where[Op.or] = [
+      { code: { [Op.like]: `%${q.toUpperCase()}%` } },
+      sequelizeWhere(fn("LOWER", col("campaign_name")), {
+        [Op.like]: `%${q.toLowerCase()}%`,
+      }),
+    ];
   }
   if (scopeType === "PLATFORM" || scopeType === "STORE") {
     where.scopeType = scopeType;
@@ -296,6 +308,7 @@ router.post("/", async (req, res, next) => {
   try {
     const body = createSchema.parse(req.body);
     const code = body.code.trim().toUpperCase();
+    const campaignName = String(body.campaignName || "").trim() || code;
     const startsAt = parseDateTime(body.startsAt ?? null);
     const expiresAt = parseDateTime(body.expiresAt ?? null);
     if (startsAt && expiresAt && expiresAt.getTime() < startsAt.getTime()) {
@@ -308,6 +321,7 @@ router.post("/", async (req, res, next) => {
 
     const created = await Coupon.create({
       code,
+      campaignName,
       discountType: body.discountType,
       amount: body.amount,
       minSpend: body.minSpend ?? 0,
@@ -380,6 +394,7 @@ router.post("/import", upload.single("file"), async (req, res, next) => {
       try {
         const row = importRowSchema.parse(rawRow || {});
         const code = row.code.trim().toUpperCase();
+        const campaignName = String(row.campaignName || "").trim() || code;
         if (!code) {
           throw new Error("Coupon code is required.");
         }
@@ -419,6 +434,7 @@ router.post("/import", upload.single("file"), async (req, res, next) => {
 
         if (existing) {
           const patch: any = {};
+          if (row.campaignName !== undefined) patch.campaignName = campaignName;
           if (row.discountType !== undefined) patch.discountType = row.discountType;
           if (row.amount !== undefined) patch.amount = row.amount;
           if (row.minSpend !== undefined) patch.minSpend = row.minSpend;
@@ -443,6 +459,7 @@ router.post("/import", upload.single("file"), async (req, res, next) => {
 
         await Coupon.create({
           code,
+          campaignName,
           discountType: row.discountType || "percent",
           amount: row.amount,
           minSpend: row.minSpend ?? 0,
@@ -521,6 +538,9 @@ router.patch("/:id", async (req, res, next) => {
 
     const patch: any = {};
     if (body.code !== undefined) patch.code = body.code.trim().toUpperCase();
+    if (body.campaignName !== undefined) {
+      patch.campaignName = String(body.campaignName || "").trim() || patch.code || coupon.get("code");
+    }
     if (body.discountType !== undefined) patch.discountType = body.discountType;
     if (body.amount !== undefined) patch.amount = body.amount;
     if (body.minSpend !== undefined) patch.minSpend = body.minSpend;

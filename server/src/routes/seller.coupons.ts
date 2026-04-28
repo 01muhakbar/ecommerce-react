@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import requireSellerStoreAccess from "../middleware/requireSellerStoreAccess.js";
 import { Coupon, Store } from "../models/index.js";
-import { parseLocaleNumber } from "../services/coupon.service.js";
+import { parseCouponInteger } from "../services/coupon.service.js";
 import {
   getCouponTimeWindow,
   normalizeCouponAssetUrl,
@@ -19,36 +19,40 @@ const parseDateTime = (value?: string | null) => {
 
 const couponSchema = z.object({
   code: z.string().trim().min(1).max(255),
+  campaignName: z.string().trim().min(1).max(255).optional().nullable(),
   discountType: z.enum(["percent", "fixed"]).default("percent"),
   amount: z
     .union([z.string(), z.number()])
-    .transform(parseLocaleNumber)
+    .transform(parseCouponInteger)
     .refine((value) => value > 0, { message: "Amount must be greater than 0." }),
   minSpend: z
     .union([z.string(), z.number()])
     .optional()
-    .transform((value) => parseLocaleNumber(value ?? 0))
+    .transform((value) => parseCouponInteger(value ?? 0))
     .refine((value) => value >= 0, { message: "Min spend must be >= 0." })
     .default(0),
   active: z.coerce.boolean().optional().default(true),
+  bannerImageUrl: z.string().max(255).optional().nullable(),
   startsAt: z.string().datetime().optional().nullable(),
   expiresAt: z.string().datetime().optional().nullable(),
 });
 
 const couponPatchSchema = z.object({
   code: z.string().trim().min(1).max(255).optional(),
+  campaignName: z.string().trim().min(1).max(255).optional().nullable(),
   discountType: z.enum(["percent", "fixed"]).optional(),
   amount: z
     .union([z.string(), z.number()])
-    .transform(parseLocaleNumber)
+    .transform(parseCouponInteger)
     .refine((value) => value > 0, { message: "Amount must be greater than 0." })
     .optional(),
   minSpend: z
     .union([z.string(), z.number()])
-    .transform(parseLocaleNumber)
+    .transform(parseCouponInteger)
     .refine((value) => value >= 0, { message: "Min spend must be >= 0." })
     .optional(),
   active: z.coerce.boolean().optional(),
+  bannerImageUrl: z.string().max(255).optional().nullable(),
   startsAt: z.string().datetime().optional().nullable(),
   expiresAt: z.string().datetime().optional().nullable(),
 });
@@ -113,10 +117,13 @@ const serializeSellerCoupon = (coupon: any, sellerAccess: any) => {
   return {
     id: Number(plain?.id || 0),
     code: String(plain?.code || "").trim().toUpperCase(),
+    campaignName:
+      String(plain?.campaignName ?? plain?.campaign_name ?? plain?.code ?? "").trim() || null,
     discountType: plain?.discountType === "fixed" ? "fixed" : "percent",
-    amount: Number(plain?.amount || 0),
-    minSpend: Number(plain?.minSpend || 0),
+    amount: parseCouponInteger(plain?.amount || 0),
+    minSpend: parseCouponInteger(plain?.minSpend || 0),
     active: Boolean(plain?.active),
+    published: Boolean(plain?.active),
     bannerImageUrl: normalizeCouponAssetUrl(
       plain?.bannerImageUrl ?? plain?.banner_image_url ?? null
     ),
@@ -233,13 +240,16 @@ router.post(
       const startsAt = parseDateTime(body.startsAt ?? null);
       const expiresAt = parseDateTime(body.expiresAt ?? null);
       validateCouponWindow(startsAt, expiresAt);
+      const campaignName = String(body.campaignName || "").trim() || body.code.trim().toUpperCase();
 
       const created = await Coupon.create({
         code: body.code.trim().toUpperCase(),
+        campaignName,
         discountType: body.discountType,
         amount: body.amount,
         minSpend: body.minSpend ?? 0,
         active: body.active ?? true,
+        bannerImageUrl: normalizeCouponAssetUrl(body.bannerImageUrl),
         startsAt,
         expiresAt,
         scopeType: "STORE",
@@ -291,9 +301,16 @@ router.patch(
 
       const patch: any = {};
       if (body.code !== undefined) patch.code = body.code.trim().toUpperCase();
+      if (body.campaignName !== undefined) {
+        patch.campaignName =
+          String(body.campaignName || "").trim() || patch.code || String((coupon as any).get?.("code") || "");
+      }
       if (body.discountType !== undefined) patch.discountType = body.discountType;
       if (body.amount !== undefined) patch.amount = body.amount;
       if (body.minSpend !== undefined) patch.minSpend = body.minSpend;
+      if (body.bannerImageUrl !== undefined) {
+        patch.bannerImageUrl = normalizeCouponAssetUrl(body.bannerImageUrl);
+      }
       if (body.startsAt !== undefined) patch.startsAt = startsAt;
       if (body.expiresAt !== undefined) patch.expiresAt = expiresAt;
       if (body.active !== undefined) {
@@ -325,6 +342,37 @@ router.patch(
       if (statusCode) {
         return res.status(statusCode).json({ success: false, message: (error as any)?.message });
       }
+      return next(error);
+    }
+  }
+);
+
+router.delete(
+  "/stores/:storeId/coupons/:couponId",
+  requireSellerStoreAccess(["COUPON_STATUS_MANAGE"]),
+  async (req, res, next) => {
+    try {
+      const sellerAccess = (req as any).sellerAccess;
+      const storeId = Number(req.params.storeId);
+      const couponId = Number(req.params.couponId);
+      if (!Number.isFinite(couponId) || couponId <= 0) {
+        return res.status(400).json({ success: false, message: "Invalid coupon id." });
+      }
+
+      const coupon = await findSellerStoreCoupon(storeId, couponId);
+      if (!coupon) {
+        return res.status(404).json({ success: false, message: "Coupon not found." });
+      }
+
+      await coupon.update({ active: false } as any);
+      const refreshed = await findSellerStoreCoupon(storeId, couponId);
+
+      return res.json({
+        success: true,
+        message: "Coupon deactivated.",
+        data: serializeSellerCoupon(refreshed || coupon, sellerAccess),
+      });
+    } catch (error) {
       return next(error);
     }
   }

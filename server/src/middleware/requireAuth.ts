@@ -6,12 +6,17 @@ const getStorefrontCookieName = () => process.env.AUTH_COOKIE_NAME || "token";
 const getAdminCookieName = () =>
   process.env.ADMIN_AUTH_COOKIE_NAME || `${getStorefrontCookieName()}_admin`;
 
-const resolveCookieNameForRequest = (req: Request) => {
+const isAdminRequest = (req: Request) => {
   const originalUrl = String(req.originalUrl || "");
   const baseUrl = String(req.baseUrl || "");
-  const isAdminRequest =
-    originalUrl.startsWith("/api/admin") || baseUrl.startsWith("/api/admin");
-  return isAdminRequest ? getAdminCookieName() : getStorefrontCookieName();
+  return originalUrl.startsWith("/api/admin") || baseUrl.startsWith("/api/admin");
+};
+
+const resolveCookieNamesForRequest = (req: Request) => {
+  if (isAdminRequest(req)) {
+    return [getAdminCookieName(), getStorefrontCookieName()];
+  }
+  return [getStorefrontCookieName()];
 };
 
 export default async function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -19,7 +24,10 @@ export default async function requireAuth(req: Request, res: Response, next: Nex
     return next();
   }
 
-  const token = (req as any).cookies?.[resolveCookieNameForRequest(req)];
+  const token =
+    resolveCookieNamesForRequest(req)
+      .map((cookieName) => (req as any).cookies?.[cookieName])
+      .find((cookieValue) => typeof cookieValue === "string" && cookieValue.trim()) || null;
   if (!token) {
     return res.status(401).json({ success: false, message: "Unauthorized" });
   }
