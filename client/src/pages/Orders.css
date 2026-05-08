@@ -1,0 +1,35 @@
+.orders-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.orders-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.orders-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn {
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn--primary {
+  background: #111827;
+  color: #fff;
+  border-color: #111827;
+}
+
+.btn--ghost {
+  background: #f9fafb;
+}

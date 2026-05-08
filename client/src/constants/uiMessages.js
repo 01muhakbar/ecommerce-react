@@ -1,0 +1,11 @@
+export const GENERIC_ERROR = "Something went wrong. Please try again.";
+export const ORDER_FAILED = "Order failed. Please try again.";
+export const CHECKOUT_FAILED = ORDER_FAILED;
+export const NO_PRODUCTS_FOUND = "No products found";
+export const NO_ORDERS_FOUND = "No orders found";
+export const NO_ATTRIBUTES_FOUND = "No attributes found";
+export const NO_COUPONS_FOUND = "No coupons found";
+export const NO_CUSTOMERS_FOUND = "No customers found";
+export const NO_STAFF_FOUND = "No staff found.";
+export const ORDER_NOT_FOUND = "Order not found";
+export const UPDATING = "Updating...";

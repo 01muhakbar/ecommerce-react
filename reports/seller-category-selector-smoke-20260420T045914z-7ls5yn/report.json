@@ -1,0 +1,87 @@
+{
+  "runId": "seller-category-selector-smoke-20260420T045914z-7ls5yn",
+  "startedAt": "2026-04-20T04:59:14.419Z",
+  "serverBaseUrl": "http://localhost:3001",
+  "clientBaseUrl": "http://localhost:5173",
+  "storeSlug": "superseller-demo-store",
+  "sellerEmail": "superseller@local.dev",
+  "storeId": 562,
+  "productId": null,
+  "productSlug": null,
+  "categories": {
+    "selected": [
+      {
+        "id": 6,
+        "name": "Beverages",
+        "code": "beverages"
+      },
+      {
+        "id": 3,
+        "name": "Bread & Bakery",
+        "code": "bakery"
+      }
+    ],
+    "searchQuery": "bakery"
+  },
+  "screenshots": [],
+  "regressions": [],
+  "steps": [
+    {
+      "id": "1",
+      "title": "Bootstrap seller session and category references",
+      "status": "passed",
+      "summary": "Seller session and category references are ready.",
+      "startedAt": "2026-04-20T04:59:14.482Z",
+      "finishedAt": "2026-04-20T04:59:14.611Z",
+      "durationMs": 129,
+      "proof": {
+        "storeId": 562,
+        "selectedCategories": [
+          {
+            "id": 6,
+            "name": "Beverages",
+            "code": "beverages"
+          },
+          {
+            "id": 3,
+            "name": "Bread & Bakery",
+            "code": "bakery"
+          }
+        ],
+        "searchQuery": "bakery",
+        "cookieName": "token"
+      },
+      "rootCause": null
+    },
+    {
+      "id": "2",
+      "title": "Open Seller Product create page",
+      "status": "passed",
+      "summary": "Seller product create page loaded with the new category selector.",
+      "startedAt": "2026-04-20T04:59:15.275Z",
+      "finishedAt": "2026-04-20T04:59:16.763Z",
+      "durationMs": 1488,
+      "proof": {
+        "url": "http://localhost:5173/seller/stores/superseller-demo-store/catalog/products/new"
+      },
+      "rootCause": null
+    },
+    {
+      "id": "3",
+      "title": "Search category using the new search box",
+      "status": "failed",
+      "summary": "categoryCheckboxLabel is not defined",
+      "startedAt": "2026-04-20T04:59:16.763Z",
+      "finishedAt": "2026-04-20T04:59:16.824Z",
+      "durationMs": 61,
+      "rootCause": "categoryCheckboxLabel is not defined"
+    }
+  ],
+  "overallStatus": "failed",
+  "failure": {
+    "stepId": "3",
+    "stepTitle": "Search category using the new search box",
+    "message": "categoryCheckboxLabel is not defined",
+    "rootCause": "categoryCheckboxLabel is not defined"
+  }
+}

@@ -1,0 +1,1074 @@
+import axios from "axios";
+import { toUIStatus } from "../constants/orderStatus.js";
+import { normalizeShipmentList, normalizeTrackingEvent } from "../utils/shipmentReadModel.ts";
+import {
+  logProductNormalization,
+  normalizeProduct,
+} from "../services/adapters/productAdapter.js";
+
+const adminApi = axios.create({
+  baseURL: "/api",
+  withCredentials: true,
+});
+
+adminApi.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status;
+    const url = error?.config?.url || "";
+    const isAuthEndpoint = url.includes("/auth/login") || url.includes("/auth/logout");
+    if (status === 401 && !isAuthEndpoint) {
+      window.location.assign("/admin/login");
+    }
+    return Promise.reject(error);
+  }
+);
+
+const normalizeProductsMeta = (payload, params = {}) => {
+  const meta = payload?.meta || payload?.data?.meta || payload?.pagination || {};
+  const page = Number(meta.page ?? meta.currentPage ?? params.page ?? 1);
+  const limit = Number(
+    meta.limit ?? meta.pageSize ?? params.limit ?? params.pageSize ?? 10
+  );
+  const total = Number(meta.total ?? meta.totalItems ?? payload?.total ?? 0);
+  const rawTotalPages =
+    meta.totalPages ?? (limit ? Math.ceil(total / limit) : 1);
+  const totalPages = Math.max(1, Number(rawTotalPages || 1));
+  return {
+    page,
+    limit,
+    total,
+    totalPages,
+    reviewQueue:
+      meta?.reviewQueue && typeof meta.reviewQueue === "object" ? meta.reviewQueue : undefined,
+  };
+};
+
+const normalizeProductsList = (payload, params = {}) => {
+  const items = Array.isArray(payload?.data)
+    ? payload.data
+    : Array.isArray(payload?.data?.items)
+      ? payload.data.items
+      : Array.isArray(payload?.items)
+        ? payload.items
+        : Array.isArray(payload)
+          ? payload
+          : [];
+  const normalizedItems = items.map((item) => normalizeProduct(item)).filter(Boolean);
+  logProductNormalization("admin.products.list", items, normalizedItems);
+  return {
+    data: normalizedItems,
+    meta: normalizeProductsMeta(payload, params),
+  };
+};
+
+const normalizeCategoriesMeta = (payload, params = {}) => {
+  const meta = payload?.meta || payload?.data?.meta || payload?.pagination || {};
+  const page = Number(meta.page ?? meta.currentPage ?? params.page ?? 1);
+  const limit = Number(meta.limit ?? meta.pageSize ?? params.limit ?? params.pageSize ?? 10);
+  const total = Number(meta.total ?? meta.totalItems ?? payload?.total ?? 0);
+  const rawTotalPages =
+    meta.totalPages ?? (limit ? Math.ceil(total / limit) : 1);
+  const totalPages = Math.max(1, Number(rawTotalPages || 1));
+  return { page, limit, total, totalPages };
+};
+
+const normalizeCategoriesList = (payload, params = {}) => {
+  const items = Array.isArray(payload?.data)
+    ? payload.data
+    : Array.isArray(payload?.data?.items)
+      ? payload.data.items
+      : Array.isArray(payload?.items)
+        ? payload.items
+        : Array.isArray(payload)
+          ? payload
+          : [];
+  return {
+    data: items,
+    meta: normalizeCategoriesMeta(payload, params),
+  };
+};
+
+const normalizeCustomersMeta = (payload, params = {}) => {
+  const meta = payload?.meta || payload?.data?.meta || payload?.pagination || {};
+  const page = Number(meta.page ?? meta.currentPage ?? params.page ?? 1);
+  const limit = Number(
+    meta.limit ?? meta.pageSize ?? params.limit ?? params.pageSize ?? 10
+  );
+  const total = Number(meta.total ?? meta.totalItems ?? payload?.total ?? 0);
+  const rawTotalPages =
+    meta.totalPages ?? (limit ? Math.ceil(total / limit) : 1);
+  const totalPages = Math.max(1, Number(rawTotalPages || 1));
+  return { page, limit, total, totalPages };
+};
+
+const normalizeCustomersList = (payload, params = {}) => {
+  const items = Array.isArray(payload?.data)
+    ? payload.data
+    : Array.isArray(payload?.data?.items)
+      ? payload.data.items
+      : Array.isArray(payload?.items)
+        ? payload.items
+        : Array.isArray(payload)
+          ? payload
+          : [];
+  return {
+    data: items,
+    meta: normalizeCustomersMeta(payload, params),
+  };
+};
+
+export const fetchAdminProducts = async (params) => {
+  const { data } = await adminApi.get("/admin/products", { params });
+  return normalizeProductsList(data, params);
+};
+
+export const fetchAdminProduct = async (id) => {
+  const { data } = await adminApi.get(`/admin/products/${id}`);
+  const product = data?.data ?? data?.product ?? data;
+  const normalizedProduct = normalizeProduct(product);
+  logProductNormalization("admin.products.detail", product, normalizedProduct);
+  return { data: normalizedProduct };
+};
+
+export const getAdminProduct = fetchAdminProduct;
+
+export const fetchAdminCategories = async (params) => {
+  const { data } = await adminApi.get("/admin/categories", { params });
+  return normalizeCategoriesList(data, params);
+};
+
+export const fetchAdminCategory = async (id) => {
+  const { data } = await adminApi.get(`/admin/categories/${id}`);
+  const category = data?.data ?? data?.category ?? data;
+  return { data: category };
+};
+
+export const createAdminCategory = async (payload) => {
+  const { data } = await adminApi.post("/admin/categories", payload);
+  return data;
+};
+
+export const updateAdminCategory = async (id, payload) => {
+  const { data } = await adminApi.patch(`/admin/categories/${id}`, payload);
+  return data;
+};
+
+export const deleteAdminCategory = async (id) => {
+  const { data } = await adminApi.delete(`/admin/categories/${id}`);
+  return data;
+};
+
+export const bulkAdminCategories = async (action, ids) => {
+  const { data } = await adminApi.post("/admin/categories/bulk", { action, ids });
+  return data;
+};
+
+export const exportAdminCategories = async (params = {}) => {
+  const queryParams = new URLSearchParams();
+
+  if (params?.q) queryParams.set("q", String(params.q));
+  if (typeof params?.parentsOnly === "boolean") {
+    queryParams.set("parentsOnly", String(params.parentsOnly));
+  }
+  if (typeof params?.published === "boolean") {
+    queryParams.set("published", String(params.published));
+  }
+  if (params?.sort) queryParams.set("sort", String(params.sort));
+  if (params?.format) queryParams.set("format", String(params.format));
+
+  const query = queryParams.toString();
+  const endpoint = query
+    ? `/api/admin/categories/export?${query}`
+    : "/api/admin/categories/export";
+  const response = await fetch(endpoint, { credentials: "include" });
+
+  if (!response.ok) {
+    const fallback = `Failed to export categories (${response.status}).`;
+    try {
+      const payload = await response.json();
+      throw new Error(payload?.message || fallback);
+    } catch {
+      throw new Error(fallback);
+    }
+  }
+
+  return response;
+};
+
+export const importAdminCategories = async (file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await adminApi.post("/admin/categories/import", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+};
+
+export const createAdminProduct = async (payload) => {
+  const { data } = await adminApi.post("/admin/products", payload);
+  return data;
+};
+
+export const exportAdminProducts = async (params = {}) => {
+  const queryParams = new URLSearchParams();
+  const categoryIds = Array.isArray(params?.categoryIds)
+    ? params.categoryIds
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0)
+    : [];
+
+  if (params?.q) queryParams.set("q", String(params.q));
+  if (params?.categoryId) queryParams.set("categoryId", String(params.categoryId));
+  categoryIds.forEach((categoryId) => {
+    queryParams.append("categoryIds", String(categoryId));
+  });
+  if (params?.sellerSubmissionStatus) {
+    queryParams.set("sellerSubmissionStatus", String(params.sellerSubmissionStatus));
+  }
+  if (params?.sort) queryParams.set("sort", String(params.sort));
+  if (typeof params?.published === "boolean") {
+    queryParams.set("published", String(params.published));
+  }
+  if (params?.inventoryStatus) {
+    queryParams.set("inventoryStatus", String(params.inventoryStatus));
+  }
+  if (params?.format) queryParams.set("format", String(params.format));
+
+  const query = queryParams.toString();
+  const endpoint = query ? `/api/admin/products/export?${query}` : "/api/admin/products/export";
+  const response = await fetch(endpoint, { credentials: "include" });
+
+  if (!response.ok) {
+    const fallback = `Failed to export products (${response.status}).`;
+    try {
+      const payload = await response.json();
+      throw new Error(payload?.message || fallback);
+    } catch {
+      throw new Error(fallback);
+    }
+  }
+
+  return response;
+};
+
+export const importAdminProducts = async (file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await adminApi.post("/admin/products/import", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+};
+
+export const updateAdminProduct = async (id, payload) => {
+  const { data } = await adminApi.patch(`/admin/products/${id}`, payload);
+  return data;
+};
+
+export const updateAdminProductPublished = async (id, published) => {
+  const { data } = await adminApi.patch(`/admin/products/${id}/published`, {
+    published: Boolean(published),
+  });
+  return data;
+};
+
+export const duplicateAdminProduct = async (id) => {
+  const { data } = await adminApi.post(`/admin/products/${id}/duplicate`);
+  return data;
+};
+
+export const requestAdminProductRevision = async (id, note) => {
+  const { data } = await adminApi.patch(`/admin/products/${id}/revision-request`, {
+    note: typeof note === "string" ? note : null,
+  });
+  return data;
+};
+
+export const toggleAdminProductPublish = async (id, isPublished) => {
+  const { data } = await adminApi.patch(`/admin/products/${id}/published`, {
+    published: Boolean(isPublished),
+  });
+  return data;
+};
+
+export const deleteAdminProduct = async (id) => {
+  const { data } = await adminApi.delete(`/admin/products/${id}`);
+  return data;
+};
+
+export const bulkAdminProducts = async (action, ids) => {
+  const { data } = await adminApi.post("/admin/products/bulk", {
+    action,
+    ids,
+  });
+  return data;
+};
+
+export const uploadAdminImage = async (file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await adminApi.post("/admin/uploads", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+};
+
+const normalizeOrdersMeta = (payload, params = {}) => {
+  const meta = payload?.meta || payload?.pagination || payload?.data || {};
+  const page = Number(meta.page ?? meta.currentPage ?? params.page ?? 1);
+  const limit = Number(
+    meta.limit ??
+      meta.pageSize ??
+      meta.itemsPerPage ??
+      params.limit ??
+      params.pageSize ??
+      10
+  );
+  const total = Number(meta.total ?? meta.totalItems ?? payload?.total ?? 0);
+  const rawTotalPages =
+    meta.totalPages ?? (limit ? Math.ceil(total / limit) : 1);
+  const totalPages = Math.max(1, Number(rawTotalPages || 1));
+  return { page, limit, total, totalPages };
+};
+
+const normalizeShipmentAuditMeta = (value) => {
+  if (!value || typeof value !== "object") return null;
+  return {
+    totalSuborders: Number(value.totalSuborders || 0),
+    persistedShipmentCount: Number(value.persistedShipmentCount || 0),
+    legacyFallbackSuborderCount: Number(value.legacyFallbackSuborderCount || 0),
+    compatibilityMismatchCount: Number(value.compatibilityMismatchCount || 0),
+    missingTrackingTimelineCount: Number(value.missingTrackingTimelineCount || 0),
+    incompleteTrackingDataCount: Number(value.incompleteTrackingDataCount || 0),
+    usedLegacyFallback: Boolean(value.usedLegacyFallback),
+    persistedCoverage: value.persistedCoverage || "NO_SUBORDERS",
+  };
+};
+
+const normalizeSuborderShipmentSummary = (value) =>
+  Array.isArray(value)
+      ? value.map((entry) => ({
+        suborderId: Number(entry?.suborderId || 0) || null,
+        suborderNumber: entry?.suborderNumber || null,
+        storeId: Number(entry?.storeId || 0) || null,
+        storeName: entry?.storeName || null,
+        storeSlug: entry?.storeSlug || null,
+        shipmentCount: Number(entry?.shipmentCount || 0),
+        shippingStatus: entry?.shippingStatus || null,
+        shippingStatusMeta: entry?.shippingStatusMeta || null,
+        latestTrackingEvent: normalizeTrackingEvent(entry?.latestTrackingEvent),
+        hasActiveShipment: Boolean(entry?.hasActiveShipment),
+        hasTrackingNumber: Boolean(entry?.hasTrackingNumber),
+        usedLegacyFallback: Boolean(entry?.usedLegacyFallback),
+        hasPersistedShipment: Boolean(entry?.hasPersistedShipment),
+        compatibilityFulfillmentStatus: entry?.compatibilityFulfillmentStatus || null,
+        compatibilityFulfillmentStatusMeta: entry?.compatibilityFulfillmentStatusMeta || null,
+        storedFulfillmentStatus: entry?.storedFulfillmentStatus || null,
+        storedFulfillmentStatusMeta: entry?.storedFulfillmentStatusMeta || null,
+        compatibilityMatchesStorage:
+          typeof entry?.compatibilityMatchesStorage === "boolean"
+            ? entry.compatibilityMatchesStorage
+            : null,
+        trackingEventCount: Number(entry?.trackingEventCount || 0),
+        missingTrackingTimeline: Boolean(entry?.missingTrackingTimeline),
+        incompleteTrackingData: Boolean(entry?.incompleteTrackingData),
+      }))
+    : [];
+
+const normalizeOrdersList = (payload, params = {}) => {
+  const items = Array.isArray(payload?.data?.items)
+    ? payload.data.items
+    : Array.isArray(payload?.data)
+      ? payload.data
+      : Array.isArray(payload)
+        ? payload
+        : [];
+  const data = items.map((order) => ({
+    ...order,
+    id: order.id || order.orderId,
+    rawStatus: order.rawStatus || order.status,
+    status: toUIStatus(order.status),
+    invoice: order.invoiceNo || order.invoice_no || order.invoice || order.ref || null,
+    invoiceNo: order.invoiceNo || order.invoice_no || order.invoice || order.ref || null,
+    createdAt: order.createdAt || order.created_at || null,
+    totalAmount: Number(order.totalAmount || order.total || order.total_amount || 0),
+    customerEmail: order.customerEmail || order.customer?.email || null,
+    paymentMethod: order.paymentMethod || order.method || null,
+    paymentStatusMeta: order.paymentStatusMeta || null,
+    shippingStatus: order.shippingStatus || null,
+    shippingStatusMeta: order.shippingStatusMeta || null,
+    latestTrackingEvent: order.latestTrackingEvent || null,
+    hasActiveShipment: Boolean(order.hasActiveShipment),
+    hasTrackingNumber: Boolean(order.hasTrackingNumber),
+    usedLegacyFallback: Boolean(order.usedLegacyFallback),
+    shipmentAuditMeta: order.shipmentAuditMeta || null,
+    suborderShipmentSummary: Array.isArray(order.suborderShipmentSummary)
+      ? order.suborderShipmentSummary
+      : [],
+    contract: order.contract || null,
+  }));
+
+  return {
+    data,
+    meta: normalizeOrdersMeta(payload, params),
+  };
+};
+
+const normalizeAdminOrderDetail = (raw) => {
+  if (!raw) return null;
+  return {
+    id: raw.id,
+    invoice: raw.invoiceNo || raw.invoice || `#${raw.id}`,
+    invoiceNo: raw.invoiceNo || raw.invoice || null,
+    checkoutMode: raw.checkoutMode || raw.checkout_mode || "LEGACY",
+    rawStatus: raw.rawStatus || raw.status,
+    status: toUIStatus(raw.status),
+    totalAmount: Number(raw.totalAmount || raw.total || 0),
+    paymentStatus: raw.paymentStatus || raw.payment_status || "UNPAID",
+    paymentStatusMeta: raw.paymentStatusMeta || null,
+    subtotal: Number(raw.subtotal ?? raw.subtotalAmount ?? 0),
+    discount: Number(raw.discount || 0),
+    shipping: Number(raw.shipping ?? raw.shippingAmount ?? 0),
+    serviceFeeAmount: Number(raw.serviceFeeAmount || 0),
+    total: Number(raw.total || raw.totalAmount || 0),
+    grandTotal: Number(raw.grandTotal || raw.total || raw.totalAmount || 0),
+    createdAt: raw.createdAt || null,
+    updatedAt: raw.updatedAt || raw.updated_at || null,
+    customerName: raw.customerName || raw.customer?.name || "Guest",
+    customerPhone: raw.customerPhone || null,
+    customerAddress: raw.customerAddress || null,
+    customerNotes: raw.customerNotes || null,
+    method: raw.method || raw.paymentMethod || "COD",
+    shipmentCount: Number(raw.shipmentCount || 0),
+    shippingStatus: raw.shippingStatus || null,
+    shippingStatusMeta: raw.shippingStatusMeta || null,
+    latestTrackingEvent: normalizeTrackingEvent(raw.latestTrackingEvent),
+    hasActiveShipment: Boolean(raw.hasActiveShipment),
+    hasTrackingNumber: Boolean(raw.hasTrackingNumber),
+    usedLegacyFallback: Boolean(raw.usedLegacyFallback),
+    shipmentAuditMeta: normalizeShipmentAuditMeta(raw.shipmentAuditMeta),
+    suborderShipmentSummary: normalizeSuborderShipmentSummary(raw.suborderShipmentSummary),
+    shipments: normalizeShipmentList(raw.shipments),
+    groups: Array.isArray(raw.groups)
+      ? raw.groups.map((group) => ({
+          suborderId: Number(group?.suborderId || 0) || null,
+          suborderNumber: group?.suborderNumber || null,
+          storeId: Number(group?.storeId || 0) || null,
+          storeName: group?.storeName || null,
+          storeSlug: group?.storeSlug || null,
+          subtotalAmount: Number(group?.subtotalAmount || 0),
+          shippingAmount: Number(group?.shippingAmount || 0),
+          serviceFeeAmount: Number(group?.serviceFeeAmount || 0),
+          totalAmount: Number(group?.totalAmount || 0),
+          paymentStatus: group?.paymentStatus || null,
+          paymentStatusMeta: group?.paymentStatusMeta || null,
+          fulfillmentStatus: group?.fulfillmentStatus || null,
+          fulfillmentStatusMeta: group?.fulfillmentStatusMeta || null,
+          shippingStatus: group?.shippingStatus || null,
+          shippingStatusMeta: group?.shippingStatusMeta || null,
+          usedLegacyFallback: Boolean(group?.usedLegacyFallback),
+          hasPersistedShipment: Boolean(group?.hasPersistedShipment),
+          compatibilityMatchesStorage:
+            typeof group?.compatibilityMatchesStorage === "boolean"
+              ? group.compatibilityMatchesStorage
+              : null,
+          payment: group?.payment
+            ? {
+                id: Number(group.payment.id || 0) || null,
+                status: group.payment.status || null,
+                statusMeta: group.payment.statusMeta || null,
+                displayStatus: group.payment.displayStatus || null,
+                displayStatusMeta: group.payment.displayStatusMeta || null,
+                expiresAt: group.payment.expiresAt || null,
+                paidAt: group.payment.paidAt || null,
+              }
+            : null,
+          items: Array.isArray(group?.items)
+            ? group.items.map((item) => ({
+                id: item.id,
+                productId: item.productId ?? null,
+                productName: item.productName || null,
+                slug: item.slug || null,
+                qty: Number(item.qty || 0),
+                price: Number(item.price || 0),
+                lineTotal: Number(item.lineTotal || 0),
+                image: item.image || null,
+                variantKey: item.variantKey || null,
+                variantLabel: item.variantLabel || null,
+                variantSelections: Array.isArray(item.variantSelections)
+                  ? item.variantSelections
+                  : [],
+                sku: item.sku || null,
+                barcode: item.barcode || null,
+              }))
+            : [],
+        }))
+      : [],
+    contract: raw.contract || null,
+    items: (raw.items || []).map((it) => ({
+      id: it.id,
+      productId: it.productId ?? it.product_id ?? it.get?.("productId") ?? null,
+      quantity: Number(it.quantity || 0),
+      price: Number(it.price || 0),
+      lineTotal:
+        Number(it.lineTotal || 0) || Number(it.price || 0) * Number(it.quantity || 0),
+      variantKey: it.variantKey || null,
+      variantLabel: it.variantLabel || null,
+      variantSelections: Array.isArray(it.variantSelections) ? it.variantSelections : [],
+      sku: it.sku || null,
+      barcode: it.barcode || null,
+      image: it.image || null,
+      product: it.product ? { id: it.product.id, name: it.product.name } : null,
+    })),
+  };
+};
+
+export const fetchAdminOrders = async (params) => {
+  const normalizedParams = Object.fromEntries(
+    Object.entries({
+      page: params?.page,
+      pageSize: params?.pageSize ?? params?.limit,
+      search: params?.search ?? params?.q,
+      status: params?.status || undefined,
+      method: params?.method || undefined,
+      limitDays: params?.limitDays || undefined,
+      startDate: params?.startDate || undefined,
+      endDate: params?.endDate || undefined,
+      userId: params?.userId || undefined,
+    }).filter(([, value]) => value !== undefined && value !== null && value !== "")
+  );
+  const { data } = await adminApi.get("/admin/orders", { params: normalizedParams });
+  return normalizeOrdersList(data, normalizedParams);
+};
+
+export const fetchAdminOrder = async (id) => {
+  const { data } = await adminApi.get(`/admin/orders/${id}`);
+  const raw = data?.data ?? data?.order ?? data;
+  return { data: normalizeAdminOrderDetail(raw) };
+};
+
+export const fetchAdminOrderByInvoice = async (invoiceNo) => {
+  const { data } = await adminApi.get(
+    `/admin/orders/by-invoice/${encodeURIComponent(invoiceNo)}`
+  );
+  const raw = data?.data ?? data?.order ?? data;
+  return { data: normalizeAdminOrderDetail(raw) };
+};
+
+export const updateAdminOrderStatus = async (id, payload) => {
+  const { data } = await adminApi.patch(
+    `/admin/orders/${id}/status`,
+    payload
+  );
+  if (data?.data) {
+    return {
+      ...data,
+      data: {
+        ...data.data,
+        status: toUIStatus(data.data.status),
+      },
+    };
+  }
+  return data;
+};
+
+export const bulkDeleteAdminOrders = async (ids) => {
+  const { data } = await adminApi.post("/admin/orders/bulk-delete", { ids });
+  return data;
+};
+
+export const correctAdminShipmentException = async (orderId, suborderId, payload) => {
+  const { data } = await adminApi.patch(
+    `/admin/orders/${orderId}/suborders/${suborderId}/shipment-correction`,
+    payload
+  );
+  return data;
+};
+
+const normalizeShippingReconciliationItem = (item) => ({
+  ...item,
+  orderId: Number(item?.orderId || 0) || null,
+  suborderId: Number(item?.suborderId || 0) || null,
+  invoiceNo: item?.invoiceNo || null,
+  orderDetailHref: item?.orderDetailHref || null,
+  store: item?.store && typeof item.store === "object" ? item.store : null,
+  categories: Array.isArray(item?.categories) ? item.categories : [],
+  primaryCategory: item?.primaryCategory || null,
+  canonicalShipmentStatus: item?.canonicalShipmentStatus || null,
+  canonicalShipmentStatusMeta: item?.canonicalShipmentStatusMeta || null,
+  compatibilityFulfillmentStatus: item?.compatibilityFulfillmentStatus || null,
+  compatibilityFulfillmentStatusMeta: item?.compatibilityFulfillmentStatusMeta || null,
+  storedFulfillmentStatus: item?.storedFulfillmentStatus || null,
+  storedFulfillmentStatusMeta: item?.storedFulfillmentStatusMeta || null,
+  compatibilityMatchesStorage:
+    typeof item?.compatibilityMatchesStorage === "boolean"
+      ? item.compatibilityMatchesStorage
+      : null,
+  tracking: item?.tracking && typeof item.tracking === "object" ? item.tracking : {},
+  mixedOutcome: item?.mixedOutcome && typeof item.mixedOutcome === "object" ? item.mixedOutcome : {},
+});
+
+export const fetchAdminShippingReconciliationReport = async (params = {}) => {
+  const query = Object.fromEntries(
+    Object.entries({
+      page: params?.page,
+      pageSize: params?.pageSize ?? params?.limit,
+      category: params?.category || undefined,
+      shipmentStatus: params?.shipmentStatus || undefined,
+      search: params?.search || undefined,
+      storeId: params?.storeId || undefined,
+    }).filter(([, value]) => value !== undefined && value !== null && value !== "")
+  );
+  const { data } = await adminApi.get("/admin/orders/shipping-reconciliation/report", {
+    params: query,
+  });
+  const items = Array.isArray(data?.data) ? data.data : [];
+  return {
+    items: items.map(normalizeShippingReconciliationItem),
+    meta: data?.meta || {
+      page: 1,
+      pageSize: 20,
+      total: 0,
+      totalPages: 1,
+      filters: {},
+      categoryCounts: {},
+    },
+  };
+};
+
+export const fetchAdminCustomers = async (params) => {
+  const { data } = await adminApi.get("/admin/customers", { params });
+  return normalizeCustomersList(data, params);
+};
+
+export const fetchAdminCustomer = async (id) => {
+  const { data } = await adminApi.get(`/admin/customers/${id}`);
+  const customer = data?.data ?? data?.customer ?? data;
+  return { data: customer };
+};
+
+export const updateAdminCustomer = async (id, payload) => {
+  const { data } = await adminApi.put(`/admin/customers/${id}`, payload);
+  return data;
+};
+
+export const exportAdminCustomers = async (params = {}) => {
+  const query = new URLSearchParams(
+    Object.entries({
+      q: params?.q || undefined,
+      status: params?.status || undefined,
+    }).filter(([, value]) => value !== undefined && value !== null && value !== "")
+  ).toString();
+  const endpoint = query
+    ? `/api/admin/customers/export?${query}`
+    : "/api/admin/customers/export";
+  const response = await fetch(endpoint, { credentials: "include" });
+
+  if (!response.ok) {
+    const fallback = `Failed to export customers (${response.status}).`;
+    try {
+      const payload = await response.json();
+      throw new Error(payload?.message || fallback);
+    } catch {
+      throw new Error(fallback);
+    }
+  }
+
+  return response;
+};
+
+export const importAdminCustomers = async (file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await adminApi.post("/admin/customers/import", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+};
+
+export const fetchAdminCustomerOrders = async (customerId, params) => {
+  const mergedParams = Object.fromEntries(
+    Object.entries({
+      page: params?.page,
+      pageSize: params?.pageSize ?? params?.limit,
+      search: params?.search ?? params?.q,
+      status: params?.status || undefined,
+      userId: customerId,
+    }).filter(([, value]) => value !== undefined && value !== null && value !== "")
+  );
+  const { data } = await adminApi.get("/admin/orders", { params: mergedParams });
+  return normalizeOrdersList(data, mergedParams);
+};
+
+export const fetchAdminCoupons = async (params) => {
+  const { data } = await adminApi.get("/admin/coupons", { params });
+  return data;
+};
+
+export const fetchAdminCouponMeta = async () => {
+  const { data } = await adminApi.get("/admin/coupons/meta");
+  return data;
+};
+
+export const exportAdminCoupons = async (params = {}) => {
+  const query = new URLSearchParams(
+    Object.entries({
+      q: params?.q || undefined,
+      scopeType: params?.scopeType || undefined,
+    }).filter(([, value]) => value !== undefined && value !== null && value !== "")
+  ).toString();
+  const endpoint = query ? `/api/admin/coupons/export?${query}` : "/api/admin/coupons/export";
+  const response = await fetch(endpoint, { credentials: "include" });
+
+  if (!response.ok) {
+    const fallback = `Failed to export coupons (${response.status}).`;
+    try {
+      const payload = await response.json();
+      throw new Error(payload?.message || fallback);
+    } catch {
+      throw new Error(fallback);
+    }
+  }
+
+  return response;
+};
+
+export const importAdminCoupons = async (file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await adminApi.post("/admin/coupons/import", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+};
+
+export const bulkAdminCoupons = async (action, ids) => {
+  const { data } = await adminApi.post("/admin/coupons/bulk", { action, ids });
+  return data;
+};
+
+const normalizeAdminAttributesMeta = (payload, params = {}) => {
+  const meta = payload?.meta || payload?.data?.meta || payload?.pagination || {};
+  const page = Number(meta.page ?? meta.currentPage ?? params.page ?? 1);
+  const limit = Number(meta.limit ?? meta.pageSize ?? params.limit ?? 20);
+  const total = Number(meta.total ?? meta.totalItems ?? payload?.total ?? 0);
+  const rawTotalPages =
+    meta.totalPages ?? (limit ? Math.ceil(total / limit) : 1);
+  const totalPages = Math.max(1, Number(rawTotalPages || 1));
+  return { page, limit, total, totalPages };
+};
+
+const normalizeAdminAttribute = (value) => {
+  if (!value || typeof value !== "object") return null;
+  const values = Array.isArray(value.values)
+    ? value.values
+        .map((entry) =>
+          typeof entry === "string"
+            ? entry.trim()
+            : String(entry?.value || "").trim()
+        )
+        .filter(Boolean)
+    : [];
+  return {
+    id: Number(value.id || 0) || null,
+    name: String(value.name || "").trim(),
+    displayName: value.displayName ?? value.display_name ?? null,
+    type: String(value.type || "dropdown").trim().toLowerCase() || "dropdown",
+    published: Boolean(value.published),
+    scope: String(value.scope || "global").trim().toLowerCase() === "store" ? "store" : "global",
+    status: String(value.status || "active").trim().toLowerCase() === "archived" ? "archived" : "active",
+    storeId: Number(value.storeId || 0) || null,
+    storeName: value.storeName || null,
+    storeSlug: value.storeSlug || null,
+    createdByRole:
+      String(value.createdByRole || "admin").trim().toLowerCase() === "seller"
+        ? "seller"
+        : "admin",
+    values,
+    valueCount:
+      Number(value.valueCount || 0) ||
+      values.length,
+  };
+};
+
+const normalizeAdminAttributesList = (payload, params = {}) => {
+  const items = Array.isArray(payload?.data)
+    ? payload.data
+    : Array.isArray(payload?.items)
+      ? payload.items
+      : Array.isArray(payload)
+        ? payload
+        : [];
+  return {
+    data: items
+      .map(normalizeAdminAttribute)
+      .filter(Boolean),
+    meta: normalizeAdminAttributesMeta(payload, params),
+    warning: payload?.warning || "",
+  };
+};
+
+export const fetchAdminAttributes = async (params = {}) => {
+  const { data } = await adminApi.get("/admin/attributes", { params });
+  return normalizeAdminAttributesList(data, params);
+};
+
+const normalizeAdminAttributeValue = (value) => {
+  if (!value || typeof value !== "object") return null;
+  return {
+    id: Number(value.id || 0) || null,
+    attributeId: Number(value.attributeId ?? value.attribute_id ?? 0) || null,
+    value: String(value.value || "").trim(),
+  };
+};
+
+export const fetchAdminAttributeValues = async (attributeId) => {
+  const { data } = await adminApi.get(`/admin/attributes/${attributeId}/values`);
+  return {
+    ...data,
+    data: Array.isArray(data?.data)
+      ? data.data.map(normalizeAdminAttributeValue).filter(Boolean)
+      : [],
+  };
+};
+
+export const createAdminAttributeValue = async (attributeId, payload) => {
+  const { data } = await adminApi.post(`/admin/attributes/${attributeId}/values`, payload);
+  return data;
+};
+
+export const updateAdminAttributeValue = async (id, payload) => {
+  const { data } = await adminApi.patch(`/admin/attribute-values/${id}`, payload);
+  return data;
+};
+
+export const deleteAdminAttributeValue = async (id) => {
+  const { data } = await adminApi.delete(`/admin/attribute-values/${id}`);
+  return data;
+};
+
+export const bulkDeleteAdminAttributeValues = async (ids) => {
+  const { data } = await adminApi.post("/admin/attribute-values/bulk-delete", { ids });
+  return data;
+};
+
+export const createAdminAttribute = async (payload) => {
+  const { data } = await adminApi.post("/admin/attributes", payload);
+  return data;
+};
+
+export const updateAdminAttribute = async (id, payload) => {
+  const { data } = await adminApi.patch(`/admin/attributes/${id}`, payload);
+  return data;
+};
+
+export const deleteAdminAttribute = async (id) => {
+  const { data } = await adminApi.delete(`/admin/attributes/${id}`);
+  return data;
+};
+
+export const bulkAdminAttributes = async (action, ids) => {
+  const { data } = await adminApi.post("/admin/attributes/bulk", { action, ids });
+  return data;
+};
+
+export const exportAdminAttributes = async (format = "json", filters = {}) => {
+  const normalizedFormat = String(format || "json").trim().toLowerCase() === "csv" ? "csv" : "json";
+  const params = new URLSearchParams();
+  params.set("format", normalizedFormat);
+  [
+    ["q", String(filters?.q ?? "").trim()],
+    ["type", String(filters?.type ?? "").trim().toLowerCase()],
+    ["scope", String(filters?.scope ?? "").trim().toLowerCase()],
+    ["status", String(filters?.status ?? "").trim().toLowerCase()],
+    ["createdByRole", String(filters?.createdByRole ?? "").trim().toLowerCase()],
+    ["storeId", String(filters?.storeId ?? "").trim()],
+    [
+      "published",
+      typeof filters?.published === "boolean"
+        ? String(filters.published)
+        : String(filters?.published ?? "").trim(),
+    ],
+  ].forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+  const endpoint = `/api/admin/attributes/export?${params.toString()}`;
+  const response = await fetch(endpoint, { credentials: "include" });
+
+  if (!response.ok) {
+    const fallback = `Failed to export attributes (${response.status}).`;
+    try {
+      const payload = await response.json();
+      throw new Error(payload?.message || fallback);
+    } catch {
+      throw new Error(fallback);
+    }
+  }
+
+  return response;
+};
+
+export const importAdminAttributes = async (file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await adminApi.post("/admin/attributes/import", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+};
+
+export const createAdminCoupon = async (payload) => {
+  const { data } = await adminApi.post("/admin/coupons", payload);
+  return data;
+};
+
+export const updateAdminCoupon = async (id, payload) => {
+  const { data } = await adminApi.patch(`/admin/coupons/${id}`, payload);
+  return data;
+};
+
+export const deleteAdminCoupon = async (id) => {
+  const { data } = await adminApi.delete(`/admin/coupons/${id}`);
+  return data;
+};
+
+export const uploadAdminStoreHeaderLogo = async (file, language = "en") => {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("language", String(language || "en").trim().toLowerCase());
+  const { data } = await adminApi.post(
+    "/admin/store/customization/header/logo",
+    formData,
+    {
+      headers: { "Content-Type": "multipart/form-data" },
+    }
+  );
+  return data?.data ?? data;
+};
+
+export const fetchAdminSettings = async () => {
+  const { data } = await adminApi.get("/admin/settings");
+  return data;
+};
+
+export const updateAdminSettings = async (payload) => {
+  const { data } = await adminApi.put("/admin/settings", payload);
+  return data;
+};
+
+export const fetchAdminLanguages = async (params = {}) => {
+  const query = {};
+  const search = String(params?.search || "").trim();
+  if (search) query.search = search;
+
+  const { data } = await adminApi.get("/admin/languages", { params: query });
+  const items = Array.isArray(data?.data)
+    ? data.data
+    : Array.isArray(data)
+      ? data
+      : [];
+  return { data: items };
+};
+
+export const createAdminLanguage = async (payload) => {
+  const { data } = await adminApi.post("/admin/languages", payload);
+  return data;
+};
+
+export const updateAdminLanguage = async (id, payload) => {
+  const { data } = await adminApi.put(`/admin/languages/${id}`, payload);
+  return data;
+};
+
+export const deleteAdminLanguage = async (id) => {
+  const { data } = await adminApi.delete(`/admin/languages/${id}`);
+  return data;
+};
+
+export const bulkDeleteAdminLanguages = async (ids) => {
+  const { data } = await adminApi.post("/admin/languages/bulk-delete", { ids });
+  return data;
+};
+
+export const fetchAdminCurrencies = async (params = {}) => {
+  const query = {};
+  const search = String(params?.search || "").trim();
+  if (search) query.search = search;
+
+  const { data } = await adminApi.get("/admin/currencies", { params: query });
+  const items = Array.isArray(data?.data)
+    ? data.data
+    : Array.isArray(data)
+      ? data
+      : [];
+  return { data: items };
+};
+
+export const createAdminCurrency = async (payload) => {
+  const { data } = await adminApi.post("/admin/currencies", payload);
+  return data;
+};
+
+export const updateAdminCurrency = async (id, payload) => {
+  const { data } = await adminApi.put(`/admin/currencies/${id}`, payload);
+  return data;
+};
+
+export const deleteAdminCurrency = async (id) => {
+  const { data } = await adminApi.delete(`/admin/currencies/${id}`);
+  return data;
+};
+
+export const bulkDeleteAdminCurrencies = async (ids) => {
+  const { data } = await adminApi.post("/admin/currencies/bulk-delete", { ids });
+  return data;
+};
+
+export const fetchAdminStoreCustomization = async (lang) => {
+  const query = {};
+  const normalizedLang = String(lang || "").trim().toLowerCase();
+  if (normalizedLang) query.lang = normalizedLang;
+
+  const { data } = await adminApi.get("/admin/store/customization", {
+    params: query,
+  });
+  return data?.data ?? data;
+};
+
+export const updateAdminStoreCustomization = async (lang, payload) => {
+  const query = {};
+  const normalizedLang = String(lang || "").trim().toLowerCase();
+  if (normalizedLang) query.lang = normalizedLang;
+
+  const { data } = await adminApi.put(
+    "/admin/store/customization",
+    payload,
+    { params: query }
+  );
+  return data?.data ?? data;
+};
+
+export const fetchAdminStoreSettings = async () => {
+  const { data } = await adminApi.get("/admin/store/settings");
+  return data?.data ?? data;
+};
+
+export const updateAdminStoreSettings = async (payload) => {
+  const { data } = await adminApi.put("/admin/store/settings", payload);
+  return data?.data ?? data;
+};
+
+export const uploadAdminBrandingLogo = async (target, file) => {
+  const normalizedTarget = String(target || "").trim().toLowerCase();
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await adminApi.post(
+    `/admin/store/settings/branding/${encodeURIComponent(normalizedTarget)}/logo`,
+    formData,
+    {
+      headers: { "Content-Type": "multipart/form-data" },
+    }
+  );
+  return data?.data ?? data;
+};

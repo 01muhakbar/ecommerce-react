@@ -1,0 +1,73 @@
+{
+  "name": "project-ecommerce",
+  "private": true,
+  "version": "1.0.0",
+  "description": "",
+  "workspaces": [
+    "server",
+    "client",
+    "packages/*"
+  ],
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -F server build && pnpm -F client build",
+    "start": "pnpm --filter server start",
+    "dev": "pnpm -r --parallel dev",
+    "dev:server": "pnpm --filter server dev",
+    "dev:client": "pnpm --filter client dev",
+    "dev:all": "pnpm -r --parallel dev",
+    "db:sync": "pnpm --filter server db:sync",
+    "seed:super": "pnpm --filter server seed:super",
+    "seed:kachabazar": "pnpm --filter server seed:kachabazar",
+    "seed:analytics": "pnpm --filter server seed:analytics",
+    "seed:customers": "pnpm --filter server seed:customers",
+    "qa:money": "node ./scripts/qa-money.mjs",
+    "qa:mvf": "pnpm qa:money && powershell -ExecutionPolicy Bypass -File ./tools/qa/mvf-smoke.ps1",
+    "qa:mvf:visibility": "pnpm --filter server smoke:product-visibility && pnpm qa:mvf:visibility:frontend",
+    "qa:mvf:order-payment": "pnpm --filter server smoke:order-payment",
+    "qa:mvf:store-readiness": "pnpm --filter server smoke:store-readiness",
+    "qa:mvf:visibility:frontend": "tsx ./tools/qa/mvf-visibility-frontend.ts",
+    "qa:staging:core": "pnpm -F server build && pnpm -F client build && pnpm -F server smoke:auth-session-invalidation && pnpm -F server smoke:auth-rate-limit && pnpm -F server smoke:admin-public-auth && pnpm -F server smoke:product-visibility && pnpm -F server smoke:store-readiness && pnpm -F server smoke:order-payment && pnpm -F server smoke:shipment-regression && pnpm -F server smoke:stripe-webhook && pnpm qa:mvf:visibility:frontend",
+    "qa:public-release": "tsx ./tools/qa/public-release-smoke.ts",
+    "qa:e2e:truth": "tsx ./tools/qa/e2e-truth-smoke.ts",
+    "qa:e2e:shipment-reconciliation": "tsx ./tools/qa/shipment-reconciliation-smoke.ts",
+    "qa:shipping:release": "pnpm -F server smoke:shipment-regression && pnpm qa:e2e:shipment-reconciliation && pnpm qa:e2e:truth",
+    "qa:auth:frontend": "tsx ./tools/qa/auth-frontend-smoke.ts",
+    "qa:admin:public-auth": "tsx ./tools/qa/admin-public-auth-frontend-smoke.ts",
+    "qa:admin:public-auth:live": "tsx ./tools/qa/admin-public-auth-live-subset.ts",
+    "qa:admin:staff": "tsx ./tools/qa/admin-staff-workflow-smoke.ts",
+    "qa:admin:staff-approval": "tsx ./tools/qa/admin-staff-approval-workflow-smoke.ts",
+    "qa:ui": "node qa-ui.mjs",
+    "qa:ui:install": "pnpm add -D playwright -w && npx playwright install --with-deps"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/01muhakbar/ecommerce-react.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/01muhakbar/ecommerce-react/issues"
+  },
+  "homepage": "https://github.com/01muhakbar/ecommerce-react#readme",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "dependency-cruiser": "^17.0.1",
+    "dotenv": "^17.2.2",
+    "madge": "^8.0.0",
+    "nodemon": "^3.1.0",
+    "playwright": "^1.58.2",
+    "sequelize-cli": "^6.6.3",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "zod": "^4.1.5"
+  },
+  "dependencies": {
+    "multer": "^2.0.2",
+    "mysql2": "^3.14.5",
+    "sequelize": "^6.37.7"
+  }
+}

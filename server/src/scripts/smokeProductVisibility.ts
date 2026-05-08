@@ -1,0 +1,1209 @@
+import "dotenv/config";
+import assert from "node:assert/strict";
+import bcrypt from "bcrypt";
+import { Op, QueryTypes } from "sequelize";
+import {
+  Cart,
+  CartItem,
+  Product,
+  Store,
+  StoreMember,
+  StorePaymentProfile,
+  User,
+  sequelize,
+} from "../models/index.js";
+
+const BASE_URL = String(process.env.BASE_URL || "http://localhost:3001").replace(/\/+$/, "");
+const ADMIN_EMAIL = process.env.MVF_ADMIN_EMAIL || "superadmin@local.dev";
+const ADMIN_PASSWORD = process.env.MVF_ADMIN_PASSWORD || "supersecure123";
+const DEFAULT_PASSWORD = process.env.MVF_SMOKE_PASSWORD || "mvf-smoke-123";
+const RUN_ID = `mvf1-vis-${Date.now()}`;
+
+type JsonResponse = {
+  status: number;
+  ok: boolean;
+  body: any;
+  text: string;
+};
+
+type FixtureUser = {
+  id: number;
+  email: string;
+  password: string;
+};
+
+type FixtureStore = {
+  id: number;
+  slug: string;
+  status: "ACTIVE" | "INACTIVE";
+  ownerUserId: number;
+};
+
+type FixtureProduct = {
+  id: number;
+  name: string;
+  slug: string;
+  storeId: number;
+  userId: number;
+};
+
+class CookieClient {
+  private cookie = "";
+
+  async request(path: string, init: RequestInit = {}): Promise<JsonResponse> {
+    const headers = new Headers(init.headers || {});
+    headers.set("Accept", "application/json");
+    if (init.body && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+    if (this.cookie) {
+      headers.set("Cookie", this.cookie);
+    }
+
+    const response = await fetch(`${BASE_URL}${path}`, {
+      ...init,
+      headers,
+    });
+    const setCookie = response.headers.get("set-cookie");
+    if (setCookie) {
+      this.cookie = setCookie.split(";")[0] || this.cookie;
+    }
+
+    const text = await response.text();
+    let body: any = null;
+    try {
+      body = text ? JSON.parse(text) : null;
+    } catch {
+      body = text;
+    }
+
+    return {
+      status: response.status,
+      ok: response.ok,
+      body,
+      text,
+    };
+  }
+}
+
+const createdUserIds: number[] = [];
+const createdStoreIds: number[] = [];
+const createdPaymentProfileIds: number[] = [];
+const createdProductIds: number[] = [];
+const createdAttributeIds: number[] = [];
+const createdAttributeValueIds: number[] = [];
+
+const slugify = (value: string) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+const toStoreListItems = (body: any) => (Array.isArray(body?.data) ? body.data : []);
+
+const toPublicListItems = (body: any) =>
+  Array.isArray(body?.data?.items) ? body.data.items : [];
+
+const logPass = (label: string) => {
+  console.log(`[mvf-visibility] PASS ${label}`);
+};
+
+const logStep = (label: string) => {
+  console.log(`[mvf-visibility] ${label}`);
+};
+
+const assertStatus = (response: JsonResponse, status: number, label: string) => {
+  assert.equal(
+    response.status,
+    status,
+    `${label}: expected HTTP ${status}, received ${response.status} (${response.text})`
+  );
+};
+
+const assertListMissing = (items: any[], slug: string, label: string) => {
+  assert.equal(
+    items.some((item) => String(item?.slug || "") === slug),
+    false,
+    `${label}: ${slug} unexpectedly visible in list`
+  );
+};
+
+const assertListVisible = (items: any[], slug: string, label: string) => {
+  assert.equal(
+    items.some((item) => String(item?.slug || "") === slug),
+    true,
+    `${label}: ${slug} missing from list`
+  );
+};
+
+const assertProductStoreIdentity = (item: any, product: FixtureProduct, label: string) => {
+  assert.equal(
+    Number(item?.storeId || 0),
+    product.storeId,
+    `${label}: storeId mismatch`
+  );
+  assert.ok(
+    String(item?.storeSlug || item?.store?.slug || "").trim(),
+    `${label}: storeSlug missing`
+  );
+};
+
+async function ensureServerReady() {
+  const response = await fetch(`${BASE_URL}/api/health`);
+  assert.equal(response.ok, true, `[mvf-visibility] API not ready at ${BASE_URL}/api/health`);
+}
+
+async function createFixtureUser(label: string, role = "customer"): Promise<FixtureUser> {
+  const email = `${RUN_ID}-${label}@local.dev`;
+  const password = DEFAULT_PASSWORD;
+  const hashed = await bcrypt.hash(password, 10);
+  const user = await User.create({
+    name: `MVF ${label}`,
+    email,
+    password: hashed,
+    role,
+    status: "active",
+  } as any);
+  const id = Number(user.getDataValue("id"));
+  createdUserIds.push(id);
+  return { id, email, password };
+}
+
+async function createFixtureStore(
+  ownerUserId: number,
+  label: string,
+  status: "ACTIVE" | "INACTIVE"
+): Promise<FixtureStore> {
+  const slug = slugify(`${RUN_ID}-${label}`);
+  const store = await Store.create({
+    ownerUserId,
+    name: `${RUN_ID}-${label}`,
+    slug,
+    status,
+  } as any);
+  const id = Number(store.getDataValue("id"));
+  createdStoreIds.push(id);
+  return { id, slug, status, ownerUserId };
+}
+
+async function createReadyPaymentProfile(storeId: number) {
+  const now = new Date();
+  const profile = await StorePaymentProfile.create({
+    storeId,
+    providerCode: "MANUAL_QRIS",
+    paymentType: "QRIS_STATIC",
+    version: 1,
+    snapshotStatus: "ACTIVE",
+    accountName: `MVF Account ${storeId}`,
+    merchantName: `MVF Merchant ${storeId}`,
+    merchantId: `MVF-${storeId}`,
+    qrisImageUrl: `https://example.com/${RUN_ID}-${storeId}.png`,
+    qrisPayload: `${RUN_ID}-${storeId}-payload`,
+    instructionText: "MVF visibility smoke payment instructions.",
+    isActive: true,
+    verificationStatus: "ACTIVE",
+    verifiedAt: now,
+    activatedAt: now,
+  } as any);
+  const id = Number(profile.getDataValue("id"));
+  createdPaymentProfileIds.push(id);
+  await Store.update(
+    { activeStorePaymentProfileId: id } as any,
+    { where: { id: storeId } as any }
+  );
+}
+
+async function createFixtureProduct(input: {
+  ownerUserId: number;
+  storeId: number;
+  label: string;
+  status: "active" | "inactive" | "draft";
+  published: boolean;
+  sellerSubmissionStatus: "none" | "submitted" | "needs_revision";
+}): Promise<FixtureProduct> {
+  const slug = slugify(`${RUN_ID}-${input.label}`);
+  const product = await Product.create({
+    name: slug,
+    slug,
+    sku: slug.toUpperCase(),
+    price: 10000,
+    stock: 8,
+    userId: input.ownerUserId,
+    storeId: input.storeId,
+    status: input.status,
+    isPublished: input.published,
+    sellerSubmissionStatus: input.sellerSubmissionStatus,
+    description: `Fixture ${slug}`,
+  } as any);
+  const id = Number(product.getDataValue("id"));
+  createdProductIds.push(id);
+  return {
+    id,
+    name: slug,
+    slug,
+    storeId: input.storeId,
+    userId: input.ownerUserId,
+  };
+}
+
+async function createRuntimeAttributeValues(label: string) {
+  const attributeName = `${RUN_ID}-${label}-color`;
+  const [_attributeRows, attributeMeta] = await sequelize.query(
+    `
+      INSERT INTO attributes
+        (name, display_name, type, published, scope, created_by_role, status, created_at, updated_at)
+      VALUES
+        (?, 'Color', 'dropdown', 1, 'global', 'admin', 'active', NOW(), NOW())
+    `,
+    { replacements: [attributeName] }
+  );
+  let attributeId = Number((attributeMeta as any)?.insertId || 0);
+  if (!attributeId) {
+    const rows = await sequelize.query<{ id: number }>(
+      "SELECT id FROM attributes WHERE name = ? LIMIT 1",
+      { replacements: [attributeName], type: QueryTypes.SELECT }
+    );
+    attributeId = Number(rows[0]?.id || 0);
+  }
+  assert.ok(attributeId > 0, "runtime attribute fixture id missing");
+  createdAttributeIds.push(attributeId);
+
+  const values: Array<{ id: number; value: string }> = [];
+  for (const value of ["Blue", "Green"]) {
+    const [_valueRows, valueMeta] = await sequelize.query(
+      `
+        INSERT INTO attribute_values (attribute_id, value, status, created_at, updated_at)
+        VALUES (?, ?, 'active', NOW(), NOW())
+      `,
+      { replacements: [attributeId, value] }
+    );
+    let valueId = Number((valueMeta as any)?.insertId || 0);
+    if (!valueId) {
+      const rows = await sequelize.query<{ id: number }>(
+        "SELECT id FROM attribute_values WHERE attribute_id = ? AND value = ? LIMIT 1",
+        { replacements: [attributeId, value], type: QueryTypes.SELECT }
+      );
+      valueId = Number(rows[0]?.id || 0);
+    }
+    assert.ok(valueId > 0, "runtime attribute value fixture id missing");
+    createdAttributeValueIds.push(valueId);
+    values.push({ id: valueId, value });
+  }
+
+  return {
+    attributeId,
+    attributeName: "Color",
+    blue: values[0],
+    green: values[1],
+  };
+}
+
+const buildVariationSelection = (input: {
+  attributeId: number;
+  attributeName: string;
+  valueId: number;
+  value: string;
+}) => ({
+  attributeId: input.attributeId,
+  attributeName: input.attributeName,
+  valueId: input.valueId,
+  value: input.value,
+});
+
+const buildVariationKey = (selection: { attributeId: number; valueId: number; value: string }) =>
+  `${selection.attributeId}:${String(selection.valueId ?? selection.value).trim().toLowerCase()}`;
+
+async function createVisibleVariantFixtureProduct(input: {
+  ownerUserId: number;
+  storeId: number;
+  label: string;
+}) {
+  const slug = slugify(`${RUN_ID}-${input.label}`);
+  const attribute = await createRuntimeAttributeValues(input.label);
+  const blueSelection = buildVariationSelection({
+    attributeId: attribute.attributeId,
+    attributeName: attribute.attributeName,
+    valueId: attribute.blue.id,
+    value: attribute.blue.value,
+  });
+  const greenSelection = buildVariationSelection({
+    attributeId: attribute.attributeId,
+    attributeName: attribute.attributeName,
+    valueId: attribute.green.id,
+    value: attribute.green.value,
+  });
+
+  const product = await Product.create({
+    name: slug,
+    slug,
+    sku: slug.toUpperCase(),
+    price: 10000,
+    stock: 8,
+    userId: input.ownerUserId,
+    storeId: input.storeId,
+    status: "active",
+    isPublished: true,
+    sellerSubmissionStatus: "none",
+    description: `Fixture ${slug}`,
+    variations: {
+      hasVariants: true,
+      selectedAttributes: [{ id: attribute.attributeId, name: attribute.attributeName }],
+      selectedAttributeValues: [
+        {
+          attributeId: attribute.attributeId,
+          values: [
+            { id: attribute.blue.id, label: attribute.blue.value, value: attribute.blue.value },
+            { id: attribute.green.id, label: attribute.green.value, value: attribute.green.value },
+          ],
+        },
+      ],
+      variants: [
+        {
+          id: "variant-blue",
+          combination: attribute.blue.value,
+          combinationKey: buildVariationKey(blueSelection),
+          selections: [blueSelection],
+          price: 10000,
+          salePrice: 9000,
+          quantity: 4,
+          image: null,
+        },
+        {
+          id: "variant-green",
+          combination: attribute.green.value,
+          combinationKey: buildVariationKey(greenSelection),
+          selections: [greenSelection],
+          price: 10000,
+          salePrice: 9000,
+          quantity: 4,
+          image: null,
+        },
+      ],
+    },
+  } as any);
+  const id = Number(product.getDataValue("id"));
+  createdProductIds.push(id);
+  return {
+    id,
+    name: slug,
+    slug,
+    storeId: input.storeId,
+    userId: input.ownerUserId,
+    inactiveValueId: attribute.green.id,
+    inactiveValue: attribute.green.value,
+  };
+}
+
+async function login(client: CookieClient, email: string, password: string, label: string) {
+  const response = await client.request("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+  assertStatus(response, 200, label);
+  assert.equal(Boolean(response.body?.success), true, `${label}: login did not return success`);
+}
+
+async function loginAdmin(client: CookieClient) {
+  const response = await client.request("/api/auth/admin/login", {
+    method: "POST",
+    body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }),
+  });
+  assertStatus(response, 200, "admin login");
+}
+
+async function fetchStoreList(search: string) {
+  return new CookieClient().request(
+    `/api/store/products?search=${encodeURIComponent(search)}&page=1&limit=20`
+  );
+}
+
+async function fetchPublicList(search: string) {
+  return new CookieClient().request(
+    `/api/products?q=${encodeURIComponent(search)}&page=1&limit=20`
+  );
+}
+
+async function assertHiddenEverywhere(product: FixtureProduct, label: string) {
+  const storeList = await fetchStoreList(product.name);
+  assertStatus(storeList, 200, `${label} storefront list`);
+  assertListMissing(toStoreListItems(storeList.body), product.slug, `${label} storefront list`);
+
+  const publicList = await fetchPublicList(product.name);
+  assertStatus(publicList, 200, `${label} public list`);
+  assertListMissing(toPublicListItems(publicList.body), product.slug, `${label} public list`);
+
+  const storeDetail = await new CookieClient().request(
+    `/api/store/products/${encodeURIComponent(product.slug)}`
+  );
+  assertStatus(storeDetail, 404, `${label} storefront detail`);
+
+  const publicDetail = await new CookieClient().request(
+    `/api/products/${encodeURIComponent(product.slug)}`
+  );
+  assertStatus(publicDetail, 404, `${label} public detail`);
+}
+
+async function assertVisibleEverywhere(product: FixtureProduct, label: string) {
+  const storeList = await fetchStoreList(product.name);
+  assertStatus(storeList, 200, `${label} storefront list`);
+  assertListVisible(toStoreListItems(storeList.body), product.slug, `${label} storefront list`);
+  const storeListItem = toStoreListItems(storeList.body).find(
+    (item: any) => String(item?.slug || "") === product.slug
+  );
+  assertProductStoreIdentity(storeListItem, product, `${label} storefront list item`);
+
+  const publicList = await fetchPublicList(product.name);
+  assertStatus(publicList, 200, `${label} public list`);
+  assertListVisible(toPublicListItems(publicList.body), product.slug, `${label} public list`);
+  const publicListItem = toPublicListItems(publicList.body).find(
+    (item: any) => String(item?.slug || "") === product.slug
+  );
+  assertProductStoreIdentity(publicListItem, product, `${label} public list item`);
+
+  const storeDetail = await new CookieClient().request(
+    `/api/store/products/${encodeURIComponent(product.slug)}`
+  );
+  assertStatus(storeDetail, 200, `${label} storefront detail`);
+  assert.equal(
+    String(storeDetail.body?.data?.slug || ""),
+    product.slug,
+    `${label}: storefront detail returned unexpected product`
+  );
+  assertProductStoreIdentity(storeDetail.body?.data, product, `${label} storefront detail`);
+
+  const publicDetail = await new CookieClient().request(
+    `/api/products/${encodeURIComponent(product.slug)}`
+  );
+  assertStatus(publicDetail, 200, `${label} public detail`);
+  assert.equal(
+    String(publicDetail.body?.data?.slug || ""),
+    product.slug,
+    `${label}: public detail returned unexpected product`
+  );
+  assertProductStoreIdentity(publicDetail.body?.data, product, `${label} public detail`);
+}
+
+async function assertStorefrontDetailHidesInactiveVariationOption(input: {
+  product: FixtureProduct & { inactiveValueId: number; inactiveValue: string };
+  label: string;
+}) {
+  await sequelize.query("UPDATE attribute_values SET status = 'archived' WHERE id = ?", {
+    replacements: [input.product.inactiveValueId],
+  });
+
+  const storeDetail = await new CookieClient().request(
+    `/api/store/products/${encodeURIComponent(input.product.slug)}`
+  );
+  assertStatus(storeDetail, 200, `${input.label} storefront detail`);
+
+  const variations = storeDetail.body?.data?.variations;
+  const variants = Array.isArray(variations?.variants) ? variations.variants : [];
+  assert.ok(variants.length > 0, `${input.label}: expected at least one valid variant`);
+  assert.equal(
+    variants.some((variant: any) =>
+      (Array.isArray(variant?.selections) ? variant.selections : []).some(
+        (selection: any) => Number(selection?.valueId) === input.product.inactiveValueId
+      )
+    ),
+    false,
+    `${input.label}: archived value leaked in detail variants`
+  );
+
+  const selectedValues = Array.isArray(variations?.selectedAttributeValues)
+    ? variations.selectedAttributeValues.flatMap((entry: any) =>
+        Array.isArray(entry?.values) ? entry.values : []
+      )
+    : [];
+  assert.equal(
+    selectedValues.some((value: any) => Number(value?.id) === input.product.inactiveValueId),
+    false,
+    `${input.label}: archived value leaked in selectedAttributeValues`
+  );
+  assert.equal(
+    variants.some((variant: any) =>
+      String(variant?.combination || "").toLowerCase().includes(input.product.inactiveValue.toLowerCase())
+    ),
+    false,
+    `${input.label}: archived value label leaked in detail variants`
+  );
+}
+
+async function assertHiddenFromDiscoveryWithDetailGate(
+  product: FixtureProduct,
+  storeSlug: string,
+  label: string
+) {
+  const storeList = await fetchStoreList(product.name);
+  assertStatus(storeList, 200, `${label} storefront list`);
+  assertListMissing(toStoreListItems(storeList.body), product.slug, `${label} storefront list`);
+
+  const publicList = await fetchPublicList(product.name);
+  assertStatus(publicList, 200, `${label} public list`);
+  assertListMissing(toPublicListItems(publicList.body), product.slug, `${label} public list`);
+
+  const publicDetail = await new CookieClient().request(
+    `/api/products/${encodeURIComponent(product.slug)}`
+  );
+  assertStatus(publicDetail, 404, `${label} public detail`);
+
+  const storeDetail = await new CookieClient().request(
+    `/api/store/products/${encodeURIComponent(product.slug)}?storeSlug=${encodeURIComponent(storeSlug)}`
+  );
+  assertStatus(storeDetail, 200, `${label} storefront detail`);
+  assert.equal(
+    String(storeDetail.body?.data?.slug || ""),
+    product.slug,
+    `${label}: storefront detail returned unexpected product`
+  );
+  assert.equal(
+    String(storeDetail.body?.data?.purchaseState?.code || ""),
+    "STORE_NOT_READY",
+    `${label}: storefront detail purchaseState mismatch`
+  );
+  assert.equal(
+    Boolean(storeDetail.body?.data?.purchaseState?.isPurchasable),
+    false,
+    `${label}: storefront detail should stay non-purchasable`
+  );
+}
+
+async function resetCartForUser(userId: number) {
+  const carts = await Cart.findAll({
+    where: { userId } as any,
+    attributes: ["id"],
+  });
+  const cartIds = carts
+    .map((cart) => Number(cart.getDataValue("id")))
+    .filter((cartId) => Number.isInteger(cartId) && cartId > 0);
+
+  if (cartIds.length > 0) {
+    await CartItem.destroy({
+      where: { cartId: { [Op.in]: cartIds } } as any,
+    });
+    await Cart.destroy({
+      where: { id: { [Op.in]: cartIds } } as any,
+    });
+  }
+}
+
+async function previewCart(
+  customerClient: CookieClient,
+  customerUserId: number,
+  productId: number,
+  label: string
+) {
+  await resetCartForUser(customerUserId);
+  const addResponse = await customerClient.request("/api/cart/add", {
+    method: "POST",
+    body: JSON.stringify({ productId, quantity: 1 }),
+  });
+  if (addResponse.status !== 200) {
+    return {
+      addResponse,
+      previewResponse: null,
+    };
+  }
+
+  const previewResponse = await customerClient.request("/api/checkout/preview", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  return {
+    addResponse,
+    previewResponse,
+  };
+}
+
+async function cleanupFixtures() {
+  if (createdUserIds.length > 0) {
+    await resetCartForUser(createdUserIds[0]).catch(() => null);
+  }
+
+  if (createdUserIds.length > 1) {
+    for (const userId of createdUserIds.slice(1)) {
+      await resetCartForUser(userId).catch(() => null);
+    }
+  }
+
+  if (createdProductIds.length > 0) {
+    await Product.destroy({
+      where: { id: { [Op.in]: createdProductIds } } as any,
+      force: true,
+    });
+  }
+
+  if (createdAttributeValueIds.length > 0) {
+    await sequelize.query(
+      `DELETE FROM attribute_values WHERE id IN (${createdAttributeValueIds.map(() => "?").join(", ")})`,
+      { replacements: createdAttributeValueIds }
+    ).catch(() => null);
+  }
+
+  if (createdAttributeIds.length > 0) {
+    await sequelize.query(
+      `DELETE FROM attributes WHERE id IN (${createdAttributeIds.map(() => "?").join(", ")})`,
+      { replacements: createdAttributeIds }
+    ).catch(() => null);
+  }
+
+  if (createdPaymentProfileIds.length > 0) {
+    await StorePaymentProfile.destroy({
+      where: { id: { [Op.in]: createdPaymentProfileIds } } as any,
+      force: true,
+    });
+  }
+
+  if (createdStoreIds.length > 0 || createdUserIds.length > 0) {
+    await StoreMember.destroy({
+      where: {
+        ...(createdStoreIds.length > 0 ? { storeId: createdStoreIds } : {}),
+        ...(createdUserIds.length > 0 ? { userId: createdUserIds } : {}),
+      } as any,
+      force: true,
+    }).catch(() => null);
+  }
+
+  if (createdStoreIds.length > 0) {
+    await Store.destroy({
+      where: { id: { [Op.in]: createdStoreIds } } as any,
+      force: true,
+    });
+  }
+
+  if (createdUserIds.length > 0) {
+    await User.destroy({
+      where: { id: { [Op.in]: createdUserIds } } as any,
+      force: true,
+    });
+  }
+}
+
+async function run() {
+  await ensureServerReady();
+  await sequelize.authenticate();
+
+  logStep("creating fixtures");
+  const sellerUser = await createFixtureUser("seller-owner");
+  const notReadySellerUser = await createFixtureUser("not-ready-owner");
+  const inactiveSellerUser = await createFixtureUser("inactive-owner");
+  const customerUser = await createFixtureUser("customer");
+
+  const activeStore = await createFixtureStore(sellerUser.id, "store-active", "ACTIVE");
+  await createReadyPaymentProfile(activeStore.id);
+  const activeStoreNotReady = await createFixtureStore(
+    notReadySellerUser.id,
+    "store-active-not-ready",
+    "ACTIVE"
+  );
+  const inactiveStore = await createFixtureStore(
+    inactiveSellerUser.id,
+    "store-inactive",
+    "INACTIVE"
+  );
+
+  const draftProduct = await createFixtureProduct({
+    ownerUserId: sellerUser.id,
+    storeId: activeStore.id,
+    label: "draft-hidden",
+    status: "draft",
+    published: false,
+    sellerSubmissionStatus: "none",
+  });
+  const inactiveProduct = await createFixtureProduct({
+    ownerUserId: sellerUser.id,
+    storeId: activeStore.id,
+    label: "inactive-hidden",
+    status: "inactive",
+    published: true,
+    sellerSubmissionStatus: "none",
+  });
+  const submittedProduct = await createFixtureProduct({
+    ownerUserId: sellerUser.id,
+    storeId: activeStore.id,
+    label: "submitted-hidden",
+    status: "active",
+    published: true,
+    sellerSubmissionStatus: "submitted",
+  });
+  const needsRevisionProduct = await createFixtureProduct({
+    ownerUserId: sellerUser.id,
+    storeId: activeStore.id,
+    label: "needs-revision-hidden",
+    status: "active",
+    published: true,
+    sellerSubmissionStatus: "needs_revision",
+  });
+  const visibleProduct = await createFixtureProduct({
+    ownerUserId: sellerUser.id,
+    storeId: activeStore.id,
+    label: "storefront-visible",
+    status: "active",
+    published: true,
+    sellerSubmissionStatus: "none",
+  });
+  const visibleVariantProduct = await createVisibleVariantFixtureProduct({
+    ownerUserId: sellerUser.id,
+    storeId: activeStore.id,
+    label: "storefront-visible-variant",
+  });
+  const inactiveStoreProduct = await createFixtureProduct({
+    ownerUserId: inactiveSellerUser.id,
+    storeId: inactiveStore.id,
+    label: "store-inactive-hidden",
+    status: "active",
+    published: true,
+    sellerSubmissionStatus: "none",
+  });
+  const notReadyStoreProduct = await createFixtureProduct({
+    ownerUserId: notReadySellerUser.id,
+    storeId: activeStoreNotReady.id,
+    label: "store-not-ready-hidden",
+    status: "active",
+    published: true,
+    sellerSubmissionStatus: "none",
+  });
+
+  logStep("authenticating admin, seller, and customer clients");
+  const adminClient = new CookieClient();
+  const sellerClient = new CookieClient();
+  const notReadySellerClient = new CookieClient();
+  const inactiveSellerClient = new CookieClient();
+  const customerClient = new CookieClient();
+  await loginAdmin(adminClient);
+  await login(sellerClient, sellerUser.email, sellerUser.password, "seller login");
+  await login(
+    notReadySellerClient,
+    notReadySellerUser.email,
+    notReadySellerUser.password,
+    "not-ready seller login"
+  );
+  await login(
+    inactiveSellerClient,
+    inactiveSellerUser.email,
+    inactiveSellerUser.password,
+    "inactive seller login"
+  );
+  await login(customerClient, customerUser.email, customerUser.password, "customer login");
+
+  logStep("checking hidden scenarios on public/storefront routes");
+  await assertHiddenEverywhere(draftProduct, "draft hidden");
+  logPass("draft hidden");
+  await assertHiddenEverywhere(inactiveProduct, "inactive hidden");
+  logPass("inactive hidden");
+  await assertHiddenEverywhere(submittedProduct, "submitted hidden");
+  logPass("submitted hidden");
+  await assertHiddenEverywhere(needsRevisionProduct, "needs revision hidden");
+  logPass("needs revision hidden");
+  await assertHiddenEverywhere(inactiveStoreProduct, "inactive store hidden");
+  logPass("inactive store hidden");
+  await assertHiddenFromDiscoveryWithDetailGate(
+    notReadyStoreProduct,
+    activeStoreNotReady.slug,
+    "not-ready store hidden"
+  );
+  logPass("not-ready store discovery hidden with gated detail");
+
+  logStep("checking visible scenario on public/storefront routes");
+  await assertVisibleEverywhere(visibleProduct, "visible product");
+  logPass("visible product list/detail");
+
+  logStep("checking public detail sanitizer hides archived variation option");
+  await assertStorefrontDetailHidesInactiveVariationOption({
+    product: visibleVariantProduct,
+    label: "public detail variation sanitizer",
+  });
+  logPass("public detail variation sanitizer hides archived option");
+
+  logStep("checking admin review queue summary");
+  const adminQueue = await adminClient.request(
+    `/api/admin/products?q=${encodeURIComponent(RUN_ID)}&page=1&limit=50`
+  );
+  assertStatus(adminQueue, 200, "admin review queue summary");
+  assert.equal(
+    Number(adminQueue.body?.meta?.reviewQueue?.submitted || 0),
+    1,
+    "admin review queue: submitted count mismatch"
+  );
+  assert.equal(
+    Number(adminQueue.body?.meta?.reviewQueue?.needsRevision || 0),
+    1,
+    "admin review queue: needs revision count mismatch"
+  );
+  assert.equal(
+    Number(adminQueue.body?.meta?.reviewQueue?.total || 0),
+    2,
+    "admin review queue: total count mismatch"
+  );
+  const adminItems: any[] = Array.isArray(adminQueue.body?.data) ? adminQueue.body.data : [];
+  const adminItemBySlug = new Map<string, any>(
+    adminItems.map((item: any) => [String(item?.slug || ""), item])
+  );
+  const adminInactiveStoreItem = adminItemBySlug.get(inactiveStoreProduct.slug);
+  const adminVisibleItem = adminItemBySlug.get(visibleProduct.slug);
+  assert.ok(adminInactiveStoreItem, "admin list: inactive store item missing");
+  assert.ok(adminVisibleItem, "admin list: visible item missing");
+  assert.equal(
+    String(adminInactiveStoreItem?.visibility?.stateCode || ""),
+    "PUBLISHED_BLOCKED",
+    "admin list: inactive store product state mismatch"
+  );
+  assert.equal(
+    String(adminInactiveStoreItem?.visibility?.reasonCode || ""),
+    "STORE_NOT_ACTIVE",
+    "admin list: inactive store product reason mismatch"
+  );
+  assert.equal(
+    String(adminVisibleItem?.visibility?.stateCode || ""),
+    "STOREFRONT_VISIBLE",
+    "admin list: visible product state mismatch"
+  );
+  logPass("admin review queue summary");
+
+  logStep("checking checkout preview eligibility");
+  const hiddenPreview = await previewCart(
+    customerClient,
+    customerUser.id,
+    draftProduct.id,
+    "draft preview"
+  );
+  if (hiddenPreview.addResponse.status === 409) {
+    assert.equal(
+      String(hiddenPreview.addResponse.body?.code || ""),
+      "PRODUCT_NOT_AVAILABLE",
+      "draft preview: hidden product returned unexpected add-to-cart rejection"
+    );
+  } else {
+    assertStatus(hiddenPreview.addResponse, 200, "draft preview add to cart");
+    assertStatus(hiddenPreview.previewResponse as JsonResponse, 200, "draft preview");
+    assert.equal(
+      Array.isArray(hiddenPreview.previewResponse?.body?.data?.invalidItems),
+      true,
+      "draft preview: invalidItems missing"
+    );
+    assert.equal(
+      hiddenPreview.previewResponse?.body?.data?.invalidItems?.some(
+        (item: any) => Number(item?.productId) === draftProduct.id
+      ),
+      true,
+      "draft preview: hidden product was not marked invalid"
+    );
+  }
+  logPass("draft checkout preview blocked");
+
+  const visiblePreview = await previewCart(
+    customerClient,
+    customerUser.id,
+    visibleProduct.id,
+    "visible preview"
+  );
+  assertStatus(visiblePreview.addResponse, 200, "visible preview add to cart");
+  assertStatus(visiblePreview.previewResponse as JsonResponse, 200, "visible preview");
+  assert.equal(
+    visiblePreview.previewResponse?.body?.data?.invalidItems?.length || 0,
+    0,
+    "visible preview: visible product unexpectedly invalid"
+  );
+  assert.equal(
+    visiblePreview.previewResponse?.body?.data?.groups?.some((group: any) =>
+      Array.isArray(group?.items)
+        ? group.items.some((item: any) => Number(item?.productId) === visibleProduct.id)
+        : false
+    ),
+    true,
+    "visible preview: visible product missing from checkout groups"
+  );
+  logPass("visible checkout preview allowed");
+
+  logStep("checking not-ready checkout preview eligibility");
+  const notReadyPreview = await previewCart(
+    customerClient,
+    customerUser.id,
+    notReadyStoreProduct.id,
+    "not-ready preview"
+  );
+  assert.equal(
+    notReadyPreview.addResponse.status,
+    409,
+    "not-ready preview add to cart should reject immediately"
+  );
+  assert.equal(
+    String(notReadyPreview.addResponse.body?.code || ""),
+    "PRODUCT_NOT_AVAILABLE",
+    "not-ready preview: unexpected add-to-cart rejection"
+  );
+  logPass("not-ready checkout preview blocked");
+
+  logStep("checking seller visibility metadata");
+  const sellerList = await sellerClient.request(
+    `/api/seller/stores/${activeStore.id}/products?keyword=${encodeURIComponent(RUN_ID)}&limit=20`
+  );
+  assertStatus(sellerList, 200, "seller list");
+  const sellerItems: any[] = Array.isArray(sellerList.body?.data?.items)
+    ? sellerList.body.data.items
+    : [];
+  const itemBySlug = new Map<string, any>(
+    sellerItems.map((item: any) => [String(item?.slug || ""), item])
+  );
+  const submittedItem: any = itemBySlug.get(submittedProduct.slug);
+  const needsRevisionItem: any = itemBySlug.get(needsRevisionProduct.slug);
+  const visibleItem: any = itemBySlug.get(visibleProduct.slug);
+  assert.ok(submittedItem, "seller list: submitted item missing");
+  assert.ok(needsRevisionItem, "seller list: needs_revision item missing");
+  assert.ok(visibleItem, "seller list: visible item missing");
+  assert.equal(
+    Boolean(submittedItem?.visibility?.storefrontVisible),
+    false,
+    "seller list: submitted product incorrectly marked visible"
+  );
+  assert.equal(
+    String(submittedItem?.visibility?.stateCode || ""),
+    "PUBLISHED_BLOCKED",
+    "seller list: submitted product state mismatch"
+  );
+  assert.equal(
+    Boolean(needsRevisionItem?.visibility?.storefrontVisible),
+    false,
+    "seller list: needs_revision product incorrectly marked visible"
+  );
+  assert.equal(
+    String(needsRevisionItem?.visibility?.stateCode || ""),
+    "PUBLISHED_BLOCKED",
+    "seller list: needs_revision product state mismatch"
+  );
+  assert.equal(
+    Boolean(visibleItem?.visibility?.storefrontVisible),
+    true,
+    "seller list: visible product should remain storefront visible"
+  );
+  assert.equal(
+    String(visibleItem?.visibility?.stateCode || ""),
+    "STOREFRONT_VISIBLE",
+    "seller list: visible product state mismatch"
+  );
+  logPass("seller visibility metadata");
+
+  logStep("checking not-ready seller visibility metadata");
+  const notReadySellerList = await notReadySellerClient.request(
+    `/api/seller/stores/${activeStoreNotReady.id}/products?keyword=${encodeURIComponent(
+      RUN_ID
+    )}&limit=20`
+  );
+  assertStatus(notReadySellerList, 200, "not-ready seller list");
+  const notReadySellerItems: any[] = Array.isArray(notReadySellerList.body?.data?.items)
+    ? notReadySellerList.body.data.items
+    : [];
+  const notReadySellerItem = notReadySellerItems.find(
+    (item: any) => String(item?.slug || "") === notReadyStoreProduct.slug
+  );
+  assert.ok(notReadySellerItem, "not-ready seller list: product missing");
+  assert.equal(
+    Boolean(notReadySellerItem?.visibility?.storefrontVisible),
+    false,
+    "not-ready seller list: product incorrectly marked visible"
+  );
+  assert.equal(
+    String(notReadySellerItem?.visibility?.reasonCode || ""),
+    "STORE_NOT_READY",
+    "not-ready seller list: product reason mismatch"
+  );
+  assert.equal(
+    Number(notReadySellerList.body?.data?.summary?.storefrontVisible || 0),
+    0,
+    "not-ready seller list: storefrontVisible summary mismatch"
+  );
+  assert.equal(
+    Number(notReadySellerList.body?.data?.summary?.publishedBlocked || 0),
+    1,
+    "not-ready seller list: publishedBlocked summary mismatch"
+  );
+  logPass("not-ready seller visibility metadata");
+
+  logStep("checking admin not-ready visibility metadata");
+  const adminNotReadyItem = adminItemBySlug.get(notReadyStoreProduct.slug);
+  assert.ok(adminNotReadyItem, "admin list: not-ready store item missing");
+  assert.equal(
+    String(adminNotReadyItem?.visibility?.stateCode || ""),
+    "PUBLISHED_BLOCKED",
+    "admin list: not-ready store product state mismatch"
+  );
+  assert.equal(
+    String(adminNotReadyItem?.visibility?.reasonCode || ""),
+    "STORE_NOT_READY",
+    "admin list: not-ready store product reason mismatch"
+  );
+  logPass("admin not-ready visibility metadata");
+
+  logStep("checking inactive-store seller visibility metadata");
+  const inactiveSellerList = await inactiveSellerClient.request(
+    `/api/seller/stores/${inactiveStore.id}/products?keyword=${encodeURIComponent(RUN_ID)}&limit=20`
+  );
+  assertStatus(inactiveSellerList, 200, "inactive seller list");
+  const inactiveSellerItems: any[] = Array.isArray(inactiveSellerList.body?.data?.items)
+    ? inactiveSellerList.body.data.items
+    : [];
+  const inactiveSellerItem = inactiveSellerItems.find(
+    (item: any) => String(item?.slug || "") === inactiveStoreProduct.slug
+  );
+  assert.ok(inactiveSellerItem, "inactive seller list: product missing");
+  assert.equal(
+    Boolean(inactiveSellerItem?.visibility?.storefrontVisible),
+    false,
+    "inactive seller list: product incorrectly marked visible"
+  );
+  assert.equal(
+    String(inactiveSellerItem?.visibility?.stateCode || ""),
+    "PUBLISHED_BLOCKED",
+    "inactive seller list: product state mismatch"
+  );
+  assert.equal(
+    String(inactiveSellerItem?.visibility?.reasonCode || ""),
+    "STORE_NOT_ACTIVE",
+    "inactive seller list: product reason mismatch"
+  );
+  assert.equal(
+    Number(inactiveSellerList.body?.data?.summary?.storefrontVisible || 0),
+    0,
+    "inactive seller list: storefrontVisible summary mismatch"
+  );
+  assert.equal(
+    Number(inactiveSellerList.body?.data?.summary?.publishedBlocked || 0),
+    1,
+    "inactive seller list: publishedBlocked summary mismatch"
+  );
+  const inactiveVisibleFilter = await inactiveSellerClient.request(
+    `/api/seller/stores/${inactiveStore.id}/products?keyword=${encodeURIComponent(
+      RUN_ID
+    )}&visibilityState=storefront_visible&limit=20`
+  );
+  assertStatus(inactiveVisibleFilter, 200, "inactive seller visible filter");
+  assert.equal(
+    Array.isArray(inactiveVisibleFilter.body?.data?.items)
+      ? inactiveVisibleFilter.body.data.items.length
+      : 0,
+    0,
+    "inactive seller visible filter: blocked product should not appear"
+  );
+  const inactiveBlockedFilter = await inactiveSellerClient.request(
+    `/api/seller/stores/${inactiveStore.id}/products?keyword=${encodeURIComponent(
+      RUN_ID
+    )}&visibilityState=published_blocked&limit=20`
+  );
+  assertStatus(inactiveBlockedFilter, 200, "inactive seller blocked filter");
+  assert.equal(
+    Array.isArray(inactiveBlockedFilter.body?.data?.items)
+      ? inactiveBlockedFilter.body.data.items.some(
+          (item: any) => String(item?.slug || "") === inactiveStoreProduct.slug
+        )
+      : false,
+    true,
+    "inactive seller blocked filter: inactive store product missing"
+  );
+  logPass("inactive-store seller visibility metadata");
+
+  logStep("checking seller review locks");
+  const submittedEditLock = await sellerClient.request(
+    `/api/seller/stores/${activeStore.id}/products/${submittedProduct.id}/draft`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ name: `${submittedProduct.name} locked` }),
+    }
+  );
+  assertStatus(submittedEditLock, 409, "seller submitted edit lock");
+  assert.equal(
+    String(submittedEditLock.body?.code || ""),
+    "SELLER_PRODUCT_SUBMISSION_LOCKED",
+    "seller submitted edit lock: wrong error code"
+  );
+  const submittedPublishLock = await sellerClient.request(
+    `/api/seller/stores/${activeStore.id}/products/${submittedProduct.id}/published`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ published: false }),
+    }
+  );
+  assertStatus(submittedPublishLock, 409, "seller submitted publish lock");
+  assert.equal(
+    String(submittedPublishLock.body?.code || ""),
+    "SELLER_PRODUCT_REVIEW_LOCKED",
+    "seller submitted publish lock: wrong error code"
+  );
+  const needsRevisionPublishLock = await sellerClient.request(
+    `/api/seller/stores/${activeStore.id}/products/${needsRevisionProduct.id}/published`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ published: false }),
+    }
+  );
+  assertStatus(needsRevisionPublishLock, 409, "seller needs revision publish lock");
+  assert.equal(
+    String(needsRevisionPublishLock.body?.code || ""),
+    "SELLER_PRODUCT_REVIEW_LOCKED",
+    "seller needs revision publish lock: wrong error code"
+  );
+  logPass("seller review locks");
+
+  logStep("checking admin unpublish removes visibility immediately");
+  const unpublishResponse = await adminClient.request(
+    `/api/admin/products/${visibleProduct.id}/published`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ published: false }),
+    }
+  );
+  assertStatus(unpublishResponse, 200, "admin unpublish");
+  await assertHiddenEverywhere(visibleProduct, "admin unpublish");
+  const unpublishedPreview = await previewCart(
+    customerClient,
+    customerUser.id,
+    visibleProduct.id,
+    "admin unpublish preview"
+  );
+  if (unpublishedPreview.addResponse.status === 409) {
+    assert.equal(
+      String(unpublishedPreview.addResponse.body?.code || ""),
+      "PRODUCT_NOT_AVAILABLE",
+      "admin unpublish preview: hidden product returned unexpected add-to-cart rejection"
+    );
+  } else {
+    assertStatus(
+      unpublishedPreview.addResponse,
+      200,
+      "admin unpublish preview add to cart"
+    );
+    assertStatus(
+      unpublishedPreview.previewResponse as JsonResponse,
+      200,
+      "admin unpublish preview"
+    );
+    assert.equal(
+      unpublishedPreview.previewResponse?.body?.data?.invalidItems?.some(
+        (item: any) => Number(item?.productId) === visibleProduct.id
+      ),
+      true,
+      "admin unpublish preview: unpublished product still treated as purchasable"
+    );
+  }
+  logPass("admin unpublish immediate removal");
+
+  console.log("[mvf-visibility] OK");
+}
+
+run()
+  .catch((error) => {
+    console.error("[mvf-visibility] FAILED", error);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    try {
+      await cleanupFixtures();
+    } catch (cleanupError) {
+      console.error("[mvf-visibility] cleanup failed", cleanupError);
+      process.exitCode = 1;
+    }
+    try {
+      await sequelize.close();
+    } catch {
+      // ignore close failures in smoke cleanup
+    }
+  });

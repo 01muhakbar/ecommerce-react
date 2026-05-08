@@ -1,0 +1,104 @@
+{
+  "runId": "seller-category-selector-smoke-20260420T045839z-c5wt9m",
+  "startedAt": "2026-04-20T04:58:39.628Z",
+  "serverBaseUrl": "http://localhost:3001",
+  "clientBaseUrl": "http://localhost:5173",
+  "storeSlug": "superseller-demo-store",
+  "sellerEmail": "superseller@local.dev",
+  "storeId": 562,
+  "productId": null,
+  "productSlug": null,
+  "categories": {
+    "selected": [
+      {
+        "id": 6,
+        "name": "Beverages",
+        "code": "beverages"
+      },
+      {
+        "id": 3,
+        "name": "Bread & Bakery",
+        "code": "bakery"
+      }
+    ],
+    "searchQuery": "bakery"
+  },
+  "screenshots": [
+    "C:\\Users\\user\\Documents\\ecommerce-react\\reports\\seller-category-selector-smoke-20260420T045839z-c5wt9m\\01-search-category.png"
+  ],
+  "regressions": [],
+  "steps": [
+    {
+      "id": "1",
+      "title": "Bootstrap seller session and category references",
+      "status": "passed",
+      "summary": "Seller session and category references are ready.",
+      "startedAt": "2026-04-20T04:58:39.685Z",
+      "finishedAt": "2026-04-20T04:58:39.826Z",
+      "durationMs": 141,
+      "proof": {
+        "storeId": 562,
+        "selectedCategories": [
+          {
+            "id": 6,
+            "name": "Beverages",
+            "code": "beverages"
+          },
+          {
+            "id": 3,
+            "name": "Bread & Bakery",
+            "code": "bakery"
+          }
+        ],
+        "searchQuery": "bakery",
+        "cookieName": "token"
+      },
+      "rootCause": null
+    },
+    {
+      "id": "2",
+      "title": "Open Seller Product create page",
+      "status": "passed",
+      "summary": "Seller product create page loaded with the new category selector.",
+      "startedAt": "2026-04-20T04:58:40.444Z",
+      "finishedAt": "2026-04-20T04:58:41.944Z",
+      "durationMs": 1500,
+      "proof": {
+        "url": "http://localhost:5173/seller/stores/superseller-demo-store/catalog/products/new"
+      },
+      "rootCause": null
+    },
+    {
+      "id": "3",
+      "title": "Search category using the new search box",
+      "status": "passed",
+      "summary": "Search narrowed the selector to the expected category entry.",
+      "startedAt": "2026-04-20T04:58:41.944Z",
+      "finishedAt": "2026-04-20T04:58:42.360Z",
+      "durationMs": 416,
+      "proof": {
+        "searchQuery": "bakery",
+        "matchedCategory": "Bread & Bakery",
+        "screenshot": "C:\\Users\\user\\Documents\\ecommerce-react\\reports\\seller-category-selector-smoke-20260420T045839z-c5wt9m\\01-search-category.png"
+      },
+      "rootCause": null
+    },
+    {
+      "id": "4",
+      "title": "Select multiple categories and set one as default",
+      "status": "failed",
+      "summary": "locator.check: Error: strict mode violation: locator('label').filter({ has: locator('input[type=\"checkbox\"]') }).filter({ hasText: 'Beverages' }).first().locator('input[type=\"checkbox\"]') resolved to 8 elements:\n    1) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Beverages Parent category' })\n    2) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Bread & Bakery Parent' })\n    3) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Fresh Fruits Parent category' })\n    4) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Fresh Vegetables Parent' })\n    5) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Meat & Fish Parent category' })\n    6) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Milk & Dairy Parent category' })\n    7) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Pantry Parent category pantry' })\n    8) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Snacks Parent category snacks' })\n\nCall log:\n\u001b[2m  - waiting for locator('label').filter({ has: locator('input[type=\"checkbox\"]') }).filter({ hasText: 'Beverages' }).first().locator('input[type=\"checkbox\"]')\u001b[22m\n",
+      "startedAt": "2026-04-20T04:58:42.360Z",
+      "finishedAt": "2026-04-20T04:58:42.458Z",
+      "durationMs": 98,
+      "rootCause": "locator.check: Error: strict mode violation: locator('label').filter({ has: locator('input[type=\"checkbox\"]') }).filter({ hasText: 'Beverages' }).first().locator('input[type=\"checkbox\"]') resolved to 8 elements:\n    1) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Beverages Parent category' })\n    2) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Bread & Bakery Parent' })\n    3) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Fresh Fruits Parent category' })\n    4) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Fresh Vegetables Parent' })\n    5) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Meat & Fish Parent category' })\n    6) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Milk & Dairy Parent category' })\n    7) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Pantry Parent category pantry' })\n    8) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Snacks Parent category snacks' })\n\nCall log:\n\u001b[2m  - waiting for locator('label').filter({ has: locator('input[type=\"checkbox\"]') }).filter({ hasText: 'Beverages' }).first().locator('input[type=\"checkbox\"]')\u001b[22m"
+    }
+  ],
+  "overallStatus": "failed",
+  "failure": {
+    "stepId": "4",
+    "stepTitle": "Select multiple categories and set one as default",
+    "message": "locator.check: Error: strict mode violation: locator('label').filter({ has: locator('input[type=\"checkbox\"]') }).filter({ hasText: 'Beverages' }).first().locator('input[type=\"checkbox\"]') resolved to 8 elements:\n    1) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Beverages Parent category' })\n    2) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Bread & Bakery Parent' })\n    3) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Fresh Fruits Parent category' })\n    4) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Fresh Vegetables Parent' })\n    5) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Meat & Fish Parent category' })\n    6) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Milk & Dairy Parent category' })\n    7) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Pantry Parent category pantry' })\n    8) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Snacks Parent category snacks' })\n\nCall log:\n\u001b[2m  - waiting for locator('label').filter({ has: locator('input[type=\"checkbox\"]') }).filter({ hasText: 'Beverages' }).first().locator('input[type=\"checkbox\"]')\u001b[22m\n",
+    "rootCause": "locator.check: Error: strict mode violation: locator('label').filter({ has: locator('input[type=\"checkbox\"]') }).filter({ hasText: 'Beverages' }).first().locator('input[type=\"checkbox\"]') resolved to 8 elements:\n    1) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Beverages Parent category' })\n    2) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Bread & Bakery Parent' })\n    3) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Fresh Fruits Parent category' })\n    4) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Fresh Vegetables Parent' })\n    5) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Meat & Fish Parent category' })\n    6) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Milk & Dairy Parent category' })\n    7) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Pantry Parent category pantry' })\n    8) <input type=\"checkbox\" class=\"mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-300\"/> aka getByRole('checkbox', { name: 'Snacks Parent category snacks' })\n\nCall log:\n\u001b[2m  - waiting for locator('label').filter({ has: locator('input[type=\"checkbox\"]') }).filter({ hasText: 'Beverages' }).first().locator('input[type=\"checkbox\"]')\u001b[22m"
+  }
+}

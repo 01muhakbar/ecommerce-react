@@ -1,0 +1,54 @@
+import type { Request, Response, NextFunction } from "express";
+import jwt from "jsonwebtoken";
+
+type JwtPayload = {
+  sub: string;
+  email?: string;
+  role?: string;
+};
+
+const COOKIE_NAME = process.env.AUTH_COOKIE_NAME || "token";
+
+function normalize(v?: string) {
+  return String(v || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ");
+}
+
+/**
+ * Membaca cookie "access_token", verifikasi JWT, dan isi req.user
+ * Dev helper: jika ALLOW_HEADER_ROLE=true dan ada header x-test-role, gunakan itu untuk inject role (hanya dev)
+ */
+export function attachUserFromAuth(
+  req: Request,
+  _res: Response,
+  next: NextFunction
+) {
+  try {
+    const allowHeaderRole = process.env.ALLOW_HEADER_ROLE === "true";
+    const testRole = req.get("x-test-role");
+
+    if (allowHeaderRole && testRole) {
+      (req as any).user = {
+        id: "dev-user",
+        email: "dev@example.com",
+        role: normalize(testRole),
+      };
+      return next();
+    }
+    const token = req.cookies?.[COOKIE_NAME];
+    if (!token) return next(); // tidak 401 di sini—biarkan guard yang mengurus
+    const secret = process.env.JWT_SECRET || "dev-secret";
+    const payload = jwt.verify(token, secret) as JwtPayload;
+    (req as any).user = {
+      id: payload.sub,
+      email: payload.email,
+      role: normalize(payload.role),
+    };
+    return next();
+  } catch (err) {
+    // token invalid/expired → anggap tidak login
+    return next();
+  }
+}

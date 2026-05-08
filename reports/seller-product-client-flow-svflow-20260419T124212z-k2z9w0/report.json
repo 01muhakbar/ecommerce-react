@@ -1,0 +1,30 @@
+{
+  "runId": "svflow-20260419T124212z-k2z9w0",
+  "startedAt": "2026-04-19T12:42:12.200Z",
+  "serverBaseUrl": "http://localhost:3001",
+  "clientBaseUrl": "http://localhost:5173",
+  "storeSlug": "super-admin-1",
+  "sellerEmail": "superadmin@local.dev",
+  "productId": null,
+  "finalProductSlug": null,
+  "screenshots": [],
+  "steps": [
+    {
+      "id": "1",
+      "title": "Create product from Seller",
+      "status": "failed",
+      "summary": "Seller login failed before product creation.",
+      "startedAt": "2026-04-19T12:42:12.866Z",
+      "finishedAt": "2026-04-19T12:42:12.900Z",
+      "durationMs": 34,
+      "rootCause": "Please wait before trying again."
+    }
+  ],
+  "overallStatus": "failed",
+  "failure": {
+    "stepId": "1",
+    "stepTitle": "Create product from Seller",
+    "message": "Seller login failed before product creation.",
+    "rootCause": "Please wait before trying again."
+  }
+}

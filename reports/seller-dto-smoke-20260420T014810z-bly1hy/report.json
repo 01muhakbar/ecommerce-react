@@ -1,0 +1,179 @@
+{
+  "runId": "seller-dto-smoke-20260420T014810z-bly1hy",
+  "startedAt": "2026-04-20T01:48:10.541Z",
+  "serverBaseUrl": "http://localhost:3001",
+  "clientBaseUrl": "http://localhost:5173",
+  "storeSlug": "super-admin-1",
+  "sellerEmail": "superadmin@local.dev",
+  "storeId": 1,
+  "category": {
+    "id": 6,
+    "name": "Beverages"
+  },
+  "productId": 846,
+  "productSlug": "seller-dto-smoke-20260420t014810z-bly1hy-edited",
+  "screenshots": [
+    "C:\\Users\\user\\Documents\\ecommerce-react\\reports\\seller-dto-smoke-20260420T014810z-bly1hy\\02-create-edit-page.png",
+    "C:\\Users\\user\\Documents\\ecommerce-react\\reports\\seller-dto-smoke-20260420T014810z-bly1hy\\03-updated-edit-page.png",
+    "C:\\Users\\user\\Documents\\ecommerce-react\\reports\\seller-dto-smoke-20260420T014810z-bly1hy\\05-seller-list.png",
+    "C:\\Users\\user\\Documents\\ecommerce-react\\reports\\seller-dto-smoke-20260420T014810z-bly1hy\\06-seller-detail.png"
+  ],
+  "mismatches": [
+    "Mapped detail DTO tags dropped \"edited\". mappedTags=[]"
+  ],
+  "steps": [
+    {
+      "id": "1",
+      "title": "Bootstrap seller session and references",
+      "status": "passed",
+      "summary": "Seller session, store context, and category references are ready.",
+      "startedAt": "2026-04-20T01:48:10.602Z",
+      "finishedAt": "2026-04-20T01:48:10.736Z",
+      "durationMs": 134,
+      "proof": {
+        "storeId": 1,
+        "categoryId": 6,
+        "categoryName": "Beverages",
+        "cookieName": "token"
+      },
+      "rootCause": null
+    },
+    {
+      "id": "2",
+      "title": "Create seller product through UI and capture payload",
+      "status": "passed",
+      "summary": "Create flow succeeded through Seller UI and emitted the expected adapter payload.",
+      "startedAt": "2026-04-20T01:48:12.013Z",
+      "finishedAt": "2026-04-20T01:48:14.579Z",
+      "durationMs": 2566,
+      "proof": {
+        "productId": 846,
+        "productSlug": "seller-dto-smoke-20260420t014810z-bly1hy-draft",
+        "createPayload": {
+          "name": "DTO Smoke seller-dto-smoke-20260420T014810z-bly1hy",
+          "description": "Smoke validation create payload for seller-dto-smoke-20260420T014810z-bly1hy.",
+          "sku": "DTO-seller-dto-smoke-20260420T014810z-bly1hy",
+          "barcode": "BAR-seller-dto-smoke-20260420T014810z-bly1hy",
+          "slug": "seller-dto-smoke-20260420t014810z-bly1hy-draft",
+          "categoryIds": [
+            6
+          ],
+          "defaultCategoryId": 6,
+          "price": 125000,
+          "salePrice": 99000,
+          "stock": 8,
+          "imageUrls": [
+            "/uploads/products/1776649693943-919037611.jpg",
+            "/uploads/products/1776649693946-965645826.png"
+          ],
+          "tags": [
+            "dto-smoke",
+            "seller-dto-smoke-20260420T014810z-bly1hy"
+          ]
+        },
+        "screenshot": "C:\\Users\\user\\Documents\\ecommerce-react\\reports\\seller-dto-smoke-20260420T014810z-bly1hy\\02-create-edit-page.png"
+      },
+      "rootCause": null
+    },
+    {
+      "id": "3",
+      "title": "Update seller product through UI and capture payload",
+      "status": "passed",
+      "summary": "Update flow succeeded through Seller UI and preserved reordered media plus edited fields.",
+      "startedAt": "2026-04-20T01:48:14.579Z",
+      "finishedAt": "2026-04-20T01:48:15.661Z",
+      "durationMs": 1082,
+      "proof": {
+        "updatePayload": {
+          "name": "DTO Smoke seller-dto-smoke-20260420T014810z-bly1hy Edited",
+          "description": "Smoke validation update payload for seller-dto-smoke-20260420T014810z-bly1hy.",
+          "sku": "DTO-seller-dto-smoke-20260420T014810z-bly1hy",
+          "barcode": "BAR-seller-dto-smoke-20260420T014810z-bly1hy",
+          "slug": "seller-dto-smoke-20260420t014810z-bly1hy-edited",
+          "categoryIds": [
+            6
+          ],
+          "defaultCategoryId": 6,
+          "price": 149000,
+          "salePrice": 109000,
+          "stock": 5,
+          "imageUrls": [
+            "/uploads/products/1776649693946-965645826.png",
+            "/uploads/products/1776649693943-919037611.jpg"
+          ],
+          "tags": [
+            "edited"
+          ]
+        },
+        "screenshot": "C:\\Users\\user\\Documents\\ecommerce-react\\reports\\seller-dto-smoke-20260420T014810z-bly1hy\\03-updated-edit-page.png"
+      },
+      "rootCause": null
+    },
+    {
+      "id": "4",
+      "title": "Validate mapped Seller list and detail DTO",
+      "status": "passed",
+      "summary": "Shared seller DTO adapter preserved list and detail fields after create/update.",
+      "startedAt": "2026-04-20T01:48:15.661Z",
+      "finishedAt": "2026-04-20T01:48:15.705Z",
+      "durationMs": 44,
+      "proof": {
+        "mappedListItem": {
+          "id": 846,
+          "name": "DTO Smoke seller-dto-smoke-20260420T014810z-bly1hy Edited",
+          "slug": "seller-dto-smoke-20260420t014810z-bly1hy-edited",
+          "status": "draft",
+          "published": false,
+          "category": "Beverages",
+          "price": 149000,
+          "salePrice": 109000,
+          "stock": 5,
+          "mediaPreviewUrl": "/uploads/products/1776649693946-965645826.png"
+        },
+        "mappedDetail": {
+          "id": 846,
+          "description": "Smoke validation update payload for seller-dto-smoke-20260420T014810z-bly1hy.",
+          "defaultCategory": "Beverages",
+          "assignedCategories": [
+            "Beverages"
+          ],
+          "tags": [],
+          "visibilityState": "INTERNAL_ONLY",
+          "submissionStatus": "none"
+        }
+      },
+      "rootCause": null
+    },
+    {
+      "id": "5",
+      "title": "Validate Seller list UI",
+      "status": "passed",
+      "summary": "Seller list still renders key product fields correctly after DTO adapter rollout.",
+      "startedAt": "2026-04-20T01:48:15.705Z",
+      "finishedAt": "2026-04-20T01:48:17.944Z",
+      "durationMs": 2239,
+      "proof": {
+        "rowImageSrc": "http://localhost:3001/uploads/products/1776649693946-965645826.png",
+        "screenshot": "C:\\Users\\user\\Documents\\ecommerce-react\\reports\\seller-dto-smoke-20260420T014810z-bly1hy\\05-seller-list.png"
+      },
+      "rootCause": null
+    },
+    {
+      "id": "6",
+      "title": "Validate Seller detail UI",
+      "status": "failed",
+      "summary": "Detail UI tags dropped after update.",
+      "startedAt": "2026-04-20T01:48:17.944Z",
+      "finishedAt": "2026-04-20T01:48:19.443Z",
+      "durationMs": 1499,
+      "rootCause": "Detail UI tags dropped after update."
+    }
+  ],
+  "overallStatus": "failed",
+  "failure": {
+    "stepId": "6",
+    "stepTitle": "Validate Seller detail UI",
+    "message": "Detail UI tags dropped after update.",
+    "rootCause": "Detail UI tags dropped after update."
+  }
+}

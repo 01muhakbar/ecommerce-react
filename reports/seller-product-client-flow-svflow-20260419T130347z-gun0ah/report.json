@@ -1,0 +1,129 @@
+{
+  "runId": "svflow-20260419T130347z-gun0ah",
+  "startedAt": "2026-04-19T13:03:47.010Z",
+  "serverBaseUrl": "http://localhost:3001",
+  "clientBaseUrl": "http://localhost:5174",
+  "storeSlug": "super-admin-1",
+  "sellerEmail": "superadmin@local.dev",
+  "productId": 839,
+  "finalProductSlug": "svflow-20260419t130347z-gun0ah-edited",
+  "screenshots": [
+    "C:\\Users\\user\\Documents\\ecommerce-react\\reports\\seller-product-client-flow-svflow-20260419T130347z-gun0ah\\04-client-listing-published.png",
+    "C:\\Users\\user\\Documents\\ecommerce-react\\reports\\seller-product-client-flow-svflow-20260419T130347z-gun0ah\\05-client-listing-edited-primary.png",
+    "C:\\Users\\user\\Documents\\ecommerce-react\\reports\\seller-product-client-flow-svflow-20260419T130347z-gun0ah\\06-client-detail-edited.png"
+  ],
+  "steps": [
+    {
+      "id": "1",
+      "title": "Create product from Seller",
+      "status": "passed",
+      "summary": "Seller authentication, store context, image upload, and draft creation completed.",
+      "startedAt": "2026-04-19T13:03:47.487Z",
+      "finishedAt": "2026-04-19T13:05:26.697Z",
+      "durationMs": 99210,
+      "proof": {
+        "storeId": 1,
+        "categoryId": 6,
+        "categoryName": "Beverages",
+        "uploadedPrimaryImage": "/uploads/products/1776603926638-980919744.jpg",
+        "uploadedSecondaryImage": "/uploads/products/1776603926654-582714953.png",
+        "productId": 839,
+        "slug": "svflow-20260419t130347z-gun0ah-draft",
+        "createStatus": 201
+      },
+      "rootCause": null
+    },
+    {
+      "id": "2",
+      "title": "Save as draft and check DB/API response",
+      "status": "passed",
+      "summary": "Draft state is consistent across seller API and database, and remains hidden from public client APIs.",
+      "startedAt": "2026-04-19T13:05:26.697Z",
+      "finishedAt": "2026-04-19T13:05:26.778Z",
+      "durationMs": 81,
+      "proof": {
+        "dbStatus": "draft",
+        "dbPublished": 0,
+        "promoImagePath": "/uploads/products/1776603926638-980919744.jpg",
+        "imagePaths": [
+          "/uploads/products/1776603926638-980919744.jpg",
+          "/uploads/products/1776603926654-582714953.png"
+        ],
+        "publicListContainsDraft": false,
+        "publicDetailStatus": 404
+      },
+      "rootCause": null
+    },
+    {
+      "id": "3",
+      "title": "Publish product",
+      "status": "passed",
+      "summary": "Seller publish succeeded and persisted active/public product state.",
+      "startedAt": "2026-04-19T13:05:26.778Z",
+      "finishedAt": "2026-04-19T13:05:26.808Z",
+      "durationMs": 30,
+      "proof": {
+        "publishStatus": 200,
+        "responseVisibility": {
+          "isPublished": true,
+          "storefrontVisible": true,
+          "stateCode": "STOREFRONT_VISIBLE",
+          "label": "Published",
+          "publishLabel": "Published",
+          "sellerLabel": "Visible in storefront",
+          "storefrontLabel": "Visible in storefront",
+          "storefrontReason": "Public storefront queries include this product because publish is on, status is active, and the store is operational.",
+          "sellerHint": "Seller and customer views are aligned for visibility.",
+          "blockingSignals": [],
+          "reasonCode": "STOREFRONT_VISIBLE",
+          "storeOperational": true,
+          "operationalReadiness": {
+            "code": "READY",
+            "label": "Operational",
+            "description": "This store has an active approved payment setup and can be treated as operational on public store-facing lanes.",
+            "isReady": true
+          }
+        },
+        "dbStatus": "active",
+        "dbPublished": 1
+      },
+      "rootCause": null
+    },
+    {
+      "id": "4",
+      "title": "Open Client and check product appears",
+      "status": "passed",
+      "summary": "Published product became visible in public API and client listing without delay symptoms.",
+      "startedAt": "2026-04-19T13:05:26.809Z",
+      "finishedAt": "2026-04-19T13:05:29.325Z",
+      "durationMs": 2516,
+      "proof": {
+        "publicListVisibleAfterMs": 11,
+        "publicDetailVisibleAfterMs": 26,
+        "publicListImageUrl": "/uploads/products/1776603926638-980919744.jpg",
+        "listingUrl": "http://localhost:5174/store/super-admin-1?view=products&q=svflow-20260419T130347z-gun0ah",
+        "listingHasImage": false,
+        "listingImageSrc": null,
+        "screenshot": "C:\\Users\\user\\Documents\\ecommerce-react\\reports\\seller-product-client-flow-svflow-20260419T130347z-gun0ah\\04-client-listing-published.png"
+      },
+      "rootCause": null
+    },
+    {
+      "id": "5",
+      "title": "Edit product and check changes in Client",
+      "status": "failed",
+      "summary": "locator.waitFor: Error: strict mode violation: locator('text=SV Flow svflow-20260419T130347z-gun0ah Edited') resolved to 2 elements:\n    1) <span class=\"font-medium text-slate-700\">SV Flow svflow-20260419T130347z-gun0ah Edited</span> aka getByRole('navigation').getByText('SV Flow svflow-')\n    2) <h1 class=\"text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl\">SV Flow svflow-20260419T130347z-gun0ah Edited</h1> aka getByRole('heading', { name: 'SV Flow svflow-' })\n\nCall log:\n\u001b[2m  - waiting for locator('text=SV Flow svflow-20260419T130347z-gun0ah Edited') to be visible\u001b[22m\n",
+      "startedAt": "2026-04-19T13:05:29.325Z",
+      "finishedAt": "2026-04-19T13:05:32.158Z",
+      "durationMs": 2833,
+      "rootCause": "locator.waitFor: Error: strict mode violation: locator('text=SV Flow svflow-20260419T130347z-gun0ah Edited') resolved to 2 elements:\n    1) <span class=\"font-medium text-slate-700\">SV Flow svflow-20260419T130347z-gun0ah Edited</span> aka getByRole('navigation').getByText('SV Flow svflow-')\n    2) <h1 class=\"text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl\">SV Flow svflow-20260419T130347z-gun0ah Edited</h1> aka getByRole('heading', { name: 'SV Flow svflow-' })\n\nCall log:\n\u001b[2m  - waiting for locator('text=SV Flow svflow-20260419T130347z-gun0ah Edited') to be visible\u001b[22m"
+    }
+  ],
+  "overallStatus": "failed",
+  "failure": {
+    "stepId": "5",
+    "stepTitle": "Edit product and check changes in Client",
+    "message": "locator.waitFor: Error: strict mode violation: locator('text=SV Flow svflow-20260419T130347z-gun0ah Edited') resolved to 2 elements:\n    1) <span class=\"font-medium text-slate-700\">SV Flow svflow-20260419T130347z-gun0ah Edited</span> aka getByRole('navigation').getByText('SV Flow svflow-')\n    2) <h1 class=\"text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl\">SV Flow svflow-20260419T130347z-gun0ah Edited</h1> aka getByRole('heading', { name: 'SV Flow svflow-' })\n\nCall log:\n\u001b[2m  - waiting for locator('text=SV Flow svflow-20260419T130347z-gun0ah Edited') to be visible\u001b[22m\n",
+    "rootCause": "locator.waitFor: Error: strict mode violation: locator('text=SV Flow svflow-20260419T130347z-gun0ah Edited') resolved to 2 elements:\n    1) <span class=\"font-medium text-slate-700\">SV Flow svflow-20260419T130347z-gun0ah Edited</span> aka getByRole('navigation').getByText('SV Flow svflow-')\n    2) <h1 class=\"text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl\">SV Flow svflow-20260419T130347z-gun0ah Edited</h1> aka getByRole('heading', { name: 'SV Flow svflow-' })\n\nCall log:\n\u001b[2m  - waiting for locator('text=SV Flow svflow-20260419T130347z-gun0ah Edited') to be visible\u001b[22m"
+  }
+}

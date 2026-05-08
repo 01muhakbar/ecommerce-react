@@ -1,0 +1,371 @@
+import { Link } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useCart } from "./hooks/useCart.ts";
+import { useQuery } from "@tanstack/react-query";
+import { prevData } from "./lib/rq.ts";
+import { formatCurrency } from "./utils/format.js";
+import { resolveProductImageUrl } from "./utils/productImage.js";
+import {
+  fetchStoreCategories,
+  fetchStoreProductById,
+  fetchStoreProducts,
+} from "./api/public/storeProducts.ts";
+
+const getImageSrc = (product) => resolveProductImageUrl(product);
+
+const fetchProducts = async ({
+  q,
+  search,
+  category,
+  minPrice,
+  maxPrice,
+  minRating,
+  sort,
+  page,
+  limit,
+  discounted,
+}) => {
+  const keyword = search ?? q;
+  return fetchStoreProducts({
+    search: keyword || undefined,
+    category,
+    minPrice,
+    maxPrice,
+    minRating,
+    sort,
+    page,
+    limit,
+    discounted,
+  });
+};
+
+export const useCategories = (options = {}) => {
+  const parentsOnly = options?.parentsOnly === true;
+  return useQuery({
+    queryKey: ["storefront", "categories", parentsOnly ? "parents-only" : "all"],
+    queryFn: () => fetchStoreCategories({ parentsOnly }),
+    staleTime: 1000 * 60 * 5,
+  });
+};
+
+export const useProducts = ({
+  q,
+  search,
+  category,
+  minPrice,
+  maxPrice,
+  minRating,
+  sort,
+  page,
+  limit,
+  discounted,
+  enabled = true,
+  keepPreviousData = true,
+  staleTime = 1000 * 30,
+  refetchOnMount = true,
+  refetchOnWindowFocus = true,
+  refetchOnReconnect = true,
+  refetchInterval,
+}) =>
+  useQuery({
+    queryKey: [
+      "storefront",
+      "products",
+      search || q || "",
+      category || "",
+      minPrice || "",
+      maxPrice || "",
+      minRating || "",
+      sort || "",
+      page || 1,
+      limit || 12,
+      discounted ? "discounted" : "",
+    ],
+    queryFn: () =>
+      fetchProducts({
+        q,
+        search,
+        category,
+        minPrice,
+        maxPrice,
+        minRating,
+        sort,
+        page,
+        limit,
+        discounted,
+      }),
+    placeholderData: keepPreviousData ? prevData : undefined,
+    enabled,
+    staleTime,
+    refetchOnMount,
+    refetchOnWindowFocus,
+    refetchOnReconnect,
+    refetchInterval,
+  });
+
+export const useProduct = (slug) =>
+  useQuery({
+    queryKey: ["storefront", "product", slug],
+    queryFn: () => fetchStoreProductById(slug),
+    enabled: Boolean(slug),
+    staleTime: 1000 * 30,
+  });
+
+export function CategoryDropdown({
+  categories,
+  value,
+  onChange,
+  isLoading,
+  mobileOnly,
+  inline,
+}) {
+  const selectedLabel =
+    categories.find((item) => item.slug === value)?.name || "All categories";
+
+  if (mobileOnly || inline) {
+    return (
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-11 w-full rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
+        disabled={isLoading}
+      >
+        <option key="all-categories" value="">
+          All categories
+        </option>
+        {categories.map((category, index) => {
+          const baseKey = String(
+            category.id ?? category._id ?? category.slug ?? category.name ?? ""
+          );
+          const key = `${baseKey || "category"}-${category.parentId ?? ""}-${
+            category.type ?? ""
+          }-${index}`;
+          return (
+            <option key={key} value={category.slug}>
+              {category.name}
+            </option>
+          );
+        })}
+      </select>
+    );
+  }
+
+  return (
+    <details className="group relative">
+      <summary className="flex cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600 shadow-sm">
+        <span>{selectedLabel}</span>
+        <span className="text-xs">▾</span>
+      </summary>
+      <div className="absolute left-0 z-20 mt-2 w-56 rounded-2xl border border-slate-200 bg-white p-2 text-sm shadow-lg">
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          className="w-full rounded-lg px-3 py-2 text-left text-slate-900 hover:bg-slate-100"
+        >
+          All categories
+        </button>
+        {categories.map((category, index) => {
+          const baseKey = String(
+            category.id ?? category._id ?? category.slug ?? category.name ?? ""
+          );
+          const key = `${baseKey || "category"}-${category.parentId ?? ""}-${
+            category.type ?? ""
+          }-${index}`;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onChange(category.slug)}
+              className="w-full rounded-lg px-3 py-2 text-left text-slate-900 hover:bg-slate-100"
+            >
+              {category.name}
+            </button>
+          );
+        })}
+      </div>
+    </details>
+  );
+}
+
+export function CategoryCard({ category }) {
+  return (
+    <Link
+      to={`/search?category=${encodeURIComponent(category.slug)}&page=1`}
+      className="group rounded-2xl border border-slate-200 bg-white p-4 transition hover:-translate-y-1 hover:border-slate-300 hover:shadow-md"
+    >
+      <div className="text-xs uppercase tracking-[0.15em] text-slate-400">Category</div>
+      <div className="mt-2 text-lg font-semibold text-slate-900">{category.name}</div>
+      <div className="mt-6 text-xs text-slate-500">Explore now →</div>
+    </Link>
+  );
+}
+
+export function ProductCard({ product, variant = "default" }) {
+  const { add, isLoading } = useCart();
+  const resolvedSrc = useMemo(() => getImageSrc(product), [product]);
+  const [imageSrc, setImageSrc] = useState(resolvedSrc);
+  const [isAdding, setIsAdding] = useState(false);
+  const timerRef = useRef(null);
+  const productName = product?.name || product?.title || "Product";
+  const productSlug = product?.slug || product?.id;
+  const isSearchVariant = variant === "search";
+  const ratingValue = Number(product?.rating ?? product?.averageRating ?? 0);
+  const displayRating = Number.isFinite(ratingValue) && ratingValue > 0 ? ratingValue : 4.5;
+  const stockValue = Number(product?.stock);
+  const isOutOfStock = Number.isFinite(stockValue) && stockValue <= 0;
+  const purchaseState = product?.purchaseState || null;
+  const isPurchasable =
+    typeof purchaseState?.isPurchasable === "boolean"
+      ? purchaseState.isPurchasable
+      : !isOutOfStock;
+  const purchaseLabel = isPurchasable
+    ? null
+    : purchaseState?.label || (isOutOfStock ? "Out of stock" : "Unavailable");
+
+  useEffect(() => {
+    setImageSrc(resolvedSrc);
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, [resolvedSrc]);
+
+  const handleAdd = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (isAdding || !isPurchasable) return;
+    setIsAdding(true);
+    add(product?.id, 1, {
+      name: product?.name || product?.title,
+      price: product?.price,
+      imageUrl: imageSrc,
+    });
+    timerRef.current = setTimeout(() => {
+      setIsAdding(false);
+    }, 600);
+  };
+
+  return (
+    <div className="group flex h-full min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-3 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md focus-within:ring-2 focus-within:ring-slate-300 sm:p-4">
+      <Link to={`/product/${productSlug}`} className="block focus:outline-none">
+        <div
+          className={`flex items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-xs text-slate-400 ${
+            isSearchVariant ? "aspect-square w-full" : "h-32 sm:h-36"
+          }`}
+        >
+          {imageSrc ? (
+            <img
+              src={imageSrc}
+              alt={productName}
+              onError={() => setImageSrc("")}
+              className="h-full w-full rounded-xl object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center rounded-xl bg-gradient-to-br from-slate-100 via-white to-slate-200 text-slate-400">
+              <svg
+                viewBox="0 0 24 24"
+                className="h-6 w-6"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+              >
+                <rect x="3" y="5" width="18" height="14" rx="2" />
+                <path d="M7 14l3-3 4 4 3-3 2 2" />
+              </svg>
+            </div>
+          )}
+        </div>
+        <div className="mt-3 flex-1">
+          <div className="text-sm font-semibold text-slate-900 line-clamp-2">
+            {productName}
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            {product.category?.name || "Uncategorized"}
+          </div>
+          {isSearchVariant ? (
+            <div className="mt-1 text-[11px] text-amber-500">{"★".repeat(4)}☆ {displayRating}</div>
+          ) : null}
+        </div>
+      </Link>
+      <div className="mt-3 flex items-center justify-between gap-2 sm:mt-4">
+        <div className="text-sm font-semibold text-slate-900">
+          {formatCurrency(Number(product.price || 0))}
+        </div>
+        <button
+          type="button"
+          onClick={handleAdd}
+          aria-label={
+            !isPurchasable ? `${productName} is unavailable` : `Add ${productName} to cart`
+          }
+          disabled={isAdding || isLoading || !isPurchasable}
+          className={
+            isSearchVariant
+              ? "inline-flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500 text-lg font-semibold text-white shadow-sm transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+              : "inline-flex h-10 w-full items-center justify-center rounded-full border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-60 sm:h-9 sm:w-auto sm:text-xs"
+          }
+        >
+          {isSearchVariant
+            ? !isPurchasable
+              ? "!"
+              : isAdding
+                ? "✓"
+                : "+"
+            : !isPurchasable
+              ? purchaseLabel
+              : isAdding
+                ? "Added"
+                : "Add to cart"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function Pagination({ page, total, limit, onPageChange }) {
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  if (totalPages <= 1) return null;
+
+  const pages = [];
+  const start = Math.max(1, page - 2);
+  const end = Math.min(totalPages, page + 2);
+
+  for (let i = start; i <= end; i += 1) {
+    pages.push(i);
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onClick={() => onPageChange(Math.max(1, page - 1))}
+        className="inline-flex h-10 items-center justify-center rounded-full border border-slate-200 px-4 text-sm sm:h-auto sm:px-3 sm:py-1 sm:text-xs"
+        disabled={page === 1}
+      >
+        Prev
+      </button>
+      {pages.map((num) => (
+        <button
+          key={num}
+          type="button"
+          onClick={() => onPageChange(num)}
+          className={`inline-flex h-10 min-w-10 items-center justify-center rounded-full px-3 text-sm sm:h-auto sm:min-w-0 sm:py-1 sm:text-xs ${
+            num === page
+              ? "bg-slate-900 text-white"
+              : "border border-slate-200 text-slate-600"
+          }`}
+        >
+          {num}
+        </button>
+      ))}
+      <button
+        type="button"
+        onClick={() => onPageChange(Math.min(totalPages, page + 1))}
+        className="inline-flex h-10 items-center justify-center rounded-full border border-slate-200 px-4 text-sm sm:h-auto sm:px-3 sm:py-1 sm:text-xs"
+        disabled={page === totalPages}
+      >
+        Next
+      </button>
+    </div>
+  );
+}

@@ -1,0 +1,14 @@
+.simple-page {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.simple-page h1 {
+  margin: 0 0 8px;
+}
+
+.simple-page p {
+  color: #6b7280;
+}

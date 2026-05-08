@@ -1,0 +1,200 @@
+{
+  "startedAt": "2026-03-04T11:51:09",
+  "health": {
+    "ok": true,
+    "uptime": 1140,
+    "db": "connected",
+    "timestamp": "2026-03-04T03:51:09.555Z"
+  },
+  "clientStatus": 200,
+  "productUsed": {
+    "id": 1,
+    "name": "Organic Banana"
+  },
+  "scenarioA": {
+    "userEmail": "qa.shipping.2647ef74@local.dev",
+    "authUser": {
+      "id": 40,
+      "email": "qa.shipping.2647ef74@local.dev",
+      "name": "QA Shipping User",
+      "role": "customer"
+    },
+    "defaultAddress": {
+      "id": 6,
+      "userId": 40,
+      "fullName": "QA Shipping User",
+      "phoneNumber": "081234567890",
+      "province": "Jawa Barat",
+      "city": "Bandung",
+      "district": "Coblong",
+      "postalCode": "40123",
+      "streetName": "Jl. Ciumbuleuit",
+      "building": "Tower A",
+      "houseNumber": "10",
+      "otherDetails": "Unit 7",
+      "markAs": "HOME",
+      "isPrimary": true,
+      "isStore": false,
+      "isReturn": false,
+      "createdAt": "2026-03-04T03:51:09Z",
+      "updatedAt": "2026-03-04T03:51:09Z"
+    },
+    "orderCreate": {
+      "id": 30,
+      "ref": "STORE-1772596269873-7",
+      "invoiceNo": "STORE-1772596269873-7",
+      "status": "pending",
+      "totalAmount": 18000,
+      "createdAt": "2026-03-04T03:51:09.873Z",
+      "subtotal": 18000,
+      "discount": 0,
+      "tax": 0,
+      "shipping": 0,
+      "total": 18000,
+      "shippingDetails": {
+        "fullName": "QA Shipping User",
+        "phoneNumber": "081234567890",
+        "province": "Jawa Barat",
+        "city": "Bandung",
+        "district": "Coblong",
+        "postalCode": "40123",
+        "streetName": "Jl. Ciumbuleuit",
+        "building": "Tower A",
+        "houseNumber": "10",
+        "otherDetails": "Unit 7",
+        "markAs": "HOME"
+      },
+      "useDefaultShipping": true,
+      "paymentMethod": "COD",
+      "items": [
+        {
+          "productId": 1,
+          "name": "Organic Banana",
+          "quantity": 1,
+          "price": 18000,
+          "lineTotal": 18000
+        }
+      ]
+    },
+    "orderDetail": {
+      "ref": "STORE-1772596269873-7",
+      "invoiceNo": "STORE-1772596269873-7",
+      "status": "pending",
+      "totalAmount": 18000,
+      "subtotal": 18000,
+      "discount": 0,
+      "tax": 0,
+      "shipping": 0,
+      "couponCode": null,
+      "paymentMethod": "COD",
+      "createdAt": "2026-03-04T03:51:09Z",
+      "shippingDetails": "{\"fullName\":\"QA Shipping User\",\"phoneNumber\":\"081234567890\",\"province\":\"Jawa Barat\",\"city\":\"Bandung\",\"district\":\"Coblong\",\"postalCode\":\"40123\",\"streetName\":\"Jl. Ciumbuleuit\",\"building\":\"Tower A\",\"houseNumber\":\"10\",\"otherDetails\":\"Unit 7\",\"markAs\":\"HOME\"}",
+      "customerName": "QA Shipping User",
+      "customerPhone": "081234567890",
+      "customerAddress": "Jl. Ciumbuleuit 10, Tower A, Coblong, Bandung, Jawa Barat, 40123",
+      "items": [
+        {
+          "productId": 1,
+          "name": "Organic Banana",
+          "quantity": 1,
+          "price": 18000,
+          "lineTotal": 18000
+        }
+      ]
+    }
+  },
+  "scenarioB": {
+    "selectedAddressId": 7,
+    "manualShippingSubmitted": {
+      "fullName": "QA Shipping User Office",
+      "phoneNumber": "081200000111",
+      "province": "DKI Jakarta",
+      "city": "Jakarta Selatan",
+      "district": "Setiabudi",
+      "postalCode": "12910",
+      "streetName": "Jl. Sudirman",
+      "building": "Gedung B",
+      "houseNumber": "99A-MANUAL",
+      "otherDetails": "Lantai 12",
+      "markAs": "OFFICE"
+    },
+    "orderCreate": {
+      "id": 31,
+      "ref": "STORE-1772596269964-24",
+      "invoiceNo": "STORE-1772596269964-24",
+      "status": "pending",
+      "totalAmount": 18000,
+      "createdAt": "2026-03-04T03:51:09.965Z",
+      "subtotal": 18000,
+      "discount": 0,
+      "tax": 0,
+      "shipping": 0,
+      "total": 18000,
+      "shippingDetails": {
+        "fullName": "QA Shipping User Office",
+        "phoneNumber": "081200000111",
+        "province": "DKI Jakarta",
+        "city": "Jakarta Selatan",
+        "district": "Setiabudi",
+        "postalCode": "12910",
+        "streetName": "Jl. Sudirman",
+        "building": "Gedung B",
+        "houseNumber": "99A-MANUAL",
+        "otherDetails": "Lantai 12",
+        "markAs": "OFFICE"
+      },
+      "useDefaultShipping": false,
+      "paymentMethod": "COD",
+      "items": [
+        {
+          "productId": 1,
+          "name": "Organic Banana",
+          "quantity": 1,
+          "price": 18000,
+          "lineTotal": 18000
+        }
+      ]
+    },
+    "orderDetail": {
+      "ref": "STORE-1772596269964-24",
+      "invoiceNo": "STORE-1772596269964-24",
+      "status": "pending",
+      "totalAmount": 18000,
+      "subtotal": 18000,
+      "discount": 0,
+      "tax": 0,
+      "shipping": 0,
+      "couponCode": null,
+      "paymentMethod": "COD",
+      "createdAt": "2026-03-04T03:51:09Z",
+      "shippingDetails": "{\"fullName\":\"QA Shipping User Office\",\"phoneNumber\":\"081200000111\",\"province\":\"DKI Jakarta\",\"city\":\"Jakarta Selatan\",\"district\":\"Setiabudi\",\"postalCode\":\"12910\",\"streetName\":\"Jl. Sudirman\",\"building\":\"Gedung B\",\"houseNumber\":\"99A-MANUAL\",\"otherDetails\":\"Lantai 12\",\"markAs\":\"OFFICE\"}",
+      "customerName": "QA Shipping User Office",
+      "customerPhone": "081200000111",
+      "customerAddress": "Jl. Sudirman 99A-MANUAL, Gedung B, Setiabudi, Jakarta Selatan, DKI Jakarta, 12910",
+      "items": [
+        {
+          "productId": 1,
+          "name": "Organic Banana",
+          "quantity": 1,
+          "price": 18000,
+          "lineTotal": 18000
+        }
+      ]
+    }
+  },
+  "scenarioC": {
+    "invalidPostal": {
+      "status": 400,
+      "body": {
+        "message": "Invalid shipping details: postalCode"
+      }
+    },
+    "noPrimaryDefault": {
+      "status": 400,
+      "body": {
+        "message": "Default shipping address not set"
+      }
+    }
+  },
+  "completedAt": "2026-03-04T11:51:10"
+}

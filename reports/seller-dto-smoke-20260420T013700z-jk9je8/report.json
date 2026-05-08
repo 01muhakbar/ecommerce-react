@@ -1,0 +1,36 @@
+{
+  "runId": "seller-dto-smoke-20260420T013700z-jk9je8",
+  "startedAt": "2026-04-20T01:37:00.378Z",
+  "serverBaseUrl": "http://localhost:3001",
+  "clientBaseUrl": "http://localhost:5173",
+  "storeSlug": "super-admin-1",
+  "sellerEmail": "superadmin@local.dev",
+  "storeId": null,
+  "category": {
+    "id": null,
+    "name": null
+  },
+  "productId": null,
+  "productSlug": null,
+  "screenshots": [],
+  "mismatches": [],
+  "steps": [
+    {
+      "id": "1",
+      "title": "Bootstrap seller session and references",
+      "status": "failed",
+      "summary": "Seller login failed before smoke validation.",
+      "startedAt": "2026-04-20T01:37:00.457Z",
+      "finishedAt": "2026-04-20T01:37:00.473Z",
+      "durationMs": 16,
+      "rootCause": "Please wait before trying again."
+    }
+  ],
+  "overallStatus": "failed",
+  "failure": {
+    "stepId": "1",
+    "stepTitle": "Bootstrap seller session and references",
+    "message": "Seller login failed before smoke validation.",
+    "rootCause": "Please wait before trying again."
+  }
+}

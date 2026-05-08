@@ -1,0 +1,8 @@
+.loading-state {
+  padding: 16px;
+  border: 1px dashed #e5e7eb;
+  border-radius: 12px;
+  background: #f9fafb;
+  color: #6b7280;
+  font-size: 14px;
+}
