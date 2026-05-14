@@ -108,6 +108,7 @@ const importRowSchema = z.object({
 
 const serializeAdminCoupon = (coupon: any) => {
   const plain = coupon?.get ? coupon.get({ plain: true }) : coupon;
+  const governance = serializeAdminCouponGovernance(plain);
   return {
     id: plain?.id,
     code: String(plain?.code || "").trim().toUpperCase(),
@@ -122,11 +123,14 @@ const serializeAdminCoupon = (coupon: any) => {
     bannerImageUrl: normalizeCouponAssetUrl(
       plain?.bannerImageUrl ?? plain?.banner_image_url ?? null
     ),
+    scopeType: governance.scopeType,
+    storeId: governance.storeId,
+    store: governance.store,
     startsAt: plain?.startsAt ?? null,
     expiresAt: plain?.expiresAt ?? null,
     createdAt: plain?.createdAt ?? null,
     updatedAt: plain?.updatedAt ?? null,
-    governance: serializeAdminCouponGovernance(plain),
+    governance,
   };
 };
 

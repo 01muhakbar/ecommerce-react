@@ -63,7 +63,6 @@ import {
 } from "../services/splitOperationalTruth.service.js";
 import { getDefaultAddressByUser } from "../services/userAddress.service.js";
 import { protect } from "../middleware/authMiddleware.js";
-import { STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES } from "../services/sharedContracts/storePaymentProfileCompat.js";
 
 const router = Router();
 
@@ -1361,9 +1360,7 @@ router.get(
       }
 
       const productStoreInclude = storeSlug
-        ? {
-            model: Store,
-            as: "store",
+        ? buildPublicOperationalStoreInclude({
             attributes: [
               "id",
               "name",
@@ -1376,21 +1373,7 @@ router.get(
               "whatsapp",
               "createdAt",
             ],
-            required: true,
-            where: { status: "ACTIVE" } as any,
-            include: [
-              {
-                association: "paymentProfile",
-                attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
-                required: false,
-              },
-              {
-                association: "activePaymentProfile",
-                attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
-                required: false,
-              },
-            ],
-          }
+          })
         : buildPublicOperationalStoreInclude({
             attributes: [
               "id",
@@ -3607,5 +3590,3 @@ router.post(
 );
 
 export default router;
-
-

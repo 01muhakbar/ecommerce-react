@@ -738,6 +738,387 @@ const buildVariantRecoveryState = (item, invalidItem, sourcePath) => {
   };
 };
 
+const CHECKOUT_PREVIEW_AMOUNT_TOLERANCE = 0.01;
+
+const toCheckoutPreviewNumber = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const normalizeCheckoutPreviewToken = (value) => {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return normalized || null;
+};
+
+const normalizeCheckoutPreviewSelections = (value) => {
+  if (!Array.isArray(value)) return "";
+
+  return value
+    .map((selection) => {
+      const attribute =
+        normalizeCheckoutPreviewToken(
+          selection?.attributeId ??
+            selection?.attribute_id ??
+            selection?.attributeName ??
+            selection?.name
+        ) || "";
+      const selectedValue =
+        normalizeCheckoutPreviewToken(
+          selection?.valueId ??
+            selection?.value_id ??
+            selection?.value ??
+            selection?.label
+        ) || "";
+      return `${attribute}:${selectedValue}`;
+    })
+    .filter((entry) => entry !== ":")
+    .sort()
+    .join("|");
+};
+
+const normalizeCheckoutPreviewLine = (item) => {
+  const qty = Math.max(0, toCheckoutPreviewNumber(item?.qty ?? item?.quantity));
+  const price = Math.max(
+    0,
+    toCheckoutPreviewNumber(item?.price ?? item?.unitPrice ?? item?.unit_price)
+  );
+  const explicitLineTotal = toCheckoutPreviewNumber(
+    item?.lineTotal ?? item?.line_total ?? item?.totalPrice,
+    Number.NaN
+  );
+  const lineTotal = Number.isFinite(explicitLineTotal) ? explicitLineTotal : qty * price;
+
+  return {
+    lineId: normalizeCheckoutPreviewToken(item?.lineId ?? item?.line_id),
+    cartItemId: toCheckoutPreviewNumber(item?.cartItemId ?? item?.cart_item_id, 0) || null,
+    productId: normalizeCheckoutPreviewToken(item?.productId ?? item?.product_id ?? item?.id),
+    variantKey: normalizeCheckoutPreviewToken(item?.variantKey ?? item?.variant_key),
+    variantSelectionsKey: normalizeCheckoutPreviewSelections(item?.variantSelections),
+    qty,
+    price,
+    lineTotal,
+  };
+};
+
+const normalizeCheckoutPreviewSummary = (summary) => {
+  if (!summary || typeof summary !== "object") return null;
+  const subtotalAmount = toCheckoutPreviewNumber(
+    summary.subtotalAmount ?? summary.subtotal ?? summary.subtotal_amount,
+    Number.NaN
+  );
+  const shippingAmount = toCheckoutPreviewNumber(
+    summary.shippingAmount ?? summary.shipping ?? summary.shipping_amount,
+    Number.NaN
+  );
+  const grandTotal = toCheckoutPreviewNumber(
+    summary.grandTotal ?? summary.totalAmount ?? summary.total ?? summary.grand_total,
+    Number.NaN
+  );
+  const totalItems = toCheckoutPreviewNumber(
+    summary.totalItems ??
+      summary.totalQuantity ??
+      summary.quantity ??
+      summary.itemQuantity ??
+      summary.total_items,
+    Number.NaN
+  );
+
+  return {
+    ...summary,
+    subtotalAmount,
+    shippingAmount,
+    grandTotal,
+    totalItems,
+  };
+};
+
+const getRawCheckoutPreviewGroups = (data) => {
+  const candidates = [
+    data?.groups,
+    data?.storeGroups,
+    data?.stores,
+    data?.sellerGroups,
+  ];
+  const groups = candidates.find((entry) => Array.isArray(entry));
+  return Array.isArray(groups) ? groups : [];
+};
+
+const buildCheckoutDisplayItemFromSummary = (item) => ({
+  lineId: item.lineId,
+  cartItemId: item.cartItemId,
+  productId: item.productId,
+  productName: item.name,
+  slug: "",
+  qty: item.qty,
+  price: item.price,
+  lineTotal: Number(item.price || 0) * Number(item.qty || 0),
+  image: item.imageUrl,
+  stock: item.stock,
+  sku: item.variantSku ?? null,
+  barcode: item.variantBarcode ?? null,
+  variantKey: item.variantKey,
+  variantLabel: item.variantLabel,
+  variantSelections: item.variantSelections ?? [],
+  category: null,
+});
+
+const buildVisibleCartCheckoutDisplayGroup = (sourceGroups, summaryItems, summary) => {
+  if (!summaryItems.length) return [];
+  const sourceGroup =
+    Array.isArray(sourceGroups) && sourceGroups.length === 1 ? sourceGroups[0] : null;
+  const displayItems = summaryItems.map(buildCheckoutDisplayItemFromSummary);
+  const displaySubtotal = displayItems.reduce(
+    (sum, item) => sum + Number(item.lineTotal || 0),
+    0
+  );
+  const sourceSubtotal = Number(sourceGroup?.subtotalAmount);
+  const sourceShipping = Number(sourceGroup?.shippingAmount);
+  const sourceTotal = Number(sourceGroup?.totalAmount);
+  const summaryShipping = Number(summary?.shippingAmount);
+  const shippingAmount = Number.isFinite(sourceShipping)
+    ? sourceShipping
+    : Number.isFinite(summaryShipping)
+      ? summaryShipping
+      : 0;
+  const subtotalAmount = Number.isFinite(sourceSubtotal) ? sourceSubtotal : displaySubtotal;
+
+  return [
+    {
+      storeId: sourceGroup?.storeId ?? "visible-cart",
+      storeName: sourceGroup?.storeName || "Store summary",
+      storeSlug: sourceGroup?.storeSlug || "",
+      subtotalAmount,
+      shippingAmount,
+      totalAmount: Number.isFinite(sourceTotal) ? sourceTotal : subtotalAmount + shippingAmount,
+      paymentAvailable:
+        typeof sourceGroup?.paymentAvailable === "boolean" ? sourceGroup.paymentAvailable : true,
+      paymentMethod: sourceGroup?.paymentMethod ?? null,
+      paymentProfileStatus: sourceGroup?.paymentProfileStatus ?? "Unavailable",
+      paymentProfileStatusMeta: sourceGroup?.paymentProfileStatusMeta ?? null,
+      paymentAvailabilityMeta: sourceGroup?.paymentAvailabilityMeta ?? null,
+      merchantName: sourceGroup?.merchantName ?? null,
+      accountName: sourceGroup?.accountName ?? null,
+      qrisImageUrl: sourceGroup?.qrisImageUrl ?? null,
+      qrisPayload: sourceGroup?.qrisPayload ?? null,
+      paymentInstruction: sourceGroup?.paymentInstruction ?? null,
+      warning: sourceGroup?.warning ?? null,
+      items: displayItems,
+    },
+  ];
+};
+
+const resolveCheckoutPreviewDisplayGroups = ({
+  checkoutPreviewGroups,
+  rawCheckoutPreviewGroups,
+  summaryItems,
+  checkoutPreviewSummary,
+  canUseVisibleCartFallback,
+}) => {
+  const previewGroups = Array.isArray(checkoutPreviewGroups) ? checkoutPreviewGroups : [];
+  const hasRenderablePreviewItems = previewGroups.some(
+    (group) => Array.isArray(group?.items) && group.items.length > 0
+  );
+  if (hasRenderablePreviewItems) return previewGroups;
+  if (!canUseVisibleCartFallback) return previewGroups;
+  return buildVisibleCartCheckoutDisplayGroup(
+    previewGroups.length > 0 ? previewGroups : rawCheckoutPreviewGroups,
+    summaryItems,
+    checkoutPreviewSummary
+  );
+};
+
+const checkoutPreviewAmountsMatch = (left, right) =>
+  Math.abs(toCheckoutPreviewNumber(left) - toCheckoutPreviewNumber(right)) <=
+  CHECKOUT_PREVIEW_AMOUNT_TOLERANCE;
+
+const checkoutPreviewLineMatches = (localLine, previewLine, requireVariantIdentity) => {
+  if (!localLine?.productId || localLine.productId !== previewLine?.productId) return false;
+  const bothHaveCartItemId = Boolean(localLine.cartItemId && previewLine.cartItemId);
+  const sameCartItem = bothHaveCartItemId && localLine.cartItemId === previewLine.cartItemId;
+  const bothHaveLineId = Boolean(localLine.lineId && previewLine.lineId);
+  const sameLineId = bothHaveLineId && localLine.lineId === previewLine.lineId;
+
+  const bothHaveVariantKey = Boolean(localLine.variantKey && previewLine.variantKey);
+  const bothHaveSelections = Boolean(localLine.variantSelectionsKey && previewLine.variantSelectionsKey);
+  const variantKeysMatch = bothHaveVariantKey && localLine.variantKey === previewLine.variantKey;
+  const selectionsMatch =
+    bothHaveSelections && localLine.variantSelectionsKey === previewLine.variantSelectionsKey;
+  if (!sameCartItem && !sameLineId) {
+    if (bothHaveVariantKey && !variantKeysMatch) return false;
+    if (!variantKeysMatch && bothHaveSelections && !selectionsMatch) return false;
+  }
+  if (
+    requireVariantIdentity &&
+    (localLine.variantKey || previewLine.variantKey || localLine.variantSelectionsKey || previewLine.variantSelectionsKey) &&
+    !sameCartItem &&
+    !sameLineId &&
+    !variantKeysMatch &&
+    !selectionsMatch
+  ) {
+    return false;
+  }
+
+  return (
+    checkoutPreviewAmountsMatch(localLine.qty, previewLine.qty) &&
+    checkoutPreviewAmountsMatch(localLine.price, previewLine.price) &&
+    checkoutPreviewAmountsMatch(localLine.lineTotal, previewLine.lineTotal)
+  );
+};
+
+const checkoutPreviewLinesMatchVisibleCart = (localLines, previewLines) => {
+  if (!localLines.length || localLines.length !== previewLines.length) return false;
+
+  const localProductCounts = localLines.reduce((counts, line) => {
+    counts.set(line.productId, (counts.get(line.productId) || 0) + 1);
+    return counts;
+  }, new Map());
+  const previewProductCounts = previewLines.reduce((counts, line) => {
+    counts.set(line.productId, (counts.get(line.productId) || 0) + 1);
+    return counts;
+  }, new Map());
+  const unmatchedPreviewLines = [...previewLines];
+
+  return localLines.every((localLine) => {
+    const requireVariantIdentity =
+      (localProductCounts.get(localLine.productId) || 0) > 1 ||
+      (previewProductCounts.get(localLine.productId) || 0) > 1;
+    const matchIndex = unmatchedPreviewLines.findIndex((previewLine) =>
+      checkoutPreviewLineMatches(localLine, previewLine, requireVariantIdentity)
+    );
+    if (matchIndex === -1) return false;
+    unmatchedPreviewLines.splice(matchIndex, 1);
+    return true;
+  });
+};
+
+const getCheckoutPreviewStatus = ({
+  visibleLines,
+  previewLines,
+  visibleSummary,
+  previewSummary,
+  isBootstrapping,
+  isPreviewLoading,
+  previewError,
+  hasPreviewSnapshot,
+  previewHasRenderableGroups,
+}) => {
+  const normalizedVisibleLines = Array.isArray(visibleLines) ? visibleLines : [];
+  const normalizedPreviewLines = Array.isArray(previewLines) ? previewLines : [];
+  const visibleLineCount = normalizedVisibleLines.length;
+  const previewLineCount = normalizedPreviewLines.length;
+  const visibleTotalQuantity = toCheckoutPreviewNumber(visibleSummary?.totalItems);
+  const visibleSubtotal = toCheckoutPreviewNumber(visibleSummary?.subtotalAmount);
+  const previewLineTotalQuantity = normalizedPreviewLines.reduce(
+    (sum, line) => sum + toCheckoutPreviewNumber(line?.qty),
+    0
+  );
+  const previewLineSubtotal = normalizedPreviewLines.reduce(
+    (sum, line) => sum + toCheckoutPreviewNumber(line?.lineTotal),
+    0
+  );
+  const previewTotalQuantity = Number.isFinite(Number(previewSummary?.totalItems))
+    ? toCheckoutPreviewNumber(previewSummary?.totalItems)
+    : previewLineTotalQuantity;
+  const previewSubtotal = Number.isFinite(Number(previewSummary?.subtotalAmount))
+    ? toCheckoutPreviewNumber(previewSummary?.subtotalAmount)
+    : previewLineSubtotal;
+
+  const base = {
+    isLoading: false,
+    isReady: false,
+    isMismatch: false,
+    isUsingFallback: false,
+    reason: "unknown",
+    visibleSubtotal,
+    previewSubtotal,
+    visibleTotalQuantity,
+    previewTotalQuantity,
+    visibleLineCount,
+    previewLineCount,
+    lineCountMatches: visibleLineCount === previewLineCount,
+    totalQuantityMatches: checkoutPreviewAmountsMatch(
+      visibleTotalQuantity,
+      previewTotalQuantity
+    ),
+    subtotalMatches: checkoutPreviewAmountsMatch(visibleSubtotal, previewSubtotal),
+    linesMatch: false,
+  };
+
+  if (visibleLineCount === 0) {
+    return {
+      ...base,
+      reason: "empty-cart",
+    };
+  }
+
+  if (isBootstrapping || isPreviewLoading) {
+    return {
+      ...base,
+      isLoading: true,
+      reason: "loading",
+    };
+  }
+
+  if (previewError) {
+    return {
+      ...base,
+      isMismatch: false,
+      reason: "preview-error",
+    };
+  }
+
+  if (!hasPreviewSnapshot || !previewSummary) {
+    return {
+      ...base,
+      isLoading: true,
+      reason: "missing-preview",
+    };
+  }
+
+  const linesMatch = checkoutPreviewLinesMatchVisibleCart(
+    normalizedVisibleLines,
+    normalizedPreviewLines
+  );
+  const status = {
+    ...base,
+    linesMatch,
+    lineCountMatches: visibleLineCount === previewLineCount,
+    totalQuantityMatches: checkoutPreviewAmountsMatch(
+      visibleTotalQuantity,
+      previewTotalQuantity
+    ),
+    subtotalMatches: checkoutPreviewAmountsMatch(visibleSubtotal, previewSubtotal),
+  };
+  const isReady =
+    linesMatch &&
+    status.lineCountMatches &&
+    status.totalQuantityMatches &&
+    status.subtotalMatches;
+
+  if (isReady) {
+    return {
+      ...status,
+      isReady: true,
+      isUsingFallback: !previewHasRenderableGroups,
+      reason: "ready",
+    };
+  }
+
+  const reason = !status.lineCountMatches
+    ? "line-count-mismatch"
+    : !linesMatch
+      ? "line-mismatch"
+      : !status.totalQuantityMatches
+        ? "quantity-mismatch"
+        : "subtotal-mismatch";
+
+  return {
+    ...status,
+    isMismatch: true,
+    reason,
+  };
+};
+
 export default function CheckoutPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -748,6 +1129,7 @@ export default function CheckoutPage() {
     items,
     isLoading: isCartLoading,
     hasInitialized: hasCartBootstrapInitialized,
+    refreshCart,
     update: updateCartItem,
     remove: removeCartItem,
   } = useCart();
@@ -859,6 +1241,11 @@ export default function CheckoutPage() {
     );
   }, [hasCheckoutAuthHint, isAuthLoading, navigate, postLoginState, user]);
 
+  useEffect(() => {
+    if (!hasCheckoutAuthHint || !hasHydrated || !user) return;
+    void refreshCart(false);
+  }, [hasCheckoutAuthHint, hasHydrated, refreshCart, user]);
+
   const hasItems = items.length > 0;
   const isInitialCartSyncing =
     hasCheckoutAuthHint &&
@@ -901,6 +1288,8 @@ export default function CheckoutPage() {
         variantKey: item.variantKey ?? null,
         variantLabel: item.variantLabel ?? null,
         variantSelections: Array.isArray(item.variantSelections) ? item.variantSelections : [],
+        variantSku: item.variantSku ?? null,
+        variantBarcode: item.variantBarcode ?? null,
       })),
     [items]
   );
@@ -915,7 +1304,13 @@ export default function CheckoutPage() {
   const checkoutPreviewQuery = useQuery({
     queryKey: ["checkout-preview-by-store", checkoutPreviewSignature],
     queryFn: () => previewCheckoutByStore(),
-    enabled: hasHydrated && hasItems && !isRemoteSyncing && hasCheckoutAuthHint,
+    enabled:
+      hasHydrated &&
+      hasCartBootstrapInitialized &&
+      hasItems &&
+      !isCartLoading &&
+      !isRemoteSyncing &&
+      hasCheckoutAuthHint,
     staleTime: 10_000,
     retry: false,
   });
@@ -978,13 +1373,79 @@ export default function CheckoutPage() {
   const checkoutPreviewData = checkoutPreviewQuery.data?.data;
   const hasCheckoutPreviewSnapshot =
     checkoutPreviewData && typeof checkoutPreviewData === "object";
-  const checkoutPreviewGroups = checkoutPreviewData?.groups ?? [];
+  const rawCheckoutPreviewGroups = getRawCheckoutPreviewGroups(checkoutPreviewData);
+  const rawCheckoutPreviewSummary = normalizeCheckoutPreviewSummary(
+    checkoutPreviewData?.summary ?? null
+  );
+  const localCartSubtotalValue = summaryItems.reduce(
+    (sum, item) => sum + Number(item.price || 0) * Number(item.qty || 0),
+    0
+  );
+  const localCartTotalQty = summaryItems.reduce(
+    (sum, item) => sum + Number(item.qty || 0),
+    0
+  );
+  const localCartPreviewLines = summaryItems.map((item) =>
+    normalizeCheckoutPreviewLine({
+      lineId: item.lineId,
+      cartItemId: item.cartItemId,
+      productId: item.productId,
+      variantKey: item.variantKey,
+      variantSelections: item.variantSelections,
+      qty: item.qty,
+      price: item.price,
+      lineTotal: Number(item.price || 0) * Number(item.qty || 0),
+    })
+  );
+  const backendCartPreviewLines = rawCheckoutPreviewGroups
+    .flatMap((group) => (Array.isArray(group?.items) ? group.items : []))
+    .map((item) => normalizeCheckoutPreviewLine(item));
+  const rawCheckoutPreviewHasRenderableGroups = rawCheckoutPreviewGroups.some(
+    (group) => Array.isArray(group?.items) && group.items.length > 0
+  );
+  const checkoutPreviewStatus = getCheckoutPreviewStatus({
+    visibleLines: localCartPreviewLines,
+    previewLines: backendCartPreviewLines,
+    visibleSummary: {
+      totalItems: localCartTotalQty,
+      subtotalAmount: localCartSubtotalValue,
+      shippingAmount: 0,
+      grandTotal: localCartSubtotalValue,
+    },
+    previewSummary: rawCheckoutPreviewSummary,
+    isBootstrapping:
+      !hasHydrated ||
+      !hasCartBootstrapInitialized ||
+      isCartLoading ||
+      isRemoteSyncing,
+    isPreviewLoading: checkoutPreviewQuery.isLoading,
+    previewError: checkoutPreviewQuery.isError,
+    hasPreviewSnapshot: Boolean(hasCheckoutPreviewSnapshot),
+    previewHasRenderableGroups: rawCheckoutPreviewHasRenderableGroups,
+  });
+  const hasCheckoutPreviewCartMismatch = checkoutPreviewStatus.isMismatch;
+  const checkoutPreviewGroups = hasCheckoutPreviewCartMismatch
+    ? []
+    : rawCheckoutPreviewGroups;
   const checkoutPreviewInvalidItems = checkoutPreviewData?.invalidItems ?? [];
   const checkoutPreviewInvalidMessages = checkoutPreviewInvalidItems.map((item) => ({
     ...item,
     message: resolveInvalidCheckoutItemMessage(item),
   }));
-  const checkoutPreviewSummary = checkoutPreviewData?.summary ?? null;
+  const checkoutPreviewSummary = hasCheckoutPreviewCartMismatch
+    ? null
+    : rawCheckoutPreviewSummary;
+  const checkoutPreviewDisplayGroups = resolveCheckoutPreviewDisplayGroups({
+    checkoutPreviewGroups,
+    rawCheckoutPreviewGroups,
+    summaryItems,
+    checkoutPreviewSummary,
+    canUseVisibleCartFallback:
+      hasItems &&
+      !checkoutPreviewQuery.isLoading &&
+      !checkoutPreviewQuery.isError &&
+      checkoutPreviewStatus.isReady,
+  });
   const checkoutMode = checkoutPreviewData?.checkoutMode ?? "SINGLE_STORE";
   const singleStoreCheckoutGroup =
     checkoutMode === "SINGLE_STORE" && checkoutPreviewGroups.length === 1
@@ -1011,7 +1472,7 @@ export default function CheckoutPage() {
   const previewGrandTotalValue = Number(checkoutPreviewSummary?.grandTotal);
   const subtotalValue = Number.isFinite(previewSubtotalValue)
     ? previewSubtotalValue
-    : Number(subtotal || 0);
+    : localCartSubtotalValue || Number(subtotal || 0);
   const shippingCost = Number.isFinite(previewShippingValue)
     ? previewShippingValue
     : fallbackShippingCost;
@@ -1041,15 +1502,13 @@ export default function CheckoutPage() {
   const previewBlocksPricingActions =
     hasCheckoutAuthHint &&
     hasItems &&
-    (isRemoteSyncing ||
-      checkoutPreviewQuery.isLoading ||
-      checkoutPreviewQuery.isError ||
-      !hasCheckoutPreviewSnapshot);
-  const isCheckoutSummaryReady =
-    !previewBlocksPricingActions && Boolean(checkoutPreviewSummary);
-  const checkoutSummaryGuardMessage = checkoutPreviewQuery.isError
-    ? "Latest checkout snapshot is unavailable. Totals stay hidden until preview recovers."
-    : "Waiting for the latest backend snapshot before showing checkout totals.";
+    !checkoutPreviewStatus.isReady;
+  const isCheckoutSummaryReady = checkoutPreviewStatus.isReady;
+  const checkoutSummaryGuardMessage = checkoutPreviewStatus.isMismatch
+    ? "Latest checkout snapshot is refreshing. Totals below use the cart currently shown."
+    : checkoutPreviewStatus.reason === "preview-error"
+      ? "Latest checkout snapshot is unavailable. Totals stay hidden until preview recovers."
+      : "Waiting for the latest backend snapshot before showing checkout totals.";
   const isPreviewBlockingSubmission =
     previewBlocksPricingActions ||
     (!checkoutPreviewQuery.isError &&
@@ -2219,7 +2678,14 @@ export default function CheckoutPage() {
                 </div>
               </section>
 
-              <section className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4 sm:p-5">
+              <section
+                data-testid="checkout-preview-groups-section"
+                data-checkout-preview-status={checkoutPreviewStatus.reason}
+                data-checkout-preview-fallback={
+                  checkoutPreviewStatus.isUsingFallback ? "true" : "false"
+                }
+                className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4 sm:p-5"
+              >
                 <SectionTitle
                   number="03."
                   title="Order Summary by Store"
@@ -2247,6 +2713,12 @@ export default function CheckoutPage() {
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                     Grouped checkout preview is temporarily unavailable. Order placement is paused
                     until the latest backend totals can be loaded again.
+                  </div>
+                ) : null}
+                {hasCheckoutPreviewCartMismatch ? (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    Checkout preview is refreshing for the current cart. Order placement is paused
+                    until the backend snapshot matches the visible items.
                   </div>
                 ) : null}
                 {!checkoutPreviewQuery.isLoading && !checkoutPreviewQuery.isError ? (
@@ -2282,8 +2754,8 @@ export default function CheckoutPage() {
                           </p>
                           <p className="mt-1 text-sm font-semibold text-slate-900">
                             {checkoutPreviewSummary.totalItems} items in{" "}
-                            {checkoutPreviewGroups.length} store
-                            {checkoutPreviewGroups.length === 1 ? "" : "s"}
+                            {checkoutPreviewDisplayGroups.length} store
+                            {checkoutPreviewDisplayGroups.length === 1 ? "" : "s"}
                           </p>
                         </div>
                         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
@@ -2297,7 +2769,7 @@ export default function CheckoutPage() {
                       </div>
                     ) : null}
                     <div className="space-y-4">
-                      {checkoutPreviewGroups.map((group) => (
+                      {checkoutPreviewDisplayGroups.map((group) => (
                         <article
                           key={group.storeId}
                           data-testid={getCheckoutPreviewGroupTestId(group, "container")}
@@ -2358,7 +2830,7 @@ export default function CheckoutPage() {
                           ) : null}
 
                           <div className="mt-4 space-y-3">
-                            {group.items.map((item) => {
+                            {(Array.isArray(group.items) ? group.items : []).map((item) => {
                               const invalidItem = findInvalidVariantCheckoutItem(
                                 checkoutPreviewInvalidMessages,
                                 item
@@ -2815,10 +3287,15 @@ export default function CheckoutPage() {
                     {isCheckoutSummaryReady ? formatCurrency(total) : "\u2014"}
                   </p>
                   <p className="mt-2 text-xs text-slate-300">
-                    {isCheckoutSummaryReady
+                    {isCheckoutSummaryReady && !hasCheckoutPreviewCartMismatch
                       ? checkoutCopy.cartItemSection.summaryReadyHint
                       : checkoutSummaryGuardMessage}
                   </p>
+                  {hasCheckoutPreviewCartMismatch ? (
+                    <p className="mt-2 text-xs text-amber-200">
+                      Backend preview is still catching up; checkout uses the visible cart total here.
+                    </p>
+                  ) : null}
                 </div>
                 <div className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-200">
                   {isCheckoutSummaryReady
@@ -3045,6 +3522,7 @@ export default function CheckoutPage() {
                     />
                     <button
                       type="button"
+                      data-testid="checkout-coupon-apply-button"
                       onClick={handleApplyCoupon}
                       disabled={
                         isSubmitting || couponStatus === "loading" || previewBlocksPricingActions
@@ -3208,9 +3686,9 @@ export default function CheckoutPage() {
                 data-testid="checkout-submit-blocker-message"
                 className="mt-3 text-center text-xs leading-5 text-amber-600"
               >
-                {previewBlocksPricingActions
-                  ? "Checkout preview must finish syncing with the latest backend totals before you can place this order."
-                  : "Resolve the blocked store groups or invalid items above before placing this order."}
+                {checkoutPreviewInvalidItems.length > 0 || previewHasPaymentBlocker
+                  ? "Resolve the blocked store groups or invalid items above before placing this order."
+                  : "Checkout preview must finish syncing with the latest backend totals before you can place this order."}
               </p>
             ) : null}
             {couponBlocksSubmission ? (

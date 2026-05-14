@@ -29,6 +29,7 @@ const StoreMicrositeProductDetailPage = lazy(() =>
   import("./pages/store/StoreMicrositeProductDetailPage.jsx")
 );
 const KachaBazarDemoHomePage = lazy(() => import("./pages/store/KachaBazarDemoHomePage.jsx"));
+const isProductionBuild = import.meta.env.PROD;
 const AdminLayout = lazy(() => import("./components/layouts/AdminLayout.jsx"));
 const AdminLoginPage = lazy(() => import("./pages/admin/AdminLoginPage.jsx"));
 const AdminCreateAccountPage = lazy(() => import("./pages/admin/AdminCreateAccountPage.jsx"));
@@ -285,7 +286,16 @@ export default function App() {
         }
       >
         <Routes>
-          <Route path="/demo/kachabazar" element={<KachaBazarDemoHomePage />} />
+          <Route
+            path="/demo/kachabazar"
+            element={
+              isProductionBuild ? (
+                <Navigate to="/" replace />
+              ) : (
+                <KachaBazarDemoHomePage />
+              )
+            }
+          />
           <Route
             path="/store/:slug/products/:productSlug"
             element={<StoreMicrositeProductDetailPage />}

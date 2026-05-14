@@ -407,32 +407,24 @@ const loadAttributeReadModelById = async (
   return item || null;
 };
 
-const loadStoreAttributeValuesOrThrow = async (
+const loadSellerAttributeValuesForReadOrThrow = async (
   storeId: number,
   attributeId: number,
   transaction?: Transaction
 ) => {
-  const attribute = await loadStoreAttributeOrThrow(attributeId, storeId, transaction);
+  const attribute = await loadAttributeRowById(attributeId, { storeId, transaction });
+  if (!attribute) {
+    throw createHttpError(404, "Attribute not found.");
+  }
   const valuesById = await loadAttributeValuesByIds([attributeId], {
-    includeArchived: true,
+    includeArchived: attribute.scope === "store",
     transaction,
   });
   const values = valuesById.get(attributeId) || [];
   const usage = await resolveAttributeValueUsage(values.map((entry) => entry.id));
 
   return {
-    attribute: normalizeAttributeRow({
-      ...(attribute.get?.() || attribute),
-      displayName: attribute.get?.("displayName") ?? attribute.getDataValue("displayName"),
-      storeId: attribute.get?.("storeId") ?? attribute.getDataValue("storeId"),
-      createdByRole: attribute.get?.("createdByRole") ?? attribute.getDataValue("createdByRole"),
-      createdByUserId:
-        attribute.get?.("createdByUserId") ?? attribute.getDataValue("createdByUserId"),
-      storeName: null,
-      storeSlug: null,
-      createdAt: (attribute as any).createdAt ?? null,
-      updatedAt: (attribute as any).updatedAt ?? null,
-    }),
+    attribute,
     values: values.map((entry) => ({
       ...entry,
       isUsed: (usage.get(entry.id)?.size || 0) > 0,
@@ -948,7 +940,7 @@ router.get(
         return res.status(400).json({ success: false, message: "Invalid attribute id." });
       }
 
-      const result = await loadStoreAttributeValuesOrThrow(storeId, attributeId);
+      const result = await loadSellerAttributeValuesForReadOrThrow(storeId, attributeId);
       return res.json({
         success: true,
         data: result.values,
@@ -960,7 +952,8 @@ router.get(
           published: result.attribute.published,
           scope: result.attribute.scope,
           status: result.attribute.status,
-          editable: true,
+          editable: result.attribute.scope === "store",
+          managedByAdmin: result.attribute.scope === "global",
         },
       });
     } catch (error: any) {

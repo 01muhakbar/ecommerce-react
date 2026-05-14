@@ -5,6 +5,7 @@ import {
   validateCoupon,
 } from "../services/coupon.service.js";
 import { serializePublicCouponSnapshot } from "../services/sharedContracts/couponGovernance.js";
+import { buildPublicOperationalPaymentProfileInclude } from "../services/sharedContracts/publicStoreIdentity.js";
 import { Coupon, Store } from "../models/index.js";
 
 const router = Router();
@@ -21,6 +22,7 @@ const resolveStoreScopeId = async (rawStoreId: any, rawStoreSlug: any) => {
     const store = await Store.findOne({
       where: { id: storeId, status: "ACTIVE" } as any,
       attributes: ["id", "slug", "status"],
+      include: [buildPublicOperationalPaymentProfileInclude()],
     });
     return store ? Number((store as any).id) : null;
   }
@@ -30,6 +32,7 @@ const resolveStoreScopeId = async (rawStoreId: any, rawStoreSlug: any) => {
   const store = await Store.findOne({
     where: { slug: storeSlug, status: "ACTIVE" } as any,
     attributes: ["id", "slug", "status"],
+    include: [buildPublicOperationalPaymentProfileInclude()],
   });
   return store ? Number((store as any).id) : null;
 };

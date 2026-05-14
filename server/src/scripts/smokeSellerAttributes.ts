@@ -109,26 +109,41 @@ async function createAttribute(name: string, published: boolean, values: string[
     displayName: `${name} display`,
     type: "dropdown",
     published,
+    scope: "global",
+    createdByRole: "admin",
+    status: "active",
   } as any);
   const attributeId = Number(attribute.getDataValue("id"));
   assert.ok(attributeId > 0, "failed to seed attribute");
   createdAttributeIds.push(attributeId);
 
+  const valueIds: number[] = [];
   for (const value of values) {
     const [_result, meta] = await sequelize.query(
       `
-        INSERT INTO attribute_values (attribute_id, value, created_at, updated_at)
-        VALUES (?, ?, NOW(), NOW())
+        INSERT INTO attribute_values (attribute_id, value, status, created_at, updated_at)
+        VALUES (?, ?, 'active', NOW(), NOW())
       `,
       {
         replacements: [attributeId, value],
       }
     );
-    const valueId = Number((meta as any)?.insertId || 0);
+    let valueId = Number((meta as any)?.insertId || 0);
+    if (!valueId) {
+      const rows = await sequelize.query<{ id: number }>(
+        "SELECT id FROM attribute_values WHERE attribute_id = ? AND value = ? LIMIT 1",
+        {
+          replacements: [attributeId, value],
+          type: QueryTypes.SELECT,
+        }
+      );
+      valueId = Number(rows[0]?.id || 0);
+    }
     if (valueId > 0) createdAttributeValueIds.push(valueId);
+    if (valueId > 0) valueIds.push(valueId);
   }
 
-  return attributeId;
+  return { attributeId, valueIds };
 }
 
 async function login(client: CookieClient, email: string, password: string, label: string) {
@@ -170,7 +185,7 @@ async function main() {
 
   const publishedName = `${RUN_ID}-published`;
   const unpublishedName = `${RUN_ID}-hidden`;
-  await createAttribute(publishedName, true, ["alpha", "beta"]);
+  const publishedAttribute = await createAttribute(publishedName, true, ["alpha", "beta"]);
   await createAttribute(unpublishedName, false, ["gamma"]);
 
   const sellerClient = new CookieClient();
@@ -191,6 +206,39 @@ async function main() {
     "unpublished attribute leaked"
   );
   logPass("seller sees only published global attributes");
+
+  logStep("read published global attribute values");
+  const valuesResponse = await sellerClient.request(
+    `/api/seller/stores/${sellerStore.id}/attributes/${publishedAttribute.attributeId}/values`
+  );
+  assertStatus(valuesResponse, 200, "seller global attribute values");
+  assert.equal(valuesResponse.body?.attribute?.scope, "global", "global attribute scope mismatch");
+  assert.equal(valuesResponse.body?.attribute?.editable, false, "global attribute should be read-only");
+  const globalValues = Array.isArray(valuesResponse.body?.data) ? valuesResponse.body.data : [];
+  assert.deepEqual(
+    globalValues.map((entry: any) => String(entry?.value || "")).sort(),
+    ["alpha", "beta"],
+    "global attribute values mismatch"
+  );
+  logPass("seller can read published global attribute values as read-only");
+
+  logStep("hide archived global attribute values");
+  await sequelize.query("UPDATE attribute_values SET status = 'archived' WHERE id = ?", {
+    replacements: [publishedAttribute.valueIds[1]],
+  });
+  const archivedValueResponse = await sellerClient.request(
+    `/api/seller/stores/${sellerStore.id}/attributes/${publishedAttribute.attributeId}/values`
+  );
+  assertStatus(archivedValueResponse, 200, "seller global attribute values after archive");
+  const activeGlobalValues = Array.isArray(archivedValueResponse.body?.data)
+    ? archivedValueResponse.body.data
+    : [];
+  assert.deepEqual(
+    activeGlobalValues.map((entry: any) => String(entry?.value || "")).sort(),
+    ["alpha"],
+    "archived global attribute value leaked"
+  );
+  logPass("archived global values stay hidden from seller variant selection");
 
   logStep("filter by option type");
   const typeResponse = await sellerClient.request(

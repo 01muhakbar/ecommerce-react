@@ -109,6 +109,10 @@ const createdProductIds: number[] = [];
 const createdOrderIds: number[] = [];
 const createdAttributeIds: number[] = [];
 const createdAttributeValueIds: number[] = [];
+const latestSmokeCartOrder = [
+  ["updatedAt", "DESC"],
+  ["id", "DESC"],
+] as any;
 
 const slugify = (value: string) =>
   String(value || "")
@@ -347,6 +351,41 @@ async function createFixtureVariantProduct(input: {
   return { id, slug, variants };
 }
 
+async function createFixtureSimpleProduct(input: {
+  ownerUserId: number;
+  storeId: number;
+  label: string;
+  price?: number;
+  stock?: number;
+}) {
+  const slug = slugify(`${RUN_ID}-${input.label}`);
+  const price = input.price ?? 25000;
+  const stock = input.stock ?? 60;
+  const product = await Product.create({
+    name: "Organic Banana",
+    slug,
+    sku: slug.toUpperCase(),
+    price,
+    salePrice: null,
+    stock,
+    userId: input.ownerUserId,
+    storeId: input.storeId,
+    status: "active",
+    isPublished: true,
+    sellerSubmissionStatus: "none",
+    description: `Fixture ${slug}`,
+    promoImagePath: "/uploads/products/demo.svg",
+    imagePaths: ["/uploads/products/demo.svg"],
+    variations: {
+      hasVariants: false,
+      variants: [],
+    },
+  } as any);
+  const id = Number(product.getDataValue("id"));
+  createdProductIds.push(id);
+  return { id, slug, price, stock };
+}
+
 async function login(client: CookieClient, email: string, password: string, label: string) {
   const response = await client.request("/api/auth/login", {
     method: "POST",
@@ -419,6 +458,23 @@ async function addVariantToCart(input: {
   assert.ok(response.body?.cartItem, `${input.label}: cartItem payload missing`);
 }
 
+async function addProductToCart(input: {
+  customerClient: CookieClient;
+  productId: number;
+  quantity: number;
+  label: string;
+}) {
+  const response = await input.customerClient.request("/api/cart/add", {
+    method: "POST",
+    body: JSON.stringify({
+      productId: input.productId,
+      quantity: input.quantity,
+    }),
+  });
+  assertStatus(response, 200, input.label);
+  assert.ok(response.body?.cartItem, `${input.label}: cartItem payload missing`);
+}
+
 async function addVariantToCartExpectFailure(input: {
   customerClient: CookieClient;
   productId: number;
@@ -481,6 +537,20 @@ async function previewCheckout(customerClient: CookieClient, label: string) {
   return response.body?.data ?? null;
 }
 
+async function previewCheckoutExpectFailure(
+  customerClient: CookieClient,
+  label: string,
+  payload: Record<string, unknown>,
+  expectedStatus = 409
+) {
+  const response = await customerClient.request("/api/checkout/preview", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  assertStatus(response, expectedStatus, label);
+  return response.body ?? null;
+}
+
 async function previewCheckoutExpectSuccessWithInvalidItems(
   customerClient: CookieClient,
   label: string
@@ -516,7 +586,8 @@ async function createCheckout(customerClient: CookieClient, label: string) {
 async function createCheckoutExpectFailure(
   customerClient: CookieClient,
   label: string,
-  expectedStatus = 409
+  expectedStatus = 409,
+  payloadOverrides: Record<string, unknown> = {}
 ) {
   const shippingDetails = buildShippingDetails(label);
   const response = await customerClient.request("/api/checkout/create-multi-store", {
@@ -529,6 +600,7 @@ async function createCheckoutExpectFailure(
         notes: `Smoke ${label}`,
       },
       shippingDetails,
+      ...payloadOverrides,
     }),
   });
   assertStatus(response, expectedStatus, label);
@@ -629,6 +701,13 @@ const resolveLineTotal = (item: any) => {
     if (Number.isFinite(value)) return value;
   }
   return resolveLineQty(item) * resolveLinePrice(item);
+};
+
+const assertSimpleLine = (item: any, expected: { productId: number; qty: number; price: number }, label: string) => {
+  assert.equal(toNumber(item?.productId ?? item?.id, 0), expected.productId, `${label}: productId mismatch`);
+  assert.equal(resolveLineQty(item), expected.qty, `${label}: qty mismatch`);
+  assert.equal(resolveLinePrice(item), expected.price, `${label}: price mismatch`);
+  assert.equal(resolveLineTotal(item), expected.price * expected.qty, `${label}: line total mismatch`);
 };
 
 const assertVariantLineDetails = (
@@ -758,6 +837,64 @@ const assertVariantSnapshotItems = (
     );
   });
 };
+
+async function assertPublicStorefrontVariantState(input: {
+  product: { slug: string; variants: VariantRecord[] };
+  storeSlug: string;
+  expectedQuantities: Record<string, number>;
+  label: string;
+}) {
+  const response = await new CookieClient().request(
+    `/api/store/products/${encodeURIComponent(input.product.slug)}?storeSlug=${encodeURIComponent(input.storeSlug)}`
+  );
+  assertStatus(response, 200, input.label);
+  assert.equal(
+    String(response.body?.data?.slug || ""),
+    input.product.slug,
+    `${input.label}: public detail returned unexpected product`
+  );
+  assert.equal(
+    Boolean(response.body?.data?.purchaseState?.isPurchasable),
+    true,
+    `${input.label}: public detail should remain purchasable`
+  );
+
+  const variants = Array.isArray(response.body?.data?.variations?.variants)
+    ? response.body.data.variations.variants
+    : [];
+  assert.equal(variants.length, input.product.variants.length, `${input.label}: variant count mismatch`);
+  for (const expected of input.product.variants) {
+    const actual = variants.find(
+      (entry: any) => String(entry?.combinationKey || "") === expected.combinationKey
+    );
+    assert.ok(actual, `${input.label}: ${expected.combination} variant missing from public detail`);
+    assert.equal(
+      String(actual?.combination || ""),
+      expected.combination,
+      `${input.label}: ${expected.combination} label mismatch`
+    );
+    assert.deepEqual(
+      normalizeVariantSelectionsSnapshot(actual?.selections),
+      expected.selections,
+      `${input.label}: ${expected.combination} selections mismatch`
+    );
+    assert.equal(
+      toNumber(actual?.price, 0),
+      expected.price,
+      `${input.label}: ${expected.combination} price mismatch`
+    );
+    assert.equal(
+      toNumber(actual?.salePrice, 0),
+      expected.salePrice,
+      `${input.label}: ${expected.combination} sale price mismatch`
+    );
+    assert.equal(
+      toNumber(actual?.quantity, 0),
+      input.expectedQuantities[expected.combinationKey],
+      `${input.label}: ${expected.combination} quantity mismatch`
+    );
+  }
+}
 
 async function cleanupFixtures() {
   for (const userId of createdUserIds) {
@@ -893,6 +1030,13 @@ async function run() {
     storeId: store.id,
     label: "variant-product",
   });
+  const bananaProduct = await createFixtureSimpleProduct({
+    ownerUserId: sellerUser.id,
+    storeId: store.id,
+    label: "organic-banana",
+    price: 25000,
+    stock: 80,
+  });
 
   logStep("authenticating clients");
   const adminClient = new CookieClient();
@@ -901,6 +1045,161 @@ async function run() {
   await loginAdmin(adminClient);
   await login(sellerClient, sellerUser.email, sellerUser.password, "seller login");
   await login(buyerClient, buyerUser.email, buyerUser.password, "buyer login");
+
+  logStep("keeping checkout summary on the latest backend cart when stale carts exist");
+  await resetCartForUser(buyerUser.id);
+  await addProductToCart({
+    customerClient: buyerClient,
+    productId: bananaProduct.id,
+    quantity: 32,
+    label: "seed stale banana cart",
+  });
+  const staleBananaCart = await Cart.findOne({
+    where: { userId: buyerUser.id } as any,
+    attributes: ["id"],
+    order: latestSmokeCartOrder,
+  });
+  const staleBananaCartId = toNumber(staleBananaCart?.getDataValue?.("id"), 0);
+  assert.ok(staleBananaCartId > 0, "stale banana cart fixture missing");
+  await Cart.create({ userId: buyerUser.id } as any);
+  await addProductToCart({
+    customerClient: buyerClient,
+    productId: bananaProduct.id,
+    quantity: 1,
+    label: "add banana qty 1 to active cart",
+  });
+  const bananaCartItems = await fetchCart(buyerClient, "fetch active banana cart");
+  assert.equal(bananaCartItems.length, 1, "active banana cart: expected one product line");
+  const bananaCartLine = normalizeCartSnapshotItems(bananaCartItems)[0];
+  assertSimpleLine(
+    bananaCartLine,
+    { productId: bananaProduct.id, qty: 1, price: bananaProduct.price },
+    "active banana cart"
+  );
+  const bananaPreview = await previewCheckout(buyerClient, "preview active banana cart");
+  assert.equal(toNumber(bananaPreview?.summary?.totalItems, 0), 1, "banana preview: total qty mismatch");
+  assert.equal(
+    toNumber(bananaPreview?.summary?.subtotalAmount, 0),
+    25000,
+    "banana preview: subtotal mismatch"
+  );
+  assert.equal(
+    toNumber(bananaPreview?.summary?.grandTotal, 0),
+    25000,
+    "banana preview: grand total mismatch"
+  );
+  const bananaPreviewGroups = Array.isArray(bananaPreview?.groups) ? bananaPreview.groups : [];
+  assert.equal(bananaPreviewGroups.length, 1, "banana preview: expected one store group");
+  assert.equal(
+    toNumber(bananaPreviewGroups[0]?.subtotalAmount, 0),
+    25000,
+    "banana preview group: subtotal mismatch"
+  );
+  assert.equal(
+    toNumber(bananaPreviewGroups[0]?.totalAmount, 0),
+    25000,
+    "banana preview group: total mismatch"
+  );
+  const bananaPreviewItems = Array.isArray(bananaPreviewGroups[0]?.items)
+    ? bananaPreviewGroups[0].items
+    : [];
+  assert.equal(bananaPreviewItems.length, 1, "banana preview: expected one product line");
+  assertSimpleLine(
+    bananaPreviewItems[0],
+    { productId: bananaProduct.id, qty: 1, price: bananaProduct.price },
+    "banana preview item"
+  );
+  const stalePreviewResponse = await previewCheckoutExpectFailure(
+    buyerClient,
+    "preview stale explicit banana cart",
+    { cartId: staleBananaCartId },
+    409
+  );
+  assert.equal(
+    String(stalePreviewResponse?.code || ""),
+    "CHECKOUT_CART_STALE",
+    "stale cart preview should return CHECKOUT_CART_STALE"
+  );
+  const staleCreateResponse = await createCheckoutExpectFailure(
+    buyerClient,
+    "create checkout with stale explicit banana cart",
+    409,
+    { cartId: staleBananaCartId }
+  );
+  assert.equal(
+    String(staleCreateResponse?.code || ""),
+    "CHECKOUT_CART_STALE",
+    "stale cart create should return CHECKOUT_CART_STALE"
+  );
+  const bananaCheckoutOrder = await createCheckout(buyerClient, "create active banana checkout");
+  const bananaOrderId = toNumber(bananaCheckoutOrder?.orderId, 0);
+  assert.ok(bananaOrderId > 0, "banana checkout create: orderId missing");
+  createdOrderIds.push(bananaOrderId);
+  const bananaCheckoutGroups = Array.isArray(bananaCheckoutOrder?.groups)
+    ? bananaCheckoutOrder.groups
+    : [];
+  assert.equal(bananaCheckoutGroups.length, 1, "banana checkout create: expected one store group");
+  assert.equal(
+    toNumber(bananaCheckoutGroups[0]?.totalAmount, 0),
+    25000,
+    "banana checkout create: total mismatch"
+  );
+  const bananaOrderItems = await OrderItem.findAll({
+    where: { orderId: bananaOrderId } as any,
+    order: [["id", "ASC"]],
+  });
+  assert.equal(bananaOrderItems.length, 1, "banana stored order: expected one order item");
+  assertSimpleLine(
+    bananaOrderItems[0],
+    { productId: bananaProduct.id, qty: 1, price: bananaProduct.price },
+    "banana stored order item"
+  );
+  await resetCartForUser(buyerUser.id);
+  await addProductToCart({
+    customerClient: buyerClient,
+    productId: bananaProduct.id,
+    quantity: 32,
+    label: "seed stale banana cart for qty 2",
+  });
+  await Cart.create({ userId: buyerUser.id } as any);
+  await addProductToCart({
+    customerClient: buyerClient,
+    productId: bananaProduct.id,
+    quantity: 2,
+    label: "add banana qty 2 to active cart",
+  });
+  const bananaQtyTwoPreview = await previewCheckout(
+    buyerClient,
+    "preview active banana cart qty 2"
+  );
+  assert.equal(
+    toNumber(bananaQtyTwoPreview?.summary?.totalItems, 0),
+    2,
+    "banana qty 2 preview: total qty mismatch"
+  );
+  assert.equal(
+    toNumber(bananaQtyTwoPreview?.summary?.subtotalAmount, 0),
+    50000,
+    "banana qty 2 preview: subtotal mismatch"
+  );
+  assert.equal(
+    toNumber(bananaQtyTwoPreview?.summary?.grandTotal, 0),
+    50000,
+    "banana qty 2 preview: grand total mismatch"
+  );
+  await resetCartForUser(buyerUser.id);
+  logPass("cart drawer, checkout preview, explicit cart guard, and order creation use the same active cart snapshot");
+
+  logStep("checking public product detail variant truth before cart");
+  await assertPublicStorefrontVariantState({
+    product,
+    storeSlug: store.slug,
+    expectedQuantities: Object.fromEntries(
+      product.variants.map((variant) => [variant.combinationKey, variant.quantity])
+    ),
+    label: "public variant detail before cart",
+  });
+  logPass("public detail exposes the same variant price, sale price, attributes, and stock");
 
   logStep("adding two variants of the same product to cart");
   await resetCartForUser(buyerUser.id);
@@ -1344,6 +1643,15 @@ async function run() {
     product.variants[1].quantity - 1,
     "green variant quantity should decrement only for the dual-line checkout"
   );
+  await assertPublicStorefrontVariantState({
+    product,
+    storeSlug: store.slug,
+    expectedQuantities: {
+      [product.variants[0].combinationKey]: blueQuantity,
+      [product.variants[1].combinationKey]: greenQuantity,
+    },
+    label: "public variant detail after checkout",
+  });
   logPass("variant stock snapshots persist through checkout create");
 
   logStep("verifying buyer, seller, and admin order detail snapshots");

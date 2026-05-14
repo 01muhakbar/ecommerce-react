@@ -550,22 +550,7 @@ async function assertHiddenFromDiscoveryWithDetailGate(
   const storeDetail = await new CookieClient().request(
     `/api/store/products/${encodeURIComponent(product.slug)}?storeSlug=${encodeURIComponent(storeSlug)}`
   );
-  assertStatus(storeDetail, 200, `${label} storefront detail`);
-  assert.equal(
-    String(storeDetail.body?.data?.slug || ""),
-    product.slug,
-    `${label}: storefront detail returned unexpected product`
-  );
-  assert.equal(
-    String(storeDetail.body?.data?.purchaseState?.code || ""),
-    "STORE_NOT_READY",
-    `${label}: storefront detail purchaseState mismatch`
-  );
-  assert.equal(
-    Boolean(storeDetail.body?.data?.purchaseState?.isPurchasable),
-    false,
-    `${label}: storefront detail should stay non-purchasable`
-  );
+  assertStatus(storeDetail, 404, `${label} storefront detail with storeSlug`);
 }
 
 async function resetCartForUser(userId: number) {

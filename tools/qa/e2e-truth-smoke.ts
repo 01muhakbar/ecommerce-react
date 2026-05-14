@@ -5,7 +5,7 @@ import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
-import { Op } from "sequelize";
+import { Op, QueryTypes } from "sequelize";
 import { config as loadEnv } from "dotenv";
 import {
   getSplitOperationalPayment,
@@ -125,6 +125,8 @@ const createdStoreIds: number[] = [];
 const createdPaymentProfileIds: number[] = [];
 const createdProductIds: number[] = [];
 const createdOrderIds: number[] = [];
+const createdAttributeIds: number[] = [];
+const createdAttributeValueIds: number[] = [];
 
 const log = (message: string) => console.log(`[e2e-truth] ${message}`);
 
@@ -348,17 +350,92 @@ const buildVariantCombinationKey = (selections: VariantSelection[]) =>
     )
     .join("|");
 
+async function createFixtureAttributeValues(label: string) {
+  const [attributeResult, attributeMeta] = await sequelize.query(
+    `
+      INSERT INTO attributes
+        (name, display_name, type, published, scope, created_by_role, status, created_at, updated_at)
+      VALUES
+        (?, ?, 'dropdown', 1, 'global', 'admin', 'active', NOW(), NOW())
+    `,
+    {
+      replacements: [`${RUN_ID}-${label}-color`, "Color"],
+    }
+  );
+  let attributeId = Number((attributeMeta as any)?.insertId || (attributeResult as any)?.insertId || 0);
+  if (!attributeId) {
+    const rows = await sequelize.query<{ id: number }>(
+      "SELECT id FROM attributes WHERE name = ? LIMIT 1",
+      {
+        replacements: [`${RUN_ID}-${label}-color`],
+        type: QueryTypes.SELECT,
+      }
+    );
+    attributeId = Number(rows[0]?.id || 0);
+  }
+  assert.ok(attributeId > 0, "failed to create checkout attribute fixture");
+  createdAttributeIds.push(attributeId);
+
+  const values: Array<{ id: number; value: string }> = [];
+  for (const value of ["Blue", "Green"]) {
+    const [valueResult, valueMeta] = await sequelize.query(
+      `
+        INSERT INTO attribute_values
+          (attribute_id, value, status, created_at, updated_at)
+        VALUES
+          (?, ?, 'active', NOW(), NOW())
+      `,
+      {
+        replacements: [attributeId, value],
+      }
+    );
+    let valueId = Number((valueMeta as any)?.insertId || (valueResult as any)?.insertId || 0);
+    if (!valueId) {
+      const rows = await sequelize.query<{ id: number }>(
+        "SELECT id FROM attribute_values WHERE attribute_id = ? AND value = ? LIMIT 1",
+        {
+          replacements: [attributeId, value],
+          type: QueryTypes.SELECT,
+        }
+      );
+      valueId = Number(rows[0]?.id || 0);
+    }
+    assert.ok(valueId > 0, "failed to create checkout attribute value fixture");
+    createdAttributeValueIds.push(valueId);
+    values.push({ id: valueId, value });
+  }
+
+  return {
+    attributeId,
+    attributeName: "Color",
+    blueValueId: values[0].id,
+    greenValueId: values[1].id,
+  };
+}
+
 async function createFixtureVariantProduct(input: {
   ownerUserId: number;
   storeId: number;
   label: string;
+  name?: string;
 }) {
   const slug = slugify(`${RUN_ID}-${input.label}`);
+  const attribute = await createFixtureAttributeValues(input.label);
   const blueSelections: VariantSelection[] = [
-    { attributeId: 1, attributeName: "Color", valueId: 101, value: "Blue" },
+    {
+      attributeId: attribute.attributeId,
+      attributeName: attribute.attributeName,
+      valueId: attribute.blueValueId,
+      value: "Blue",
+    },
   ];
   const greenSelections: VariantSelection[] = [
-    { attributeId: 1, attributeName: "Color", valueId: 102, value: "Green" },
+    {
+      attributeId: attribute.attributeId,
+      attributeName: attribute.attributeName,
+      valueId: attribute.greenValueId,
+      value: "Green",
+    },
   ];
   const variants: VariantRecord[] = [
     {
@@ -386,7 +463,7 @@ async function createFixtureVariantProduct(input: {
   ];
 
   const product = await Product.create({
-    name: slug,
+    name: input.name || slug,
     slug,
     sku: slug.toUpperCase(),
     price: 45000,
@@ -472,6 +549,34 @@ async function addProductToCart(customerClient: CookieClient, buyerUserId: numbe
       continue;
     }
     assertStatus(response, 200, "add product to cart");
+    return;
+  }
+}
+
+async function addVariantProductToCart(input: {
+  customerClient: CookieClient;
+  buyerUserId: number;
+  productId: number;
+  variant: VariantRecord;
+  quantity: number;
+}) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await resetCartForUser(input.buyerUserId);
+    const response = await input.customerClient.request("/api/cart/add", {
+      method: "POST",
+      body: JSON.stringify({
+        productId: input.productId,
+        quantity: input.quantity,
+        variantKey: input.variant.combinationKey,
+        variantSelections: input.variant.selections,
+      }),
+    });
+    const responseText = String(response.text || "");
+    if (response.status === 500 && responseText.includes("Deadlock") && attempt < 2) {
+      await delay(500);
+      continue;
+    }
+    assertStatus(response, 200, "add variant product to cart");
     return;
   }
 }
@@ -673,6 +778,51 @@ async function waitForAllTexts(page: any, expectedTexts: string[], timeoutMs = 1
   }
 }
 
+async function expectBodyTextAbsent(page: any, unexpected: string | RegExp) {
+  const text = await page.locator("body").textContent();
+  const bodyText = String(text || "");
+  const matches =
+    unexpected instanceof RegExp ? unexpected.test(bodyText) : bodyText.includes(unexpected);
+  assert.equal(
+    matches,
+    false,
+    `Expected page not to include "${unexpected}"`
+  );
+}
+
+async function assertOrganicBananaCheckoutReady(page: any, quantity: number, totalText: string) {
+  await waitForBodyText(page, "Checkout Summary");
+  await waitForBodyText(page, "Order Summary by Store");
+  await waitForBodyText(page, "Organic Banana");
+  await waitForBodyText(page, "Variant: Blue");
+  await waitForBodyText(page, totalText);
+  await waitForTestIdText(page, "checkout-preview-groups-section", "Organic Banana");
+  await waitForTestIdText(page, "checkout-preview-groups-section", "Variant: Blue");
+  await waitForTestIdText(
+    page,
+    "checkout-preview-groups-section",
+    `Qty ${quantity} x Rp 25.000`
+  );
+  await waitForTestIdText(page, "checkout-preview-groups-section", totalText);
+  await expectBodyTextAbsent(page, /Backend preview is still catching up/i);
+  await expectBodyTextAbsent(page, /Latest checkout snapshot is refreshing/i);
+  await expectBodyTextAbsent(page, /Checkout preview must finish syncing/i);
+  await expectBodyTextAbsent(page, /Checkout preview is refreshing/i);
+  await expectBodyTextAbsent(page, /Wait for the checkout preview/i);
+  await expectBodyTextAbsent(page, /Order placement is paused/i);
+  await expectBodyTextAbsent(page, /finish syncing before applying coupons/i);
+  assert.equal(
+    await page.getByTestId("checkout-coupon-apply-button").isDisabled().catch(() => true),
+    false,
+    `coupon apply should not be sync-blocked for Organic Banana qty ${quantity}`
+  );
+  assert.equal(
+    await page.getByTestId("checkout-submit-cta").isDisabled().catch(() => true),
+    false,
+    `checkout submit CTA should not be sync-blocked for Organic Banana qty ${quantity}`
+  );
+}
+
 async function waitForTestIdText(page: any, testId: string, expected: string, timeoutMs = 15000) {
   const locator = page.getByTestId(testId);
   const started = Date.now();
@@ -773,6 +923,12 @@ async function runScenario(browser: any) {
     ownerUserId: checkoutSellerUser.id,
     storeId: checkoutStore.id,
     label: "checkout-variant-product",
+  });
+  const checkoutReadyVariantProduct = await createFixtureVariantProduct({
+    ownerUserId: checkoutSellerUser.id,
+    storeId: checkoutStore.id,
+    label: "checkout-ready-variant-product",
+    name: "Organic Banana",
   });
   const orderProduct = await createFixtureProduct({
     ownerUserId: orderSellerUser.id,
@@ -946,7 +1102,19 @@ async function runScenario(browser: any) {
       await buyerPage.reload({ waitUntil: "load", timeout: 30000 });
       await buyerPage.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);
     await waitForBodyText(buyerPage, "Checkout Summary");
+    await waitForBodyText(buyerPage, "Order Summary by Store");
     await waitForBodyText(buyerPage, checkoutProduct.name);
+    await expectBodyTextAbsent(buyerPage, /Backend preview is still catching up/i);
+    await expectBodyTextAbsent(buyerPage, /Latest checkout snapshot is refreshing/i);
+    await expectBodyTextAbsent(buyerPage, /Checkout preview must finish syncing/i);
+    await expectBodyTextAbsent(buyerPage, /Checkout preview is refreshing/i);
+    await expectBodyTextAbsent(buyerPage, /Order placement is paused/i);
+    await expectBodyTextAbsent(buyerPage, /finish syncing before applying coupons/i);
+    assert.equal(
+      await buyerPage.getByTestId("checkout-submit-cta").isDisabled().catch(() => true),
+      false,
+      "checkout submit CTA should not be blocked when preview matches visible cart"
+    );
     await waitForTestIdText(
       buyerPage,
       `checkout-preview-group-payment-availability-${checkoutStore.id}`,
@@ -970,6 +1138,46 @@ async function runScenario(browser: any) {
         activeProfileSource
       );
 
+      await addVariantProductToCart({
+        customerClient: buyerClient,
+        buyerUserId: buyerUser.id,
+        productId: checkoutReadyVariantProduct.id,
+        variant: checkoutReadyVariantProduct.variants[0],
+        quantity: 1,
+      });
+      await gotoRoute(buyerPage, "/checkout");
+      await buyerPage.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);
+      await assertOrganicBananaCheckoutReady(buyerPage, 1, "Rp 25.000");
+
+      await addVariantProductToCart({
+        customerClient: buyerClient,
+        buyerUserId: buyerUser.id,
+        productId: checkoutReadyVariantProduct.id,
+        variant: checkoutReadyVariantProduct.variants[0],
+        quantity: 2,
+      });
+      await gotoRoute(buyerPage, "/checkout");
+      await buyerPage.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);
+      await assertOrganicBananaCheckoutReady(buyerPage, 2, "Rp 50.000");
+
+      await addVariantProductToCart({
+        customerClient: buyerClient,
+        buyerUserId: buyerUser.id,
+        productId: checkoutReadyVariantProduct.id,
+        variant: checkoutReadyVariantProduct.variants[0],
+        quantity: 3,
+      });
+      await gotoRoute(buyerPage, "/checkout");
+      await buyerPage.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);
+      await assertOrganicBananaCheckoutReady(buyerPage, 3, "Rp 75.000");
+      if (process.env.E2E_TRUTH_CHECKOUT_SCREENSHOT_PATH) {
+        await buyerPage.screenshot({
+          path: process.env.E2E_TRUTH_CHECKOUT_SCREENSHOT_PATH,
+          fullPage: true,
+        });
+      }
+
+      await addProductToCart(buyerClient, buyerUser.id, checkoutProduct.id);
       checkoutPreviewMode = "fallback";
       await buyerPage.goto(`${clientBase}/checkout`, { waitUntil: "load", timeout: 30000 });
       await buyerPage.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);
@@ -1241,6 +1449,22 @@ async function cleanupFixtures() {
     await Product.destroy({ where: { id: { [Op.in]: createdProductIds } } as any, force: true }).catch(
       () => null
     );
+  }
+
+  if (createdAttributeValueIds.length > 0) {
+    await sequelize
+      .query(`DELETE FROM attribute_values WHERE id IN (${createdAttributeValueIds.map(() => "?").join(", ")})`, {
+        replacements: createdAttributeValueIds,
+      })
+      .catch(() => null);
+  }
+
+  if (createdAttributeIds.length > 0) {
+    await sequelize
+      .query(`DELETE FROM attributes WHERE id IN (${createdAttributeIds.map(() => "?").join(", ")})`, {
+        replacements: createdAttributeIds,
+      })
+      .catch(() => null);
   }
 
   if (createdStoreIds.length > 0) {

@@ -97,6 +97,28 @@ const shippingDetailsSchema = z.object({
 const CHECKOUT_REQUEST_KEY_SOURCE = "CHECKOUT_REQUEST_KEY";
 const CHECKOUT_REQUEST_KEY_PATTERN = /^[A-Za-z0-9._:-]{8,120}$/;
 const CHECKOUT_IDEMPOTENCY_RETRY_AFTER_SECONDS = 2;
+const latestCheckoutCartOrder = [
+  ["updatedAt", "DESC"],
+  ["id", "DESC"],
+] as any;
+
+const createCheckoutRouteError = (statusCode: number, code: string, message: string) =>
+  Object.assign(new Error(message), { statusCode, code });
+
+const sendCheckoutRouteError = (res: any, error: any, fallbackMessage: string) => {
+  const statusCode = Number(error?.statusCode || 0);
+  if (Number.isInteger(statusCode) && statusCode >= 400 && statusCode < 500) {
+    return res.status(statusCode).json({
+      success: false,
+      message: error?.message || fallbackMessage,
+      code: error?.code || "CHECKOUT_REQUEST_INVALID",
+    });
+  }
+  return res.status(500).json({
+    success: false,
+    message: fallbackMessage,
+  });
+};
 
 const createMultiStoreSchema = z.object({
   cartId: z.number().int().positive().optional(),
@@ -935,11 +957,29 @@ const findCartForUser = async (
   if (cartId) where.id = cartId;
   const cart = await Cart.findOne({
     where,
+    ...(cartId ? {} : { order: latestCheckoutCartOrder }),
     transaction,
     lock: transaction?.LOCK?.UPDATE,
   });
   if (!cart) return null;
   const resolvedCartId = toNumber(getAttr(cart, "id"), 0);
+  if (cartId && resolvedCartId > 0) {
+    const latestCart = await Cart.findOne({
+      where: { userId } as any,
+      attributes: ["id"],
+      order: latestCheckoutCartOrder,
+      transaction,
+      lock: transaction?.LOCK?.UPDATE,
+    });
+    const latestCartId = toNumber(getAttr(latestCart, "id"), 0);
+    if (latestCartId > 0 && latestCartId !== resolvedCartId) {
+      throw createCheckoutRouteError(
+        409,
+        "CHECKOUT_CART_STALE",
+        "Checkout cart is stale. Refresh the cart before previewing or placing the order."
+      );
+    }
+  }
   const products =
     resolvedCartId > 0
       ? await loadCheckoutCartProducts(resolvedCartId, transaction, includePaymentMedia)
@@ -1989,10 +2029,7 @@ router.post("/preview", async (req, res) => {
     });
   } catch (error) {
     console.error("[checkout/preview] error", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to build checkout preview.",
-    });
+    return sendCheckoutRouteError(res, error, "Failed to build checkout preview.");
   }
 });
 
@@ -2667,17 +2704,15 @@ router.post("/create-multi-store", async (req, res) => {
         });
       }
       console.error("[checkout/create-multi-store] error", error);
-      return res.status(500).json({
-        success: false,
-        message: (error as any)?.message || "Failed to create multi-store checkout.",
-      });
+      return sendCheckoutRouteError(
+        res,
+        error,
+        (error as any)?.message || "Failed to create multi-store checkout."
+      );
     }
   } catch (error) {
     console.error("[checkout/create-multi-store] fatal error", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to create multi-store checkout.",
-    });
+    return sendCheckoutRouteError(res, error, "Failed to create multi-store checkout.");
   }
 });
 

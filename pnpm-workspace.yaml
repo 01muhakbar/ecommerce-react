@@ -2,3 +2,8 @@ packages:
   - "client"
   - "server"
   - "packages/*"
+allowBuilds:
+  '@tailwindcss/oxide': true
+  bcrypt: true
+  core-js: true
+  esbuild: true

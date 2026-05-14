@@ -216,6 +216,13 @@ async function fetchPublicProductDetail(
   return response.body;
 }
 
+async function fetchPublicProductDetailResponse(productSlug: string, storeSlug: string) {
+  const client = new PublicClient();
+  return client.request(
+    `/api/store/products/${encodeURIComponent(productSlug)}?storeSlug=${encodeURIComponent(storeSlug)}`
+  );
+}
+
 async function verifyReadyScenario(store: FixtureStore, product: FixtureProduct) {
   logStep("verifying ready store public identity");
   const identityBody = await fetchPublicIdentity(store.slug, "ready public identity");
@@ -270,39 +277,10 @@ async function verifyNotConfiguredScenario(store: FixtureStore, product: Fixture
   );
   logPass("non-ready public identity readiness");
 
-  logStep("verifying non-ready store PDP seller info");
-  const detailBody = await fetchPublicProductDetail(
-    product.slug,
-    store.slug,
-    "non-ready product detail"
-  );
-  const sellerInfo = getSellerInfo(detailBody, "non-ready product detail");
-  assert.equal(
-    String(sellerInfo?.operationalReadiness?.code || ""),
-    "PAYMENT_NOT_CONFIGURED",
-    "non-ready seller info: readiness code mismatch"
-  );
-  assert.equal(
-    String(sellerInfo?.status?.code || ""),
-    "PAYMENT_NOT_CONFIGURED",
-    "non-ready seller info: status badge should follow readiness gate"
-  );
-  assert.equal(
-    Boolean(sellerInfo?.operationalReadiness?.isReady),
-    false,
-    "non-ready seller info: isReady should be false"
-  );
-  assert.equal(
-    Boolean(sellerInfo?.canVisitStore),
-    false,
-    "non-ready seller info: canVisitStore should be false"
-  );
-  assert.equal(
-    sellerInfo?.visitStoreHref ?? null,
-    null,
-    "non-ready seller info: visitStoreHref should be null"
-  );
-  logPass("non-ready seller info CTA gating");
+  logStep("verifying non-ready store PDP is hidden from public checkout surface");
+  const detailResponse = await fetchPublicProductDetailResponse(product.slug, store.slug);
+  assertStatus(detailResponse, 404, "non-ready product detail");
+  logPass("non-ready product detail hidden");
 }
 
 async function cleanupFixtures() {

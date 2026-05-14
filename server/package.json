@@ -29,6 +29,7 @@
     "smoke:product-visibility": "tsx src/scripts/smokeProductVisibility.ts",
     "smoke:order-payment": "tsx src/scripts/smokeOrderPayment.ts",
     "smoke:coupon-scope": "tsx src/scripts/smokeCouponScope.ts",
+    "smoke:checkout-coupons": "tsx src/scripts/smokeCheckoutCoupons.ts",
     "smoke:checkout-variants": "tsx src/scripts/smokeCheckoutVariants.ts",
     "smoke:shipment-regression": "tsx src/scripts/smokeShipmentRegression.ts",
     "smoke:auth-forgot-password": "tsx src/scripts/smokeForgotPassword.ts",

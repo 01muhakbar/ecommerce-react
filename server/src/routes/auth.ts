@@ -38,7 +38,10 @@ import {
   resetClientPassword,
 } from "../services/clientPasswordReset.service.js";
 import { AuthRateLimitError, enforceAuthRateLimit } from "../services/authRateLimit.service.js";
-import { buildAuthSessionClaims } from "../services/authSession.service.js";
+import {
+  buildAuthSessionClaims,
+  resolveAuthenticatedUserFromToken,
+} from "../services/authSession.service.js";
 
 const { User } = models as { User?: any };
 const AUTH_DEBUG_COOKIES = process.env.AUTH_DEBUG_COOKIES === "true";
@@ -108,14 +111,8 @@ const loadScopedUserFromCookie = async (
     scope === "admin" ? getAdminAuthCookieName() : getStorefrontAuthCookieName();
   const token = req.cookies?.[cookieName];
   if (!token) return null;
-  const claims = jwt.verify(token, process.env.JWT_SECRET ?? "dev-secret") as any;
-  const userId = Number(claims?.id ?? claims?.sub ?? 0);
-  if (!Number.isFinite(userId) || userId <= 0) return null;
-  const dbUser = await User.findByPk(userId, {
-    attributes: ["id", "email", "name", "role", "avatarUrl", "phoneNumber", "status"],
-  });
-  if (!dbUser) return null;
-  return dbUser;
+  const session = await resolveAuthenticatedUserFromToken(String(token));
+  return session?.user || null;
 };
 
 const respondWithScopedAuthUser = async (

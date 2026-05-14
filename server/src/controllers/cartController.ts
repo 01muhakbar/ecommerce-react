@@ -197,6 +197,11 @@ const resolveCartId = async (cart: any, userId: number | string) => {
   return Number.isFinite(normalized) ? normalized : null;
 };
 
+const latestCartOrder = [
+  ["updatedAt", "DESC"],
+  ["id", "DESC"],
+] as any;
+
 const toCartItemPayload = (row: any) => {
   const id = Number(getAttr(row, "id"));
   const cartId = Number(getAttr(row, "cartId"));
@@ -678,6 +683,7 @@ export const addToCart = async (
       const supportedVariantFields = await getCartItemSupportedVariantFields();
       let cart = await Cart.findOne({
         where: { userId },
+        order: latestCartOrder,
         transaction: t,
         lock: t.LOCK.UPDATE,
       });
@@ -758,6 +764,7 @@ export const getCart = async (
     const cart = await Cart.findOne({
       where: { userId },
       attributes: ["id", "userId"],
+      order: latestCartOrder,
     });
 
     if (!cart) {
@@ -803,7 +810,7 @@ export const removeFromCart = async (
       return;
     }
 
-    const cart = await Cart.findOne({ where: { userId } });
+    const cart = await Cart.findOne({ where: { userId }, order: latestCartOrder });
     if (!cart) {
       res.status(404).json({ message: "Cart not found." });
       return;
@@ -867,6 +874,7 @@ export const updateCartItem = async (
     await sequelize.transaction(async (t) => {
       const cart = await Cart.findOne({
         where: { userId },
+        order: latestCartOrder,
         transaction: t,
         lock: t.LOCK.UPDATE,
       });
@@ -937,6 +945,7 @@ export const setCartItemQty = async (
       const supportedVariantFields = await getCartItemSupportedVariantFields();
       let cart = await Cart.findOne({
         where: { userId },
+        order: latestCartOrder,
         transaction: t,
         lock: t.LOCK.UPDATE,
       });
@@ -1046,4 +1055,3 @@ export const setCartItemQty = async (
     sendControllerError(res, error, "Failed to set cart item quantity.");
   }
 };
-
