@@ -521,6 +521,9 @@ const finalizeSuborderShippingReadModel = (input: {
     aggregateShipment ? [aggregateShipment] : [],
     aggregateShipment?.shipmentStatus ?? "WAITING_PAYMENT"
   );
+  const splitShippingStatus = aggregateShipment?.shipmentStatus ?? aggregate.shippingStatus;
+  const splitShippingStatusMeta =
+    aggregateShipment?.shipmentStatusMeta ?? buildShipmentStatusMeta(splitShippingStatus);
   const storedFulfillmentStatus = normalizeStoredFulfillmentStatus(
     getAttr(input.suborder, "fulfillmentStatus")
   );
@@ -534,8 +537,8 @@ const finalizeSuborderShippingReadModel = (input: {
     compatibilityFulfillmentStatus === storedFulfillmentStatus;
   return {
     shipmentCount: input.featureEnabled ? aggregate.shipmentCount : 0,
-    shippingStatus: aggregate.shippingStatus,
-    shippingStatusMeta: aggregate.shippingStatusMeta,
+    shippingStatus: splitShippingStatus,
+    shippingStatusMeta: splitShippingStatusMeta,
     latestTrackingEvent: input.featureEnabled ? aggregate.latestTrackingEvent : null,
     hasActiveShipment: input.featureEnabled ? aggregate.hasActiveShipment : false,
     hasTrackingNumber: input.featureEnabled ? aggregate.hasTrackingNumber : false,

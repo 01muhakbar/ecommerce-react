@@ -652,13 +652,6 @@ export default function StoreOrderTrackingPage() {
   const storeSplits = Array.isArray(order?.storeSplits) ? order.storeSplits : [];
   const shipments = normalizeShipmentList(order?.shipments);
   const splitAttentionStatus = getSplitAttentionStatus(storeSplits);
-  const splitTruthSummary = splitAttentionStatus || {
-    totalCount: 0,
-    awaitingPaymentCount: 0,
-    underReviewCount: 0,
-    shipmentLaneCount: 0,
-    finalNegativeCount: 0,
-  };
   const brandingSettings = brandingSettingsQuery.data?.data?.storeSettings?.branding ?? {};
   const platformBrandName =
     String(brandingSettings?.workspaceBrandName || "").trim() || "TP PRENEURS";
@@ -705,24 +698,6 @@ export default function StoreOrderTrackingPage() {
         : truthStatus.code === "UNDER_REVIEW"
           ? "Wait for backend review"
           : "Keep this page for updates";
-  const nextStepDescription = isTrackingStopped
-    ? trackingPresentation.stoppedDescription
-    : stripeContinuePath
-      ? continueStripeAction?.description ||
-        statusSummary?.description ||
-        "Stripe payment can continue only through the backend-approved next step."
-      : continuePaymentPath
-        ? splitTruthSummary.awaitingPaymentCount > 0
-          ? `Complete payment from your account for ${splitTruthSummary.awaitingPaymentCount} store split${splitTruthSummary.awaitingPaymentCount === 1 ? "" : "s"}. Shipment stays blocked per split until payment truth is settled.`
-          : paymentEntry?.summaryLabel ||
-            continuePaymentAction?.description ||
-            trackingSummary.description
-        : truthStatus.code === "UNDER_REVIEW"
-          ? splitTruthSummary.underReviewCount > 0
-            ? `${splitTruthSummary.underReviewCount} store split payment${splitTruthSummary.underReviewCount === 1 ? " is" : "s are"} under review. Shipment will stay blocked for those splits until backend review finishes.`
-            : trackingSummary.description ||
-              "Payment review is still running. This page will update after the backend state changes."
-          : "Use the order reference for support, tracking checks, or printing the invoice after delivery.";
   const errorMessage = isInvalidRefResponse
     ? "Use the public invoice reference shown after checkout or in My Orders."
     : error?.response?.data?.message || error?.message || GENERIC_ERROR;
@@ -872,13 +847,6 @@ export default function StoreOrderTrackingPage() {
           <h2 className="mt-3 text-xl font-bold leading-tight">
             {nextStepTitle}
           </h2>
-          <p
-            className={`mt-3 text-sm leading-6 ${
-              isTrackingStopped ? "text-rose-700" : "text-slate-500"
-            }`}
-          >
-            {nextStepDescription}
-          </p>
           <div className="mt-5 space-y-3">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -970,11 +938,6 @@ export default function StoreOrderTrackingPage() {
               Shipments: <span className="font-semibold text-slate-900">{shipments.length}</span>
             </p>
           </div>
-          <p className="mt-3 text-xs text-slate-500">
-            {order?.usedLegacyFallback
-              ? "This order still mixes persisted shipment truth with legacy compatibility fallback."
-              : "This tracking lane reads the same shipment truth that seller and admin use."}
-          </p>
           <div className="mt-5 grid gap-3 lg:grid-cols-2">
             {shipments.map((shipment) => {
               const buyerShipment = getBuyerShipmentPresentation(
@@ -1030,11 +993,6 @@ export default function StoreOrderTrackingPage() {
                     </span>
                   </p>
                 </div>
-                <p className="mt-3 text-sm text-slate-500">
-                  {buyerShipment.description ||
-                    shipment.latestTrackingEvent?.note ||
-                    "Shipment read model is available for this store shipment."}
-                </p>
                 {shipment.compatibilityMatchesStorage === false ? (
                   <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
                     Shipment truth and legacy compatibility storage are out of sync.
@@ -1063,9 +1021,6 @@ export default function StoreOrderTrackingPage() {
                             {formatDate(event.happenedAt)}
                           </p>
                         </div>
-                        <p className="mt-1 text-sm text-slate-600">
-                          {event.note || event.statusMeta?.description || "Shipment updated."}
-                        </p>
                       </div>
                     ))}
                   </div>

@@ -12,6 +12,7 @@ import {
   PaymentProof,
   PaymentStatusLog,
   Product,
+  Shipment,
   Store,
   StoreMember,
   StorePaymentProfile,
@@ -153,6 +154,12 @@ async function createFixtureStore(ownerUserId: number, label: string) {
     name: `${RUN_ID}-${label}`,
     slug,
     status: "ACTIVE",
+    phone: "081234567890",
+    addressLine1: "MVF Origin Street 1",
+    city: "Jakarta Selatan",
+    province: "Jakarta",
+    postalCode: "12190",
+    country: "Indonesia",
   } as any);
   const id = Number(store.getDataValue("id"));
   createdStoreIds.push(id);
@@ -511,6 +518,125 @@ async function runCheckoutIdempotencyScenario(input: {
     "idempotency checkout: duplicate seller notification created"
   );
 
+  await addProductToCart(input.customerClient, input.buyerUserId, input.productId);
+  const parallelShippingDetails = buildShippingDetails("idempotency-parallel");
+  const parallelCheckoutRequestKey = `${RUN_ID}:checkout-idempotency-parallel`;
+  const parallelCheckoutBody = {
+    customer: {
+      name: parallelShippingDetails.fullName,
+      phone: parallelShippingDetails.phoneNumber,
+      address: `${parallelShippingDetails.streetName} ${parallelShippingDetails.houseNumber}`,
+      notes: "Smoke parallel idempotency",
+    },
+    checkoutRequestKey: parallelCheckoutRequestKey,
+    shippingDetails: parallelShippingDetails,
+  };
+  const parallelResponses = await Promise.all([
+    input.customerClient.request("/api/checkout/create-multi-store", {
+      method: "POST",
+      body: JSON.stringify(parallelCheckoutBody),
+    }),
+    input.customerClient.request("/api/checkout/create-multi-store", {
+      method: "POST",
+      body: JSON.stringify(parallelCheckoutBody),
+    }),
+  ]);
+  const parallelSuccessResponses = parallelResponses.filter((response) =>
+    response.status === 201 || response.status === 200
+  );
+  assert.ok(
+    parallelSuccessResponses.length >= 1,
+    `parallel idempotency checkout: expected a canonical response, received ${parallelResponses
+      .map((response) => `${response.status}:${response.text}`)
+      .join(" | ")}`
+  );
+  for (const response of parallelResponses) {
+    const isCanonical = response.status === 201 || response.status === 200;
+    const isInProgress =
+      response.status === 409 &&
+      String(response.body?.code || "") === "CHECKOUT_IDEMPOTENCY_IN_PROGRESS" &&
+      Boolean(response.body?.data?.retryable);
+    assert.ok(
+      isCanonical || isInProgress,
+      `parallel idempotency checkout: unsafe duplicate response ${response.status} ${response.text}`
+    );
+  }
+
+  const parallelCanonical = parallelSuccessResponses[0].body?.data ?? null;
+  const parallelOrderId = toNumber(parallelCanonical?.orderId, 0);
+  const parallelInvoiceNo = String(parallelCanonical?.invoiceNo || parallelCanonical?.ref || "");
+  assert.ok(parallelOrderId > 0, "parallel idempotency checkout: orderId missing");
+  assert.ok(parallelInvoiceNo, "parallel idempotency checkout: invoiceNo missing");
+  const parallelGroup = getSingleGroup(
+    parallelCanonical,
+    "parallel idempotency canonical checkout"
+  );
+  const parallelSuborderId = toNumber(parallelGroup?.suborderId, 0);
+  const parallelPaymentId = toNumber(parallelGroup?.payment?.id, 0);
+  assert.ok(parallelSuborderId > 0, "parallel idempotency checkout: suborderId missing");
+  assert.ok(parallelPaymentId > 0, "parallel idempotency checkout: paymentId missing");
+  if (!createdOrderIds.includes(parallelOrderId)) {
+    createdOrderIds.push(parallelOrderId);
+  }
+  for (const response of parallelSuccessResponses.slice(1)) {
+    assert.equal(
+      toNumber(response.body?.data?.orderId, 0),
+      parallelOrderId,
+      "parallel idempotency checkout: duplicate response orderId mismatch"
+    );
+    assert.equal(
+      String(response.body?.data?.invoiceNo || response.body?.data?.ref || ""),
+      parallelInvoiceNo,
+      "parallel idempotency checkout: duplicate response invoiceNo mismatch"
+    );
+  }
+
+  const parallelReplay = await input.customerClient.request("/api/checkout/create-multi-store", {
+    method: "POST",
+    body: JSON.stringify(parallelCheckoutBody),
+  });
+  assertStatus(parallelReplay, 200, "parallel idempotency replay checkout");
+  assert.equal(
+    Boolean(parallelReplay.body?.data?.idempotency?.replayed),
+    true,
+    "parallel idempotency replay checkout: replay flag missing"
+  );
+  assert.equal(
+    toNumber(parallelReplay.body?.data?.orderId, 0),
+    parallelOrderId,
+    "parallel idempotency replay checkout: orderId mismatch"
+  );
+
+  const parallelOrders = await Order.findAll({
+    where: { invoiceNo: parallelInvoiceNo } as any,
+    attributes: ["id"],
+  });
+  assert.equal(
+    parallelOrders.length,
+    1,
+    "parallel idempotency checkout: duplicate parent order created"
+  );
+
+  const parallelSuborders = await Suborder.findAll({
+    where: { orderId: parallelOrderId } as any,
+    attributes: ["id"],
+  });
+  assert.equal(
+    parallelSuborders.length,
+    1,
+    "parallel idempotency checkout: duplicate suborder created"
+  );
+
+  const parallelPayments = await Payment.findAll({
+    where: { suborderId: parallelSuborderId } as any,
+    attributes: ["id"],
+  });
+  assert.equal(
+    parallelPayments.length,
+    1,
+    "parallel idempotency checkout: duplicate payment created"
+  );
+
   logPass("checkout idempotency duplicate-submit coverage");
 }
 
@@ -549,12 +675,16 @@ async function expectSellerFulfillmentBlocked(input: {
   action: "MARK_PROCESSING" | "MARK_SHIPPED" | "MARK_DELIVERED";
   expectedCode: string;
   label: string;
+  body?: Record<string, unknown>;
 }) {
   const response = await input.sellerClient.request(
     `/api/seller/stores/${input.storeId}/suborders/${input.suborderId}/fulfillment`,
     {
       method: "PATCH",
-      body: JSON.stringify({ action: input.action }),
+      body: JSON.stringify({
+        action: input.action,
+        ...(input.body || {}),
+      }),
     }
   );
   assertStatus(response, 409, input.label);
@@ -565,6 +695,33 @@ async function expectSellerFulfillmentBlocked(input: {
     `${input.label}: blocker code mismatch`
   );
   return response.body ?? null;
+}
+
+async function updateSellerFulfillment(input: {
+  sellerClient: CookieClient;
+  storeId: number;
+  suborderId: number;
+  action: "MARK_PROCESSING" | "MARK_SHIPPED" | "MARK_DELIVERED";
+  label: string;
+  trackingNumber?: string;
+  courierCode?: string;
+  courierService?: string;
+}) {
+  const response = await input.sellerClient.request(
+    `/api/seller/stores/${input.storeId}/suborders/${input.suborderId}/fulfillment`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        action: input.action,
+        trackingNumber: input.trackingNumber,
+        courierCode: input.courierCode,
+        courierService: input.courierService,
+      }),
+    }
+  );
+  assertStatus(response, 200, input.label);
+  assert.equal(Boolean(response.body?.success), true, `${input.label}: mutation should succeed`);
+  return response.body?.data ?? null;
 }
 
 async function fetchSellerPaymentReviewList(
@@ -677,6 +834,95 @@ function findAdminSplitGroup(auditDetail: any, suborderId: number, label: string
   return group;
 }
 
+async function assertPersistedInitialCheckoutStatus(scenario: CheckoutScenario, label: string) {
+  const order = await Order.findByPk(scenario.orderId, {
+    attributes: ["id", "status", "paymentStatus"],
+  });
+  assert.ok(order, `${label}: parent order missing`);
+  assert.equal(String(order?.get("status") || ""), "pending", `${label}: parent order status mismatch`);
+  assert.equal(
+    String(order?.get("paymentStatus") || ""),
+    "UNPAID",
+    `${label}: parent payment status mismatch`
+  );
+
+  const suborder = await Suborder.findByPk(scenario.suborderId, {
+    attributes: ["id", "paymentStatus", "fulfillmentStatus"],
+  });
+  assert.ok(suborder, `${label}: suborder missing`);
+  assert.equal(
+    String(suborder?.get("paymentStatus") || ""),
+    "UNPAID",
+    `${label}: suborder payment status mismatch`
+  );
+  assert.equal(
+    String(suborder?.get("fulfillmentStatus") || ""),
+    "UNFULFILLED",
+    `${label}: suborder fulfillment status mismatch`
+  );
+
+  const payment = await Payment.findByPk(scenario.paymentId, {
+    attributes: ["id", "status"],
+  });
+  assert.ok(payment, `${label}: payment missing`);
+  assert.equal(
+    String(payment?.get("status") || ""),
+    "CREATED",
+    `${label}: payment record status mismatch`
+  );
+}
+
+async function assertPersistedFulfillmentStatus(
+  scenario: CheckoutScenario,
+  expected: {
+    parentOrderStatus: string;
+    suborderFulfillmentStatus: string;
+    shipmentStatus: string;
+  },
+  label: string
+) {
+  const order = await Order.findByPk(scenario.orderId, {
+    attributes: ["id", "status", "paymentStatus"],
+  });
+  assert.ok(order, `${label}: parent order missing`);
+  assert.equal(
+    String(order?.get("status") || ""),
+    expected.parentOrderStatus,
+    `${label}: parent order status mismatch`
+  );
+  assert.equal(
+    String(order?.get("paymentStatus") || ""),
+    "PAID",
+    `${label}: parent payment status mismatch`
+  );
+
+  const suborder = await Suborder.findByPk(scenario.suborderId, {
+    attributes: ["id", "paymentStatus", "fulfillmentStatus"],
+  });
+  assert.ok(suborder, `${label}: suborder missing`);
+  assert.equal(
+    String(suborder?.get("paymentStatus") || ""),
+    "PAID",
+    `${label}: suborder payment status mismatch`
+  );
+  assert.equal(
+    String(suborder?.get("fulfillmentStatus") || ""),
+    expected.suborderFulfillmentStatus,
+    `${label}: suborder fulfillment status mismatch`
+  );
+
+  const shipment = await Shipment.findOne({
+    where: { suborderId: scenario.suborderId } as any,
+    attributes: ["id", "status"],
+  });
+  assert.ok(shipment, `${label}: shipment missing`);
+  assert.equal(
+    String(shipment?.get("status") || ""),
+    expected.shipmentStatus,
+    `${label}: shipment status mismatch`
+  );
+}
+
 async function expectCheckoutConflict(input: {
   customerClient: CookieClient;
   buyerUserId: number;
@@ -730,12 +976,28 @@ async function runApproveScenario(input: {
     "approve buyer initial grouped view"
   );
   assertInitialState(initialBuyerView, "approve buyer initial grouped view");
+  await assertPersistedInitialCheckoutStatus(scenario, "approve persisted initial checkout");
 
   const initialSellerDetail = await fetchSellerOrderDetail(
     input.sellerClient,
     input.storeId,
     scenario.suborderId,
     "approve seller initial detail"
+  );
+  assert.equal(
+    String(initialSellerDetail?.paymentStatus || ""),
+    "UNPAID",
+    "approve seller initial detail: suborder paymentStatus should be UNPAID"
+  );
+  assert.equal(
+    String(initialSellerDetail?.fulfillmentStatus || ""),
+    "UNFULFILLED",
+    "approve seller initial detail: fulfillmentStatus should be UNFULFILLED"
+  );
+  assert.equal(
+    String(initialSellerDetail?.paymentSummary?.status || initialSellerDetail?.payment?.status || ""),
+    "CREATED",
+    "approve seller initial detail: payment record should be CREATED"
   );
   assert.equal(
     String(initialSellerDetail?.operationalTruth?.bridge?.paymentToShipment || ""),
@@ -751,6 +1013,87 @@ async function runApproveScenario(input: {
     ),
     false,
     "approve seller initial detail: fulfillment actions should be disabled before payment"
+  );
+
+  const initialAdminAudit = await fetchAdminAuditDetail(
+    input.adminClient,
+    scenario.orderId,
+    "approve admin initial audit detail"
+  );
+  const initialAdminAuditGroup = findAdminSplitGroup(
+    initialAdminAudit,
+    scenario.suborderId,
+    "approve admin initial audit detail"
+  );
+  const initialAdminAuditSuborder = findAdminSuborder(
+    initialAdminAudit,
+    scenario.suborderId,
+    "approve admin initial audit detail"
+  );
+  assert.equal(
+    String(initialAdminAudit?.parent?.paymentStatus || ""),
+    "UNPAID",
+    "approve admin initial: parent paymentStatus should be UNPAID"
+  );
+  assert.equal(
+    String(initialAdminAudit?.parent?.orderStatus || ""),
+    "pending",
+    "approve admin initial: parent orderStatus should be pending"
+  );
+  assert.equal(
+    String(initialAdminAuditGroup?.payment?.status || ""),
+    "CREATED",
+    "approve admin initial: split payment should be CREATED"
+  );
+  assert.equal(
+    String(initialAdminAuditSuborder?.paymentStatus || ""),
+    "UNPAID",
+    "approve admin initial: suborder paymentStatus should be UNPAID"
+  );
+  assert.equal(
+    String(initialAdminAuditSuborder?.fulfillmentStatus || ""),
+    "UNFULFILLED",
+    "approve admin initial: suborder fulfillmentStatus should be UNFULFILLED"
+  );
+
+  const initialAdminOrderDetail = await fetchAdminOrderDetail(
+    input.adminClient,
+    scenario.invoiceNo,
+    "approve admin initial order detail"
+  );
+  assert.equal(
+    String(initialAdminOrderDetail?.contract?.paymentActionability?.code || ""),
+    "ACTION_REQUIRED",
+    "approve admin initial order detail: paymentActionability should be ACTION_REQUIRED"
+  );
+
+  const initialPublicTracking = await fetchPublicTracking(
+    scenario.invoiceNo,
+    "approve public initial tracking"
+  );
+  assert.equal(
+    String(initialPublicTracking?.contract?.paymentActionability?.code || ""),
+    "ACTION_REQUIRED",
+    "approve public initial tracking: paymentActionability should be ACTION_REQUIRED"
+  );
+  assert.equal(
+    String(initialPublicTracking?.storeSplits?.[0]?.contract?.paymentStatus || ""),
+    "UNPAID",
+    "approve public initial tracking: split contract paymentStatus should be UNPAID"
+  );
+  assert.equal(
+    String(initialPublicTracking?.storeSplits?.[0]?.paymentReadModel?.status || ""),
+    "CREATED",
+    "approve public initial tracking: split paymentReadModel should be CREATED"
+  );
+  assert.equal(
+    String(
+      initialPublicTracking?.storeSplits?.[0]?.shippingStatus ||
+        initialPublicTracking?.storeSplits?.[0]?.operationalTruth?.shipment?.status ||
+        ""
+    ),
+    "WAITING_PAYMENT",
+    "approve public initial tracking: shipment should be waiting for payment"
   );
   await expectSellerFulfillmentBlocked({
     sellerClient: input.sellerClient,
@@ -807,6 +1150,53 @@ async function runApproveScenario(input: {
     String(sellerApproved?.fulfillmentStatus || ""),
     "UNFULFILLED",
     "approve scenario: approval should not auto-pack the suborder"
+  );
+
+  const sellerPaidReady = await fetchSellerOrderDetail(
+    input.sellerClient,
+    input.storeId,
+    scenario.suborderId,
+    "approve seller paid ready detail"
+  );
+  assert.equal(
+    String(sellerPaidReady?.paymentStatus || ""),
+    "PAID",
+    "approve seller paid ready: suborder paymentStatus should be PAID"
+  );
+  assert.equal(
+    String(sellerPaidReady?.fulfillmentStatus || ""),
+    "UNFULFILLED",
+    "approve seller paid ready: fulfillment should not auto-pack"
+  );
+  assert.equal(
+    String(sellerPaidReady?.shippingStatus || sellerPaidReady?.operationalTruth?.shipment?.status || ""),
+    "READY_TO_FULFILL",
+    "approve seller paid ready: shipment should be ready to fulfill"
+  );
+  assert.equal(
+    String(sellerPaidReady?.operationalTruth?.bridge?.paymentToShipment || ""),
+    "READY",
+    "approve seller paid ready: payment-to-shipment bridge should be ready"
+  );
+  assert.equal(
+    Boolean(
+      Array.isArray(sellerPaidReady?.operationalTruth?.actions?.sellerFulfillment) &&
+        sellerPaidReady.operationalTruth.actions.sellerFulfillment.some(
+          (action: any) => action?.code === "MARK_PROCESSING" && action?.enabled !== false
+        )
+    ),
+    true,
+    "approve seller paid ready: MARK_PROCESSING should be available after payment is PAID"
+  );
+  assert.equal(
+    Boolean(
+      Array.isArray(sellerPaidReady?.shipments?.[0]?.availableShippingActions) &&
+        sellerPaidReady.shipments[0].availableShippingActions.some(
+          (action: any) => action?.code === "MARK_PROCESSING" && action?.enabled === true
+        )
+    ),
+    true,
+    "approve seller paid ready: shipment MARK_PROCESSING should be enabled after payment is PAID"
   );
 
   const buyerPaid = await fetchBuyerGroupedOrder(
@@ -922,7 +1312,567 @@ async function runApproveScenario(input: {
     "/uploads/products/demo.svg",
     "approve public tracking: invoice item should expose normalized product imageUrl"
   );
-  logPass("approve scenario cross-lane sync");
+
+  logStep("approve scenario: seller marks shipment packed");
+  const packedMutation = await updateSellerFulfillment({
+    sellerClient: input.sellerClient,
+    storeId: input.storeId,
+    suborderId: scenario.suborderId,
+    action: "MARK_PROCESSING",
+    label: "approve seller mark packed",
+  });
+  assert.equal(
+    String(packedMutation?.transition?.to || ""),
+    "PROCESSING",
+    "approve mark packed: compatibility fulfillment transition mismatch"
+  );
+  assert.equal(
+    String(packedMutation?.transition?.shipmentTo || ""),
+    "PACKED",
+    "approve mark packed: canonical shipment transition mismatch"
+  );
+  assert.equal(
+    String(packedMutation?.suborder?.paymentStatus || ""),
+    "PAID",
+    "approve mark packed: suborder paymentStatus should remain PAID"
+  );
+  assert.equal(
+    String(packedMutation?.suborder?.fulfillmentStatus || ""),
+    "PROCESSING",
+    "approve mark packed: suborder fulfillmentStatus should be PROCESSING"
+  );
+  assert.equal(
+    String(packedMutation?.suborder?.shippingStatus || packedMutation?.suborder?.operationalTruth?.shipment?.status || ""),
+    "PACKED",
+    "approve mark packed: suborder shipment should be PACKED"
+  );
+  await assertPersistedFulfillmentStatus(
+    scenario,
+    {
+      parentOrderStatus: "processing",
+      suborderFulfillmentStatus: "PROCESSING",
+      shipmentStatus: "PACKED",
+    },
+    "approve persisted packed fulfillment"
+  );
+
+  const sellerPacked = await fetchSellerOrderDetail(
+    input.sellerClient,
+    input.storeId,
+    scenario.suborderId,
+    "approve seller packed detail"
+  );
+  assert.equal(
+    String(sellerPacked?.paymentStatus || ""),
+    "PAID",
+    "approve seller packed: paymentStatus should remain PAID"
+  );
+  assert.equal(
+    String(sellerPacked?.fulfillmentStatus || ""),
+    "PROCESSING",
+    "approve seller packed: fulfillmentStatus should be PROCESSING"
+  );
+  assert.equal(
+    String(sellerPacked?.shippingStatus || sellerPacked?.operationalTruth?.shipment?.status || ""),
+    "PACKED",
+    "approve seller packed: shipment should be PACKED"
+  );
+  assert.equal(
+    Boolean(
+      Array.isArray(sellerPacked?.operationalTruth?.actions?.sellerFulfillment) &&
+        sellerPacked.operationalTruth.actions.sellerFulfillment.some(
+          (action: any) => action?.code === "MARK_SHIPPED" && action?.enabled !== false
+        )
+    ),
+    true,
+    "approve seller packed: MARK_SHIPPED should become the next seller fulfillment action"
+  );
+
+  const adminPacked = await fetchAdminOrderDetail(
+    input.adminClient,
+    scenario.invoiceNo,
+    "approve admin packed order detail"
+  );
+  const adminPackedGroup = getSingleGroup(adminPacked, "approve admin packed order detail");
+  assert.equal(
+    String(adminPacked?.paymentStatus || adminPacked?.contract?.paymentStatus || ""),
+    "PAID",
+    "approve admin packed: parent paymentStatus should remain PAID"
+  );
+  assert.equal(
+    String(adminPacked?.rawStatus || adminPacked?.status || ""),
+    "processing",
+    "approve admin packed: parent order status should remain processing"
+  );
+  assert.equal(
+    String(adminPackedGroup?.paymentStatus || ""),
+    "PAID",
+    "approve admin packed: split paymentStatus should remain PAID"
+  );
+  assert.equal(
+    String(adminPackedGroup?.fulfillmentStatus || ""),
+    "PROCESSING",
+    "approve admin packed: split fulfillmentStatus should be PROCESSING"
+  );
+  assert.equal(
+    String(adminPackedGroup?.shippingStatus || ""),
+    "PACKED",
+    "approve admin packed: split shippingStatus should be PACKED"
+  );
+  assert.equal(
+    String(adminPacked?.suborderShipmentSummary?.[0]?.shippingStatus || ""),
+    "PACKED",
+    "approve admin packed: shipment reconciliation summary should be PACKED"
+  );
+  assert.equal(
+    String(adminPacked?.shipments?.[0]?.shipmentStatus || ""),
+    "PACKED",
+    "approve admin packed: persisted shipment should be PACKED"
+  );
+
+  const publicPacked = await fetchPublicTracking(
+    scenario.invoiceNo,
+    "approve public packed tracking"
+  );
+  assert.equal(
+    String(publicPacked?.contract?.paymentActionability?.code || ""),
+    "PAID",
+    "approve public packed: paymentActionability should remain PAID"
+  );
+  assert.equal(
+    String(publicPacked?.storeSplits?.[0]?.contract?.paymentStatus || ""),
+    "PAID",
+    "approve public packed: split contract paymentStatus should remain PAID"
+  );
+  assert.equal(
+    String(publicPacked?.storeSplits?.[0]?.paymentReadModel?.status || ""),
+    "PAID",
+    "approve public packed: split paymentReadModel should remain PAID"
+  );
+  assert.equal(
+    String(publicPacked?.storeSplits?.[0]?.shippingStatus || publicPacked?.storeSplits?.[0]?.operationalTruth?.shipment?.status || ""),
+    "PACKED",
+    "approve public packed: split shipment should be PACKED"
+  );
+  assert.equal(
+    String(publicPacked?.storeSplits?.[0]?.shippingStatusMeta?.label || ""),
+    "Packed",
+    "approve public packed: split shipment should expose buyer-friendly packed label"
+  );
+  assert.equal(
+    String(publicPacked?.storeSplits?.[0]?.operationalTruth?.statusSummary?.lane || ""),
+    "SHIPMENT",
+    "approve public packed: status summary should stay on shipment lane"
+  );
+  assert.equal(
+    String(publicPacked?.storeSplits?.[0]?.operationalTruth?.statusSummary?.code || ""),
+    "PACKED",
+    "approve public packed: status summary should expose PACKED"
+  );
+
+  await expectSellerFulfillmentBlocked({
+    sellerClient: input.sellerClient,
+    storeId: input.storeId,
+    suborderId: scenario.suborderId,
+    action: "MARK_SHIPPED",
+    expectedCode: "TRACKING_NUMBER_REQUIRED",
+    label: "approve seller shipped tracking guard",
+    body: {
+      courierService: "MVF Courier",
+    },
+  });
+
+  await expectSellerFulfillmentBlocked({
+    sellerClient: input.sellerClient,
+    storeId: input.storeId,
+    suborderId: scenario.suborderId,
+    action: "MARK_SHIPPED",
+    expectedCode: "COURIER_DETAILS_REQUIRED",
+    label: "approve seller shipped courier guard",
+    body: {
+      trackingNumber: `${RUN_ID}-TRACK-001`,
+    },
+  });
+
+  logStep("approve scenario: seller marks shipment shipped");
+  const shippedMutation = await updateSellerFulfillment({
+    sellerClient: input.sellerClient,
+    storeId: input.storeId,
+    suborderId: scenario.suborderId,
+    action: "MARK_SHIPPED",
+    label: "approve seller mark shipped",
+    trackingNumber: `${RUN_ID}-TRACK-001`,
+    courierService: "MVF Courier",
+  });
+  assert.equal(
+    String(shippedMutation?.transition?.to || ""),
+    "SHIPPED",
+    "approve mark shipped: compatibility fulfillment transition mismatch"
+  );
+  assert.equal(
+    String(shippedMutation?.transition?.shipmentTo || ""),
+    "SHIPPED",
+    "approve mark shipped: canonical shipment transition mismatch"
+  );
+  assert.equal(
+    String(shippedMutation?.parentOrderSync?.to || ""),
+    "shipped",
+    "approve mark shipped: parent order should sync to shipped for a single active split"
+  );
+  assert.equal(
+    String(shippedMutation?.suborder?.paymentStatus || ""),
+    "PAID",
+    "approve mark shipped: suborder paymentStatus should remain PAID"
+  );
+  assert.equal(
+    String(shippedMutation?.suborder?.fulfillmentStatus || ""),
+    "SHIPPED",
+    "approve mark shipped: suborder fulfillmentStatus should be SHIPPED"
+  );
+  assert.equal(
+    String(shippedMutation?.suborder?.shippingStatus || shippedMutation?.suborder?.operationalTruth?.shipment?.status || ""),
+    "SHIPPED",
+    "approve mark shipped: suborder shipment should be SHIPPED"
+  );
+  await assertPersistedFulfillmentStatus(
+    scenario,
+    {
+      parentOrderStatus: "shipped",
+      suborderFulfillmentStatus: "SHIPPED",
+      shipmentStatus: "SHIPPED",
+    },
+    "approve persisted shipped fulfillment"
+  );
+
+  const sellerShipped = await fetchSellerOrderDetail(
+    input.sellerClient,
+    input.storeId,
+    scenario.suborderId,
+    "approve seller shipped detail"
+  );
+  assert.equal(
+    String(sellerShipped?.order?.status || ""),
+    "shipped",
+    "approve seller shipped: parent order status should be shipped"
+  );
+  assert.equal(
+    String(sellerShipped?.paymentStatus || ""),
+    "PAID",
+    "approve seller shipped: paymentStatus should remain PAID"
+  );
+  assert.equal(
+    String(sellerShipped?.fulfillmentStatus || ""),
+    "SHIPPED",
+    "approve seller shipped: fulfillmentStatus should be SHIPPED"
+  );
+  assert.equal(
+    String(sellerShipped?.shippingStatus || sellerShipped?.operationalTruth?.shipment?.status || ""),
+    "SHIPPED",
+    "approve seller shipped: shipment should be SHIPPED"
+  );
+  assert.equal(
+    String(sellerShipped?.shipments?.[0]?.trackingNumber || ""),
+    `${RUN_ID}-TRACK-001`,
+    "approve seller shipped: tracking number should be retained"
+  );
+  assert.equal(
+    String(sellerShipped?.shipments?.[0]?.courierService || ""),
+    "MVF Courier",
+    "approve seller shipped: courier service should be retained"
+  );
+  assert.equal(
+    Boolean(
+      Array.isArray(sellerShipped?.operationalTruth?.actions?.sellerFulfillment) &&
+        sellerShipped.operationalTruth.actions.sellerFulfillment.some(
+          (action: any) => action?.code === "MARK_DELIVERED" && action?.enabled !== false
+        )
+    ),
+    true,
+    "approve seller shipped: MARK_DELIVERED should become the next seller fulfillment action"
+  );
+
+  const adminShipped = await fetchAdminOrderDetail(
+    input.adminClient,
+    scenario.invoiceNo,
+    "approve admin shipped order detail"
+  );
+  const adminShippedGroup = getSingleGroup(adminShipped, "approve admin shipped order detail");
+  assert.equal(
+    String(adminShipped?.rawStatus || adminShipped?.status || ""),
+    "shipped",
+    "approve admin shipped: parent order status should be shipped"
+  );
+  assert.equal(
+    String(adminShipped?.paymentStatus || adminShipped?.contract?.paymentStatus || ""),
+    "PAID",
+    "approve admin shipped: parent paymentStatus should remain PAID"
+  );
+  assert.equal(
+    String(adminShipped?.shippingStatus || ""),
+    "SHIPPED",
+    "approve admin shipped: parent aggregate shippingStatus should be SHIPPED"
+  );
+  assert.equal(
+    String(adminShippedGroup?.paymentStatus || ""),
+    "PAID",
+    "approve admin shipped: split paymentStatus should remain PAID"
+  );
+  assert.equal(
+    String(adminShippedGroup?.fulfillmentStatus || ""),
+    "SHIPPED",
+    "approve admin shipped: split fulfillmentStatus should be SHIPPED"
+  );
+  assert.equal(
+    String(adminShippedGroup?.shippingStatus || ""),
+    "SHIPPED",
+    "approve admin shipped: split shippingStatus should be SHIPPED"
+  );
+  assert.equal(
+    String(adminShipped?.suborderShipmentSummary?.[0]?.shippingStatus || ""),
+    "SHIPPED",
+    "approve admin shipped: shipment reconciliation summary should be SHIPPED"
+  );
+  assert.equal(
+    String(adminShipped?.shipments?.[0]?.shipmentStatus || ""),
+    "SHIPPED",
+    "approve admin shipped: persisted shipment should be SHIPPED"
+  );
+  assert.equal(
+    String(adminShipped?.shipments?.[0]?.trackingNumber || ""),
+    `${RUN_ID}-TRACK-001`,
+    "approve admin shipped: tracking number should be retained"
+  );
+
+  const publicShipped = await fetchPublicTracking(
+    scenario.invoiceNo,
+    "approve public shipped tracking"
+  );
+  assert.ok(
+    ["shipped", "shipping"].includes(String(publicShipped?.orderStatus || publicShipped?.status || "")),
+    "approve public shipped: parent order status should be shipped/shipping"
+  );
+  assert.equal(
+    String(publicShipped?.contract?.paymentActionability?.code || ""),
+    "PAID",
+    "approve public shipped: paymentActionability should remain PAID"
+  );
+  assert.equal(
+    String(publicShipped?.shippingStatus || ""),
+    "SHIPPED",
+    "approve public shipped: parent aggregate shippingStatus should be SHIPPED"
+  );
+  assert.equal(
+    String(publicShipped?.storeSplits?.[0]?.paymentReadModel?.status || ""),
+    "PAID",
+    "approve public shipped: split paymentReadModel should remain PAID"
+  );
+  assert.equal(
+    String(publicShipped?.storeSplits?.[0]?.fulfillmentStatus || ""),
+    "SHIPPED",
+    "approve public shipped: split fulfillmentStatus should be SHIPPED"
+  );
+  assert.equal(
+    String(publicShipped?.storeSplits?.[0]?.shippingStatus || publicShipped?.storeSplits?.[0]?.operationalTruth?.shipment?.status || ""),
+    "SHIPPED",
+    "approve public shipped: split shipment should be SHIPPED"
+  );
+  assert.equal(
+    String(publicShipped?.storeSplits?.[0]?.shippingStatusMeta?.label || ""),
+    "Shipped",
+    "approve public shipped: split shipment should expose buyer-friendly shipped label"
+  );
+  assert.equal(
+    String(publicShipped?.storeSplits?.[0]?.operationalTruth?.statusSummary?.code || ""),
+    "SHIPPED",
+    "approve public shipped: status summary should expose SHIPPED"
+  );
+  assert.equal(
+    String(publicShipped?.shipments?.[0]?.trackingNumber || ""),
+    `${RUN_ID}-TRACK-001`,
+    "approve public shipped: tracking number should be retained"
+  );
+
+  logStep("approve scenario: seller marks shipment delivered");
+  const deliveredMutation = await updateSellerFulfillment({
+    sellerClient: input.sellerClient,
+    storeId: input.storeId,
+    suborderId: scenario.suborderId,
+    action: "MARK_DELIVERED",
+    label: "approve seller mark delivered",
+  });
+  assert.equal(
+    String(deliveredMutation?.transition?.to || ""),
+    "DELIVERED",
+    "approve mark delivered: compatibility fulfillment transition mismatch"
+  );
+  assert.equal(
+    String(deliveredMutation?.transition?.shipmentTo || ""),
+    "DELIVERED",
+    "approve mark delivered: canonical shipment transition mismatch"
+  );
+  assert.equal(
+    String(deliveredMutation?.parentOrderSync?.to || ""),
+    "delivered",
+    "approve mark delivered: parent order should sync to delivered for a single active split"
+  );
+  assert.equal(
+    String(deliveredMutation?.suborder?.paymentStatus || ""),
+    "PAID",
+    "approve mark delivered: suborder paymentStatus should remain PAID"
+  );
+  assert.equal(
+    String(deliveredMutation?.suborder?.fulfillmentStatus || ""),
+    "DELIVERED",
+    "approve mark delivered: suborder fulfillmentStatus should be DELIVERED"
+  );
+  assert.equal(
+    String(deliveredMutation?.suborder?.shippingStatus || deliveredMutation?.suborder?.operationalTruth?.shipment?.status || ""),
+    "DELIVERED",
+    "approve mark delivered: suborder shipment should be DELIVERED"
+  );
+  await assertPersistedFulfillmentStatus(
+    scenario,
+    {
+      parentOrderStatus: "delivered",
+      suborderFulfillmentStatus: "DELIVERED",
+      shipmentStatus: "DELIVERED",
+    },
+    "approve persisted delivered fulfillment"
+  );
+
+  const sellerDelivered = await fetchSellerOrderDetail(
+    input.sellerClient,
+    input.storeId,
+    scenario.suborderId,
+    "approve seller delivered detail"
+  );
+  assert.equal(
+    String(sellerDelivered?.order?.status || ""),
+    "delivered",
+    "approve seller delivered: parent order status should be delivered"
+  );
+  assert.equal(
+    String(sellerDelivered?.paymentStatus || ""),
+    "PAID",
+    "approve seller delivered: paymentStatus should remain PAID"
+  );
+  assert.equal(
+    String(sellerDelivered?.fulfillmentStatus || ""),
+    "DELIVERED",
+    "approve seller delivered: fulfillmentStatus should be DELIVERED"
+  );
+  assert.equal(
+    String(sellerDelivered?.shippingStatus || sellerDelivered?.operationalTruth?.shipment?.status || ""),
+    "DELIVERED",
+    "approve seller delivered: shipment should be DELIVERED"
+  );
+  assert.equal(
+    Boolean(
+      Array.isArray(sellerDelivered?.operationalTruth?.actions?.sellerFulfillment) &&
+        sellerDelivered.operationalTruth.actions.sellerFulfillment.some(
+          (action: any) => action?.enabled !== false
+        )
+    ),
+    false,
+    "approve seller delivered: no forward seller fulfillment action should remain"
+  );
+
+  const adminDelivered = await fetchAdminOrderDetail(
+    input.adminClient,
+    scenario.invoiceNo,
+    "approve admin delivered order detail"
+  );
+  const adminDeliveredGroup = getSingleGroup(adminDelivered, "approve admin delivered order detail");
+  assert.equal(
+    String(adminDelivered?.rawStatus || adminDelivered?.status || ""),
+    "delivered",
+    "approve admin delivered: parent order status should be delivered"
+  );
+  assert.equal(
+    String(adminDelivered?.paymentStatus || adminDelivered?.contract?.paymentStatus || ""),
+    "PAID",
+    "approve admin delivered: parent paymentStatus should remain PAID"
+  );
+  assert.equal(
+    String(adminDelivered?.shippingStatus || ""),
+    "DELIVERED",
+    "approve admin delivered: parent aggregate shippingStatus should be DELIVERED"
+  );
+  assert.equal(
+    String(adminDeliveredGroup?.paymentStatus || ""),
+    "PAID",
+    "approve admin delivered: split paymentStatus should remain PAID"
+  );
+  assert.equal(
+    String(adminDeliveredGroup?.fulfillmentStatus || ""),
+    "DELIVERED",
+    "approve admin delivered: split fulfillmentStatus should be DELIVERED"
+  );
+  assert.equal(
+    String(adminDeliveredGroup?.shippingStatus || ""),
+    "DELIVERED",
+    "approve admin delivered: split shippingStatus should be DELIVERED"
+  );
+  assert.equal(
+    String(adminDelivered?.suborderShipmentSummary?.[0]?.shippingStatus || ""),
+    "DELIVERED",
+    "approve admin delivered: shipment reconciliation summary should be DELIVERED"
+  );
+  assert.equal(
+    String(adminDelivered?.shipments?.[0]?.shipmentStatus || ""),
+    "DELIVERED",
+    "approve admin delivered: persisted shipment should be DELIVERED"
+  );
+
+  const publicDelivered = await fetchPublicTracking(
+    scenario.invoiceNo,
+    "approve public delivered tracking"
+  );
+  assert.ok(
+    ["delivered", "complete"].includes(String(publicDelivered?.orderStatus || publicDelivered?.status || "")),
+    "approve public delivered: parent order status should be delivered/complete"
+  );
+  assert.equal(
+    String(publicDelivered?.contract?.paymentActionability?.code || ""),
+    "PAID",
+    "approve public delivered: paymentActionability should remain PAID"
+  );
+  assert.equal(
+    String(publicDelivered?.shippingStatus || ""),
+    "DELIVERED",
+    "approve public delivered: parent aggregate shippingStatus should be DELIVERED"
+  );
+  assert.equal(
+    String(publicDelivered?.storeSplits?.[0]?.paymentReadModel?.status || ""),
+    "PAID",
+    "approve public delivered: split paymentReadModel should remain PAID"
+  );
+  assert.equal(
+    String(publicDelivered?.storeSplits?.[0]?.fulfillmentStatus || ""),
+    "DELIVERED",
+    "approve public delivered: split fulfillmentStatus should be DELIVERED"
+  );
+  assert.equal(
+    String(publicDelivered?.storeSplits?.[0]?.shippingStatus || publicDelivered?.storeSplits?.[0]?.operationalTruth?.shipment?.status || ""),
+    "DELIVERED",
+    "approve public delivered: split shipment should be DELIVERED"
+  );
+  assert.equal(
+    String(publicDelivered?.storeSplits?.[0]?.shippingStatusMeta?.label || ""),
+    "Delivered",
+    "approve public delivered: split shipment should expose buyer-friendly delivered label"
+  );
+  assert.equal(
+    String(publicDelivered?.storeSplits?.[0]?.operationalTruth?.statusSummary?.code || ""),
+    "DELIVERED",
+    "approve public delivered: status summary should expose DELIVERED"
+  );
+  assert.equal(
+    String(publicDelivered?.shipments?.[0]?.shipmentStatus || ""),
+    "DELIVERED",
+    "approve public delivered: persisted shipment should be DELIVERED"
+  );
+  logPass("approve scenario paid fulfillment delivered sync");
 }
 
 async function runRejectScenario(input: {

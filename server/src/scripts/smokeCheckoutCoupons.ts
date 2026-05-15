@@ -313,6 +313,115 @@ async function createCheckout(
   return response;
 }
 
+async function previewCheckout(client: CookieClient, label: string) {
+  const response = await client.request("/api/checkout/preview", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  assert.equal(response.status, 200, `${label}: preview failed ${response.text}`);
+  assert.equal(Boolean(response.body?.success), true, `${label}: preview missing success`);
+  return response.body?.data ?? null;
+}
+
+function assertPreviewTotals(input: {
+  label: string;
+  preview: any;
+  subtotalAmount: number;
+  shippingAmount: number;
+  grandTotal: number;
+  groupTotals: Array<{ storeId: number; subtotalAmount: number; shippingAmount: number; totalAmount: number }>;
+}) {
+  assert.equal(
+    toNumber(input.preview?.summary?.subtotalAmount),
+    input.subtotalAmount,
+    `${input.label}: preview subtotal mismatch`
+  );
+  assert.equal(
+    toNumber(input.preview?.summary?.shippingAmount),
+    input.shippingAmount,
+    `${input.label}: preview shipping mismatch`
+  );
+  assert.equal(
+    toNumber(input.preview?.summary?.grandTotal),
+    input.grandTotal,
+    `${input.label}: preview grand total mismatch`
+  );
+
+  const groupsByStore = new Map(
+    (Array.isArray(input.preview?.groups) ? input.preview.groups : []).map((group: any) => [
+      toNumber(group?.storeId),
+      group,
+    ])
+  );
+  assert.equal(groupsByStore.size, input.groupTotals.length, `${input.label}: preview group count mismatch`);
+  for (const expected of input.groupTotals) {
+    const group = groupsByStore.get(expected.storeId) as any;
+    assert.ok(group, `${input.label}: preview group missing for store ${expected.storeId}`);
+    assert.equal(
+      toNumber(group?.subtotalAmount),
+      expected.subtotalAmount,
+      `${input.label}: preview group subtotal mismatch for store ${expected.storeId}`
+    );
+    assert.equal(
+      toNumber(group?.shippingAmount),
+      expected.shippingAmount,
+      `${input.label}: preview group shipping mismatch for store ${expected.storeId}`
+    );
+    assert.equal(
+      toNumber(group?.totalAmount),
+      expected.totalAmount,
+      `${input.label}: preview group total mismatch for store ${expected.storeId}`
+    );
+  }
+}
+
+function assertCheckoutResponseTotals(input: {
+  label: string;
+  data: any;
+  subtotalAmount: number;
+  shippingAmount: number;
+  grandTotal: number;
+  groupTotals: Array<{ storeId: number; totalAmount: number; paymentAmount: number }>;
+}) {
+  assert.equal(
+    toNumber(input.data?.summary?.subtotalAmount),
+    input.subtotalAmount,
+    `${input.label}: response summary subtotal mismatch`
+  );
+  assert.equal(
+    toNumber(input.data?.summary?.shippingAmount),
+    input.shippingAmount,
+    `${input.label}: response summary shipping mismatch`
+  );
+  assert.equal(
+    toNumber(input.data?.summary?.grandTotal),
+    input.grandTotal,
+    `${input.label}: response summary grand total mismatch`
+  );
+
+  const groupsByStore = new Map(
+    (Array.isArray(input.data?.groups) ? input.data.groups : []).map((group: any) => [
+      toNumber(group?.storeId),
+      group,
+    ])
+  );
+  assert.equal(groupsByStore.size, input.groupTotals.length, `${input.label}: response group count mismatch`);
+  for (const expected of input.groupTotals) {
+    const group = groupsByStore.get(expected.storeId) as any;
+    assert.ok(group, `${input.label}: response group missing for store ${expected.storeId}`);
+    assert.equal(
+      toNumber(group?.totalAmount),
+      expected.totalAmount,
+      `${input.label}: response group total mismatch for store ${expected.storeId}`
+    );
+    assert.equal(
+      toNumber(group?.payment?.amount),
+      expected.paymentAmount,
+      `${input.label}: response payment amount mismatch for store ${expected.storeId}`
+    );
+  }
+}
+
 async function loadOrder(orderId: number) {
   const order = await Order.findByPk(orderId, {
     include: [
@@ -336,6 +445,23 @@ async function assertOrderTotals(input: {
   assert.equal(toNumber(order.get("discountAmount")), input.discountAmount, "order discount mismatch");
   assert.equal(toNumber(order.get("totalAmount")), input.totalAmount, "order total mismatch");
   assert.equal((order.suborders || []).length, input.suborderCount, "suborder count mismatch");
+  const suborderTotal = (order.suborders || []).reduce(
+    (sum: number, suborder: any) => sum + toNumber(suborder.get("totalAmount")),
+    0
+  );
+  assert.equal(suborderTotal, input.totalAmount, "suborder totals should sum to order total");
+  const paymentTotal = (order.suborders || []).reduce(
+    (sum: number, suborder: any) =>
+      sum +
+      (Array.isArray(suborder.payments)
+        ? suborder.payments.reduce(
+            (inner: number, payment: any) => inner + toNumber(payment.get("amount")),
+            0
+          )
+        : 0),
+    0
+  );
+  assert.equal(paymentTotal, input.totalAmount, "payment amounts should sum to order total");
   return order;
 }
 
@@ -351,6 +477,36 @@ async function runSingleStoreCouponScenario(input: {
 }) {
   await resetCart(input.buyerUserId);
   await addToCart(input.buyerClient, input.productId, 2);
+  const preview = await previewCheckout(input.buyerClient, `${input.label} preview`);
+  assertPreviewTotals({
+    label: input.label,
+    preview,
+    subtotalAmount: 20000,
+    shippingAmount: 0,
+    grandTotal: 20000,
+    groupTotals: [
+      {
+        storeId: toNumber(preview?.groups?.[0]?.storeId),
+        subtotalAmount: 20000,
+        shippingAmount: 0,
+        totalAmount: 20000,
+      },
+    ],
+  });
+  const previewGroup = Array.isArray(preview?.groups) ? preview.groups[0] : null;
+  const quote = await fetchJson("/api/store/coupons/quote", {
+    method: "POST",
+    body: JSON.stringify({
+      code: input.code,
+      subtotal: toNumber(previewGroup?.subtotalAmount),
+      shipping: toNumber(previewGroup?.shippingAmount),
+      storeId: toNumber(previewGroup?.storeId),
+    }),
+  });
+  assert.equal(quote.response.status, 200, `${input.label}: quote failed ${quote.text}`);
+  assert.equal(Boolean(quote.body?.valid), true, `${input.label}: quote should be valid`);
+  assert.equal(toNumber(quote.body?.discount), input.expectedDiscount, `${input.label}: quote discount mismatch`);
+  assert.equal(toNumber(quote.body?.total), input.expectedTotal, `${input.label}: quote total mismatch`);
 
   const checkout = await createCheckout(input.buyerClient, input.label, {
     couponCode: input.code,
@@ -359,6 +515,20 @@ async function runSingleStoreCouponScenario(input: {
   const orderId = toNumber(checkout.body?.data?.orderId, 0);
   assert.ok(orderId > 0, `${input.label}: orderId missing`);
   createdOrderIds.push(orderId);
+  assertCheckoutResponseTotals({
+    label: input.label,
+    data: checkout.body?.data,
+    subtotalAmount: 20000,
+    shippingAmount: 0,
+    grandTotal: input.expectedTotal,
+    groupTotals: [
+      {
+        storeId: toNumber(previewGroup?.storeId),
+        totalAmount: input.expectedTotal,
+        paymentAmount: input.expectedTotal,
+      },
+    ],
+  });
 
   const order = await assertOrderTotals({
     orderId,
@@ -545,6 +715,58 @@ async function run() {
   await resetCart(buyer.id);
   await addToCart(buyerClient, productA.id, 2);
   await addToCart(buyerClient, productB.id, 1);
+  const multiPreview = await previewCheckout(buyerClient, "multi-store group coupons preview");
+  assertPreviewTotals({
+    label: "multi-store group coupons",
+    preview: multiPreview,
+    subtotalAmount: 28000,
+    shippingAmount: 0,
+    grandTotal: 28000,
+    groupTotals: [
+      {
+        storeId: storeA.id,
+        subtotalAmount: 20000,
+        shippingAmount: 0,
+        totalAmount: 20000,
+      },
+      {
+        storeId: storeB.id,
+        subtotalAmount: 8000,
+        shippingAmount: 0,
+        totalAmount: 8000,
+      },
+    ],
+  });
+  const multiGroupsByStore = new Map(
+    (Array.isArray(multiPreview?.groups) ? multiPreview.groups : []).map((group: any) => [
+      toNumber(group?.storeId),
+      group,
+    ])
+  );
+  const storeAQuote = await fetchJson("/api/store/coupons/quote", {
+    method: "POST",
+    body: JSON.stringify({
+      code: STORE_A_CODE,
+      subtotal: toNumber((multiGroupsByStore.get(storeA.id) as any)?.subtotalAmount),
+      shipping: toNumber((multiGroupsByStore.get(storeA.id) as any)?.shippingAmount),
+      storeId: storeA.id,
+    }),
+  });
+  assert.equal(Boolean(storeAQuote.body?.valid), true, "store A group quote should be valid");
+  assert.equal(toNumber(storeAQuote.body?.discount), 1500, "store A group quote discount mismatch");
+  assert.equal(toNumber(storeAQuote.body?.total), 18500, "store A group quote total mismatch");
+  const storeBQuote = await fetchJson("/api/store/coupons/quote", {
+    method: "POST",
+    body: JSON.stringify({
+      code: STORE_B_CODE,
+      subtotal: toNumber((multiGroupsByStore.get(storeB.id) as any)?.subtotalAmount),
+      shipping: toNumber((multiGroupsByStore.get(storeB.id) as any)?.shippingAmount),
+      storeId: storeB.id,
+    }),
+  });
+  assert.equal(Boolean(storeBQuote.body?.valid), true, "store B group quote should be valid");
+  assert.equal(toNumber(storeBQuote.body?.discount), 1600, "store B group quote discount mismatch");
+  assert.equal(toNumber(storeBQuote.body?.total), 6400, "store B group quote total mismatch");
   const multiStore = await createCheckout(buyerClient, "multi-store-group-coupons", {
     groupCoupons: [
       { storeId: storeA.id, couponCode: STORE_A_CODE },
@@ -555,6 +777,17 @@ async function run() {
   const multiOrderId = toNumber(multiStore.body?.data?.orderId, 0);
   assert.ok(multiOrderId > 0, "multi-store orderId missing");
   createdOrderIds.push(multiOrderId);
+  assertCheckoutResponseTotals({
+    label: "multi-store group coupons",
+    data: multiStore.body?.data,
+    subtotalAmount: 28000,
+    shippingAmount: 0,
+    grandTotal: 24900,
+    groupTotals: [
+      { storeId: storeA.id, totalAmount: 18500, paymentAmount: 18500 },
+      { storeId: storeB.id, totalAmount: 6400, paymentAmount: 6400 },
+    ],
+  });
   const multiOrder = await assertOrderTotals({
     orderId: multiOrderId,
     couponCode: null,
@@ -571,8 +804,10 @@ async function run() {
   assert.ok(suborderB, "store B suborder missing");
   assert.equal(String(suborderA.get("appliedCouponCode") || ""), STORE_A_CODE, "store A coupon attribution");
   assert.equal(toNumber(suborderA.get("totalAmount")), 18500, "store A discounted total");
+  assert.equal(toNumber(suborderA.payments?.[0]?.get?.("amount")), 18500, "store A payment amount");
   assert.equal(String(suborderB.get("appliedCouponCode") || ""), STORE_B_CODE, "store B coupon attribution");
   assert.equal(toNumber(suborderB.get("totalAmount")), 6400, "store B discounted total");
+  assert.equal(toNumber(suborderB.payments?.[0]?.get?.("amount")), 6400, "store B payment amount");
   logPass("multi-store group coupon totals and attribution");
 
   console.log("[mvf-checkout-coupons] OK");

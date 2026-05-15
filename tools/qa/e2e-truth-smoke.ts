@@ -706,6 +706,25 @@ function stripCheckoutPreviewMeta(preview: any) {
   return cloned;
 }
 
+function buildCheckoutPreviewWithCanonicalPriceDrift(preview: any) {
+  if (!preview || typeof preview !== "object") return preview;
+  const cloned = JSON.parse(JSON.stringify(preview));
+  const group = Array.isArray(cloned?.groups) ? cloned.groups[0] : null;
+  const item = Array.isArray(group?.items) ? group.items[0] : null;
+  if (!group || !item) return cloned;
+  const qty = Math.max(1, Number(item.qty || item.quantity || 1));
+  const delta = 1000;
+  item.price = Number(item.price || 0) + delta;
+  item.lineTotal = Number(item.lineTotal || 0) + delta * qty;
+  group.subtotalAmount = Number(group.subtotalAmount || 0) + delta * qty;
+  group.totalAmount = Number(group.totalAmount || 0) + delta * qty;
+  if (cloned.summary && typeof cloned.summary === "object") {
+    cloned.summary.subtotalAmount = Number(cloned.summary.subtotalAmount || 0) + delta * qty;
+    cloned.summary.grandTotal = Number(cloned.summary.grandTotal || 0) + delta * qty;
+  }
+  return cloned;
+}
+
 function getSellerStatusLabel(detail: any) {
   return String(
     getSplitOperationalStatusSummary(detail)?.label ||
@@ -823,6 +842,20 @@ async function assertOrganicBananaCheckoutReady(page: any, quantity: number, tot
   );
 }
 
+async function readCheckoutPreviewDebugSnapshot(page: any) {
+  const raw = await page
+    .getByTestId("checkout-preview-debug-panel")
+    .locator("pre")
+    .textContent()
+    .catch(() => "");
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 async function waitForTestIdText(page: any, testId: string, expected: string, timeoutMs = 15000) {
   const locator = page.getByTestId(testId);
   const started = Date.now();
@@ -876,6 +909,23 @@ async function expectTestIdAttribute(
   );
 }
 
+async function fillCheckoutShippingForm(page: any, label: string) {
+  const checkoutForm = page
+    .locator("form")
+    .filter({ has: page.getByTestId("checkout-submit-cta") })
+    .first();
+  await checkoutForm.getByPlaceholder("First Name").fill(label);
+  await checkoutForm.getByPlaceholder("Last Name").fill("Checkout");
+  await checkoutForm.getByPlaceholder("Email Address").fill(`${slugify(label)}@local.dev`);
+  await checkoutForm.getByPlaceholder("Phone Number").fill("081234567890");
+  await checkoutForm.locator("select").nth(0).selectOption({ label: "DKI Jakarta" });
+  await checkoutForm.locator("select").nth(1).selectOption({ label: "Kota Jakarta Selatan" });
+  await checkoutForm.locator("select").nth(2).selectOption({ label: "Kebayoran Baru" });
+  await checkoutForm.locator("input").nth(4).fill("12190");
+  await checkoutForm.locator("input").nth(5).fill(`${label} Street`);
+  await checkoutForm.locator("input").nth(6).fill("12");
+}
+
 async function createAuthedContext(browser: any, client: CookieClient) {
   const context = await browser.newContext();
   await context.addInitScript(() => {
@@ -909,6 +959,8 @@ async function runScenario(browser: any) {
   const checkoutSellerUser = await createFixtureUser("checkout-seller", "seller");
   const orderSellerUser = await createFixtureUser("order-seller", "seller");
   const buyerUser = await createFixtureUser("buyer");
+  const checkoutSubmitBuyerUser = await createFixtureUser("checkout-submit-buyer");
+  const doubleSubmitBuyerUser = await createFixtureUser("double-submit-buyer");
 
   const checkoutStore = await createFixtureStore(checkoutSellerUser.id, "checkout-store");
   const orderStore = await createFixtureStore(orderSellerUser.id, "order-store");
@@ -940,6 +992,8 @@ async function runScenario(browser: any) {
   const adminClient = new CookieClient();
   const orderSellerClient = new CookieClient();
   const buyerClient = new CookieClient();
+  const checkoutSubmitClient = new CookieClient();
+  const doubleSubmitClient = new CookieClient();
   await loginAdmin(adminClient, adminUser.email, adminUser.password);
   await login(
     orderSellerClient,
@@ -948,6 +1002,18 @@ async function runScenario(browser: any) {
     "order seller login"
   );
   await login(buyerClient, buyerUser.email, buyerUser.password, "buyer login");
+  await login(
+    checkoutSubmitClient,
+    checkoutSubmitBuyerUser.email,
+    checkoutSubmitBuyerUser.password,
+    "checkout submit buyer login"
+  );
+  await login(
+    doubleSubmitClient,
+    doubleSubmitBuyerUser.email,
+    doubleSubmitBuyerUser.password,
+    "double submit buyer login"
+  );
 
   log("running guest login recovery browser assertions");
   const guestVariantContext = await browser.newContext();
@@ -1040,16 +1106,22 @@ async function runScenario(browser: any) {
   const buyerContext = await createAuthedContext(browser, buyerClient);
   const buyerPage = await buyerContext.newPage();
   try {
-    let checkoutPreviewMode: "backend" | "fallback" = "backend";
+    let checkoutPreviewMode: "backend" | "fallback" | "canonical-price-drift" = "backend";
     await buyerPage.route("**/api/checkout/preview", async (route: any) => {
       if (route.request().method() !== "POST") {
         await route.continue();
         return;
       }
       const preview = await fetchCheckoutPreview(buyerClient);
+      const previewData =
+        checkoutPreviewMode === "fallback"
+          ? stripCheckoutPreviewMeta(preview)
+          : checkoutPreviewMode === "canonical-price-drift"
+            ? buildCheckoutPreviewWithCanonicalPriceDrift(preview)
+            : preview;
       const responseBody = {
         success: true,
-        data: checkoutPreviewMode === "fallback" ? stripCheckoutPreviewMeta(preview) : preview,
+        data: previewData,
       };
       await route.fulfill({
         status: 200,
@@ -1138,6 +1210,322 @@ async function runScenario(browser: any) {
         activeProfileSource
       );
 
+      checkoutPreviewMode = "canonical-price-drift";
+      await buyerPage.reload({ waitUntil: "load", timeout: 30000 });
+      await buyerPage.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);
+      await waitForBodyText(buyerPage, "Order Summary by Store");
+      await waitForTestIdText(buyerPage, "checkout-preview-groups-section", checkoutProduct.name);
+      await expectBodyTextAbsent(buyerPage, /Backend preview is still catching up/i);
+      await expectBodyTextAbsent(buyerPage, /Latest checkout snapshot is refreshing/i);
+      await expectBodyTextAbsent(buyerPage, /Checkout preview must finish syncing/i);
+      await expectBodyTextAbsent(buyerPage, /finish syncing before applying coupons/i);
+      assert.equal(
+        await buyerPage.getByTestId("checkout-coupon-apply-button").isDisabled().catch(() => true),
+        false,
+        "checkout coupon apply should stay enabled when backend canonical price differs from visible cart"
+      );
+      assert.equal(
+        await buyerPage.getByTestId("checkout-submit-cta").isDisabled().catch(() => true),
+        false,
+        "checkout submit CTA should stay enabled when backend canonical price differs from visible cart"
+      );
+      checkoutPreviewMode = "backend";
+
+      log("running checkout submit to payment and tracking browser assertions");
+      await addVariantProductToCart({
+        customerClient: checkoutSubmitClient,
+        buyerUserId: checkoutSubmitBuyerUser.id,
+        productId: checkoutReadyVariantProduct.id,
+        variant: checkoutReadyVariantProduct.variants[0],
+        quantity: 1,
+      });
+      const checkoutSubmitContext = await createAuthedContext(browser, checkoutSubmitClient);
+      const checkoutSubmitPage = await checkoutSubmitContext.newPage();
+      let checkoutCreateRequestCount = 0;
+      let checkoutCreatePayload: any = null;
+      try {
+        checkoutSubmitPage.on("request", (request: any) => {
+          if (
+            request.method() !== "POST" ||
+            !String(request.url()).includes("/api/checkout/create-multi-store")
+          ) {
+            return;
+          }
+          checkoutCreateRequestCount += 1;
+          try {
+            checkoutCreatePayload = JSON.parse(request.postData() || "{}");
+          } catch {
+            checkoutCreatePayload = null;
+          }
+        });
+
+        await gotoRoute(checkoutSubmitPage, "/checkout");
+        await checkoutSubmitPage.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);
+        await assertOrganicBananaCheckoutReady(checkoutSubmitPage, 1, "Rp 25.000");
+        const submitDebug = await readCheckoutPreviewDebugSnapshot(checkoutSubmitPage);
+        assert.equal(
+          String(submitDebug?.mismatchReason || "MATCHED"),
+          "MATCHED",
+          "checkout submit flow: preview must match before submit"
+        );
+        assert.equal(
+          String(submitDebug?.disabledReason || ""),
+          "",
+          "checkout submit flow: submit must not be blocked by preview sync"
+        );
+
+        await fillCheckoutShippingForm(checkoutSubmitPage, "Checkout Submit");
+        await delay(250);
+        const checkoutSubmitButton = checkoutSubmitPage.getByTestId("checkout-submit-cta");
+        await checkoutSubmitButton.waitFor({ state: "visible", timeout: 15000 });
+        assert.equal(
+          await checkoutSubmitButton.isDisabled().catch(() => true),
+          false,
+          "checkout submit flow: CTA should be enabled after required fields"
+        );
+
+        const createResponsePromise = checkoutSubmitPage.waitForResponse(
+          (response: any) =>
+            response.request().method() === "POST" &&
+            String(response.url()).includes("/api/checkout/create-multi-store"),
+          { timeout: 30000 }
+        );
+        await checkoutSubmitButton.click();
+        const createResponse = await createResponsePromise;
+        assert.equal(createResponse.status(), 201, "checkout submit flow: create response status");
+        const createBody = await createResponse.json();
+        assert.equal(Boolean(createBody?.success), true, "checkout submit flow: create response success");
+        const createdOrder = createBody?.data ?? null;
+        const createdOrderId = toNumber(createdOrder?.orderId, 0);
+        const createdInvoiceNo = String(createdOrder?.invoiceNo || createdOrder?.ref || "");
+        const createdGroup = getSingleGroup(createdOrder, "checkout submit flow create response");
+        const createdPayment = createdGroup?.payment ?? null;
+        assert.ok(createdOrderId > 0, "checkout submit flow: orderId missing");
+        assert.ok(createdInvoiceNo, "checkout submit flow: invoiceNo missing");
+        assert.equal(
+          String(createdOrder?.paymentStatus || ""),
+          "UNPAID",
+          "checkout submit flow: parent paymentStatus should start UNPAID"
+        );
+        assert.equal(
+          String(createdPayment?.status || ""),
+          "CREATED",
+          "checkout submit flow: payment status should start CREATED"
+        );
+        assert.equal(
+          toNumber(createdPayment?.amount, 0),
+          25000,
+          "checkout submit flow: payment amount should be canonical Organic Banana total"
+        );
+        assert.ok(
+          String(createdPayment?.instructionText || createdGroup?.paymentInstruction || "").trim(),
+          "checkout submit flow: payment instruction should be present"
+        );
+        assert.ok(
+          String(createdPayment?.expiresAt || "").trim(),
+          "checkout submit flow: payment deadline should be present"
+        );
+        assert.equal(
+          checkoutCreateRequestCount,
+          1,
+          "checkout submit flow: browser should send one create request"
+        );
+        assert.ok(
+          String(checkoutCreatePayload?.checkoutRequestKey || "").length >= 8,
+          "checkout submit flow: checkoutRequestKey should be sent"
+        );
+        assert.equal(
+          Number(checkoutCreatePayload?.shippingDetails?.postalCode || 0),
+          12190,
+          "checkout submit flow: shipping details should be sent"
+        );
+
+        await waitForUrl(
+          checkoutSubmitPage,
+          new RegExp(`/user/my-orders/${createdOrderId}/payment`),
+          "checkout submit payment redirect"
+        );
+        await waitForBodyText(checkoutSubmitPage, "Order created successfully.");
+        await waitForBodyText(checkoutSubmitPage, createdInvoiceNo);
+        await waitForBodyText(checkoutSubmitPage, "Grand Total");
+        await waitForBodyText(checkoutSubmitPage, "Rp 25.000");
+        await waitForBodyText(checkoutSubmitPage, "Payment");
+        await waitForBodyText(checkoutSubmitPage, "Amount to Pay");
+        await waitForBodyText(checkoutSubmitPage, "Deadline");
+
+        const cartAfterSubmit = await checkoutSubmitClient.request("/api/cart");
+        assertStatus(cartAfterSubmit, 200, "checkout submit flow cart after create");
+        const cartItemsAfterSubmit =
+          cartAfterSubmit.body?.data?.items ??
+          cartAfterSubmit.body?.items ??
+          cartAfterSubmit.body?.data?.Products ??
+          [];
+        assert.equal(
+          Array.isArray(cartItemsAfterSubmit) ? cartItemsAfterSubmit.length : 0,
+          0,
+          "checkout submit flow: backend cart should be cleared after create"
+        );
+
+        const trackingResponse = await checkoutSubmitClient.request(
+          `/api/store/orders/${encodeURIComponent(createdInvoiceNo)}`
+        );
+        assertStatus(trackingResponse, 200, "checkout submit flow public tracking API");
+        const trackedOrder = trackingResponse.body?.data ?? null;
+        assert.equal(
+          String(trackedOrder?.invoiceNo || trackedOrder?.ref || ""),
+          createdInvoiceNo,
+          "checkout submit flow: tracking should read the same invoice"
+        );
+        assert.equal(
+          toNumber(trackedOrder?.totalAmount, 0),
+          25000,
+          "checkout submit flow: tracking total should match payment amount"
+        );
+        assert.equal(
+          String(trackedOrder?.storeSplits?.[0]?.paymentReadModel?.status || ""),
+          "CREATED",
+          "checkout submit flow: tracking split paymentReadModel should be CREATED"
+        );
+
+        await gotoRoute(checkoutSubmitPage, `/order/${encodeURIComponent(createdInvoiceNo)}`);
+        await waitForBodyText(checkoutSubmitPage, createdInvoiceNo);
+        await waitForBodyText(checkoutSubmitPage, "Organic Banana");
+        await waitForBodyText(checkoutSubmitPage, "Rp 25.000");
+        createdOrderIds.push(createdOrderId);
+      } finally {
+        await checkoutSubmitPage.close().catch(() => null);
+        await checkoutSubmitContext.close().catch(() => null);
+      }
+
+      log("running checkout double-submit browser guard assertions");
+      await addProductToCart(doubleSubmitClient, doubleSubmitBuyerUser.id, checkoutProduct.id);
+      const doubleSubmitContext = await createAuthedContext(browser, doubleSubmitClient);
+      const doubleSubmitPage = await doubleSubmitContext.newPage();
+      let createRequestCount = 0;
+      let firstRequestKey = "";
+      let resolveFirstCreateRequest: () => void = () => undefined;
+      let releaseCreateRequest: () => void = () => undefined;
+      const firstCreateRequest = new Promise<void>((resolve) => {
+        resolveFirstCreateRequest = resolve;
+      });
+      const releaseCreateResponse = new Promise<void>((resolve) => {
+        releaseCreateRequest = resolve;
+      });
+      try {
+        await doubleSubmitPage.route("**/api/checkout/preview", async (route: any) => {
+          if (route.request().method() !== "POST") {
+            await route.continue();
+            return;
+          }
+          const preview = await fetchCheckoutPreview(doubleSubmitClient);
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ success: true, data: preview }),
+          });
+        });
+        await doubleSubmitPage.route(
+          "**/api/checkout/create-multi-store",
+          async (route: any) => {
+            if (route.request().method() !== "POST") {
+              await route.continue();
+              return;
+            }
+            createRequestCount += 1;
+            if (!firstRequestKey) {
+              try {
+                firstRequestKey = String(
+                  JSON.parse(route.request().postData() || "{}")?.checkoutRequestKey || ""
+                );
+              } catch {
+                firstRequestKey = "";
+              }
+            }
+            resolveFirstCreateRequest();
+            await releaseCreateResponse;
+            await route.fulfill({
+              status: 200,
+              contentType: "application/json",
+              body: JSON.stringify({
+                success: true,
+                data: {
+                  orderId: 900000001,
+                  ref: `${RUN_ID}-frontend-double-submit`,
+                  invoiceNo: `${RUN_ID}-frontend-double-submit`,
+                  checkoutMode: "SINGLE_STORE",
+                  paymentStatus: "UNPAID",
+                  orderStatus: "pending",
+                  paymentMethod: "QRIS",
+                  groups: [],
+                },
+              }),
+            });
+          }
+        );
+
+        await gotoRoute(doubleSubmitPage, "/checkout");
+        await doubleSubmitPage.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);
+        await waitForBodyText(doubleSubmitPage, checkoutProduct.name);
+        await fillCheckoutShippingForm(doubleSubmitPage, "Double Submit");
+        await delay(250);
+        const doubleSubmitButton = doubleSubmitPage.getByTestId("checkout-submit-cta");
+        await doubleSubmitButton.waitFor({ state: "visible", timeout: 15000 });
+        assert.equal(
+          await doubleSubmitButton.isDisabled().catch(() => true),
+          false,
+          "double-submit guard: submit CTA should start enabled"
+        );
+        await doubleSubmitButton.evaluate((button: HTMLButtonElement) => {
+          button.form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        });
+        await delay(500);
+        if (createRequestCount === 0) {
+          const bodyText = String(
+            (await doubleSubmitPage.locator("body").textContent().catch(() => "")) || ""
+          )
+            .replace(/\s+/g, " ")
+            .slice(0, 700);
+          const hasSubmitForm = await doubleSubmitButton
+            .evaluate((button: HTMLButtonElement) => Boolean(button.form))
+            .catch(() => false);
+          throw new Error(
+            `double-submit guard first create request did not start; hasSubmitForm=${hasSubmitForm}; body="${bodyText}"`
+          );
+        }
+        await withTimeout(
+          () => firstCreateRequest,
+          5000,
+          "double-submit guard first create request"
+        );
+        assert.ok(
+          firstRequestKey.length >= 8,
+          "double-submit guard: checkoutRequestKey should be sent with submit"
+        );
+        assert.equal(
+          await doubleSubmitButton.isDisabled().catch(() => false),
+          true,
+          "double-submit guard: submit CTA should disable while request is pending"
+        );
+        await doubleSubmitPage
+          .getByTestId("checkout-submit-cta")
+          .evaluate((button: HTMLButtonElement) => {
+            button.form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+          })
+          .catch(() => null);
+        await delay(250);
+        assert.equal(
+          createRequestCount,
+          1,
+          "double-submit guard: frontend sent more than one active checkout create request"
+        );
+        releaseCreateRequest();
+        await delay(100);
+      } finally {
+        releaseCreateRequest();
+        await doubleSubmitPage.close().catch(() => null);
+        await doubleSubmitContext.close().catch(() => null);
+      }
+
       await addVariantProductToCart({
         customerClient: buyerClient,
         buyerUserId: buyerUser.id,
@@ -1170,6 +1558,49 @@ async function runScenario(browser: any) {
       await gotoRoute(buyerPage, "/checkout");
       await buyerPage.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => null);
       await assertOrganicBananaCheckoutReady(buyerPage, 3, "Rp 75.000");
+      const qtyThreeDebug = await readCheckoutPreviewDebugSnapshot(buyerPage);
+      assert.equal(
+        String(qtyThreeDebug?.mismatchReason || "MATCHED"),
+        "MATCHED",
+        "checkout qty 3 debug: mismatchReason should be MATCHED"
+      );
+      assert.equal(
+        Number(qtyThreeDebug?.rawPreviewGroupsLength || 0),
+        1,
+        "checkout qty 3 debug: preview should expose one group"
+      );
+      assert.equal(
+        Number(qtyThreeDebug?.rawPreviewItemsLength || 0),
+        1,
+        "checkout qty 3 debug: preview should expose one item"
+      );
+      assert.equal(
+        String(qtyThreeDebug?.disabledReason || ""),
+        "",
+        "checkout qty 3 debug: disabledReason should be empty"
+      );
+      const visibleDebugItems = Array.isArray(qtyThreeDebug?.visibleItemsNormalized)
+        ? qtyThreeDebug.visibleItemsNormalized
+        : [];
+      const previewDebugItems = Array.isArray(qtyThreeDebug?.previewItemsNormalized)
+        ? qtyThreeDebug.previewItemsNormalized
+        : [];
+      assert.equal(
+        previewDebugItems.length,
+        visibleDebugItems.length,
+        "checkout qty 3 debug: preview item count should match visible cart item count"
+      );
+      const previewLineKeys = previewDebugItems.map((item: any) =>
+        item?.cartItemId ? `cart:${item.cartItemId}` : String(item?.lineId || "")
+      );
+      assert.equal(
+        new Set(previewLineKeys).size,
+        previewLineKeys.length,
+        "checkout qty 3 debug: preview should not expose duplicate cart lines"
+      );
+      log(
+        `checkout qty 3 debug snapshot: reason=${qtyThreeDebug?.mismatchReason || "MATCHED"} visible=${qtyThreeDebug?.visibleFingerprint || ""} preview=${qtyThreeDebug?.previewFingerprint || ""} groups=${qtyThreeDebug?.rawPreviewGroupsLength ?? "n/a"} disabled=${qtyThreeDebug?.disabledReason || ""}`
+      );
       if (process.env.E2E_TRUTH_CHECKOUT_SCREENSHOT_PATH) {
         await buyerPage.screenshot({
           path: process.env.E2E_TRUTH_CHECKOUT_SCREENSHOT_PATH,
@@ -1217,7 +1648,14 @@ async function runScenario(browser: any) {
       const blockedItem =
         invalidItems.find((item: any) => Number(item?.productId) === checkoutProduct.id) || null;
       assert.ok(blockedItem, "blocked checkout preview item missing");
-      const blockedMessage = resolveInvalidCheckoutMessage(String(blockedItem?.reason || ""));
+      const blockedMessage =
+        String(blockedItem?.message || "").trim() ||
+        resolveInvalidCheckoutMessage(String(blockedItem?.reason || ""));
+      assert.match(
+        blockedMessage,
+        /cannot accept checkout yet|no longer publicly available/i,
+        "blocked checkout preview should expose an actionable backend message"
+      );
 
       await gotoRoute(buyerPage, "/checkout");
       await waitForBodyText(buyerPage, "Place an Order");

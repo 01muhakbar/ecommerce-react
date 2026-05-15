@@ -208,6 +208,31 @@ async function createFixturePaymentProfile(storeId: number) {
   return { id };
 }
 
+async function createHistoricalPaymentProfiles(storeId: number, count: number) {
+  const now = new Date();
+  for (let index = 0; index < count; index += 1) {
+    const profile = await StorePaymentProfile.create({
+      storeId,
+      providerCode: "MANUAL_QRIS",
+      paymentType: "QRIS_STATIC",
+      version: index + 2,
+      snapshotStatus: "SUPERSEDED",
+      accountName: `MVF Historical Account ${storeId}-${index + 1}`,
+      merchantName: `MVF Historical Merchant ${storeId}-${index + 1}`,
+      merchantId: `MVF-HIST-${storeId}-${index + 1}`,
+      qrisImageUrl: `https://example.com/${RUN_ID}-${storeId}-historical-${index + 1}.png`,
+      qrisPayload: `${RUN_ID}-${storeId}-historical-${index + 1}-payload`,
+      instructionText: "Historical payment profile must not duplicate checkout lines.",
+      isActive: false,
+      verificationStatus: "INACTIVE",
+      verifiedAt: now,
+      activatedAt: now,
+      supersededAt: now,
+    } as any);
+    createdPaymentProfileIds.push(Number(profile.getDataValue("id")));
+  }
+}
+
 const buildVariantCombinationKey = (selections: VariantSelection[]) =>
   selections
     .map((entry) =>
@@ -1024,7 +1049,8 @@ async function run() {
   const sellerUser = await createFixtureUser("seller-owner");
   const buyerUser = await createFixtureUser("buyer");
   const store = await createFixtureStore(sellerUser.id, "variant-store");
-  await createFixturePaymentProfile(store.id);
+  const paymentProfile = await createFixturePaymentProfile(store.id);
+  await createHistoricalPaymentProfiles(store.id, 15);
   const product = await createFixtureVariantProduct({
     ownerUserId: sellerUser.id,
     storeId: store.id,
@@ -1103,7 +1129,19 @@ async function run() {
   const bananaPreviewItems = Array.isArray(bananaPreviewGroups[0]?.items)
     ? bananaPreviewGroups[0].items
     : [];
-  assert.equal(bananaPreviewItems.length, 1, "banana preview: expected one product line");
+  assert.equal(
+    bananaPreviewItems.length,
+    1,
+    "banana preview: expected one product line even with historical payment profiles"
+  );
+  const bananaPreviewCartItemIds = bananaPreviewItems
+    .map((item: any) => toNumber(item?.cartItemId, 0))
+    .filter((id: number) => id > 0);
+  assert.equal(
+    new Set(bananaPreviewCartItemIds).size,
+    1,
+    "banana preview: duplicate join must not repeat the same cartItemId"
+  );
   assertSimpleLine(
     bananaPreviewItems[0],
     { productId: bananaProduct.id, qty: 1, price: bananaProduct.price },
@@ -1154,6 +1192,41 @@ async function run() {
     { productId: bananaProduct.id, qty: 1, price: bananaProduct.price },
     "banana stored order item"
   );
+  const bananaSuborders = await Suborder.findAll({
+    where: { orderId: bananaOrderId } as any,
+    order: [["id", "ASC"]],
+  });
+  assert.equal(bananaSuborders.length, 1, "banana stored suborders: expected one suborder");
+  const bananaSuborderId = toNumber(bananaSuborders[0]?.getDataValue?.("id"), 0);
+  assert.equal(
+    toNumber(bananaSuborders[0]?.getDataValue?.("subtotalAmount"), 0),
+    25000,
+    "banana stored suborder: subtotal should not include duplicate join rows"
+  );
+  assert.equal(
+    toNumber(bananaSuborders[0]?.getDataValue?.("totalAmount"), 0),
+    25000,
+    "banana stored suborder: total should not include duplicate join rows"
+  );
+  const bananaSuborderItems = await SuborderItem.findAll({
+    where: { suborderId: bananaSuborderId } as any,
+    order: [["id", "ASC"]],
+  });
+  assert.equal(
+    bananaSuborderItems.length,
+    1,
+    "banana stored suborder items: duplicate join must not create duplicate seller lines"
+  );
+  const bananaPayments = await Payment.findAll({
+    where: { suborderId: bananaSuborderId } as any,
+    order: [["id", "ASC"]],
+  });
+  assert.equal(bananaPayments.length, 1, "banana stored payment: expected one payment");
+  assert.equal(
+    toNumber(bananaPayments[0]?.getDataValue?.("amount"), 0),
+    25000,
+    "banana stored payment: amount should not include duplicate join rows"
+  );
   await resetCartForUser(buyerUser.id);
   await addProductToCart({
     customerClient: buyerClient,
@@ -1200,6 +1273,106 @@ async function run() {
     label: "public variant detail before cart",
   });
   logPass("public detail exposes the same variant price, sale price, attributes, and stock");
+
+  logStep("blocking checkout preview when store payment profile is inactive");
+  await resetCartForUser(buyerUser.id);
+  await addProductToCart({
+    customerClient: buyerClient,
+    productId: bananaProduct.id,
+    quantity: 1,
+    label: "add banana before payment profile inactive",
+  });
+  await StorePaymentProfile.update(
+    { isActive: false, activatedAt: null } as any,
+    { where: { id: paymentProfile.id } as any }
+  );
+  const inactivePaymentPreview = await previewCheckoutExpectSuccessWithInvalidItems(
+    buyerClient,
+    "preview inactive payment profile cart"
+  );
+  assert.equal(
+    toNumber(inactivePaymentPreview?.summary?.totalItems, 0),
+    0,
+    "inactive payment preview: valid totalItems should be zero"
+  );
+  assert.equal(
+    toNumber(inactivePaymentPreview?.summary?.subtotalAmount, 0),
+    0,
+    "inactive payment preview: valid subtotal should be zero"
+  );
+  assert.equal(
+    toNumber(inactivePaymentPreview?.summary?.grandTotal, 0),
+    0,
+    "inactive payment preview: valid grand total should be zero"
+  );
+  assert.equal(
+    (Array.isArray(inactivePaymentPreview?.groups) ? inactivePaymentPreview.groups : []).length,
+    0,
+    "inactive payment preview: no store group should be checkout-ready"
+  );
+  const inactivePaymentInvalidItems = Array.isArray(inactivePaymentPreview?.invalidItems)
+    ? inactivePaymentPreview.invalidItems
+    : [];
+  assert.equal(
+    inactivePaymentInvalidItems.length,
+    1,
+    "inactive payment preview: expected one invalid item"
+  );
+  const inactivePaymentInvalidItem = inactivePaymentInvalidItems[0];
+  assert.equal(
+    String(inactivePaymentInvalidItem?.reason || inactivePaymentInvalidItem?.code || ""),
+    "PRODUCT_NOT_PUBLIC",
+    "inactive payment preview: reason must stay backward-compatible"
+  );
+  assert.match(
+    String(inactivePaymentInvalidItem?.message || ""),
+    /cannot accept checkout yet|payment setup/i,
+    "inactive payment preview: message should explain store payment readiness"
+  );
+  assert.equal(
+    String(inactivePaymentInvalidItem?.meta?.blockedBy || ""),
+    "PAYMENT_PROFILE",
+    "inactive payment preview: metadata blockedBy mismatch"
+  );
+  assert.equal(
+    String(inactivePaymentInvalidItem?.meta?.storeReadinessCode || ""),
+    "PAYMENT_INACTIVE",
+    "inactive payment preview: metadata storeReadinessCode mismatch"
+  );
+  assert.equal(
+    String(inactivePaymentInvalidItem?.meta?.paymentProfileCode || ""),
+    "INACTIVE",
+    "inactive payment preview: metadata paymentProfileCode mismatch"
+  );
+
+  await StorePaymentProfile.update(
+    { isActive: true, verificationStatus: "ACTIVE", activatedAt: new Date() } as any,
+    { where: { id: paymentProfile.id } as any }
+  );
+  const restoredPaymentPreview = await previewCheckout(
+    buyerClient,
+    "preview restored payment profile cart"
+  );
+  assert.equal(
+    (Array.isArray(restoredPaymentPreview?.invalidItems)
+      ? restoredPaymentPreview.invalidItems
+      : []
+    ).length,
+    0,
+    "restored payment preview: invalid items should be cleared"
+  );
+  assert.equal(
+    toNumber(restoredPaymentPreview?.summary?.totalItems, 0),
+    1,
+    "restored payment preview: valid totalItems mismatch"
+  );
+  assert.equal(
+    (Array.isArray(restoredPaymentPreview?.groups) ? restoredPaymentPreview.groups : []).length,
+    1,
+    "restored payment preview: expected one ready store group"
+  );
+  await resetCartForUser(buyerUser.id);
+  logPass("payment profile inactive preview returns compatible reason plus readiness metadata");
 
   logStep("adding two variants of the same product to cart");
   await resetCartForUser(buyerUser.id);

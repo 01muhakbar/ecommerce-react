@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -909,16 +909,6 @@ function PaymentGroupCard({
               <ProofReviewBadge status={payment.proof.reviewStatus} prefix="Proof" />
             ) : null}
           </div>
-          <p className="mt-2 text-sm text-slate-500">
-            Suborder {group.suborderNumber || "-"} • Shipment{" "}
-            {operationalShipment.statusMeta?.label ||
-              operationalShipment.status ||
-              group.fulfillmentStatusMeta?.label ||
-              group.fulfillmentStatus}
-          </p>
-          {operationalBridge.shipmentBlockedReason ? (
-            <p className="mt-2 text-sm text-slate-500">{operationalBridge.shipmentBlockedReason}</p>
-          ) : null}
           {group.warning ? <p className="mt-2 text-sm text-amber-700">{group.warning}</p> : null}
         </div>
         <div className="rounded-[24px] border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-4 py-4 text-left shadow-sm xl:text-right">
@@ -928,7 +918,6 @@ function PaymentGroupCard({
           <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
             {formatCurrency(paymentAmount)}
           </p>
-          <p className="mt-2 text-xs text-slate-500">Keep the transfer amount exact for this split.</p>
         </div>
       </div>
 
@@ -946,7 +935,6 @@ function PaymentGroupCard({
                   QRIS Payment
                 </p>
                 <h3 className="mt-1 text-lg font-semibold text-slate-900">{step.title}</h3>
-                <p className="mt-1 text-sm leading-6 text-slate-600">{step.detail}</p>
               </div>
             </div>
 
@@ -958,10 +946,6 @@ function PaymentGroupCard({
                 <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
                   {formatCurrency(paymentAmount)}
                 </p>
-                <p className="mt-1 text-sm text-slate-500">
-                  Pay exactly this amount for {group.storeName}.
-                </p>
-
                 <div className="mt-5 grid gap-3 md:grid-cols-2">
                   <div className={`rounded-[22px] border px-4 py-4 ${expiryMeta.cardClass}`}>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
@@ -992,7 +976,6 @@ function PaymentGroupCard({
                     copyKey={`reference-${payment?.id || group.suborderId}`}
                     copiedKey={copiedPaymentId}
                     onCopyValue={onCopyAmount}
-                    helper="Use this reference if you need to match payment and proof review."
                   />
                 </div>
 
@@ -1295,7 +1278,6 @@ function PaymentGroupCard({
 
 export default function AccountOrderPaymentPage() {
   const { id } = useParams();
-  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [copiedPaymentId, setCopiedPaymentId] = useState(null);
   const [proofIntent, setProofIntent] = useState({});
@@ -1369,7 +1351,6 @@ export default function AccountOrderPaymentPage() {
 
   const order = data?.data;
   const groups = Array.isArray(order?.groups) ? order.groups : [];
-  const fromCheckout = searchParams.get("checkoutCreated") === "true";
 
   useEffect(() => {
     if (groups.length === 0) return;
@@ -1456,12 +1437,6 @@ export default function AccountOrderPaymentPage() {
 
   return (
     <div className="space-y-6">
-      {fromCheckout ? (
-        <div className="rounded-[28px] border border-sky-200 bg-sky-50/90 px-4 py-3 text-sm text-sky-900">
-          Order created successfully. Pay each store from this page, then continue with proof submission only for the store payment you have completed.
-        </div>
-      ) : null}
-
       {actionNotice ? (
         <div
           className={`rounded-[28px] border px-4 py-3 text-sm ${
@@ -1522,17 +1497,11 @@ export default function AccountOrderPaymentPage() {
                   prefix="Parent"
                 />
               </div>
-              <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-600 sm:text-[15px]">
-                {order.checkoutMode === "MULTI_STORE"
-                  ? "This order is split by store. Pay each store total from its own panel so seller review, shipment readiness, and proof tracking stay aligned."
-                  : "Use the store payment panel below to pay the exact amount, then submit proof from the same section."}
-              </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <SummaryMetricCard
                 eyebrow="Grand Total"
                 value={formatCurrency(order.summary.grandTotal)}
-                helper="Total buyer obligation for this order."
                 tone="emerald"
                 featured
               />
@@ -1543,22 +1512,15 @@ export default function AccountOrderPaymentPage() {
                     ? formatCountdown(groupedStats.earliestOpenExpiresAt, now)
                     : "No open payment"
                 }
-                helper={
-                  groupedStats.earliestOpenExpiresAt
-                    ? formatDateTime(groupedStats.earliestOpenExpiresAt)
-                    : "All store splits are already closed, confirmed, or waiting review."
-                }
                 tone={groupedStats.earliestOpenExpiresAt ? "sky" : "slate"}
               />
               <SummaryMetricCard
                 eyebrow="Store Groups"
                 value={String(groups.length)}
-                helper={groupedStats.summaryText}
               />
               <SummaryMetricCard
                 eyebrow="Order Created"
                 value={formatDateTime(order.createdAt)}
-                helper="Latest parent order timestamp."
               />
             </div>
           </div>

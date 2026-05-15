@@ -638,6 +638,39 @@ const isStorefrontProductVisible = (product: any) => {
   );
 };
 
+const getCheckoutStoreReadinessBlocker = (product: any) => {
+  const status = String(getAttr(product, "status") || "").trim().toLowerCase();
+  const isPublished = Boolean(
+    getAttr(product, "isPublished") ?? getAttr(product, "published")
+  );
+  const submissionStatus = String(getAttr(product, "sellerSubmissionStatus") || "none")
+    .trim()
+    .toLowerCase();
+  const store = product?.store ?? product?.get?.("store") ?? null;
+  const storeId = toNumber(getAttr(product, "storeId"), 0);
+  if (status !== "active" || !isPublished || submissionStatus !== "none" || !storeId) {
+    return null;
+  }
+
+  const operationalReadiness = store ? buildPublicStoreOperationalReadiness(store) : null;
+  if (operationalReadiness?.isReady) return null;
+
+  const storeName = String(getAttr(store, "name") || `Store #${storeId}`);
+  const readinessDescription =
+    String(operationalReadiness?.description || "").trim() ||
+    "This store is not operational for buyer checkout yet.";
+  return {
+    reason: "PRODUCT_NOT_PUBLIC",
+    message: `${storeName} cannot accept checkout yet. ${readinessDescription}`,
+    meta: {
+      blockedBy: operationalReadiness?.blockedBy || "STORE_READINESS",
+      storeReadinessCode: operationalReadiness?.code || "STORE_NOT_READY",
+      storeStatusCode: operationalReadiness?.storeStatusCode || null,
+      paymentProfileCode: operationalReadiness?.paymentProfileCode || null,
+    },
+  };
+};
+
 const buildPublicProductWhere = (extraWhere: Record<string, any> = {}) => ({
   ...extraWhere,
   status: "active",
@@ -807,6 +840,57 @@ const buildCheckoutCartProductSnapshot = (product: any, cartItem: any) => {
   return product;
 };
 
+const getCheckoutCartLineDedupeKey = (product: any) => {
+  const cartItem = product?.CartItem ?? product?.cartItem ?? null;
+  const cartItemId = toNumber(cartItem?.id, 0);
+  if (cartItemId > 0) return `cart-item:${cartItemId}`;
+
+  const productId = toNumber(getAttr(product, "id"), 0);
+  const store = product?.store ?? product?.get?.("store") ?? null;
+  const storeId = toNumber(getAttr(product, "storeId") ?? getAttr(store, "id"), 0);
+  const storeSlug = String(getAttr(store, "slug") || "").trim().toLowerCase();
+  const variantKey = String(cartItem?.variantKey || "").trim().toLowerCase();
+  const variantSelections = normalizeVariantSelections(
+    normalizeJsonValue(cartItem?.variantSelections)
+  );
+  const variantIdentity =
+    variantKey ||
+    (variantSelections.length > 0
+      ? buildVariantCombinationKey(variantSelections).toLowerCase()
+      : "base");
+
+  return [
+    "cart-line",
+    storeId > 0 ? `store-id:${storeId}` : `store-slug:${storeSlug}`,
+    `product:${productId}`,
+    `variant:${variantIdentity}`,
+  ].join("|");
+};
+
+const dedupeCheckoutCartProducts = (products: any[], label: string) => {
+  const deduped = new Map<string, any>();
+  const duplicateKeys: string[] = [];
+
+  for (const product of Array.isArray(products) ? products : []) {
+    const key = getCheckoutCartLineDedupeKey(product);
+    if (deduped.has(key)) {
+      duplicateKeys.push(key);
+      continue;
+    }
+    deduped.set(key, product);
+  }
+
+  if (duplicateKeys.length > 0 && process.env.NODE_ENV !== "production") {
+    console.warn("[checkout] duplicate cart lines ignored after read", {
+      label,
+      duplicateCount: duplicateKeys.length,
+      duplicateKeys,
+    });
+  }
+
+  return Array.from(deduped.values());
+};
+
 const buildCartInclude = async (includePaymentMedia = false) => {
   const supportedCartItemFields = await getCheckoutCartItemSupportedVariantFields();
   return [
@@ -851,12 +935,6 @@ const buildCartInclude = async (includePaymentMedia = false) => {
           as: "store",
           attributes: ["id", "activeStorePaymentProfileId", "name", "slug", "status"],
           include: [
-            {
-              model: StorePaymentProfile,
-              as: "paymentProfile",
-              attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
-              required: false,
-            },
             {
               model: StorePaymentProfile,
               as: "activePaymentProfile",
@@ -921,12 +999,6 @@ const loadCheckoutCartProducts = async (
             include: [
               {
                 model: StorePaymentProfile,
-                as: "paymentProfile",
-                attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
-                required: false,
-              },
-              {
-                model: StorePaymentProfile,
                 as: "activePaymentProfile",
                 attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
                 required: false,
@@ -940,11 +1012,12 @@ const loadCheckoutCartProducts = async (
     order: [["id", "ASC"]],
   });
 
-  return rows
+  const products = rows
     .map((row: any) =>
       buildCheckoutCartProductSnapshot(row?.Product ?? row?.product ?? null, row)
     )
     .filter(Boolean);
+  return dedupeCheckoutCartProducts(products, "checkout-cart-products");
 };
 
 const findCartForUser = async (
@@ -988,6 +1061,34 @@ const findCartForUser = async (
   return cart;
 };
 
+const loadCheckoutFallbackPaymentProfiles = async (
+  storeIds: number[],
+  transaction?: any
+) => {
+  if (!storeIds.length) return new Map<number, any>();
+
+  const profiles = await StorePaymentProfile.findAll({
+    where: { storeId: { [Op.in]: storeIds } } as any,
+    attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+    order: [
+      ["storeId", "ASC"],
+      ["isActive", "DESC"],
+      ["updatedAt", "DESC"],
+      ["id", "DESC"],
+    ],
+    transaction,
+  });
+
+  const byStoreId = new Map<number, any>();
+  for (const profile of profiles as any[]) {
+    const storeId = toNumber(getAttr(profile, "storeId"), 0);
+    if (storeId > 0 && !byStoreId.has(storeId)) {
+      byStoreId.set(storeId, profile);
+    }
+  }
+  return byStoreId;
+};
+
 const loadCheckoutStoreSnapshots = async (storeIds: number[], transaction?: any) => {
   const normalizedIds = Array.from(
     new Set(storeIds.map((value) => toNumber(value, 0)).filter((value) => value > 0))
@@ -1002,12 +1103,6 @@ const loadCheckoutStoreSnapshots = async (storeIds: number[], transaction?: any)
     include: [
       {
         model: StorePaymentProfile,
-        as: "paymentProfile",
-        attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
-        required: false,
-      },
-      {
-        model: StorePaymentProfile,
         as: "activePaymentProfile",
         attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
         required: false,
@@ -1015,6 +1110,16 @@ const loadCheckoutStoreSnapshots = async (storeIds: number[], transaction?: any)
     ],
     transaction,
   });
+  const fallbackProfiles = await loadCheckoutFallbackPaymentProfiles(normalizedIds, transaction);
+
+  for (const store of stores as any[]) {
+    const storeId = toNumber(getAttr(store, "id"), 0);
+    const fallbackProfile = fallbackProfiles.get(storeId) ?? null;
+    if (fallbackProfile) {
+      store.setDataValue?.("paymentProfile", fallbackProfile);
+      store.paymentProfile = fallbackProfile;
+    }
+  }
 
   return new Map<number, any>(stores.map((store: any) => [toNumber(getAttr(store, "id")), store]));
 };
@@ -1081,13 +1186,19 @@ const serializePreviewGroup = (group: any) => ({
 const buildInvalidCheckoutItem = (
   product: any,
   reason: string,
-  extras: { available?: number | null; requested?: number | null } = {}
+  extras: {
+    available?: number | null;
+    requested?: number | null;
+    message?: string | null;
+    meta?: Record<string, any> | null;
+  } = {}
 ) => {
   const productId = toNumber(getAttr(product, "id"));
   const variantKey = String(product?.CartItem?.variantKey || "").trim() || null;
   const lineId = buildCheckoutLineId(productId, variantKey);
   const available = extras.available == null ? null : Math.max(0, Number(extras.available) || 0);
   const requested = extras.requested == null ? null : Math.max(0, Number(extras.requested) || 0);
+  const explicitMessage = String(extras.message || "").trim();
   return {
     lineId,
     cartItemId: toNumber(product?.CartItem?.id, 0) || null,
@@ -1096,7 +1207,7 @@ const buildInvalidCheckoutItem = (
     code: reason,
     reason,
     variantKey,
-    message: resolveCheckoutInvalidItemMessage(reason, extras),
+    message: explicitMessage || resolveCheckoutInvalidItemMessage(reason, extras),
     meta: {
       productId,
       lineId,
@@ -1104,6 +1215,7 @@ const buildInvalidCheckoutItem = (
       variantKey,
       availableStock: available,
       requestedQty: requested,
+      ...(extras.meta && typeof extras.meta === "object" ? extras.meta : {}),
     },
     available,
     requested,
@@ -1125,13 +1237,20 @@ const prepareCartGroups = (cartItems: any[]) => {
     const unitPrice = Math.max(0, toNumber(lineSnapshot.unitPrice, 0));
     const lineTotal = unitPrice * quantity;
 
-    if (!isStorefrontProductVisible(product)) {
-      invalidItems.push(buildInvalidCheckoutItem(product, "PRODUCT_NOT_PUBLIC"));
+    if (!storeId) {
+      invalidItems.push(buildInvalidCheckoutItem(product, "PRODUCT_STORE_UNMAPPED"));
       continue;
     }
 
-    if (!storeId) {
-      invalidItems.push(buildInvalidCheckoutItem(product, "PRODUCT_STORE_UNMAPPED"));
+    if (!isStorefrontProductVisible(product)) {
+      const readinessBlocker = getCheckoutStoreReadinessBlocker(product);
+      invalidItems.push(
+        buildInvalidCheckoutItem(
+          product,
+          readinessBlocker?.reason || "PRODUCT_NOT_PUBLIC",
+          readinessBlocker || {}
+        )
+      );
       continue;
     }
 
@@ -1349,12 +1468,6 @@ const lockVisibleProductsForCheckout = async (
         required: true,
         where: { status: "ACTIVE" } as any,
         include: [
-          {
-            model: StorePaymentProfile,
-            as: "paymentProfile",
-            attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
-            required: false,
-          },
           {
             model: StorePaymentProfile,
             as: "activePaymentProfile",
@@ -2153,6 +2266,26 @@ router.post("/create-multi-store", async (req, res) => {
       const cartItems = Array.isArray((cart as any)?.Products) ? (cart as any).Products : [];
       if (!cart || cartItems.length === 0) {
         await tx.rollback();
+        if (idempotentInvoiceNo) {
+          const existingOrder = await waitForIdempotentCheckoutOrder(
+            idempotentInvoiceNo,
+            authUser.id
+          );
+          if (existingOrder) {
+            logOperationalAuditEvent("checkout.idempotency.empty_cart_replay", {
+              traceId,
+              userId: authUser.id,
+              orderId: toNumber(getAttr(existingOrder, "id"), 0),
+              invoiceNo: getAttr(existingOrder, "invoiceNo"),
+              idempotencyKeyFingerprint,
+              idempotencySource: resolvedCheckoutRequestKey.source,
+            });
+            return res.status(200).json({
+              success: true,
+              data: serializeIdempotentCheckoutOrder(existingOrder, true),
+            });
+          }
+        }
         return res.status(400).json({
           success: false,
           message: "Cart is empty.",

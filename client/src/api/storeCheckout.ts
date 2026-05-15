@@ -31,10 +31,13 @@ export const previewCheckoutByStore = async (payload?: {
   cartId?: number;
   shippingAddressId?: number;
 }) => {
-  const { data } = await api.post<StoreCheckoutPreviewResponse>(
+  const response = await api.post<StoreCheckoutPreviewResponse>(
     "/checkout/preview",
     payload ?? {},
     { withCredentials: true }
   );
-  return data;
+  return {
+    ...response.data,
+    __httpStatus: response.status,
+  };
 };
