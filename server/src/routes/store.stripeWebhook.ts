@@ -10,6 +10,7 @@ import {
 } from "../services/storeSettings.js";
 import { syncStoreOrderFromStripeSession } from "../services/stripeOrderSync.js";
 import { getRequestTraceId } from "../services/operationalAudit.service.js";
+import { stripeWebhookRateLimit } from "../middleware/rateLimit.js";
 
 const router = Router();
 
@@ -22,6 +23,7 @@ const SUPPORTED_STRIPE_WEBHOOK_EVENTS = new Set([
 
 router.post(
   "/stripe/webhook",
+  stripeWebhookRateLimit,
   express.raw({ type: "application/json", limit: "1mb" }),
   async (req: Request, res: Response) => {
     try {

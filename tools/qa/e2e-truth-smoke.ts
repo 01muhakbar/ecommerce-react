@@ -1345,7 +1345,7 @@ async function runScenario(browser: any) {
           new RegExp(`/user/my-orders/${createdOrderId}/payment`),
           "checkout submit payment redirect"
         );
-        await waitForBodyText(checkoutSubmitPage, "Order created successfully.");
+        await waitForBodyText(checkoutSubmitPage, "Order Payment");
         await waitForBodyText(checkoutSubmitPage, createdInvoiceNo);
         await waitForBodyText(checkoutSubmitPage, "Grand Total");
         await waitForBodyText(checkoutSubmitPage, "Rp 25.000");
@@ -1965,6 +1965,7 @@ async function main() {
         CLIENT_URL: clientOrigin,
         CORS_ORIGIN: smokeCorsOrigins,
         NODE_ENV: "development",
+        VITE_PROXY_API_HOST: APP_HOST,
         VITE_PROXY_API_PORT: String(API_PORT),
       },
       async () => {

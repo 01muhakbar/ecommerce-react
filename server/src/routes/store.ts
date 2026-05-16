@@ -63,6 +63,11 @@ import {
 } from "../services/splitOperationalTruth.service.js";
 import { getDefaultAddressByUser } from "../services/userAddress.service.js";
 import { protect } from "../middleware/authMiddleware.js";
+import {
+  checkoutSubmitRateLimit,
+  publicTrackingRateLimit,
+  stripeSessionRateLimit,
+} from "../middleware/rateLimit.js";
 
 const router = Router();
 
@@ -1016,6 +1021,7 @@ const buildPublicProductWhere = (extraWhere: Record<string, any> = {}) => {
     isPublished: { [Op.in]: [1, true] },
     sellerSubmissionStatus: "none",
     storeId: { [Op.not]: null },
+    stock: { [Op.gt]: 0 },
     ...extraWhere,
     [Op.and]: [
       { name: { [Op.notLike]: "QA %" } },
@@ -2062,6 +2068,7 @@ router.put(
 // GET /api/store/orders/:ref (public invoice tracking)
 router.get(
   "/orders/:ref",
+  publicTrackingRateLimit,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const refParam = normalizePublicTrackingRef(req.params.ref);
@@ -2913,6 +2920,7 @@ router.put(
 router.post(
   "/orders",
   protect,
+  checkoutSubmitRateLimit,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
         const parsed = createOrderRequestSchema.safeParse(req.body);
@@ -3390,6 +3398,7 @@ router.post(
 router.get(
   "/orders/:ref/stripe/session",
   protect,
+  stripeSessionRateLimit,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const userId = getAuthUserId(req, res);
@@ -3492,6 +3501,7 @@ router.get(
 router.post(
   "/orders/:ref/stripe/session",
   protect,
+  stripeSessionRateLimit,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const userId = getAuthUserId(req, res);

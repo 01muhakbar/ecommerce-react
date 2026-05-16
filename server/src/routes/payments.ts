@@ -25,6 +25,7 @@ import {
   appendAuditNote,
   getRequestTraceId,
 } from "../services/operationalAudit.service.js";
+import { paymentMutationRateLimit } from "../middleware/rateLimit.js";
 
 const router = Router();
 
@@ -282,7 +283,7 @@ router.get("/:paymentId", async (req, res) => {
   }
 });
 
-router.post("/:paymentId/proof", async (req, res) => {
+router.post("/:paymentId/proof", paymentMutationRateLimit, async (req, res) => {
   try {
     const authUser = getAuthUser(req);
     if (!authUser.id) {
@@ -465,7 +466,7 @@ router.post("/:paymentId/proof", async (req, res) => {
   }
 });
 
-router.post("/:paymentId/cancel", async (req, res) => {
+router.post("/:paymentId/cancel", paymentMutationRateLimit, async (req, res) => {
   try {
     const authUser = getAuthUser(req);
     if (!authUser.id) {

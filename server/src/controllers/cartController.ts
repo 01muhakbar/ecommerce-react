@@ -98,13 +98,63 @@ const sendControllerError = (
   const meta = (error as any)?.meta;
   res.status(statusCode).json({
     message:
-      statusCode >= 400 && statusCode < 500
+      (statusCode >= 400 && statusCode < 500) ||
+      code === "CART_MUTATION_RETRY_EXHAUSTED"
         ? (error as Error).message
         : fallbackMessage,
     error: (error as Error).message,
     ...(code ? { code } : {}),
     ...(meta && typeof meta === "object" ? { meta } : {}),
   });
+};
+
+const CART_MUTATION_MAX_RETRIES = 2;
+const CART_MUTATION_RETRY_DELAY_MS = 75;
+const RETRYABLE_CART_MUTATION_ERRNOS = new Set([1205, 1213]);
+const RETRYABLE_CART_MUTATION_CODES = new Set([
+  "ER_LOCK_DEADLOCK",
+  "ER_LOCK_WAIT_TIMEOUT",
+]);
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isRetryableCartMutationError = (error: unknown) => {
+  const sources = [
+    error,
+    (error as any)?.parent,
+    (error as any)?.original,
+  ];
+  return sources.some((source) => {
+    const code = String((source as any)?.code || "").toUpperCase();
+    const errno = Number((source as any)?.errno);
+    return (
+      RETRYABLE_CART_MUTATION_CODES.has(code) ||
+      RETRYABLE_CART_MUTATION_ERRNOS.has(errno)
+    );
+  });
+};
+
+const runRetryableCartMutation = async <T>(fn: () => Promise<T>) => {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt <= CART_MUTATION_MAX_RETRIES; attempt += 1) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableCartMutationError(error) || attempt >= CART_MUTATION_MAX_RETRIES) {
+        break;
+      }
+      await delay(CART_MUTATION_RETRY_DELAY_MS * (attempt + 1));
+    }
+  }
+
+  if (isRetryableCartMutationError(lastError)) {
+    throw createControllerError("Cart is busy. Please retry in a moment.", {
+      statusCode: 503,
+      code: "CART_MUTATION_RETRY_EXHAUSTED",
+    });
+  }
+  throw lastError;
 };
 
 const normalizeVariantSelectionCompareKey = (selection: any) =>
@@ -679,7 +729,7 @@ export const addToCart = async (
     }
     let responsePayload: any = null;
 
-    await sequelize.transaction(async (t) => {
+    await runRetryableCartMutation(() => sequelize.transaction(async (t) => {
       const supportedVariantFields = await getCartItemSupportedVariantFields();
       let cart = await Cart.findOne({
         where: { userId },
@@ -737,7 +787,7 @@ export const addToCart = async (
         { transaction: t }
       );
       responsePayload = toCartItemPayload(created);
-    });
+    }));
 
     res.status(200).json({
       message: "Product added to cart successfully.",

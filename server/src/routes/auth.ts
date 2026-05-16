@@ -49,9 +49,11 @@ const AUTH_DEBUG_COOKIES = process.env.AUTH_DEBUG_COOKIES === "true";
 const router = Router();
 
 const resolveAuthCookieOptions = (req: any) => {
+  const isProduction = process.env.NODE_ENV === "production";
   const secure =
     process.env.COOKIE_SECURE === "true" ||
-    (process.env.NODE_ENV === "production" && req.secure);
+    (isProduction && process.env.COOKIE_SECURE !== "false") ||
+    (isProduction && req.secure);
   return {
     httpOnly: true,
     secure,

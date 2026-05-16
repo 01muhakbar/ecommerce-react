@@ -43,6 +43,7 @@ const toManualVendorChunk = (id: string) => {
 
 export default defineConfig(({ mode }) => {
   const analyze = mode === "analyze";
+  const proxyApiHost = process.env.VITE_PROXY_API_HOST || "localhost";
   const proxyApiPort = Number(process.env.VITE_PROXY_API_PORT || 3001);
 
   return {
@@ -69,13 +70,13 @@ export default defineConfig(({ mode }) => {
       proxy: {
         // Proxy semua request /api ke server dev
         "/api": {
-          target: `http://localhost:${proxyApiPort}`,
+          target: `http://${proxyApiHost}:${proxyApiPort}`,
           changeOrigin: true,
           secure: false,
         },
         // Proxy uploaded assets too
         "/uploads": {
-          target: `http://localhost:${proxyApiPort}`,
+          target: `http://${proxyApiHost}:${proxyApiPort}`,
           changeOrigin: true,
         },
       },

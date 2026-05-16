@@ -66,6 +66,7 @@ export const buildProductVisibilitySnapshot = (input: {
   isPublished: boolean;
   status: unknown;
   submissionStatus?: unknown;
+  stock?: unknown;
   store?: any;
   storeOperationalReadiness?: any;
   storeStatus?: unknown;
@@ -74,6 +75,8 @@ export const buildProductVisibilitySnapshot = (input: {
   const isPublished = Boolean(input?.isPublished);
   const status = normalizeProductStatus(input?.status);
   const submissionStatus = normalizeSubmissionStatus(input?.submissionStatus);
+  const stock = Number(input?.stock);
+  const hasStock = Number.isFinite(stock) ? stock > 0 : true;
   const operationalReadiness = resolveStoreOperationalReadiness(input);
   const storeActive = isStorefrontStoreActive({
     storeStatus: input?.storeStatus,
@@ -83,7 +86,7 @@ export const buildProductVisibilitySnapshot = (input: {
     operationalReadiness != null ? Boolean(operationalReadiness.isReady) : storeActive;
   const reviewBlocked = submissionStatus !== "none";
   const storefrontVisible =
-    isPublished && status === "active" && !reviewBlocked && storeOperational;
+    isPublished && status === "active" && !reviewBlocked && storeOperational && hasStock;
   const blockingSignals: string[] = [];
 
   if (!isPublished) {
@@ -103,6 +106,9 @@ export const buildProductVisibilitySnapshot = (input: {
   } else if (!storeOperational) {
     blockingSignals.push("STORE_NOT_READY");
   }
+  if (!hasStock) {
+    blockingSignals.push("OUT_OF_STOCK");
+  }
 
   const stateCode = !isPublished
     ? "INTERNAL_ONLY"
@@ -119,9 +125,11 @@ export const buildProductVisibilitySnapshot = (input: {
           ? "STORE_NOT_ACTIVE"
           : !storeOperational
             ? "STORE_NOT_READY"
-          : storefrontVisible
-            ? "STOREFRONT_VISIBLE"
-            : "STATUS_NOT_ACTIVE";
+            : !hasStock
+              ? "OUT_OF_STOCK"
+              : storefrontVisible
+                ? "STOREFRONT_VISIBLE"
+                : "STATUS_NOT_ACTIVE";
 
   const sellerLabel = !isPublished
     ? status === "draft"
@@ -137,7 +145,9 @@ export const buildProductVisibilitySnapshot = (input: {
             ? "Published but store is inactive"
           : !storeOperational
             ? "Published but store is not operational"
-            : "Published but blocked";
+            : !hasStock
+              ? "Published but out of stock"
+              : "Published but blocked";
   const storefrontReason = !isPublished
     ? "Public storefront queries exclude this product because the publish flag is off."
     : storefrontVisible
@@ -149,9 +159,11 @@ export const buildProductVisibilitySnapshot = (input: {
           : !storeActive
             ? "Publish is on, but the linked store is not active, so storefront queries still exclude this product."
             : !storeOperational
-              ? String(operationalReadiness?.description || "").trim() ||
-                "Publish is on, but the linked store is not operational yet, so storefront queries still exclude this product."
-            : "Publish is on, but public storefront queries still exclude this product until status becomes active.";
+            ? String(operationalReadiness?.description || "").trim() ||
+              "Publish is on, but the linked store is not operational yet, so storefront queries still exclude this product."
+            : !hasStock
+              ? "Publish is on, but public storefront queries exclude this product until stock is available."
+              : "Publish is on, but public storefront queries still exclude this product until status becomes active.";
   const sellerHint = !isPublished
     ? "Seller can still review this product here, but customers cannot see it yet."
     : storefrontVisible
@@ -164,7 +176,9 @@ export const buildProductVisibilitySnapshot = (input: {
             ? "Seller can keep this product published internally, but storefront visibility stays blocked until the store becomes active."
           : !storeOperational
             ? "Seller can keep this product published internally, but storefront visibility stays blocked until the store becomes operational."
-            : "Seller can review this product here, but customers will not see it until status becomes active.";
+            : !hasStock
+              ? "Seller can keep this product published internally, but customers will not see it until stock is available."
+              : "Seller can review this product here, but customers will not see it until status becomes active.";
 
   return {
     isPublished,

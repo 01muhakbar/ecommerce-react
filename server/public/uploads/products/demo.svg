@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480" role="img" aria-labelledby="title desc">
+  <title id="title">Demo product image</title>
+  <desc id="desc">Generic product placeholder for development and smoke fixtures.</desc>
+  <rect width="640" height="480" fill="#f8fafc"/>
+  <rect x="48" y="48" width="544" height="384" rx="28" fill="#ffffff" stroke="#d1d5db" stroke-width="4"/>
+  <circle cx="210" cy="188" r="58" fill="#34d399"/>
+  <path d="M126 356c55-70 90-105 122-105 29 0 47 28 74 28 33 0 57-65 96-65 42 0 79 68 122 142H126Z" fill="#0f766e"/>
+  <path d="M126 356h388" stroke="#065f46" stroke-width="10" stroke-linecap="round"/>
+  <text x="320" y="408" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#334155">TP Preneurs</text>
+</svg>

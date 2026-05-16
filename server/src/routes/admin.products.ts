@@ -1186,7 +1186,7 @@ const resolveAdminPublishGate = (plain: any) => {
       willClearSubmissionState: true,
       nextLifecycleStatus: lifecycleStatus === "active" ? "active" : "active",
       reasonCode: "REVIEW_SUBMITTED",
-      hint: "Open review preview to publish this seller submission as the final admin outcome.",
+      hint: "Open review preview to approve this seller submission. Seller publish remains a separate action after approval.",
     };
   }
 
@@ -1264,6 +1264,7 @@ const assertAdminPublishAllowed = (
     return {
       patch: {
         status: "active",
+        isPublished: false,
         ...buildClearedSellerSubmissionPatch(),
       },
       sellerSubmissionStatus,
@@ -1702,6 +1703,7 @@ const toAdminProductListItem = (product: any, storeOperationalReadiness: any = n
     isPublished: published,
     status: plain?.status,
     submissionStatus: plain?.sellerSubmissionStatus,
+    stock: plain?.stock,
     storeOperationalReadiness,
     storeStatus: plain?.store?.status,
     storeId: plain?.storeId,
@@ -1758,6 +1760,7 @@ const toAdminProductDetail = (product: any, storeOperationalReadiness: any = nul
     isPublished: published,
     status: plain?.status,
     submissionStatus: plain?.sellerSubmissionStatus,
+    stock: plain?.stock,
     storeOperationalReadiness,
     storeStatus: plain?.store?.status,
     storeId: plain?.storeId,
@@ -3091,6 +3094,12 @@ router.patch(
         },
       });
       if (body.published === true) {
+        const finalPublished = Boolean(
+          (updated as any)?.get?.("isPublished") ??
+            (updated as any)?.get?.("published") ??
+            (updated as any)?.isPublished ??
+            patch.isPublished
+        );
         if (currentSubmissionStatus === "submitted") {
           await logProductActivity({
             storeId: getAdminProductStoreId(updated),
@@ -3106,19 +3115,21 @@ router.patch(
             },
           });
         }
-        await logProductActivity({
-          storeId: getAdminProductStoreId(updated),
-          entityId: idNum,
-          action: PRODUCT_ACTIVITY_LOG_ACTIONS.PUBLISHED,
-          actorType: "admin",
-          actorId: actorUserId,
-          before: beforeSnapshot,
-          after: updated,
-          metadata: {
-            source: "manual",
-            lane: "admin",
-          },
-        });
+        if (finalPublished) {
+          await logProductActivity({
+            storeId: getAdminProductStoreId(updated),
+            entityId: idNum,
+            action: PRODUCT_ACTIVITY_LOG_ACTIONS.PUBLISHED,
+            actorType: "admin",
+            actorId: actorUserId,
+            before: beforeSnapshot,
+            after: updated,
+            metadata: {
+              source: "manual",
+              lane: "admin",
+            },
+          });
+        }
       } else if (body.published === false) {
         await logProductActivity({
           storeId: getAdminProductStoreId(updated),
@@ -3258,21 +3269,26 @@ router.patch(
         } as any
       );
       const afterSnapshot = product.get?.({ plain: true }) ?? product;
-      await logProductActivity({
-        storeId: getAdminProductStoreId(product),
-        entityId: idNum,
-        action: published
-          ? PRODUCT_ACTIVITY_LOG_ACTIONS.PUBLISHED
-          : PRODUCT_ACTIVITY_LOG_ACTIONS.UNPUBLISHED,
-        actorType: "admin",
-        actorId: Number((req as any).user?.id || 0) || null,
-        before: beforeSnapshot,
-        after: afterSnapshot,
-        metadata: {
-          source: "manual",
-          lane: "admin",
-        },
-      });
+      const finalPublished = Boolean(
+        product.get?.("isPublished") ?? product.get?.("published") ?? published
+      );
+      if (!published || finalPublished) {
+        await logProductActivity({
+          storeId: getAdminProductStoreId(product),
+          entityId: idNum,
+          action: finalPublished
+            ? PRODUCT_ACTIVITY_LOG_ACTIONS.PUBLISHED
+            : PRODUCT_ACTIVITY_LOG_ACTIONS.UNPUBLISHED,
+          actorType: "admin",
+          actorId: Number((req as any).user?.id || 0) || null,
+          before: beforeSnapshot,
+          after: afterSnapshot,
+          metadata: {
+            source: "manual",
+            lane: "admin",
+          },
+        });
+      }
       if (published && currentSubmissionStatus === "submitted") {
         await logProductActivity({
           storeId: getAdminProductStoreId(product),

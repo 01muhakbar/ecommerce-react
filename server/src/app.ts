@@ -134,12 +134,15 @@ app.use("/api/store/customization", storeCustomizationRouter);
 app.use("/api/store/settings", storeSettingsRouter);
 app.use("/api/user", userStoreApplicationsRouter);
 
-// serve uploaded files from all known locations (priority: runtime uploads first)
-const uploadsCandidates = [
-  path.resolve(process.cwd(), "uploads"),
-  path.resolve(process.cwd(), "public/uploads"),
-  path.resolve(process.cwd(), "server/public/uploads"),
-];
+// serve uploaded files from all known locations (priority: configured runtime uploads first)
+const uploadsCandidates = Array.from(
+  new Set([
+    path.resolve(process.cwd(), process.env.UPLOAD_DIR || "uploads"),
+    path.resolve(process.cwd(), "uploads"),
+    path.resolve(process.cwd(), "public/uploads"),
+    path.resolve(process.cwd(), "server/public/uploads"),
+  ])
+);
 uploadsCandidates.forEach((uploadsDir) => {
   if (!fs.existsSync(uploadsDir)) return;
   app.use(

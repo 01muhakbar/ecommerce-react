@@ -208,6 +208,23 @@ async function createFixtureStore(ownerUserId: number, label: string): Promise<S
     name: `${RUN_ID}-${label}`,
     slug,
     status: "ACTIVE",
+    phone: "+628111111111",
+    addressLine1: "Jl Shipment QA No. 1",
+    city: "Jakarta",
+    province: "DKI Jakarta",
+    postalCode: "10110",
+    country: "Indonesia",
+    shippingSetup: {
+      shippingEnabled: true,
+      originContactName: `${RUN_ID}-${label}`,
+      originPhone: "+628111111111",
+      originAddressLine1: "Jl Shipment QA No. 1",
+      originCity: "Jakarta",
+      originProvince: "DKI Jakarta",
+      originPostalCode: "10110",
+      originCountry: "Indonesia",
+      pickupNotes: "Shipment reconciliation smoke ready origin.",
+    },
   } as any);
   const id = Number(store.getDataValue("id"));
   createdStoreIds.push(id);
@@ -499,10 +516,13 @@ async function mutateSellerFulfillment(input: {
   return response;
 }
 
-const normalizeShipmentSnapshot = (shipment: any) => ({
-  suborderId: toNumber(shipment?.suborderId, 0) || null,
-  shipmentId: toNumber(shipment?.shipmentId, 0) || null,
-  storeId: toNumber(shipment?.storeId, 0) || null,
+const normalizeShipmentSnapshot = (
+  shipment: any,
+  options?: { includeInternalIds?: boolean }
+) => ({
+  suborderId: options?.includeInternalIds ? toNumber(shipment?.suborderId, 0) || null : null,
+  shipmentId: options?.includeInternalIds ? toNumber(shipment?.shipmentId, 0) || null : null,
+  storeId: options?.includeInternalIds ? toNumber(shipment?.storeId, 0) || null : null,
   storeName: String(shipment?.storeName || "").trim() || null,
   usedLegacyFallback: Boolean(shipment?.usedLegacyFallback),
   shipmentStatus: String(shipment?.shipmentStatus || "").trim().toUpperCase() || null,
@@ -516,27 +536,38 @@ const normalizeShipmentSnapshot = (shipment: any) => ({
     .filter(Boolean),
 });
 
-const snapshotShipments = (shipments: any[]) =>
+const snapshotShipments = (
+  shipments: any[],
+  options?: { includeInternalIds?: boolean }
+) =>
   (Array.isArray(shipments) ? shipments : [])
-    .map((shipment) => normalizeShipmentSnapshot(shipment))
+    .map((shipment) => normalizeShipmentSnapshot(shipment, options))
     .sort((left, right) => {
       if ((left.suborderId || 0) !== (right.suborderId || 0)) {
         return (left.suborderId || 0) - (right.suborderId || 0);
       }
-      return (left.storeId || 0) - (right.storeId || 0);
+      if ((left.storeId || 0) !== (right.storeId || 0)) {
+        return (left.storeId || 0) - (right.storeId || 0);
+      }
+      return String(left.storeName || "").localeCompare(String(right.storeName || ""));
     });
 
-const pickOrderShipmentSnapshot = (payload: any) => ({
+const pickOrderShipmentSnapshot = (
+  payload: any,
+  options?: { includeInternalIds?: boolean }
+) => ({
   shipmentCount: toNumber(payload?.shipmentCount, 0),
   shippingStatus: String(payload?.shippingStatus || "").trim().toUpperCase() || null,
   usedLegacyFallback: Boolean(payload?.usedLegacyFallback),
-  shipments: snapshotShipments(payload?.shipments),
+  shipments: snapshotShipments(payload?.shipments, options),
 });
 
 const assertOrderRouteParity = (label: string, left: any, right: any) => {
+  // Public tracking intentionally strips internal shipment/store/suborder ids.
+  // Parity here must prove customer-visible shipment truth, not private ids.
   assert.deepEqual(
-    pickOrderShipmentSnapshot(left),
-    pickOrderShipmentSnapshot(right),
+    pickOrderShipmentSnapshot(left, { includeInternalIds: false }),
+    pickOrderShipmentSnapshot(right, { includeInternalIds: false }),
     `${label}: shipment truth mismatch`
   );
 };

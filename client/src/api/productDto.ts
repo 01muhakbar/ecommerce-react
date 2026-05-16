@@ -349,10 +349,12 @@ const normalizeAvailability = (availability: any, inventory: any = {}) => {
         : inStock
           ? "In stock"
           : "Out of stock"),
-    storefrontImpact: availability?.storefrontImpact || "NO_VISIBILITY_CHANGE",
+    storefrontImpact: availability?.storefrontImpact || (inStock ? "NO_VISIBILITY_CHANGE" : "VISIBILITY_BLOCKED"),
     storefrontReason:
       availability?.storefrontReason ||
-      "Current storefront product queries do not hide products based on stock or pre-order flags.",
+      (inStock
+        ? "Current storefront product queries can include this product while stock is available."
+        : "Current storefront product queries hide this product until stock is available."),
   };
 };
 

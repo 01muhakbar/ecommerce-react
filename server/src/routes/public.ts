@@ -103,6 +103,7 @@ const buildPublicProductWhere = (extraWhere: Record<string, any> = {}) => ({
   status: "active",
   sellerSubmissionStatus: "none",
   storeId: { [Op.not]: null },
+  stock: { [Op.gt]: 0 },
   ...extraWhere,
 });
 
@@ -402,5 +403,4 @@ router.post("/upload", (req: Request, res: Response) => {
 });
 
 export default router;
-
 

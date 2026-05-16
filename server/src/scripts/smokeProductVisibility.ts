@@ -5,6 +5,7 @@ import { Op, QueryTypes } from "sequelize";
 import {
   Cart,
   CartItem,
+  Category,
   Product,
   Store,
   StoreMember,
@@ -89,6 +90,7 @@ class CookieClient {
 const createdUserIds: number[] = [];
 const createdStoreIds: number[] = [];
 const createdPaymentProfileIds: number[] = [];
+const createdCategoryIds: number[] = [];
 const createdProductIds: number[] = [];
 const createdAttributeIds: number[] = [];
 const createdAttributeValueIds: number[] = [];
@@ -214,9 +216,23 @@ async function createReadyPaymentProfile(storeId: number) {
   );
 }
 
+async function createFixtureCategory() {
+  const code = slugify(`${RUN_ID}-cat`).slice(0, 32);
+  const category = await Category.create({
+    code,
+    name: `${RUN_ID} Category`,
+    published: true,
+  } as any);
+  const id = Number(category.getDataValue("id"));
+  createdCategoryIds.push(id);
+  return { id, code };
+}
+
 async function createFixtureProduct(input: {
   ownerUserId: number;
   storeId: number;
+  categoryId?: number | null;
+  stock?: number;
   label: string;
   status: "active" | "inactive" | "draft";
   published: boolean;
@@ -228,9 +244,11 @@ async function createFixtureProduct(input: {
     slug,
     sku: slug.toUpperCase(),
     price: 10000,
-    stock: 8,
+    stock: typeof input.stock === "number" ? input.stock : 8,
     userId: input.ownerUserId,
     storeId: input.storeId,
+    categoryId: input.categoryId ?? null,
+    defaultCategoryId: input.categoryId ?? null,
     status: input.status,
     isPublished: input.published,
     sellerSubmissionStatus: input.sellerSubmissionStatus,
@@ -317,6 +335,7 @@ const buildVariationKey = (selection: { attributeId: number; valueId: number; va
 async function createVisibleVariantFixtureProduct(input: {
   ownerUserId: number;
   storeId: number;
+  categoryId?: number | null;
   label: string;
 }) {
   const slug = slugify(`${RUN_ID}-${input.label}`);
@@ -342,6 +361,8 @@ async function createVisibleVariantFixtureProduct(input: {
     stock: 8,
     userId: input.ownerUserId,
     storeId: input.storeId,
+    categoryId: input.categoryId ?? null,
+    defaultCategoryId: input.categoryId ?? null,
     status: "active",
     isPublished: true,
     sellerSubmissionStatus: "none",
@@ -618,6 +639,13 @@ async function cleanupFixtures() {
     });
   }
 
+  if (createdCategoryIds.length > 0) {
+    await Category.destroy({
+      where: { id: { [Op.in]: createdCategoryIds } } as any,
+      force: true,
+    }).catch(() => null);
+  }
+
   if (createdAttributeValueIds.length > 0) {
     await sequelize.query(
       `DELETE FROM attribute_values WHERE id IN (${createdAttributeValueIds.map(() => "?").join(", ")})`,
@@ -686,10 +714,12 @@ async function run() {
     "store-inactive",
     "INACTIVE"
   );
+  const category = await createFixtureCategory();
 
   const draftProduct = await createFixtureProduct({
     ownerUserId: sellerUser.id,
     storeId: activeStore.id,
+    categoryId: category.id,
     label: "draft-hidden",
     status: "draft",
     published: false,
@@ -698,6 +728,7 @@ async function run() {
   const inactiveProduct = await createFixtureProduct({
     ownerUserId: sellerUser.id,
     storeId: activeStore.id,
+    categoryId: category.id,
     label: "inactive-hidden",
     status: "inactive",
     published: true,
@@ -706,6 +737,7 @@ async function run() {
   const submittedProduct = await createFixtureProduct({
     ownerUserId: sellerUser.id,
     storeId: activeStore.id,
+    categoryId: category.id,
     label: "submitted-hidden",
     status: "active",
     published: true,
@@ -714,6 +746,7 @@ async function run() {
   const needsRevisionProduct = await createFixtureProduct({
     ownerUserId: sellerUser.id,
     storeId: activeStore.id,
+    categoryId: category.id,
     label: "needs-revision-hidden",
     status: "active",
     published: true,
@@ -722,7 +755,18 @@ async function run() {
   const visibleProduct = await createFixtureProduct({
     ownerUserId: sellerUser.id,
     storeId: activeStore.id,
+    categoryId: category.id,
     label: "storefront-visible",
+    status: "active",
+    published: true,
+    sellerSubmissionStatus: "none",
+  });
+  const outOfStockProduct = await createFixtureProduct({
+    ownerUserId: sellerUser.id,
+    storeId: activeStore.id,
+    categoryId: category.id,
+    stock: 0,
+    label: "out-of-stock-hidden",
     status: "active",
     published: true,
     sellerSubmissionStatus: "none",
@@ -730,11 +774,13 @@ async function run() {
   const visibleVariantProduct = await createVisibleVariantFixtureProduct({
     ownerUserId: sellerUser.id,
     storeId: activeStore.id,
+    categoryId: category.id,
     label: "storefront-visible-variant",
   });
   const inactiveStoreProduct = await createFixtureProduct({
     ownerUserId: inactiveSellerUser.id,
     storeId: inactiveStore.id,
+    categoryId: category.id,
     label: "store-inactive-hidden",
     status: "active",
     published: true,
@@ -743,6 +789,7 @@ async function run() {
   const notReadyStoreProduct = await createFixtureProduct({
     ownerUserId: notReadySellerUser.id,
     storeId: activeStoreNotReady.id,
+    categoryId: category.id,
     label: "store-not-ready-hidden",
     status: "active",
     published: true,
@@ -788,6 +835,8 @@ async function run() {
     "not-ready store hidden"
   );
   logPass("not-ready store discovery hidden with gated detail");
+  await assertHiddenEverywhere(outOfStockProduct, "out-of-stock hidden");
+  logPass("out-of-stock hidden");
 
   logStep("checking visible scenario on public/storefront routes");
   await assertVisibleEverywhere(visibleProduct, "visible product");
@@ -826,8 +875,10 @@ async function run() {
   );
   const adminInactiveStoreItem = adminItemBySlug.get(inactiveStoreProduct.slug);
   const adminVisibleItem = adminItemBySlug.get(visibleProduct.slug);
+  const adminOutOfStockItem = adminItemBySlug.get(outOfStockProduct.slug);
   assert.ok(adminInactiveStoreItem, "admin list: inactive store item missing");
   assert.ok(adminVisibleItem, "admin list: visible item missing");
+  assert.ok(adminOutOfStockItem, "admin list: out-of-stock item missing");
   assert.equal(
     String(adminInactiveStoreItem?.visibility?.stateCode || ""),
     "PUBLISHED_BLOCKED",
@@ -842,6 +893,11 @@ async function run() {
     String(adminVisibleItem?.visibility?.stateCode || ""),
     "STOREFRONT_VISIBLE",
     "admin list: visible product state mismatch"
+  );
+  assert.equal(
+    String(adminOutOfStockItem?.visibility?.reasonCode || ""),
+    "OUT_OF_STOCK",
+    "admin list: out-of-stock product reason mismatch"
   );
   logPass("admin review queue summary");
 
@@ -933,9 +989,11 @@ async function run() {
   const submittedItem: any = itemBySlug.get(submittedProduct.slug);
   const needsRevisionItem: any = itemBySlug.get(needsRevisionProduct.slug);
   const visibleItem: any = itemBySlug.get(visibleProduct.slug);
+  const outOfStockItem: any = itemBySlug.get(outOfStockProduct.slug);
   assert.ok(submittedItem, "seller list: submitted item missing");
   assert.ok(needsRevisionItem, "seller list: needs_revision item missing");
   assert.ok(visibleItem, "seller list: visible item missing");
+  assert.ok(outOfStockItem, "seller list: out-of-stock item missing");
   assert.equal(
     Boolean(submittedItem?.visibility?.storefrontVisible),
     false,
@@ -965,6 +1023,16 @@ async function run() {
     String(visibleItem?.visibility?.stateCode || ""),
     "STOREFRONT_VISIBLE",
     "seller list: visible product state mismatch"
+  );
+  assert.equal(
+    Boolean(outOfStockItem?.visibility?.storefrontVisible),
+    false,
+    "seller list: out-of-stock product incorrectly marked visible"
+  );
+  assert.equal(
+    String(outOfStockItem?.visibility?.reasonCode || ""),
+    "OUT_OF_STOCK",
+    "seller list: out-of-stock product reason mismatch"
   );
   logPass("seller visibility metadata");
 
@@ -1127,6 +1195,65 @@ async function run() {
     "seller needs revision publish lock: wrong error code"
   );
   logPass("seller review locks");
+
+  logStep("checking seller publish requires admin approval");
+  const draftPublishBeforeReview = await sellerClient.request(
+    `/api/seller/stores/${activeStore.id}/products/${draftProduct.id}/published`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ published: true }),
+    }
+  );
+  assertStatus(draftPublishBeforeReview, 409, "seller draft publish before review");
+  assert.equal(
+    String(draftPublishBeforeReview.body?.code || ""),
+    "SELLER_PRODUCT_REVIEW_APPROVAL_REQUIRED",
+    "seller draft publish before review: wrong error code"
+  );
+
+  const submitDraftForReview = await sellerClient.request(
+    `/api/seller/stores/${activeStore.id}/products/${draftProduct.id}/submit-review`,
+    {
+      method: "POST",
+    }
+  );
+  assertStatus(submitDraftForReview, 200, "seller submit draft for review");
+
+  const adminApproveReview = await adminClient.request(
+    `/api/admin/products/${draftProduct.id}/published`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ published: true }),
+    }
+  );
+  assertStatus(adminApproveReview, 200, "admin approve review");
+  assert.equal(
+    Boolean(adminApproveReview.body?.data?.published),
+    false,
+    "admin approve review: approval should not publish the product"
+  );
+  assert.equal(
+    String(adminApproveReview.body?.data?.status || ""),
+    "active",
+    "admin approve review: product lifecycle should become active"
+  );
+  assert.equal(
+    String(adminApproveReview.body?.data?.sellerSubmission?.status || ""),
+    "none",
+    "admin approve review: seller submission state should be cleared"
+  );
+  await assertHiddenEverywhere(draftProduct, "admin approved but seller unpublished");
+
+  const sellerPublishApproved = await sellerClient.request(
+    `/api/seller/stores/${activeStore.id}/products/${draftProduct.id}/published`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ published: true }),
+    }
+  );
+  assertStatus(sellerPublishApproved, 200, "seller publish approved product");
+  await assertVisibleEverywhere(draftProduct, "seller published after admin approval");
+  logPass("seller publish requires admin approval");
 
   logStep("checking admin unpublish removes visibility immediately");
   const unpublishResponse = await adminClient.request(

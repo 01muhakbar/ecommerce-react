@@ -72,6 +72,10 @@ import {
   logOperationalAuditEvent,
 } from "../services/operationalAudit.service.js";
 import { applyRuntimeVariationSanitizerToProduct } from "../services/attributeVariationRuntimeValidation.js";
+import {
+  checkoutPreviewRateLimit,
+  checkoutSubmitRateLimit,
+} from "../middleware/rateLimit.js";
 
 const router = Router();
 
@@ -2109,7 +2113,7 @@ const resolveCheckoutRequestKey = (req: any, bodyKey: unknown) => {
 
 router.use(requireAuth);
 
-router.post("/preview", async (req, res) => {
+router.post("/preview", checkoutPreviewRateLimit, async (req, res) => {
   try {
     const parsed = previewRequestSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
@@ -2146,7 +2150,7 @@ router.post("/preview", async (req, res) => {
   }
 });
 
-router.post("/create-multi-store", async (req, res) => {
+router.post("/create-multi-store", checkoutSubmitRateLimit, async (req, res) => {
   try {
     const parsed = createMultiStoreSchema.safeParse(req.body ?? {});
     if (!parsed.success) {

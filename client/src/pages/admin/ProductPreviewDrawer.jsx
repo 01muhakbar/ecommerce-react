@@ -338,7 +338,7 @@ export default function ProductPreviewDrawer({ productId, onClose, onEdit }) {
       setPublishStatus({
         type: "success",
         message:
-          "Product published as the final admin review outcome. Seller submission state has been cleared.",
+          "Product approved. Seller submission state has been cleared and seller publish remains separate.",
       });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["admin-products"] }),
@@ -352,7 +352,7 @@ export default function ProductPreviewDrawer({ productId, onClose, onEdit }) {
         type: "error",
         message:
           error?.response?.data?.message ||
-          "Failed to publish this seller product from the review lane.",
+          "Failed to approve this seller product from the review lane.",
       });
     },
   });
@@ -481,7 +481,7 @@ export default function ProductPreviewDrawer({ productId, onClose, onEdit }) {
                       </p>
                       <p className="mt-1 text-xs text-slate-500">
                         {publishGate?.hint ||
-                          "Submitted products can be sent back as needs revision. Publish authority stays with admin."}
+                          "Submitted products can be approved or sent back as needs revision. Seller publishes after approval."}
                       </p>
                     </div>
                     {sellerSubmission?.submittedAt ? (
@@ -540,10 +540,10 @@ export default function ProductPreviewDrawer({ productId, onClose, onEdit }) {
                           className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           <CheckCircle2 className="h-4 w-4" />
-                          {publishMutation.isPending ? "Publishing..." : "Publish as Final Outcome"}
+                          {publishMutation.isPending ? "Approving..." : "Approve Review"}
                         </button>
                         <span className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
-                          Publish will clear the seller submission review state.
+                          Approval clears the seller submission state without publishing.
                         </span>
                       </div>
                       <label className="block">

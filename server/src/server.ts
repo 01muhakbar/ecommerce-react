@@ -11,6 +11,24 @@ import {
 const BASE_PORT = Number(process.env.PORT) || 3001;
 
 const trimEnv = (key: string) => String(process.env[key] || "").trim();
+const parseEnvList = (...values: string[]) =>
+  values
+    .flatMap((value) => value.split(","))
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+const isLocalOrigin = (value: string) =>
+  /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(value);
+const isHttpOrigin = (value: string) => /^http:\/\//i.test(value);
+const isValidHttpOrigin = (value: string) => /^https?:\/\/[^/]+$/i.test(value);
+const DEV_SECRET_VALUES = new Set([
+  "dev-secret",
+  "secret",
+  "secretkey",
+  "change_me_in_local_dev",
+  "change_me_to_a_strong_secret",
+  "replace_with_at_least_24_random_characters",
+]);
 
 const assertProductionRuntimeEnv = async () => {
   if (process.env.NODE_ENV !== "production") return;
@@ -34,6 +52,10 @@ const assertProductionRuntimeEnv = async () => {
   const clientPublicBaseUrl = trimEnv("CLIENT_PUBLIC_BASE_URL");
   const storePublicBaseUrl = trimEnv("STORE_PUBLIC_BASE_URL");
   const uploadDir = path.resolve(process.cwd(), trimEnv("UPLOAD_DIR") || "uploads");
+  const corsOrigins = parseEnvList(clientUrl, corsOrigin);
+  const publicOrigins = parseEnvList(publicBaseUrl, clientPublicBaseUrl, storePublicBaseUrl);
+  const configuredOrigins = [...corsOrigins, ...publicOrigins];
+  const localProductionProof = configuredOrigins.length > 0 && configuredOrigins.every(isLocalOrigin);
 
   if (!jwtSecret) missing.push("JWT_SECRET");
   if (!authCookieName) missing.push("AUTH_COOKIE_NAME");
@@ -46,22 +68,36 @@ const assertProductionRuntimeEnv = async () => {
   }
 
   if (jwtSecret) {
-    if (jwtSecret === "dev-secret") {
-      errors.push("JWT_SECRET must not use the development fallback value.");
+    if (DEV_SECRET_VALUES.has(jwtSecret)) {
+      errors.push("JWT_SECRET must not use a development/example value.");
     } else if (jwtSecret.length < 24) {
       errors.push("JWT_SECRET must be at least 24 characters long for production.");
     }
   }
 
   if (!clientUrl && !corsOrigin) {
-    warnings.push(
-      "CLIENT_URL/CORS_ORIGIN is not set. This is only safe when production is deployed same-origin behind a trusted proxy."
-    );
+    errors.push("CLIENT_URL or CORS_ORIGIN must be set explicitly in production.");
   }
 
-  if (cookieSecure !== "true") {
+  for (const origin of corsOrigins) {
+    if (origin === "*") {
+      errors.push("CORS origin wildcard (*) is not allowed in production.");
+    } else if (!isValidHttpOrigin(origin)) {
+      errors.push(`CORS/CLIENT origin is invalid for production: ${origin}`);
+    } else if (isHttpOrigin(origin) && !isLocalOrigin(origin)) {
+      errors.push(`CORS/CLIENT origin must use HTTPS in production: ${origin}`);
+    }
+  }
+
+  if (cookieSecure === "false" && !localProductionProof) {
+    errors.push("COOKIE_SECURE must not be false in production. Omit it to auto-secure or set true.");
+  } else if (cookieSecure === "false") {
     warnings.push(
-      "COOKIE_SECURE is not set to true. Cross-origin HTTPS cookies will fail and production auth may be weaker than intended."
+      "COOKIE_SECURE=false is only acceptable for localhost production-proof runs. Use Secure cookies for public HTTPS."
+    );
+  } else if (cookieSecure !== "true") {
+    warnings.push(
+      "COOKIE_SECURE is not set. Auth cookies will default to Secure in production."
     );
   }
 
@@ -69,6 +105,18 @@ const assertProductionRuntimeEnv = async () => {
     warnings.push(
       "PUBLIC_BASE_URL / CLIENT_PUBLIC_BASE_URL / STORE_PUBLIC_BASE_URL is not set. Stripe checkout redirects will fall back to request origin/host and may be fragile behind proxies."
     );
+  }
+
+  for (const origin of publicOrigins) {
+    if (!/^https?:\/\/[^/]+/i.test(origin)) {
+      errors.push(`Public base URL is invalid for production: ${origin}`);
+    } else if (isHttpOrigin(origin) && !isLocalOrigin(origin)) {
+      errors.push(`Public base URL must use HTTPS in production: ${origin}`);
+    }
+  }
+
+  if (process.env.DB_SYNC === "true") {
+    errors.push("DB_SYNC=true is not allowed during production startup.");
   }
 
   if (process.env.ENABLE_MULTISTORE_SHIPMENT_MUTATION && !process.env.ENABLE_MULTISTORE_SHIPMENT_MVP) {
@@ -155,4 +203,3 @@ function listenOnce(port: number): Promise<void> {
       });
   });
 }
-

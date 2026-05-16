@@ -7,6 +7,7 @@ import {
 import { serializePublicCouponSnapshot } from "../services/sharedContracts/couponGovernance.js";
 import { buildPublicOperationalPaymentProfileInclude } from "../services/sharedContracts/publicStoreIdentity.js";
 import { Coupon, Store } from "../models/index.js";
+import { couponQuoteRateLimit } from "../middleware/rateLimit.js";
 
 const router = Router();
 
@@ -83,7 +84,7 @@ router.get("/", async (req, res, next) => {
 });
 
 // POST /api/store/coupons/quote
-router.post("/quote", async (req, res, next) => {
+router.post("/quote", couponQuoteRateLimit, async (req, res, next) => {
   try {
     const code = req.body?.code;
     const subtotal = req.body?.subtotal;
@@ -105,7 +106,7 @@ router.post("/quote", async (req, res, next) => {
 });
 
 // POST /api/store/coupons/validate
-router.post("/validate", async (req, res, next) => {
+router.post("/validate", couponQuoteRateLimit, async (req, res, next) => {
   try {
     const code = req.body?.code;
     const subtotal = req.body?.subtotal;

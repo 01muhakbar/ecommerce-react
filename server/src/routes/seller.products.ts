@@ -935,7 +935,7 @@ const buildSellerSubmissionGovernance = (
   const hasConcreteProduct = Boolean(options?.hasConcreteProduct);
   const isResubmission = submissionStatus === "needs_revision";
   const sellerCanPublish =
-    permissions.canPublishProducts && submissionStatus === "none";
+    permissions.canPublishProducts && productStatus === "active" && submissionStatus === "none";
   const canSubmit =
     hasConcreteProduct &&
     permissions.canSubmitDrafts &&
@@ -962,8 +962,8 @@ const buildSellerSubmissionGovernance = (
         : submissionStatus === "needs_revision"
           ? "Admin requested revisions on this draft. Update the requested changes first, then resubmit for review before publish can continue."
         : hasConcreteProduct
-          ? "Seller may keep this product as an internal draft or publish it directly while no admin review is in progress."
-          : "You can create a draft first, then publish it directly when the required fields are ready.",
+          ? "Seller may keep this product internal, submit drafts for admin review, and publish only after admin approval moves the product to active."
+          : "You can create a draft first, then submit it for admin review before publishing.",
   };
 };
 
@@ -1605,7 +1605,9 @@ const buildCatalogReadContract = () => ({
     "Seller catalog stays store-scoped through Product.storeId.",
     "Current public storefront queries gate product visibility by store mapping, active store status, publish flag, active product status, and a cleared seller submission state.",
     "Submitted and revision-required products stay blocked from storefront visibility until admin review is resolved and Product.sellerSubmissionStatus returns to none.",
-    "Stock, pre-order, and category publish state are still not used as hard storefront visibility gates in product queries.",
+    "Seller publish requires an admin-approved active product; draft products must be submitted and approved before Seller can publish.",
+    "Products with no available stock stay blocked from public storefront visibility until stock is available.",
+    "Variant-specific runtime availability is still revalidated by product detail, cart, and checkout.",
   ],
 });
 
@@ -1626,6 +1628,7 @@ const serializeProductVisibility = (
   status: string,
   submissionStatus: string = "none",
   options: {
+    stock?: unknown;
     store?: any;
     storeOperationalReadiness?: any;
     storeStatus?: unknown;
@@ -1636,6 +1639,7 @@ const serializeProductVisibility = (
     isPublished,
     status,
     submissionStatus,
+    stock: options.stock,
     store: options.store,
     storeOperationalReadiness: options.storeOperationalReadiness,
     storeStatus: options.storeStatus,
@@ -1663,6 +1667,7 @@ const serializeProductPublishing = (
     isPublished,
     status,
     submissionStatus,
+    stock: getAttr(product, "stock"),
     store: options.store,
     storeOperationalReadiness: options.storeOperationalReadiness,
     storeStatus: options.storeStatus,
@@ -1684,14 +1689,27 @@ const serializeProductPublishing = (
               "Admin requested revisions. Update the draft and resubmit before changing publish visibility.",
           }
         : null;
-  const blockedReasons = reviewBlocker
-    ? [reviewBlocker, ...readiness.blockers]
-    : readiness.blockers;
+  const approvalBlocker =
+    !reviewBlocker && !isPublished && status !== "active"
+      ? {
+          field: "status",
+          code: "SELLER_PRODUCT_REVIEW_APPROVAL_REQUIRED",
+          message:
+            "Admin approval is required before this product can be published to the storefront.",
+        }
+      : null;
+  const blockedReasons = [
+    ...(reviewBlocker ? [reviewBlocker] : []),
+    ...(approvalBlocker ? [approvalBlocker] : []),
+    ...readiness.blockers,
+  ];
   const canPublish =
     permissions.canPublishProducts &&
     !isPublished &&
+    status === "active" &&
     readiness.isReady &&
-    !reviewBlocker;
+    !reviewBlocker &&
+    !approvalBlocker;
   const canUnpublish =
     permissions.canPublishProducts &&
     isPublished &&
@@ -1720,7 +1738,7 @@ const serializeProductPublishing = (
             ? "Waiting Review"
             : "Complete Revision"
         : stateCode === "DRAFT"
-          ? "Complete draft"
+          ? "Submit for review"
           : "Update product",
     hint: canPublish
       ? visibility.storefrontVisible
@@ -1733,6 +1751,7 @@ const serializeProductPublishing = (
           ? "This product is live and can be hidden from storefront at any time."
           : visibility.storefrontReason
         : reviewBlocker?.message ||
+          approvalBlocker?.message ||
           blockedReasons[0]?.message ||
           (permissions.canPublishProducts
             ? "Update the remaining required fields before publishing."
@@ -1813,7 +1832,7 @@ const buildCatalogGovernance = (sellerAccess: any = null, options: any = {}) => 
           ? "This draft is locked while admin review is pending."
           : submissionStatus === "needs_revision"
             ? "This draft is open for revision updates so it can be resubmitted for review."
-            : "Seller workspace may create and edit store-scoped products across draft, active, and inactive states with seller-safe core fields, then publish or unpublish them directly.",
+            : "Seller workspace may create and edit store-scoped products with seller-safe core fields, submit drafts for admin review, then publish approved active products.",
     },
     submissionGovernance: buildSellerSubmissionGovernance(sellerAccess, options),
     statusGovernance: {
@@ -1822,7 +1841,7 @@ const buildCatalogGovernance = (sellerAccess: any = null, options: any = {}) => 
       sellerStateTransitionsActive: true,
       note:
         submissionStatus === "none"
-          ? "Seller publish actions set store-scoped products live by turning publish on and moving the lifecycle to active. Unpublish hides the product without removing store ownership."
+          ? "Seller publish actions turn publish on only after admin approval has moved the product lifecycle to active. Unpublish hides the product without removing store ownership."
           : "Submitted and revision-required products stay outside seller publish toggles until the admin review lane is resolved.",
     },
     fieldGovernance: buildFieldGovernance(),
@@ -1883,6 +1902,7 @@ const serializeProductListItem = (
     status,
     normalizeSellerSubmissionStatus(getAttr(product, "sellerSubmissionStatus")),
     {
+      stock,
       store: storeContext?.store ?? null,
       storeOperationalReadiness: storeContext?.operationalReadiness ?? null,
       storeStatus,
@@ -1973,6 +1993,7 @@ const serializeProductDetail = (
     status,
     normalizeSellerSubmissionStatus(getAttr(product, "sellerSubmissionStatus")),
     {
+      stock: getAttr(product, "stock"),
       store: storeContext?.store ?? null,
       storeOperationalReadiness: storeContext?.operationalReadiness ?? null,
       storeStatus,
@@ -3257,6 +3278,16 @@ router.patch(
       }
 
       if (nextPublished) {
+        const currentStatus = normalizeProductStatus(getAttr(product, "status"));
+        if (currentStatus !== "active") {
+          return res.status(409).json({
+            success: false,
+            code: "SELLER_PRODUCT_REVIEW_APPROVAL_REQUIRED",
+            message:
+              "Admin approval is required before this product can be published to the storefront.",
+          });
+        }
+
         const readiness = resolveSellerPublishReadiness(product);
 
         if (!readiness.isReady) {
@@ -3272,7 +3303,6 @@ router.patch(
         }
 
         await (product as any).update({
-          status: "active",
           isPublished: true,
           ...buildSellerSubmissionResetPatch(),
         });
