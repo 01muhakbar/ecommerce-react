@@ -1629,6 +1629,7 @@ const serializeProductVisibility = (
   submissionStatus: string = "none",
   options: {
     stock?: unknown;
+    variations?: unknown;
     store?: any;
     storeOperationalReadiness?: any;
     storeStatus?: unknown;
@@ -1640,6 +1641,7 @@ const serializeProductVisibility = (
     status,
     submissionStatus,
     stock: options.stock,
+    variations: options.variations,
     store: options.store,
     storeOperationalReadiness: options.storeOperationalReadiness,
     storeStatus: options.storeStatus,
@@ -1668,6 +1670,7 @@ const serializeProductPublishing = (
     status,
     submissionStatus,
     stock: getAttr(product, "stock"),
+    variations: getAttr(product, "variations"),
     store: options.store,
     storeOperationalReadiness: options.storeOperationalReadiness,
     storeStatus: options.storeStatus,
@@ -1903,6 +1906,7 @@ const serializeProductListItem = (
     normalizeSellerSubmissionStatus(getAttr(product, "sellerSubmissionStatus")),
     {
       stock,
+      variations: getAttr(product, "variations"),
       store: storeContext?.store ?? null,
       storeOperationalReadiness: storeContext?.operationalReadiness ?? null,
       storeStatus,
@@ -1994,6 +1998,7 @@ const serializeProductDetail = (
     normalizeSellerSubmissionStatus(getAttr(product, "sellerSubmissionStatus")),
     {
       stock: getAttr(product, "stock"),
+      variations: getAttr(product, "variations"),
       store: storeContext?.store ?? null,
       storeOperationalReadiness: storeContext?.operationalReadiness ?? null,
       storeStatus,
@@ -2143,10 +2148,6 @@ const buildSellerProductSummary = async (
 ) => {
   const baseWhere = { storeId } as any;
   const storeStatus = storeContext?.status ?? storeContext;
-  const storefrontOperational =
-    typeof storeContext?.isOperational === "boolean"
-      ? storeContext.isOperational
-      : isStorefrontStoreActive({ storeStatus, storeId });
 
   const [
     totalProducts,
@@ -2157,9 +2158,6 @@ const buildSellerProductSummary = async (
     submitted,
     needsRevision,
     reviewQueue,
-    storefrontVisible,
-    publishedBlocked,
-    internalOnly,
   ] = await Promise.all([
     Product.count({ where: baseWhere }),
     Product.count({ where: { ...baseWhere, status: "draft" } as any }),
@@ -2186,35 +2184,40 @@ const buildSellerProductSummary = async (
         },
       } as any,
     }),
-    Product.count({
-      where: {
-        ...baseWhere,
-        isPublished: true,
-        status: "active",
-        sellerSubmissionStatus: "none",
-      } as any,
-    }).then((count) => (storefrontOperational ? count : 0)),
-    Product.count({
-      where: storefrontOperational
-        ? {
-            ...baseWhere,
-            isPublished: true,
-            [Op.or]: [
-              { status: { [Op.ne]: "active" } },
-              {
-                sellerSubmissionStatus: {
-                  [Op.in]: ["submitted", "needs_revision"],
-                },
-              },
-            ],
-          } as any
-        : {
-            ...baseWhere,
-            isPublished: true,
-          } as any,
-    }),
-    Product.count({ where: { ...baseWhere, isPublished: false } as any }),
   ]);
+
+  const visibilityRows = await Product.findAll({
+    where: baseWhere,
+    attributes: [
+      "id",
+      "storeId",
+      "isPublished",
+      "status",
+      "sellerSubmissionStatus",
+      "stock",
+      "variations",
+    ],
+  });
+  const visibilityCounts = visibilityRows.reduce(
+    (acc, product: any) => {
+      const visibility = buildProductVisibilitySnapshot({
+        isPublished: Boolean(getAttr(product, "isPublished")),
+        status: getAttr(product, "status"),
+        submissionStatus: getAttr(product, "sellerSubmissionStatus"),
+        stock: getAttr(product, "stock"),
+        variations: getAttr(product, "variations"),
+        store: storeContext?.store ?? null,
+        storeOperationalReadiness: storeContext?.operationalReadiness ?? null,
+        storeStatus,
+        storeId: getAttr(product, "storeId"),
+      });
+      if (visibility.stateCode === "STOREFRONT_VISIBLE") acc.storefrontVisible += 1;
+      if (visibility.stateCode === "PUBLISHED_BLOCKED") acc.publishedBlocked += 1;
+      if (visibility.stateCode === "INTERNAL_ONLY") acc.internalOnly += 1;
+      return acc;
+    },
+    { storefrontVisible: 0, publishedBlocked: 0, internalOnly: 0 }
+  );
 
   return {
     totalProducts,
@@ -2225,9 +2228,9 @@ const buildSellerProductSummary = async (
     submitted,
     needsRevision,
     reviewQueue,
-    storefrontVisible,
-    publishedBlocked,
-    internalOnly,
+    storefrontVisible: visibilityCounts.storefrontVisible,
+    publishedBlocked: visibilityCounts.publishedBlocked,
+    internalOnly: visibilityCounts.internalOnly,
   };
 };
 
@@ -2288,18 +2291,6 @@ const buildSellerProductsWhere = async (options: any = {}) => {
     }
   } else if (options?.visibilityState === "published_blocked") {
     andConditions.push({ isPublished: true });
-    if (storeActive) {
-      andConditions.push({
-        [Op.or]: [
-          { status: { [Op.ne]: "active" } },
-          {
-            sellerSubmissionStatus: {
-              [Op.in]: ["submitted", "needs_revision"],
-            },
-          },
-        ],
-      });
-    }
   }
 
   if (options?.keyword) {
@@ -4291,6 +4282,7 @@ router.get(
             "price",
             "salePrice",
             "stock",
+            "variations",
             "promoImagePath",
             "imagePaths",
             "createdAt",
@@ -4318,12 +4310,28 @@ router.get(
         buildSellerProductSummary(storeId, storeContext),
       ]);
 
+      const serializedItems = result.rows.map((product) =>
+        serializeProductListItem(product, sellerAccess, storeContext)
+      );
+      const filteredItems = visibilityState
+        ? serializedItems.filter((item: any) => {
+            if (visibilityState === "internal_only") {
+              return item?.visibility?.stateCode === "INTERNAL_ONLY";
+            }
+            if (visibilityState === "storefront_visible") {
+              return item?.visibility?.stateCode === "STOREFRONT_VISIBLE";
+            }
+            if (visibilityState === "published_blocked") {
+              return item?.visibility?.stateCode === "PUBLISHED_BLOCKED";
+            }
+            return true;
+          })
+        : serializedItems;
+
       return res.json({
         success: true,
         data: {
-          items: result.rows.map((product) =>
-            serializeProductListItem(product, sellerAccess, storeContext)
-          ),
+          items: filteredItems,
           contract: buildCatalogReadContract(),
           governance: buildCatalogGovernance(sellerAccess),
           summary,
@@ -4339,7 +4347,10 @@ router.get(
           pagination: {
             page,
             limit,
-            total: result.count,
+            total:
+              visibilityState && filteredItems.length !== serializedItems.length
+                ? Math.max(0, Number(result.count || 0) - (serializedItems.length - filteredItems.length))
+                : result.count,
           },
         },
       });

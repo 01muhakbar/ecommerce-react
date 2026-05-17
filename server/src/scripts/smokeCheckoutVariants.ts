@@ -791,6 +791,20 @@ const assertVariantLineDetails = (
   });
 };
 
+const resolveLineProductName = (item: any) =>
+  String(item?.productName ?? item?.name ?? item?.product?.name ?? "").trim();
+
+const assertLineProductNames = (items: any[], expectedName: string, label: string) => {
+  assert.ok(items.length > 0, `${label}: expected at least one item`);
+  items.forEach((item, index) => {
+    assert.equal(
+      resolveLineProductName(item),
+      expectedName,
+      `${label}: product name snapshot mismatch at index ${index}`
+    );
+  });
+};
+
 const findCartLineByVariant = (products: any[], variantKey: string) =>
   normalizeCartSnapshotItems(products).find(
     (item) => String(item?.variantKey || "") === String(variantKey || "")
@@ -833,6 +847,42 @@ const normalizeVariationState = (value: unknown) => {
     variants: Array.isArray((value as any).variants) ? (value as any).variants : [],
   };
 };
+
+async function updateFixtureVariant(
+  productId: number,
+  variantKey: string,
+  patch: Partial<Pick<VariantRecord, "price" | "salePrice" | "quantity">>
+) {
+  const product = await Product.findByPk(productId);
+  assert.ok(product, `variant update fixture missing product ${productId}`);
+  const rawVariations = (product as any).variations ?? product?.getDataValue?.("variations");
+  const variationState = normalizeVariationState(rawVariations);
+  assert.equal(
+    variationState.hasVariants,
+    true,
+    "variant update fixture expected variant product"
+  );
+  let updatedVariant: any = null;
+  const nextVariants = variationState.variants.map((variant: any) => {
+    if (String(variant?.combinationKey || "") !== variantKey) return variant;
+    updatedVariant = {
+      ...variant,
+      ...patch,
+    };
+    return updatedVariant;
+  });
+  assert.ok(updatedVariant, `variant update fixture missing variant ${variantKey}`);
+  await product!.update({
+    variations: {
+      ...(rawVariations && typeof rawVariations === "object" && !Array.isArray(rawVariations)
+        ? rawVariations
+        : {}),
+      hasVariants: true,
+      variants: nextVariants,
+    },
+  } as any);
+  return updatedVariant;
+}
 
 const assertVariantSnapshotItems = (
   items: any[],
@@ -1047,8 +1097,10 @@ async function run() {
 
   logStep("creating fixtures");
   const sellerUser = await createFixtureUser("seller-owner");
+  const otherSellerUser = await createFixtureUser("seller-owner-other");
   const buyerUser = await createFixtureUser("buyer");
   const store = await createFixtureStore(sellerUser.id, "variant-store");
+  const otherStore = await createFixtureStore(otherSellerUser.id, "variant-store-other");
   const paymentProfile = await createFixturePaymentProfile(store.id);
   await createHistoricalPaymentProfiles(store.id, 15);
   const product = await createFixtureVariantProduct({
@@ -1263,6 +1315,51 @@ async function run() {
   await resetCartForUser(buyerUser.id);
   logPass("cart drawer, checkout preview, explicit cart guard, and order creation use the same active cart snapshot");
 
+  logStep("using backend canonical product price when cart snapshot is stale");
+  await resetCartForUser(buyerUser.id);
+  await addProductToCart({
+    customerClient: buyerClient,
+    productId: bananaProduct.id,
+    quantity: 1,
+    label: "add banana before backend price change",
+  });
+  await Product.update(
+    { price: 27000 } as any,
+    { where: { id: bananaProduct.id } as any }
+  );
+  const stalePricePreview = await previewCheckout(
+    buyerClient,
+    "preview banana after backend price change"
+  );
+  assert.equal(
+    toNumber(stalePricePreview?.summary?.subtotalAmount, 0),
+    27000,
+    "stale price preview: backend product price should be canonical"
+  );
+  const stalePriceOrder = await createCheckout(
+    buyerClient,
+    "create banana checkout after backend price change"
+  );
+  const stalePriceOrderId = toNumber(stalePriceOrder?.orderId, 0);
+  assert.ok(stalePriceOrderId > 0, "stale price checkout create: orderId missing");
+  createdOrderIds.push(stalePriceOrderId);
+  const stalePriceOrderItems = await OrderItem.findAll({
+    where: { orderId: stalePriceOrderId } as any,
+    order: [["id", "ASC"]],
+  });
+  assert.equal(stalePriceOrderItems.length, 1, "stale price order: expected one item");
+  assertSimpleLine(
+    stalePriceOrderItems[0],
+    { productId: bananaProduct.id, qty: 1, price: 27000 },
+    "stale price stored order item"
+  );
+  await Product.update(
+    { price: bananaProduct.price } as any,
+    { where: { id: bananaProduct.id } as any }
+  );
+  await resetCartForUser(buyerUser.id);
+  logPass("checkout preview/create use current backend product price, not stale cart snapshot");
+
   logStep("checking public product detail variant truth before cart");
   await assertPublicStorefrontVariantState({
     product,
@@ -1273,6 +1370,135 @@ async function run() {
     label: "public variant detail before cart",
   });
   logPass("public detail exposes the same variant price, sale price, attributes, and stock");
+
+  logStep("enforcing variant stock and canonical variant price at checkout");
+  await resetCartForUser(buyerUser.id);
+  await addVariantToCart({
+    customerClient: buyerClient,
+    productId: product.id,
+    variant: product.variants[0],
+    label: "add blue before stock drops to zero",
+  });
+  await updateFixtureVariant(product.id, product.variants[0].combinationKey, {
+    quantity: 0,
+  });
+  const zeroVariantPreview = await previewCheckoutExpectSuccessWithInvalidItems(
+    buyerClient,
+    "preview selected variant after stock drops to zero"
+  );
+  const zeroVariantInvalidItems = Array.isArray(zeroVariantPreview?.invalidItems)
+    ? zeroVariantPreview.invalidItems
+    : [];
+  assert.equal(zeroVariantInvalidItems.length, 1, "zero variant preview: expected one invalid item");
+  assert.equal(
+    String(zeroVariantInvalidItems[0]?.code || zeroVariantInvalidItems[0]?.reason || ""),
+    "PRODUCT_OUT_OF_STOCK",
+    "zero variant preview: expected PRODUCT_OUT_OF_STOCK"
+  );
+  assert.equal(
+    toNumber(zeroVariantInvalidItems[0]?.available, -1),
+    0,
+    "zero variant preview: available stock should be zero"
+  );
+  const orderCountBeforeZeroVariantCreate = await Order.count({
+    where: { userId: buyerUser.id } as any,
+  });
+  const zeroVariantCreate = await createCheckoutExpectFailure(
+    buyerClient,
+    "create checkout with selected variant stock zero"
+  );
+  assert.equal(
+    String(zeroVariantCreate?.code || ""),
+    "CHECKOUT_INVALID_ITEMS",
+    "zero variant create: expected CHECKOUT_INVALID_ITEMS"
+  );
+  assert.equal(
+    String(zeroVariantCreate?.data?.invalidItems?.[0]?.code || ""),
+    "PRODUCT_OUT_OF_STOCK",
+    "zero variant create: expected PRODUCT_OUT_OF_STOCK invalid item"
+  );
+  assert.equal(
+    await Order.count({ where: { userId: buyerUser.id } as any }),
+    orderCountBeforeZeroVariantCreate,
+    "zero variant create: order should not be created"
+  );
+  await updateFixtureVariant(product.id, product.variants[0].combinationKey, {
+    quantity: product.variants[0].quantity,
+  });
+  await resetCartForUser(buyerUser.id);
+
+  await addVariantToCart({
+    customerClient: buyerClient,
+    productId: product.id,
+    variant: product.variants[1],
+    label: "add green before backend variant price change",
+  });
+  await updateFixtureVariant(product.id, product.variants[1].combinationKey, {
+    price: 46000,
+    salePrice: 31000,
+    quantity: product.variants[1].quantity,
+  });
+  const canonicalVariantPricePreview = await previewCheckout(
+    buyerClient,
+    "preview selected variant after backend price change"
+  );
+  const canonicalVariantPriceGroups = Array.isArray(canonicalVariantPricePreview?.groups)
+    ? canonicalVariantPricePreview.groups
+    : [];
+  const canonicalVariantPriceItems = Array.isArray(canonicalVariantPriceGroups[0]?.items)
+    ? canonicalVariantPriceGroups[0].items
+    : [];
+  assert.equal(
+    toNumber(canonicalVariantPriceItems[0]?.price, 0),
+    31000,
+    "variant price preview: backend variant sale price should be canonical"
+  );
+  assert.equal(
+    toNumber(canonicalVariantPriceItems[0]?.stock, 0),
+    product.variants[1].quantity,
+    "variant price preview: backend variant stock should stay canonical"
+  );
+  await updateFixtureVariant(product.id, product.variants[1].combinationKey, {
+    price: product.variants[1].price,
+    salePrice: product.variants[1].salePrice,
+    quantity: product.variants[1].quantity,
+  });
+  await resetCartForUser(buyerUser.id);
+
+  const directCart = await Cart.create({ userId: buyerUser.id } as any);
+  await CartItem.create({
+    cartId: Number((directCart as any).id || directCart.getDataValue("id")),
+    productId: product.id,
+    quantity: 1,
+  } as any);
+  const missingVariantPreview = await previewCheckoutExpectSuccessWithInvalidItems(
+    buyerClient,
+    "preview variant product cart line without variant snapshot"
+  );
+  const missingVariantInvalidItems = Array.isArray(missingVariantPreview?.invalidItems)
+    ? missingVariantPreview.invalidItems
+    : [];
+  assert.equal(
+    missingVariantInvalidItems.length,
+    1,
+    "missing variant preview: expected one invalid item"
+  );
+  assert.equal(
+    String(missingVariantInvalidItems[0]?.code || missingVariantInvalidItems[0]?.reason || ""),
+    "PRODUCT_VARIANT_MISSING",
+    "missing variant preview: expected PRODUCT_VARIANT_MISSING"
+  );
+  const missingVariantCreate = await createCheckoutExpectFailure(
+    buyerClient,
+    "create checkout with variant product missing variant snapshot"
+  );
+  assert.equal(
+    String(missingVariantCreate?.data?.invalidItems?.[0]?.code || ""),
+    "PRODUCT_VARIANT_MISSING",
+    "missing variant create: expected PRODUCT_VARIANT_MISSING invalid item"
+  );
+  await resetCartForUser(buyerUser.id);
+  logPass("backend rejects stale zero-stock variants, missing variant snapshots, and stale variant prices");
 
   logStep("blocking checkout preview when store payment profile is inactive");
   await resetCartForUser(buyerUser.id);
@@ -1827,10 +2053,32 @@ async function run() {
   });
   logPass("variant stock snapshots persist through checkout create");
 
+  logStep("mutating current product and variant prices after order creation");
+  await Product.update(
+    {
+      name: `${product.slug}-renamed-after-order`,
+      price: 99000,
+      salePrice: 88000,
+    } as any,
+    { where: { id: product.id } as any }
+  );
+  await updateFixtureVariant(product.id, product.variants[0].combinationKey, {
+    price: 99000,
+    salePrice: 88000,
+    quantity: blueQuantity + 7,
+  });
+  await updateFixtureVariant(product.id, product.variants[1].combinationKey, {
+    price: 97000,
+    salePrice: 87000,
+    quantity: greenQuantity + 7,
+  });
+  logPass("current product edits are ready to challenge order detail snapshots");
+
   logStep("verifying buyer, seller, and admin order detail snapshots");
   const buyerDetail = await fetchBuyerOrderDetail(buyerClient, orderId, "buyer order detail");
+  const buyerDetailItems = Array.isArray(buyerDetail?.items) ? buyerDetail.items : [];
   assertVariantLineDetails(
-    Array.isArray(buyerDetail?.items) ? buyerDetail.items : [],
+    buyerDetailItems,
     [
       buildExpectedVariantLine(product.variants[0], 1),
       buildExpectedVariantLine(product.variants[1], 1),
@@ -1838,6 +2086,7 @@ async function run() {
     "buyer order detail snapshot",
     { checkLineTotal: true }
   );
+  assertLineProductNames(buyerDetailItems, product.slug, "buyer order detail product snapshot");
 
   const sellerDetail = await fetchSellerOrderDetail(
     sellerClient,
@@ -1845,8 +2094,9 @@ async function run() {
     suborderId,
     "seller order detail"
   );
+  const sellerDetailItems = Array.isArray(sellerDetail?.items) ? sellerDetail.items : [];
   assertVariantLineDetails(
-    Array.isArray(sellerDetail?.items) ? sellerDetail.items : [],
+    sellerDetailItems,
     [
       buildExpectedVariantLine(product.variants[0], 1),
       buildExpectedVariantLine(product.variants[1], 1),
@@ -1854,14 +2104,20 @@ async function run() {
     "seller order detail snapshot",
     { checkLineTotal: true }
   );
+  assertLineProductNames(sellerDetailItems, product.slug, "seller order detail product snapshot");
+  const wrongStoreDetail = await sellerClient.request(
+    `/api/seller/stores/${otherStore.id}/suborders/${suborderId}`
+  );
+  assertStatus(wrongStoreDetail, 403, "seller order detail through another seller store");
 
   const adminDetail = await fetchAdminOrderDetail(
     adminClient,
     invoiceNo,
     "admin order detail"
   );
+  const adminDetailItems = Array.isArray(adminDetail?.items) ? adminDetail.items : [];
   assertVariantLineDetails(
-    Array.isArray(adminDetail?.items) ? adminDetail.items : [],
+    adminDetailItems,
     [
       buildExpectedVariantLine(product.variants[0], 1),
       buildExpectedVariantLine(product.variants[1], 1),
@@ -1869,6 +2125,7 @@ async function run() {
     "admin order detail snapshot",
     { checkLineTotal: true }
   );
+  assertLineProductNames(adminDetailItems, product.slug, "admin order detail product snapshot");
   logPass("buyer seller admin order detail snapshot stays in sync");
 
   const postCheckoutCart = await fetchCart(buyerClient, "fetch cart after dual variant checkout");

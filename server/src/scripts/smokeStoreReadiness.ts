@@ -24,6 +24,7 @@ type FixtureUser = {
 type FixtureStore = {
   id: number;
   slug: string;
+  status: "ACTIVE" | "INACTIVE";
 };
 
 type FixtureProduct = {
@@ -114,17 +115,21 @@ async function createFixtureUser(label: string): Promise<FixtureUser> {
   return { id, email, password };
 }
 
-async function createFixtureStore(ownerUserId: number, label: string): Promise<FixtureStore> {
+async function createFixtureStore(
+  ownerUserId: number,
+  label: string,
+  status: "ACTIVE" | "INACTIVE" = "ACTIVE"
+): Promise<FixtureStore> {
   const slug = slugify(`${RUN_ID}-${label}`);
   const store = await Store.create({
     ownerUserId,
     name: `${RUN_ID}-${label}`,
     slug,
-    status: "ACTIVE",
+    status,
   } as any);
   const id = Number(store.getDataValue("id"));
   createdStoreIds.push(id);
-  return { id, slug };
+  return { id, slug, status };
 }
 
 async function createReadyPaymentProfile(storeId: number) {
@@ -203,6 +208,27 @@ async function fetchPublicIdentity(slug: string, label: string) {
   return response.body;
 }
 
+async function fetchPublicIdentityResponse(slug: string) {
+  const client = new PublicClient();
+  return client.request(`/api/store/customization/identity/${encodeURIComponent(slug)}`);
+}
+
+async function fetchPublicMicrositeRichAboutResponse(slug: string) {
+  const client = new PublicClient();
+  return client.request(
+    `/api/store/customization/microsites/${encodeURIComponent(slug)}/rich-about`
+  );
+}
+
+async function fetchPublicProductListByStoreResponse(storeSlug: string, search: string) {
+  const client = new PublicClient();
+  return client.request(
+    `/api/store/products?storeSlug=${encodeURIComponent(storeSlug)}&search=${encodeURIComponent(
+      search
+    )}&limit=20`
+  );
+}
+
 async function fetchPublicProductDetail(
   productSlug: string,
   storeSlug: string,
@@ -259,28 +285,69 @@ async function verifyReadyScenario(store: FixtureStore, product: FixtureProduct)
     "ready seller info: visitStoreHref mismatch"
   );
   logPass("ready seller info CTA");
+
+  logStep("verifying ready store public microsite and product list");
+  const richAboutResponse = await fetchPublicMicrositeRichAboutResponse(store.slug);
+  assertStatus(richAboutResponse, 200, "ready microsite rich-about");
+  const listResponse = await fetchPublicProductListByStoreResponse(store.slug, product.slug);
+  assertStatus(listResponse, 200, "ready product list by store");
+  const listItems = Array.isArray(listResponse.body?.data) ? listResponse.body.data : [];
+  assert.equal(
+    listItems.some((item: any) => String(item?.slug || "") === product.slug),
+    true,
+    "ready product list: product missing"
+  );
+  logPass("ready public microsite/product list visible");
 }
 
 async function verifyNotConfiguredScenario(store: FixtureStore, product: FixtureProduct) {
-  logStep("verifying non-ready store public identity");
-  const identityBody = await fetchPublicIdentity(store.slug, "non-ready public identity");
-  const readiness = getOperationalReadiness(identityBody, "non-ready public identity");
+  logStep("verifying payment-not-ready store public identity is hidden");
+  const identityResponse = await fetchPublicIdentityResponse(store.slug);
   assert.equal(
-    String(readiness.code || ""),
-    "PAYMENT_NOT_CONFIGURED",
-    "non-ready identity: code mismatch"
+    identityResponse.status,
+    404,
+    `non-ready public identity should be hidden (${identityResponse.text})`
   );
+  logPass("payment-not-ready public identity hidden");
+
+  logStep("verifying payment-not-ready microsite and product list are hidden");
+  const richAboutResponse = await fetchPublicMicrositeRichAboutResponse(store.slug);
+  assertStatus(richAboutResponse, 404, "payment-not-ready microsite rich-about");
+  const listResponse = await fetchPublicProductListByStoreResponse(store.slug, product.slug);
+  assertStatus(listResponse, 200, "payment-not-ready product list by store");
+  const listItems = Array.isArray(listResponse.body?.data) ? listResponse.body.data : [];
   assert.equal(
-    Boolean(readiness.isReady),
+    listItems.some((item: any) => String(item?.slug || "") === product.slug),
     false,
-    "non-ready identity: isReady should be false"
+    "payment-not-ready product list: product leaked"
   );
-  logPass("non-ready public identity readiness");
+  logPass("payment-not-ready microsite/product list hidden");
 
   logStep("verifying non-ready store PDP is hidden from public checkout surface");
   const detailResponse = await fetchPublicProductDetailResponse(product.slug, store.slug);
   assertStatus(detailResponse, 404, "non-ready product detail");
   logPass("non-ready product detail hidden");
+}
+
+async function verifyInactiveScenario(store: FixtureStore, product: FixtureProduct) {
+  logStep("verifying inactive store public identity is hidden");
+  const identityResponse = await fetchPublicIdentityResponse(store.slug);
+  assertStatus(identityResponse, 404, "inactive public identity");
+  const richAboutResponse = await fetchPublicMicrositeRichAboutResponse(store.slug);
+  assertStatus(richAboutResponse, 404, "inactive microsite rich-about");
+
+  const listResponse = await fetchPublicProductListByStoreResponse(store.slug, product.slug);
+  assertStatus(listResponse, 200, "inactive product list by store");
+  const listItems = Array.isArray(listResponse.body?.data) ? listResponse.body.data : [];
+  assert.equal(
+    listItems.some((item: any) => String(item?.slug || "") === product.slug),
+    false,
+    "inactive product list: product leaked"
+  );
+
+  const detailResponse = await fetchPublicProductDetailResponse(product.slug, store.slug);
+  assertStatus(detailResponse, 404, "inactive product detail");
+  logPass("inactive store public surfaces hidden");
 }
 
 async function cleanupFixtures() {
@@ -327,10 +394,13 @@ async function run() {
   logStep("creating readiness fixtures");
   const readyOwner = await createFixtureUser("ready-owner");
   const gatedOwner = await createFixtureUser("gated-owner");
+  const inactiveOwner = await createFixtureUser("inactive-owner");
 
   const readyStore = await createFixtureStore(readyOwner.id, "ready-store");
   const gatedStore = await createFixtureStore(gatedOwner.id, "gated-store");
+  const inactiveStore = await createFixtureStore(inactiveOwner.id, "inactive-store", "INACTIVE");
   await createReadyPaymentProfile(readyStore.id);
+  await createReadyPaymentProfile(inactiveStore.id);
 
   const readyProduct = await createFixtureProduct({
     ownerUserId: readyOwner.id,
@@ -342,9 +412,15 @@ async function run() {
     storeId: gatedStore.id,
     label: "gated-product",
   });
+  const inactiveProduct = await createFixtureProduct({
+    ownerUserId: inactiveOwner.id,
+    storeId: inactiveStore.id,
+    label: "inactive-product",
+  });
 
   await verifyReadyScenario(readyStore, readyProduct);
   await verifyNotConfiguredScenario(gatedStore, gatedProduct);
+  await verifyInactiveScenario(inactiveStore, inactiveProduct);
 
   console.log("[mvf-store-readiness] OK");
 }

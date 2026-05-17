@@ -17,6 +17,55 @@ const normalizeSubmissionStatus = (value: unknown) => {
 const normalizeStoreStatus = (value: unknown) =>
   String(value || "").trim().toUpperCase();
 
+const normalizeJsonValue = (value: unknown) => {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+};
+
+const normalizeVariantQuantity = (variant: any) => {
+  const raw =
+    variant?.quantity === null || typeof variant?.quantity === "undefined" || variant?.quantity === ""
+      ? variant?.stock
+      : variant?.quantity;
+  if (raw === null || typeof raw === "undefined" || raw === "") return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : 0;
+};
+
+const getVariationRoot = (variations: unknown) => {
+  const normalized = normalizeJsonValue(variations);
+  if (!normalized || typeof normalized !== "object") return null;
+  return Array.isArray(normalized)
+    ? { hasVariants: normalized.length > 0, variants: normalized }
+    : (normalized as Record<string, any>);
+};
+
+export const hasStorefrontSellableInventory = (input: {
+  stock?: unknown;
+  variations?: unknown;
+}) => {
+  const stock = Number(input?.stock);
+  const hasBaseStock = Number.isFinite(stock) ? stock > 0 : true;
+  const variationRoot = getVariationRoot(input?.variations);
+  const variants = Array.isArray(variationRoot?.variants) ? variationRoot.variants : [];
+  const hasVariants = Boolean(variationRoot?.hasVariants) || variants.length > 0;
+
+  if (!hasVariants) {
+    return hasBaseStock;
+  }
+
+  return variants.some((variant: any) => {
+    const quantity = normalizeVariantQuantity(variant);
+    return quantity === null ? hasBaseStock : quantity > 0;
+  });
+};
+
 export const isStorefrontStoreActive = (input: {
   storeStatus?: unknown;
   storeId?: unknown;
@@ -67,6 +116,7 @@ export const buildProductVisibilitySnapshot = (input: {
   status: unknown;
   submissionStatus?: unknown;
   stock?: unknown;
+  variations?: unknown;
   store?: any;
   storeOperationalReadiness?: any;
   storeStatus?: unknown;
@@ -75,8 +125,10 @@ export const buildProductVisibilitySnapshot = (input: {
   const isPublished = Boolean(input?.isPublished);
   const status = normalizeProductStatus(input?.status);
   const submissionStatus = normalizeSubmissionStatus(input?.submissionStatus);
-  const stock = Number(input?.stock);
-  const hasStock = Number.isFinite(stock) ? stock > 0 : true;
+  const hasStock = hasStorefrontSellableInventory({
+    stock: input?.stock,
+    variations: input?.variations,
+  });
   const operationalReadiness = resolveStoreOperationalReadiness(input);
   const storeActive = isStorefrontStoreActive({
     storeStatus: input?.storeStatus,

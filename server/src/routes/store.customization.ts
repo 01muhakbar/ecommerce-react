@@ -105,18 +105,7 @@ const resolvePublicStoreBySlug = async (slug: string) => {
       status: "ACTIVE",
     } as any,
     attributes: [...PUBLIC_STORE_IDENTITY_ATTRIBUTES],
-    include: [
-      {
-        association: "activePaymentProfile",
-        attributes: [...buildPublicOperationalPaymentProfileInclude().attributes],
-        required: false,
-      },
-      {
-        association: "paymentProfile",
-        attributes: [...buildPublicOperationalPaymentProfileInclude().attributes],
-        required: false,
-      },
-    ],
+    include: [buildPublicOperationalPaymentProfileInclude()],
   });
 };
 

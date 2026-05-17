@@ -752,7 +752,7 @@ const orderDetailInclude: any[] = [
 ];
 
 const toOrderDetailPayload = (orderItem: any) => {
-  const items = ((orderItem as any).items ?? []).map((item: any) => ({
+  const legacyItems = ((orderItem as any).items ?? []).map((item: any) => ({
     id: getAttr(item, "id"),
     productId:
       getAttr(item, "productId") ?? item.get?.("productId") ?? item.product_id,
@@ -856,6 +856,33 @@ const toOrderDetailPayload = (orderItem: any) => {
       })),
     };
   });
+  const splitSnapshotItems = groups.flatMap((group: any) =>
+    (Array.isArray(group?.items) ? group.items : []).map((item: any) => ({
+      id: item.id,
+      productId: item.productId,
+      storeId: group.storeId,
+      name: item.productName,
+      productName: item.productName,
+      quantity: item.qty,
+      qty: item.qty,
+      price: item.price,
+      lineTotal: item.lineTotal,
+      variantKey: item.variantKey,
+      variantLabel: item.variantLabel,
+      variantSelections: item.variantSelections,
+      sku: item.sku,
+      barcode: item.barcode,
+      image: item.image,
+      product: item.productId
+        ? {
+            id: item.productId,
+            name: item.productName,
+            slug: item.slug,
+          }
+        : null,
+    }))
+  );
+  const items = splitSnapshotItems.length > 0 ? splitSnapshotItems : legacyItems;
 
   const computedSubtotal = items.reduce((sum: number, item: any) => {
     return sum + Number(item.lineTotal || 0);

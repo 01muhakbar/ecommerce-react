@@ -727,14 +727,8 @@ const resolveCheckoutCartLineSnapshot = (product: any) => {
   const variantSnapshot = selectedVariant
     ? resolveVariantUnitPrice(selectedVariant, product)
     : {
-        unitPrice: toNumber(
-          cartItem?.unitSalePriceSnapshot ?? cartItem?.unitPriceSnapshot ?? getProductUnitPrice(product),
-          0
-        ),
-        unitOriginalPrice: toNumber(
-          cartItem?.unitPriceSnapshot ?? getAttr(product, "price"),
-          0
-        ),
+        unitPrice: getProductUnitPrice(product),
+        unitOriginalPrice: toNumber(getAttr(product, "price"), 0),
       };
 
   return {

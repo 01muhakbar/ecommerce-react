@@ -416,6 +416,88 @@ async function createVisibleVariantFixtureProduct(input: {
   };
 }
 
+async function createOutOfStockVariantFixtureProduct(input: {
+  ownerUserId: number;
+  storeId: number;
+  categoryId?: number | null;
+  label: string;
+}) {
+  const slug = slugify(`${RUN_ID}-${input.label}`);
+  const attribute = await createRuntimeAttributeValues(input.label);
+  const blueSelection = buildVariationSelection({
+    attributeId: attribute.attributeId,
+    attributeName: attribute.attributeName,
+    valueId: attribute.blue.id,
+    value: attribute.blue.value,
+  });
+  const greenSelection = buildVariationSelection({
+    attributeId: attribute.attributeId,
+    attributeName: attribute.attributeName,
+    valueId: attribute.green.id,
+    value: attribute.green.value,
+  });
+
+  const product = await Product.create({
+    name: slug,
+    slug,
+    sku: slug.toUpperCase(),
+    price: 10000,
+    stock: 8,
+    userId: input.ownerUserId,
+    storeId: input.storeId,
+    categoryId: input.categoryId ?? null,
+    defaultCategoryId: input.categoryId ?? null,
+    status: "active",
+    isPublished: true,
+    sellerSubmissionStatus: "none",
+    description: `Fixture ${slug}`,
+    variations: {
+      hasVariants: true,
+      selectedAttributes: [{ id: attribute.attributeId, name: attribute.attributeName }],
+      selectedAttributeValues: [
+        {
+          attributeId: attribute.attributeId,
+          values: [
+            { id: attribute.blue.id, label: attribute.blue.value, value: attribute.blue.value },
+            { id: attribute.green.id, label: attribute.green.value, value: attribute.green.value },
+          ],
+        },
+      ],
+      variants: [
+        {
+          id: "variant-blue-empty",
+          combination: attribute.blue.value,
+          combinationKey: buildVariationKey(blueSelection),
+          selections: [blueSelection],
+          price: 10000,
+          salePrice: 9000,
+          quantity: 0,
+          image: null,
+        },
+        {
+          id: "variant-green-empty",
+          combination: attribute.green.value,
+          combinationKey: buildVariationKey(greenSelection),
+          selections: [greenSelection],
+          price: 10000,
+          salePrice: 9000,
+          quantity: 0,
+          image: null,
+        },
+      ],
+    },
+  } as any);
+  const id = Number(product.getDataValue("id"));
+  createdProductIds.push(id);
+  return {
+    id,
+    name: slug,
+    slug,
+    storeId: input.storeId,
+    userId: input.ownerUserId,
+  };
+}
+
 async function login(client: CookieClient, email: string, password: string, label: string) {
   const response = await client.request("/api/auth/login", {
     method: "POST",
@@ -777,6 +859,12 @@ async function run() {
     categoryId: category.id,
     label: "storefront-visible-variant",
   });
+  const outOfStockVariantProduct = await createOutOfStockVariantFixtureProduct({
+    ownerUserId: sellerUser.id,
+    storeId: activeStore.id,
+    categoryId: category.id,
+    label: "all-variants-out-of-stock-hidden",
+  });
   const inactiveStoreProduct = await createFixtureProduct({
     ownerUserId: inactiveSellerUser.id,
     storeId: inactiveStore.id,
@@ -837,6 +925,8 @@ async function run() {
   logPass("not-ready store discovery hidden with gated detail");
   await assertHiddenEverywhere(outOfStockProduct, "out-of-stock hidden");
   logPass("out-of-stock hidden");
+  await assertHiddenEverywhere(outOfStockVariantProduct, "all variants out-of-stock hidden");
+  logPass("all variants out-of-stock hidden");
 
   logStep("checking visible scenario on public/storefront routes");
   await assertVisibleEverywhere(visibleProduct, "visible product");
@@ -876,9 +966,11 @@ async function run() {
   const adminInactiveStoreItem = adminItemBySlug.get(inactiveStoreProduct.slug);
   const adminVisibleItem = adminItemBySlug.get(visibleProduct.slug);
   const adminOutOfStockItem = adminItemBySlug.get(outOfStockProduct.slug);
+  const adminOutOfStockVariantItem = adminItemBySlug.get(outOfStockVariantProduct.slug);
   assert.ok(adminInactiveStoreItem, "admin list: inactive store item missing");
   assert.ok(adminVisibleItem, "admin list: visible item missing");
   assert.ok(adminOutOfStockItem, "admin list: out-of-stock item missing");
+  assert.ok(adminOutOfStockVariantItem, "admin list: all-variants-out-of-stock item missing");
   assert.equal(
     String(adminInactiveStoreItem?.visibility?.stateCode || ""),
     "PUBLISHED_BLOCKED",
@@ -898,6 +990,11 @@ async function run() {
     String(adminOutOfStockItem?.visibility?.reasonCode || ""),
     "OUT_OF_STOCK",
     "admin list: out-of-stock product reason mismatch"
+  );
+  assert.equal(
+    String(adminOutOfStockVariantItem?.visibility?.reasonCode || ""),
+    "OUT_OF_STOCK",
+    "admin list: all-variants-out-of-stock product reason mismatch"
   );
   logPass("admin review queue summary");
 
@@ -990,10 +1087,12 @@ async function run() {
   const needsRevisionItem: any = itemBySlug.get(needsRevisionProduct.slug);
   const visibleItem: any = itemBySlug.get(visibleProduct.slug);
   const outOfStockItem: any = itemBySlug.get(outOfStockProduct.slug);
+  const outOfStockVariantItem: any = itemBySlug.get(outOfStockVariantProduct.slug);
   assert.ok(submittedItem, "seller list: submitted item missing");
   assert.ok(needsRevisionItem, "seller list: needs_revision item missing");
   assert.ok(visibleItem, "seller list: visible item missing");
   assert.ok(outOfStockItem, "seller list: out-of-stock item missing");
+  assert.ok(outOfStockVariantItem, "seller list: all-variants-out-of-stock item missing");
   assert.equal(
     Boolean(submittedItem?.visibility?.storefrontVisible),
     false,
@@ -1033,6 +1132,16 @@ async function run() {
     String(outOfStockItem?.visibility?.reasonCode || ""),
     "OUT_OF_STOCK",
     "seller list: out-of-stock product reason mismatch"
+  );
+  assert.equal(
+    Boolean(outOfStockVariantItem?.visibility?.storefrontVisible),
+    false,
+    "seller list: all-variants-out-of-stock product incorrectly marked visible"
+  );
+  assert.equal(
+    String(outOfStockVariantItem?.visibility?.reasonCode || ""),
+    "OUT_OF_STOCK",
+    "seller list: all-variants-out-of-stock product reason mismatch"
   );
   logPass("seller visibility metadata");
 

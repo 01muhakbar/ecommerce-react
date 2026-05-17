@@ -61,6 +61,7 @@ import {
   buildBuyerAggregateStatusSummary,
   buildSplitOperationalTruth,
 } from "../services/splitOperationalTruth.service.js";
+import { hasStorefrontSellableInventory } from "../services/productVisibility.js";
 import { getDefaultAddressByUser } from "../services/userAddress.service.js";
 import { protect } from "../middleware/authMiddleware.js";
 import {
@@ -229,6 +230,54 @@ const normalizeOrderVariantSelectionsOutput = (raw: any) => {
   }
   return [];
 };
+
+const mapSuborderSnapshotItemsForBuyerDetail = (suborders: any[]) =>
+  suborders.flatMap((suborder: any) =>
+    (Array.isArray(suborder?.items) ? suborder.items : []).map((item: any) => {
+      const product = item?.product ?? item?.get?.("product") ?? null;
+      const productId =
+        Number(getAttr(item, "productId") || getAttr(product, "id") || 0) || null;
+      const qty = Number(getAttr(item, "qty") || 0);
+      const price = Number(getAttr(item, "priceSnapshot") || 0);
+      const lineTotalSnapshot = Number(getAttr(item, "totalPrice"));
+      const name = String(
+        getAttr(item, "productNameSnapshot") ||
+          getAttr(product, "name") ||
+          `Product #${productId || "-"}`
+      );
+      const imageUrl = normalizeUploadsUrl(getAttr(item, "imageSnapshot") || null);
+      const slug = String(getAttr(product, "slug") || "").trim() || null;
+
+      return {
+        id: Number(getAttr(item, "id") || 0) || null,
+        productId,
+        storeId:
+          Number(getAttr(item, "storeId") || getAttr(suborder, "storeId") || 0) || null,
+        name,
+        productName: name,
+        product: productId
+          ? {
+              id: productId,
+              name,
+              slug,
+            }
+          : null,
+        imageUrl,
+        image: imageUrl,
+        quantity: qty,
+        qty,
+        price,
+        lineTotal: Number.isFinite(lineTotalSnapshot) ? lineTotalSnapshot : price * qty,
+        variantKey: String(getAttr(item, "variantKey") || "").trim() || null,
+        variantLabel: String(getAttr(item, "variantLabel") || "").trim() || null,
+        variantSelections: normalizeOrderVariantSelectionsOutput(
+          getAttr(item, "variantSelections")
+        ),
+        sku: String(getAttr(item, "skuSnapshot") || "").trim() || null,
+        barcode: String(getAttr(item, "barcodeSnapshot") || "").trim() || null,
+      };
+    })
+  );
 
 const resolveOrderAmountSnapshot = (order: any, computedSubtotal = 0) => {
   const subtotalAmount = toNumber(
@@ -878,7 +927,6 @@ const toSafeNumber = (value: any, fallback = 0) => {
 };
 
 const buildPublicPurchaseState = (product: any, store: any) => {
-  const stock = toNumber(product?.stock);
   const operationalReadiness = store ? buildPublicStoreOperationalReadiness(store) : null;
   const isStoreReady = operationalReadiness ? Boolean(operationalReadiness.isReady) : true;
 
@@ -893,12 +941,17 @@ const buildPublicPurchaseState = (product: any, store: any) => {
     };
   }
 
-  if (Number.isFinite(Number(stock)) && Number(stock) <= 0) {
+  if (
+    !hasStorefrontSellableInventory({
+      stock: product?.stock,
+      variations: product?.variations,
+    })
+  ) {
     return {
       code: "OUT_OF_STOCK",
       label: "Out of stock",
       isPurchasable: false,
-      description: "This product stays visible, but checkout is blocked until stock is available.",
+      description: "This product stays hidden from storefront until sellable stock is available.",
     };
   }
 
@@ -1322,13 +1375,23 @@ router.get(
         );
       }
 
+      const visibleRows = rows.filter((row: any) => {
+        const plain = row?.get ? row.get({ plain: true }) : row;
+        return hasStorefrontSellableInventory({
+          stock: plain?.stock,
+          variations: plain?.variations,
+        });
+      });
+      const hiddenOnPage = rows.length - visibleRows.length;
+      const visibleTotal = Math.max(0, Number(count || 0) - hiddenOnPage);
+
       res.json({
-        data: rows.map(toProductListItem),
+        data: visibleRows.map(toProductListItem),
         meta: {
           page,
           pageSize,
-          total: count,
-          totalPages: Math.max(1, Math.ceil(count / pageSize)),
+          total: visibleTotal,
+          totalPages: Math.max(1, Math.ceil(visibleTotal / pageSize)),
         },
       });
     } catch (error) {
@@ -1484,6 +1547,18 @@ router.get(
           }
         }
       }
+      const sanitizedVariations = await sanitizeVariationsForRuntime(productPlain?.variations, {
+        storeId: Number(productPlain?.storeId) || null,
+      });
+      if (
+        !hasStorefrontSellableInventory({
+          stock: productPlain?.stock,
+          variations: sanitizedVariations,
+        })
+      ) {
+        return res.status(404).json({ message: "Not found" });
+      }
+
       const productWithStats = {
         ...productPlain,
         id: Number.isFinite(productId) && productId > 0 ? productId : productPlain?.id,
@@ -1491,9 +1566,7 @@ router.get(
         isPublished: productPlain?.isPublished ?? Boolean(productPlain?.published),
         ratingAvg: stats.ratingAvg ?? 0,
         reviewCount: stats.reviewCount ?? 0,
-        variations: await sanitizeVariationsForRuntime(productPlain?.variations, {
-          storeId: Number(productPlain?.storeId) || null,
-        }),
+        variations: sanitizedVariations,
       };
       const sellerInfo = await serializePublicSellerInfo(productPlain?.store ?? null);
 
@@ -1794,7 +1867,7 @@ router.get(
         return res.status(404).json({ message: "Order not found" });
       }
 
-      const items = ((order as any).items ?? []).map((item: any) => ({
+      const legacyItems = ((order as any).items ?? []).map((item: any) => ({
         id: item.id,
         productId: item.productId ?? item.get?.("productId") ?? item.product_id,
         name: item.product?.name ?? `Product #${item.productId || item.product_id || "-"}`,
@@ -1827,6 +1900,11 @@ router.get(
               "storeId",
               "productNameSnapshot",
               "skuSnapshot",
+              "variantKey",
+              "variantLabel",
+              "variantSelections",
+              "barcodeSnapshot",
+              "imageSnapshot",
               "priceSnapshot",
               "qty",
               "totalPrice",
@@ -1892,6 +1970,8 @@ router.get(
         ],
         order: [["id", "ASC"]],
       });
+      const snapshotItems = mapSuborderSnapshotItemsForBuyerDetail(paymentGroups);
+      const items = snapshotItems.length > 0 ? snapshotItems : legacyItems;
       const displayStatuses = paymentGroups.map((suborder: any) => {
         const payment = Array.isArray(suborder?.payments) ? suborder.payments[0] : null;
         return resolveBuyerFacingPaymentStatus({
@@ -2305,7 +2385,7 @@ router.get(
         order.get?.("customer_email") ??
         null;
 
-      const items = (Array.isArray((order as any).items) ? (order as any).items : []).map(
+      const legacyItems = (Array.isArray((order as any).items) ? (order as any).items : []).map(
         (item: any) => {
           const product = item?.product ?? item?.get?.("product") ?? null;
           const productId =
@@ -2345,12 +2425,6 @@ router.get(
           };
         }
       );
-      const subtotal = items.reduce(
-        (sum: number, item: any) => sum + Number(item.lineTotal || 0),
-        0
-      );
-      const amounts = resolveOrderAmountSnapshot(order, subtotal);
-      const tax = 0;
       const shippingReadModel = buildOrderShippingReadModel(
         Array.isArray((order as any).suborders) ? (order as any).suborders : []
       );
@@ -2478,6 +2552,16 @@ router.get(
       const storeSplits = rawStoreSplits
         .map(sanitizePublicStoreSplit)
         .filter(Boolean);
+      const snapshotItems = mapSuborderSnapshotItemsForBuyerDetail(
+        Array.isArray((order as any).suborders) ? (order as any).suborders : []
+      );
+      const items = snapshotItems.length > 0 ? snapshotItems : legacyItems;
+      const subtotal = items.reduce(
+        (sum: number, item: any) => sum + Number(item.lineTotal || 0),
+        0
+      );
+      const amounts = resolveOrderAmountSnapshot(order, subtotal);
+      const tax = 0;
       const contract = buildBuyerOrderContractPayload({
         orderStatus: status,
         paymentStatus:
