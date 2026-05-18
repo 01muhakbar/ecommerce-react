@@ -2,15 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ChevronDown,
-  Download,
+  BadgeCheck,
+  CreditCard,
   Eye,
   RotateCcw,
   Search,
   ShoppingBag,
   Trash2,
   Truck,
-  XCircle,
 } from "lucide-react";
 import {
   bulkDeleteSellerSuborders,
@@ -26,9 +25,11 @@ import {
   sellerTableCellClass,
   sellerTableHeadCellClass,
   sellerTableWrapClass,
+  SellerWorkspaceEmptyState,
   SellerWorkspaceNotice,
   SellerWorkspacePanel,
   SellerWorkspaceStatePanel,
+  SellerWorkspaceStatCard,
 } from "../../components/seller/SellerWorkspaceFoundation.jsx";
 
 const toolbarButtonBase =
@@ -62,8 +63,6 @@ const FULFILLMENT_FILTER_OPTIONS = [
   { value: "DELIVERED", label: "Delivered" },
   { value: "CANCELLED", label: "Cancelled" },
 ];
-
-const BULK_SELLER_ACTIONS_AVAILABLE = false;
 
 const normalizeStatusText = (value) => String(value || "").trim().toLowerCase();
 
@@ -147,19 +146,29 @@ const getSellerRowAction = (item) => {
   );
 };
 
+const sellerFriendlyText = (value, fallback = "") => {
+  const text = String(value || "").trim();
+  if (!text) return fallback;
+  return text
+    .replace(/\bmutations\b/gi, "actions")
+    .replace(/\bmutation\b/gi, "action")
+    .replace(/\bbackend\b/gi, "system")
+    .replace(/\bmetadata\b/gi, "details");
+};
+
 const getSellerRowBlockedReason = (item) => {
   const actions = Array.isArray(item?.governance?.fulfillment?.availableActions)
     ? item.governance.fulfillment.availableActions
     : [];
 
-  return (
+  return sellerFriendlyText(
     actions.find((action) => action?.enabled === false && action?.reason)?.reason ||
-    item?.governance?.fulfillment?.mutationBlockedReason ||
+      item?.governance?.fulfillment?.mutationBlockedReason,
     "No list action available."
   );
 };
 
-const getDeliveryLabel = (view) => view.deliveryName || "—";
+const getDeliveryLabel = (view) => view.deliveryName || "-";
 export default function SellerOrdersPage() {
   const { sellerContext, workspaceStoreId: storeId, workspaceRoutes } =
     useSellerWorkspaceRoute();
@@ -168,7 +177,6 @@ export default function SellerOrdersPage() {
   const [feedback, setFeedback] = useState(null);
   const [busyActionKey, setBusyActionKey] = useState("");
   const [selectedIds, setSelectedIds] = useState(() => new Set());
-  const [bulkAction, setBulkAction] = useState("");
   const [searchInput, setSearchInput] = useState(
     String(searchParams.get("keyword") || "").trim()
   );
@@ -228,6 +236,24 @@ export default function SellerOrdersPage() {
       })),
     [items, workspaceRoutes]
   );
+  const visibleSummary = useMemo(() => {
+    const paymentCode = (item) => String(item?.raw?.paymentStatus || "").trim().toUpperCase();
+    const fulfillmentCode = (item) =>
+      String(item?.raw?.fulfillmentStatus || "").trim().toUpperCase();
+
+    return {
+      pendingPayment: rows.filter((item) =>
+        ["UNPAID", "PENDING_CONFIRMATION", "PARTIALLY_PAID"].includes(paymentCode(item))
+      ).length,
+      paid: rows.filter((item) => paymentCode(item) === "PAID").length,
+      needFulfillment: rows.filter(
+        (item) =>
+          paymentCode(item) === "PAID" &&
+          ["UNFULFILLED", "PROCESSING"].includes(fulfillmentCode(item))
+      ).length,
+      completed: rows.filter((item) => fulfillmentCode(item) === "DELIVERED").length,
+    };
+  }, [rows]);
 
   useEffect(() => {
     const visibleIds = new Set(rows.map((entry) => Number(entry.raw?.suborderId)).filter(Boolean));
@@ -403,41 +429,14 @@ export default function SellerOrdersPage() {
               <h1 className="text-[1.85rem] font-semibold tracking-tight text-slate-900">
                 Orders
               </h1>
-              <p className="text-sm text-slate-500">Manage customer orders.</p>
+              <p className="text-sm text-slate-500">
+                Process paid store orders, review payment state, and continue fulfillment when the
+                system allows the next action.
+              </p>
             </div>
           </div>
 
-          <div className="flex w-full flex-wrap items-center gap-2 xl:max-w-[860px] xl:flex-none xl:justify-end">
-            <div className="flex min-w-[190px] items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3">
-              <select
-                value={bulkAction}
-                onChange={(event) => setBulkAction(event.target.value)}
-                disabled={!BULK_SELLER_ACTIONS_AVAILABLE}
-                className="h-9 w-full bg-transparent text-sm text-slate-500 focus:outline-none disabled:cursor-not-allowed"
-                title="Bulk actions are not available for seller orders yet."
-              >
-                <option value="">Bulk Action</option>
-              </select>
-              <ChevronDown className="h-4 w-4 text-slate-400" />
-            </div>
-            <button
-              type="button"
-              className={toolbarButtonDisabled}
-              disabled
-              title="Delivery assignment is handled from order detail when available."
-            >
-              <Truck className="h-4 w-4" />
-              Assign Delivery{selectedCount > 0 ? ` (${selectedCount})` : ""}
-            </button>
-            <button
-              type="button"
-              className={toolbarButtonDisabled}
-              disabled
-              title="Delivery unassign is not available in seller list view."
-            >
-              <XCircle className="h-4 w-4" />
-              Unassign{selectedCount > 0 ? ` (${selectedCount})` : ""}
-            </button>
+          <div className="flex w-full flex-wrap items-center gap-2 xl:max-w-[420px] xl:flex-none xl:justify-end">
             <button
               type="button"
               className={
@@ -462,20 +461,46 @@ export default function SellerOrdersPage() {
               }
             >
               <Trash2 className="h-4 w-4" />
-              {deleteMutation.isPending ? "Deleting..." : "Delete"}
-            </button>
-            <button
-              type="button"
-              className={toolbarButtonDisabled}
-              disabled
-              title="Order export is not available in seller workspace."
-            >
-              <Download className="h-4 w-4" />
-              Download All Orders
+              {deleteMutation.isPending
+                ? "Deleting..."
+                : selectedCount > 0
+                  ? `Delete selected (${selectedCount})`
+                  : "Select orders to delete"}
             </button>
           </div>
         </div>
       </SellerWorkspacePanel>
+
+      {!ordersQuery.isLoading && !ordersQuery.isError ? (
+        <section className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-4">
+          <SellerWorkspaceStatCard
+            label="Pending Payment"
+            value={String(visibleSummary.pendingPayment)}
+            hint="Visible orders still unpaid or waiting for proof review."
+            Icon={CreditCard}
+            tone="amber"
+          />
+          <SellerWorkspaceStatCard
+            label="Paid"
+            value={String(visibleSummary.paid)}
+            hint="Visible orders with seller split payment marked paid."
+            Icon={BadgeCheck}
+            tone="emerald"
+          />
+          <SellerWorkspaceStatCard
+            label="Need Fulfillment"
+            value={String(visibleSummary.needFulfillment)}
+            hint="Paid visible orders still waiting to be packed or shipped."
+            Icon={Truck}
+          />
+          <SellerWorkspaceStatCard
+            label="Completed"
+            value={String(visibleSummary.completed)}
+            hint="Visible orders already delivered."
+            Icon={ShoppingBag}
+          />
+        </section>
+      ) : null}
 
       <SellerWorkspacePanel className="p-4 shadow-sm sm:p-4">
         <div className="grid gap-3">
@@ -518,7 +543,7 @@ export default function SellerOrdersPage() {
             </select>
           </label>
           <label className="grid gap-1.5">
-            <span className={subtleLabelClass}>Method</span>
+            <span className={subtleLabelClass}>Payment</span>
             <select
               value={paymentStatus}
               onChange={(event) => patchSearch({ paymentStatus: event.target.value, page: 1 })}
@@ -554,7 +579,7 @@ export default function SellerOrdersPage() {
       {ordersQuery.isLoading ? (
         <SellerWorkspaceStatePanel
           title="Loading orders"
-          description="Fetching store-scoped orders for the active seller workspace."
+          description="Fetching store orders for the active seller workspace."
           Icon={ShoppingBag}
         />
       ) : null}
@@ -573,21 +598,24 @@ export default function SellerOrdersPage() {
       ) : null}
 
       {!ordersQuery.isLoading && !ordersQuery.isError && rows.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center">
-          <p className="text-base font-semibold text-slate-900">No orders found</p>
-          <p className="mt-1.5 text-sm text-slate-500">
-            This store does not have orders yet.
-          </p>
-        </div>
+        <SellerWorkspaceEmptyState
+          title="No orders need processing yet"
+          description={
+            keyword || paymentStatus || fulfillmentStatus
+              ? "No orders match the current filters. Reset filters to see all store orders."
+              : "New store orders will appear here after buyers check out and the system creates seller suborders."
+          }
+          icon={<ShoppingBag className="h-5 w-5" />}
+        />
       ) : null}
 
       {!ordersQuery.isLoading && !ordersQuery.isError && rows.length > 0 ? (
-        <div className={sellerTableWrapClass}>
+        <div className={`${sellerTableWrapClass} overflow-x-auto`}>
           <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-1.5 text-[11px] text-slate-500">
             <span className="font-semibold text-slate-700">{rows.length}</span> /{" "}
             <span className="font-semibold text-slate-700">{pagination.total || 0}</span>
           </div>
-          <div className="w-full">
+          <div className="min-w-[1080px]">
             <table className="w-full table-fixed text-left">
               <thead className="bg-slate-50">
                 <tr>
@@ -603,7 +631,7 @@ export default function SellerOrdersPage() {
                   <th className={`${sellerHeadCellClass} w-[19%]`}>Invoice No</th>
                   <th className={`${sellerHeadCellClass} w-[16%]`}>Order Time</th>
                   <th className={`${sellerHeadCellClass} w-[16%]`}>Customer Name</th>
-                  <th className={`${sellerHeadCellClass} w-[8%]`}>Method</th>
+                  <th className={`${sellerHeadCellClass} w-[8%]`}>Payment</th>
                   <th className={`${sellerHeadCellClass} w-[10%] text-right`}>Amount</th>
                   <th className={`${sellerHeadCellClass} w-[11%]`}>Status</th>
                   <th className={`${sellerHeadCellClass} w-[7%]`}>Delivery</th>
@@ -617,6 +645,7 @@ export default function SellerOrdersPage() {
                   const actionKey = rowAction ? `${raw.suborderId}:${rowAction.code}` : "";
                   const isSelected = selectedIds.has(Number(raw.suborderId || 0));
                   const deliveryName = getDeliveryLabel(view);
+                  const blockedReason = getSellerRowBlockedReason(raw);
 
                   return (
                     <tr
@@ -676,7 +705,7 @@ export default function SellerOrdersPage() {
                       </td>
                       <td className={sellerBodyCellClass}>
                         <span className="inline-flex w-full items-center justify-center rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
-                          {view.deliveryAssigned ? deliveryName : "Assign"}
+                          {view.deliveryAssigned ? deliveryName : "Not assigned"}
                         </span>
                       </td>
                       <td className={`${sellerBodyCellClass} w-[12%]`}>
@@ -697,6 +726,7 @@ export default function SellerOrdersPage() {
                         ) : (
                           <div className="flex items-center">
                             <span
+                              title={blockedReason}
                               className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getStatusBadgeClass(
                                 view.status
                               )}`}
@@ -716,7 +746,7 @@ export default function SellerOrdersPage() {
                             <Eye className="h-4 w-4" />
                           </Link>
                         ) : (
-                          <span className="text-slate-300">—</span>
+                          <span className="text-slate-300">-</span>
                         )}
                       </td>
                     </tr>
@@ -731,7 +761,7 @@ export default function SellerOrdersPage() {
       {!ordersQuery.isLoading && !ordersQuery.isError && rows.length > 0 ? (
         <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
           <p className="text-sm text-slate-500">
-            Page {pagination.page} of {totalPages} • {pagination.total} orders
+            Page {pagination.page} of {totalPages} - {pagination.total} orders
           </p>
           <div className="flex gap-2">
             <button

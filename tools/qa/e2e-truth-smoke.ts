@@ -1779,8 +1779,8 @@ async function runScenario(browser: any) {
       expectedSuborderNumber,
       `Payment ${expectedSellerPaymentLabel}`,
       `Operational ${expectedSellerStatusLabel}`,
-      "Persisted shipment truth for this store split.",
-      "Persisted shipment",
+      "Saved shipment data for this store order.",
+      "Shipment record",
     ]);
   } finally {
     await sellerPage.close().catch(() => null);

@@ -25,15 +25,21 @@ function summarizeDelta(beforeState, afterState) {
   const changes = [];
 
   if ((beforeState?.roleCode || null) !== (afterState?.roleCode || null)) {
-    changes.push(`${beforeState?.roleCode || "-"} -> ${afterState?.roleCode || "-"}`);
+    const beforeRole = formatRoleLabel(beforeState?.roleCode);
+    const afterRole = formatRoleLabel(afterState?.roleCode);
+    changes.push(beforeRole ? `Role ${beforeRole} -> ${afterRole || "-"}` : `Role set to ${afterRole || "-"}`);
   }
 
   if ((beforeState?.status || null) !== (afterState?.status || null)) {
-    changes.push(`${beforeState?.status || "-"} -> ${afterState?.status || "-"}`);
+    const beforeStatus = formatRoleLabel(beforeState?.status);
+    const afterStatus = formatRoleLabel(afterState?.status);
+    changes.push(
+      beforeStatus ? `Status ${beforeStatus} -> ${afterStatus || "-"}` : `Status set to ${afterStatus || "-"}`
+    );
   }
 
   if (changes.length === 0 && afterState?.status) {
-    changes.push(`Status ${afterState.status}`);
+    changes.push(`Status ${formatRoleLabel(afterState.status)}`);
   }
 
   return changes.length > 0 ? changes.join(" | ") : "Snapshot recorded";
@@ -67,6 +73,14 @@ function actionTone(action) {
 
 function formatActionOption(action) {
   return actionLabel(action);
+}
+
+function formatRoleLabel(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 export default function SellerTeamAuditPage() {
@@ -115,7 +129,7 @@ export default function SellerTeamAuditPage() {
     return (
       <SellerWorkspaceStatePanel
         title="Loading seller team audit logs"
-        description="Fetching tenant-scoped team mutation history for the active store."
+        description="Fetching team activity history for the active store."
         Icon={History}
       />
     );
@@ -140,15 +154,15 @@ export default function SellerTeamAuditPage() {
     <div className="space-y-5">
       <SellerWorkspaceSectionHeader
         eyebrow="Team Audit"
-        title="Read-only team mutation trail"
-        description="This viewer reads tenant-scoped team mutation logs from the seller audit trail. It covers invite, re-invite, invite acceptance, invite decline, attach, role change, disable, reactivate, and operational remove events only."
+        title="Team activity"
+        description="Review who changed team access, what changed, and when it happened. This page is read-only."
         actions={[
           <SellerWorkspaceBadge
             key="role"
-            label={sellerContext?.access?.roleCode || "UNKNOWN"}
+            label={formatRoleLabel(sellerContext?.access?.roleCode) || "Role pending"}
             tone="sky"
           />,
-          <SellerWorkspaceBadge key="perm" label="AUDIT_LOG_VIEW" tone="amber" />,
+          <SellerWorkspaceBadge key="perm" label="Can view audit" tone="amber" />,
         ]}
       />
 
@@ -156,13 +170,13 @@ export default function SellerTeamAuditPage() {
         <SellerWorkspaceStatCard
           label="Audit Rows"
           value={String(pagination.total || 0)}
-          hint="Tenant-scoped mutation history rows for the active store."
+          hint="Team activity records for the active store."
           Icon={History}
         />
         <SellerWorkspaceStatCard
           label="Scope"
-          value="Store scoped"
-          hint="Tenant-scoped by store id. Backend access remains the final authority."
+          value="This store"
+          hint="Only activity for this store is shown."
           Icon={ShieldCheck}
           tone="emerald"
         />
@@ -173,7 +187,7 @@ export default function SellerTeamAuditPage() {
           <div>
             <h3 className="text-base font-semibold text-slate-900">Filters</h3>
             <p className="mt-1 text-sm text-slate-500">
-              Narrow the audit trail to one mutation action if needed.
+              Narrow the activity trail to one team action if needed.
             </p>
           </div>
 
@@ -204,7 +218,7 @@ export default function SellerTeamAuditPage() {
           <div>
             <h3 className="text-base font-semibold text-slate-900">Audit Timeline</h3>
             <p className="mt-1 text-sm text-slate-500">
-              Lightweight operational history for seller team mutations.
+              Recent team changes in a readable timeline.
             </p>
           </div>
           <SellerWorkspaceBadge
@@ -215,7 +229,8 @@ export default function SellerTeamAuditPage() {
 
         {items.length > 0 ? (
           <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
-            <div className="grid grid-cols-[1.1fr_1fr_1fr_1.4fr_0.9fr] gap-3 border-b border-slate-200 bg-slate-50 px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+            <div className="min-w-0">
+            <div className="hidden grid-cols-[1.1fr_1fr_1fr_1.4fr_0.9fr] gap-3 border-b border-slate-200 bg-slate-50 px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500 md:grid">
               <span>Action</span>
               <span>Actor</span>
               <span>Target</span>
@@ -226,7 +241,7 @@ export default function SellerTeamAuditPage() {
               {items.map((item) => (
                 <div
                   key={item.id}
-                  className="grid grid-cols-[1.1fr_1fr_1fr_1.4fr_0.9fr] gap-3 px-3.5 py-3.5 text-sm text-slate-700"
+                  className="grid grid-cols-1 gap-3 px-3.5 py-3.5 text-sm text-slate-700 md:grid-cols-[1.1fr_1fr_1fr_1.4fr_0.9fr]"
                 >
                   <div className="space-y-2">
                     <SellerWorkspaceBadge
@@ -241,7 +256,7 @@ export default function SellerTeamAuditPage() {
                         actionTone(item.action)
                       }
                     />
-                    <p className="text-xs text-slate-500">Log #{item.id}</p>
+                    <p className="text-xs text-slate-500">Activity ID {item.id}</p>
                   </div>
                   <div>
                     <p className="font-medium text-slate-900">{formatActor(item.actor)}</p>
@@ -252,22 +267,20 @@ export default function SellerTeamAuditPage() {
                       {formatActor(item.target?.user)}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
-                      {item.target?.snapshot?.roleCode || item.target?.roleCode || "-"}{" "}
-                      {item.target?.snapshot?.status ? `• ${item.target.snapshot.status}` : ""}
-                      {item.target?.memberId ? ` • Member #${item.target.memberId}` : ""}
+                      {formatRoleLabel(item.target?.snapshot?.roleCode || item.target?.roleCode) || "-"}{" "}
+                      {item.target?.snapshot?.status
+                        ? `- ${formatRoleLabel(item.target.snapshot.status)}`
+                        : ""}
+                      {item.target?.memberId ? ` - Member ID ${item.target.memberId}` : ""}
                     </p>
                   </div>
                   <div>
                     <p className="font-medium text-slate-900">
-                      {item.readModel?.changeSummary ||
-                        summarizeDelta(item.beforeState, item.afterState)}
+                      {summarizeDelta(item.beforeState, item.afterState)}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
                       {item.readModel?.summary ||
-                        "Seller team mutation recorded in the tenant-scoped audit trail."}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      Category: {item.readModel?.category || "AUDIT"}
+                        "Team activity recorded for this store."}
                     </p>
                   </div>
                   <div className="text-xs text-slate-500">
@@ -281,17 +294,18 @@ export default function SellerTeamAuditPage() {
                 </div>
               ))}
             </div>
+            </div>
           </div>
         ) : (
           <div className="mt-4">
             <SellerWorkspaceEmptyState
               title={
-                actionFilter ? "No team audit rows match this action filter" : "No team audit rows yet"
+                actionFilter ? "No team activity matches this filter" : "No team activity yet"
               }
               description={
                 actionFilter
                   ? "Try widening the audit action filter for this store."
-                  : "This viewer will fill when seller team mutations succeed and write audit logs."
+                  : "Team activity will appear here after invites, role changes, disables, reactivations, or removals."
               }
               icon={<History className="h-5 w-5" />}
             />

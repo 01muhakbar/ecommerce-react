@@ -165,14 +165,14 @@ const getSellerPageMeta = (pathname) => {
   if (pathname.includes("/team/audit")) {
     return {
       title: "Team Audit",
-      subtitle: "Tenant-scoped membership trail for the active store.",
+      subtitle: "Team access changes for the active store.",
     };
   }
 
   if (pathname.includes("/team/")) {
     return {
       title: "Member Lifecycle",
-      subtitle: "Membership timeline and role snapshot for the current store.",
+      subtitle: "Membership timeline and role changes for the current store.",
     };
   }
 
@@ -186,28 +186,28 @@ const getSellerPageMeta = (pathname) => {
   if (pathname.endsWith("/catalog/products/new")) {
     return {
       title: "New Product",
-      subtitle: "Seller draft authoring lane scoped to the active store.",
+      subtitle: "Create a product draft for this store.",
     };
   }
 
   if (pathname.endsWith("/edit")) {
     return {
       title: "Edit Product Draft",
-      subtitle: "Seller draft editing lane scoped to the active store.",
+      subtitle: "Edit a product draft for this store.",
     };
   }
 
   if (pathname.includes("/catalog/products/")) {
     return {
       title: "Product Detail",
-      subtitle: "Seller-facing catalog detail scoped to this store.",
+      subtitle: "Catalog details for this store.",
     };
   }
 
   if (pathname.endsWith("/catalog/products")) {
     return {
       title: "Catalog",
-      subtitle: "Read model for products owned by the current store.",
+      subtitle: "Products owned by the current store.",
     };
   }
 
@@ -221,42 +221,42 @@ const getSellerPageMeta = (pathname) => {
   if (pathname.includes("/orders/")) {
     return {
       title: "Order Detail",
-      subtitle: "Suborder operations remain scoped to the current store.",
+      subtitle: "Order actions for the current store.",
     };
   }
 
   if (pathname.endsWith("/orders")) {
     return {
       title: "Orders",
-      subtitle: "Store-owned suborders, payment state, and fulfillment controls for seller operations.",
+      subtitle: "Store orders, payment state, and fulfillment controls for seller operations.",
     };
   }
 
   if (pathname.endsWith("/payment-review")) {
     return {
       title: "Payment Review",
-      subtitle: "Store-scoped finance review lane for buyer payment proofs in the active seller workspace.",
+      subtitle: "Buyer payment proof review for the active seller workspace.",
     };
   }
 
   if (pathname.endsWith("/payment-profile")) {
     return {
       title: "Payment Setup",
-      subtitle: "Store-scoped finance setup snapshot and admin review readiness for the active seller store.",
+      subtitle: "Payment setup, admin review status, and checkout readiness for this store.",
     };
   }
 
   if (pathname.endsWith("/coupons")) {
     return {
       title: "Coupons",
-      subtitle: "Store-scoped coupon management for the active seller store.",
+      subtitle: "Coupon management for the active seller store.",
     };
   }
 
   if (pathname.endsWith("/store-profile") || pathname.endsWith("/profile")) {
     return {
       title: "Store Profile",
-      subtitle: "Seller-managed identity and contact metadata for this store.",
+      subtitle: "Store identity, contact details, and public information.",
     };
   }
 
@@ -476,7 +476,9 @@ function SellerSidebar({
   storeSlug,
   sellerContext,
   collapsed = false,
+  mobileOpen = false,
   isDark = false,
+  onNavigate,
   onLogout,
 }) {
   const permissionKeys = sellerContext?.access?.permissionKeys || [];
@@ -620,7 +622,8 @@ function SellerSidebar({
   return (
     <aside
       className={joinClassNames(
-        "relative z-20 flex w-full shrink-0 flex-col transition-[width] duration-200 lg:sticky lg:top-0 lg:h-screen lg:max-h-screen lg:self-start lg:overflow-hidden",
+        "fixed inset-y-0 left-0 z-50 flex h-screen max-h-screen w-[min(88vw,320px)] shrink-0 flex-col shadow-xl transition-[transform,width] duration-200 lg:sticky lg:top-0 lg:z-20 lg:h-screen lg:max-h-screen lg:self-start lg:translate-x-0 lg:overflow-hidden lg:shadow-none",
+        mobileOpen ? "translate-x-0" : "-translate-x-full",
         isDark ? "border-r border-slate-800 bg-slate-950" : "border-r border-slate-200 bg-slate-50",
         collapsed ? "lg:w-[86px]" : "lg:w-[252px]"
       )}
@@ -801,6 +804,7 @@ function SellerSidebar({
                             key={child.label}
                             to={child.to}
                             end={child.to === sellerRoutes.catalog()}
+                            onClick={onNavigate}
                             className={({ isActive }) =>
                               joinClassNames(
                                 "group flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[12.5px] transition",
@@ -853,6 +857,7 @@ function SellerSidebar({
                       to={item.to}
                       end={item.to === sellerRoutes.home() || item.to === sellerRoutes.catalog()}
                       title={collapsed ? item.label : undefined}
+                      onClick={onNavigate}
                         className={({ isActive }) =>
                           joinClassNames(
                             "group relative flex items-center rounded-lg py-1.5 text-[13px] transition",
@@ -1029,6 +1034,7 @@ export default function SellerLayout() {
   const [selectedLanguage, setSelectedLanguage] = useState(readStoredSellerLanguage);
   const [langOpen, setLangOpen] = useState(false);
   const [activeMenu, setActiveMenu] = useState(null);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const langDropdownRef = useRef(null);
   const notifyDropdownRef = useRef(null);
   const profileDropdownRef = useRef(null);
@@ -1202,7 +1208,7 @@ export default function SellerLayout() {
         description={
           sellerAuth.isLoading
             ? "Checking shared session and seller workspace access."
-            : "Resolving store context and seller access from the backend."
+            : "Opening this seller workspace and checking your access."
         }
       />
     );
@@ -1348,6 +1354,15 @@ export default function SellerLayout() {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   };
 
+  const handleSidebarToggle = () => {
+    if (typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches) {
+      setSidebarCollapsed((prev) => !prev);
+      return;
+    }
+
+    setMobileSidebarOpen((prev) => !prev);
+  };
+
   const toggleMenu = (menuName) => {
     setLangOpen(false);
     setActiveMenu((prev) => (prev === menuName ? null : menuName));
@@ -1387,11 +1402,21 @@ export default function SellerLayout() {
       data-seller-theme={theme}
       data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"}
     >
+      {mobileSidebarOpen ? (
+        <button
+          type="button"
+          aria-label="Close seller navigation"
+          className="fixed inset-0 z-40 bg-slate-950/35 backdrop-blur-[1px] lg:hidden"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      ) : null}
       <SellerSidebar
         storeSlug={canonicalStoreSlug}
         sellerContext={sellerContext}
-        collapsed={sidebarCollapsed}
+        collapsed={sidebarCollapsed && !mobileSidebarOpen}
+        mobileOpen={mobileSidebarOpen}
         isDark={isDark}
+        onNavigate={() => setMobileSidebarOpen(false)}
         onLogout={handleSellerLogout}
       />
 
@@ -1404,10 +1429,11 @@ export default function SellerLayout() {
           <div className="navbar__left">
             <button
               className={`navbar__menu ${sidebarCollapsed ? "is-active" : ""}`}
-              aria-label={sidebarCollapsed ? "Expand seller sidebar" : "Collapse seller sidebar"}
+              aria-label={mobileSidebarOpen ? "Close seller navigation" : "Open seller navigation"}
+              aria-expanded={mobileSidebarOpen}
               aria-pressed={sidebarCollapsed}
               type="button"
-              onClick={() => setSidebarCollapsed((prev) => !prev)}
+              onClick={handleSidebarToggle}
             >
               <Menu className="navbar__menu-icon" />
             </button>

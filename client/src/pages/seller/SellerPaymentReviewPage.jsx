@@ -50,6 +50,25 @@ const getStatusTone = (value) =>
 const resolveBadgeTone = (metaTone, fallbackValue) =>
   String(metaTone || "").trim() || getStatusTone(fallbackValue);
 
+const sellerFriendlyText = (value, fallback = "") => {
+  const text = String(value || "").trim();
+  if (!text) return fallback;
+  return text
+    .replace(/\bmutations\b/gi, "actions")
+    .replace(/\bmutation\b/gi, "action")
+    .replace(/\bbackend\b/gi, "system")
+    .replace(/\bmetadata\b/gi, "details")
+    .replace(/\blanes\b/gi, "workflows")
+    .replace(/\blane\b/gi, "workflow");
+};
+
+const formatRoleLabel = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
 const normalizeReviewPaymentCode = (entry) =>
   String(
     entry?.payment?.statusMeta?.code ||
@@ -93,6 +112,7 @@ export default function SellerPaymentReviewPage() {
   const queryClient = useQueryClient();
   const [activeFilter, setActiveFilter] = useState("PENDING_CONFIRMATION");
   const [notes, setNotes] = useState({});
+  const [reviewFeedback, setReviewFeedback] = useState({});
   const hasViewPermission =
     sellerContext?.access?.permissionKeys?.includes("ORDER_VIEW") &&
     sellerContext?.access?.permissionKeys?.includes("PAYMENT_STATUS_VIEW");
@@ -129,6 +149,18 @@ export default function SellerPaymentReviewPage() {
 
   const handleReview = async (paymentId, action) => {
     const note = String(notes[paymentId] || "").trim();
+    if (action === "REJECT" && !note) {
+      setReviewFeedback((current) => ({
+        ...current,
+        [paymentId]: "Add a clear reason before rejecting this payment proof.",
+      }));
+      return;
+    }
+    setReviewFeedback((current) => {
+      const next = { ...current };
+      delete next[paymentId];
+      return next;
+    });
     await reviewMutation.mutateAsync({
       paymentId,
       payload: {
@@ -152,8 +184,8 @@ export default function SellerPaymentReviewPage() {
   if (reviewQuery.isLoading) {
     return (
       <SellerWorkspaceStatePanel
-        title="Loading finance review lane"
-        description="Fetching seller-scoped buyer payment proof records for the active store finance lane."
+        title="Loading payment reviews"
+        description="Fetching buyer payment proofs for the active store."
         Icon={CreditCard}
       />
     );
@@ -162,11 +194,11 @@ export default function SellerPaymentReviewPage() {
   if (reviewQuery.isError) {
     return (
       <SellerWorkspaceStatePanel
-        title="Failed to load finance review lane"
+        title="Failed to load payment reviews"
         description={getSellerRequestErrorMessage(reviewQuery.error, {
           permissionMessage:
             "Your current seller access does not include seller finance review visibility.",
-          fallbackMessage: "Failed to load seller finance review lane.",
+          fallbackMessage: "Failed to load seller payment reviews.",
         })}
         tone="error"
         Icon={CreditCard}
@@ -181,7 +213,7 @@ export default function SellerPaymentReviewPage() {
       <SellerWorkspaceSectionHeader
         eyebrow="Finance"
         title="Payment review"
-        description="This native seller finance lane reviews buyer payment proofs inside the active store workspace. Store scope comes directly from the seller route, so there is no multi-store ambiguity here. This lane does not calculate seller payout balance or settlement statements."
+        description="Review buyer payment proofs for this store. Approve only when the amount, sender details, and proof image match the order; reject with a clear reason when they do not."
         actions={[
           <SellerWorkspaceBadge
             key="scope"
@@ -194,13 +226,19 @@ export default function SellerPaymentReviewPage() {
             tone={actorCanReview ? "emerald" : "amber"}
           />,
           governance?.roleCode ? (
-            <SellerWorkspaceBadge key="role" label={governance.roleCode} tone="sky" />
+            <SellerWorkspaceBadge
+              key="role"
+              label={formatRoleLabel(governance.roleCode)}
+              tone="sky"
+            />
           ) : null,
         ].filter(Boolean)}
       >
         <p className="text-sm leading-6 text-slate-500">
-          {governance?.note ||
-            "Review state is driven by backend governance and remains store-scoped for the active seller finance lane."}
+          {sellerFriendlyText(
+            governance?.note,
+            "Review actions follow the current store role and payment status."
+          )}
         </p>
       </SellerWorkspaceSectionHeader>
 
@@ -210,15 +248,15 @@ export default function SellerPaymentReviewPage() {
           value={String(reviewStats.total)}
           hint={
             reviewStats.exceptionCount > 0
-              ? `Payment review rows for the active filter and current store only. Exception latest records: ${reviewStats.exceptionCount}.`
-              : "Payment review rows for the active filter and current store only."
+              ? `Rows in this filter for the active store. Exceptions: ${reviewStats.exceptionCount}.`
+              : "Rows in this filter for the active store."
           }
           Icon={CreditCard}
         />
         <SellerWorkspaceStatCard
           label="Awaiting Review"
           value={String(reviewStats.awaitingReview)}
-          hint="Rows whose latest backend payment snapshot still waits for seller review."
+          hint="Proofs waiting for seller approval or rejection."
           Icon={BadgeCheck}
           tone="amber"
         />
@@ -227,10 +265,10 @@ export default function SellerPaymentReviewPage() {
           value={String(reviewStats.settled)}
           hint={
             reviewStats.exceptionCount > 0
-              ? `Backend-paid only. ${reviewStats.exceptionCount} rejected/failed/expired record(s) stay outside this count.`
+              ? `Paid rows only. ${reviewStats.exceptionCount} rejected, failed, or expired row(s) stay outside this count.`
               : actorCanReview
-                ? "Backend-paid records in the active filter and store scope."
-                : "This actor can observe outcomes only."
+                ? "Paid records in this filter and store."
+                : "Your role can observe outcomes only."
           }
           Icon={BadgeCheck}
           tone="emerald"
@@ -258,7 +296,7 @@ export default function SellerPaymentReviewPage() {
 
       {!actorCanReview ? (
         <SellerWorkspaceNotice type="warning">
-          This seller role can inspect payment review data for the active store, but mutation remains disabled. Store owners and store admins keep review authority in this phase.
+          Your seller role can inspect payment proof data for this store, but cannot approve or reject it. Store owners and store admins keep review authority.
         </SellerWorkspaceNotice>
       ) : null}
 
@@ -315,12 +353,13 @@ export default function SellerPaymentReviewPage() {
                       ) : null}
                     </div>
                     <p className="mt-2 text-sm text-slate-500">
-                      Parent order {entry.orderNumber} • Buyer {entry.buyer.name}
+                      Parent order {entry.orderNumber} - Buyer {entry.buyer.name}
                     </p>
                     <p className="mt-2 text-sm text-slate-600">
-                      {entryPaymentMeta?.description ||
-                        reviewActionability?.reason ||
-                        "Review state follows the latest backend payment snapshot for this store split."}
+                      {sellerFriendlyText(
+                        entryPaymentMeta?.description || reviewActionability?.reason,
+                        "Review state follows the latest payment record for this store order."
+                      )}
                     </p>
                   </div>
 
@@ -468,16 +507,26 @@ export default function SellerPaymentReviewPage() {
                       <>
                         <textarea
                           value={notes[payment?.id] || ""}
-                          onChange={(event) =>
+                          onChange={(event) => {
                             setNotes((prev) => ({
                               ...prev,
                               [payment?.id]: event.target.value,
-                            }))
-                          }
+                            }));
+                            setReviewFeedback((current) => {
+                              const next = { ...current };
+                              delete next[payment?.id];
+                              return next;
+                            });
+                          }}
                           disabled={!payment?.id || isMutating}
-                          placeholder="Optional review note for approve or reject"
+                          placeholder="Add a note. Required when rejecting proof."
                           className={`mt-3 h-24 ${sellerTextareaClass}`}
                         />
+                        {reviewFeedback[payment?.id] ? (
+                          <SellerWorkspaceNotice type="warning" className="mt-3">
+                            {reviewFeedback[payment.id]}
+                          </SellerWorkspaceNotice>
+                        ) : null}
 
                         {reviewMutation.isError &&
                         reviewMutation.variables?.paymentId === payment?.id ? (
@@ -499,13 +548,22 @@ export default function SellerPaymentReviewPage() {
                           </button>
                           <button
                             type="button"
-                            disabled={reviewLocked || isMutating}
+                            disabled={
+                              reviewLocked ||
+                              isMutating ||
+                              String(notes[payment?.id] || "").trim().length === 0
+                            }
                             onClick={() => handleReview(payment?.id, "REJECT")}
                             className={sellerSecondaryButtonClass}
                           >
                             {isMutating ? "Saving..." : "Reject"}
                           </button>
                         </div>
+                        {!reviewLocked && String(notes[payment?.id] || "").trim().length === 0 ? (
+                          <p className="mt-3 text-sm text-slate-500">
+                            Reject needs a clear reason so the buyer knows what to fix.
+                          </p>
+                        ) : null}
 
                         {reviewLocked ? (
                           <p className="mt-3 text-sm text-slate-500">
@@ -516,7 +574,7 @@ export default function SellerPaymentReviewPage() {
                       </>
                     ) : (
                       <SellerWorkspaceNotice type="warning" className="mt-3">
-                        This actor can view the payment proof trail, but review mutation is not available in the current seller role.
+                        Your seller role can view the payment proof trail, but cannot approve or reject it.
                       </SellerWorkspaceNotice>
                     )}
 

@@ -65,6 +65,19 @@ const formatFieldName = (value) =>
     .replace(/_/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 
+const sellerFriendlyText = (value, fallback = "") => {
+  const text = String(value || "").trim();
+  if (!text) return fallback;
+  return text
+    .replace(/\bmetadata\b/gi, "details")
+    .replace(/\bbackend\b/gi, "system")
+    .replace(/\bsource of truth\b/gi, "saved record")
+    .replace(/\bserializer\b/gi, "display rules")
+    .replace(/\bclient\/storefront\b/gi, "buyer-facing store")
+    .replace(/\boperational client\b/gi, "public operations")
+    .replace(/\bnot surfaced\b/gi, "not shown publicly");
+};
+
 const getProfileValidationMessage = (error) => {
   const code = String(error?.response?.data?.code || "").toUpperCase();
   const responseMessage = error?.response?.data?.message;
@@ -180,7 +193,7 @@ export default function SellerStoreProfilePage() {
     onSuccess: async (data) => {
       setStatus({
         type: "success",
-      message: "Store profile updated successfully.",
+        message: "Store profile updated successfully.",
       });
       setIsEditing(false);
       setForm(createFormState(data));
@@ -205,14 +218,14 @@ export default function SellerStoreProfilePage() {
             label: "Store Name",
             type: "text",
             hint:
-              "Admin-governed core identity. Seller workspace can review this value, but final updates now come from admin.",
+              "Store name is managed by admin. Use the editable fields below for seller-owned public details.",
           },
           {
             key: "description",
             label: "Description",
             type: "textarea",
             hint:
-              "Seller-managed store summary. This now feeds public store identity and the fallback body for microsite rich-about when customization content is empty.",
+              "Short public summary shown on store pages when richer custom content is not available.",
           },
           {
             key: "logoUrl",
@@ -312,7 +325,7 @@ export default function SellerStoreProfilePage() {
     label: "Unavailable",
     tone: "stone",
     description:
-      "Shipping setup readiness is unavailable right now. Backend seller store profile remains the source of truth.",
+      "Shipping setup readiness is unavailable right now. Refresh the page or try again later.",
   };
   const shippingSetupMeta = profile?.shippingSetupMeta || {
     severity: "info",
@@ -341,7 +354,7 @@ export default function SellerStoreProfilePage() {
         tone: "stone",
         isReady: false,
         description:
-          "Operational readiness is unavailable right now. Use the backend workspace readiness lane as the source of truth.",
+          "Operational readiness is unavailable right now. Refresh the page or try again later.",
       },
     [profile?.operationalReadiness]
   );
@@ -387,7 +400,7 @@ export default function SellerStoreProfilePage() {
     return (
       <SellerWorkspaceSectionCard
         title="Loading seller store profile"
-        hint="Fetching the active store profile snapshot for this workspace."
+        hint="Fetching the latest saved store profile for this workspace."
         Icon={Store}
       />
     );
@@ -411,12 +424,12 @@ export default function SellerStoreProfilePage() {
     return (
       <SellerWorkspaceSectionCard
         title="No store profile data is available"
-        hint="This workspace does not expose a store profile snapshot yet."
+        hint="This workspace does not expose a store profile yet."
         Icon={Store}
       >
-        <SellerWorkspaceEmptyState
-          title="No store profile data is available for this workspace yet"
-          description="The seller profile lane will start rendering after store metadata exists for the active workspace."
+          <SellerWorkspaceEmptyState
+            title="No store profile data is available for this workspace yet"
+          description="The store profile will appear after store details exist for the active workspace."
           icon={<Store className="h-5 w-5" />}
         />
       </SellerWorkspaceSectionCard>
@@ -427,8 +440,8 @@ export default function SellerStoreProfilePage() {
     <div className="space-y-5">
       <SellerWorkspaceSectionHeader
         eyebrow="Store Profile"
-        title="Seller store profile overview"
-        description="Identity, contact, and address fields stay scoped to the active store. Seller-owned Store fields now drive public store identity and microsite contact surfaces, while admin customization still owns marketplace copy, contact-page layout, and rich content blocks."
+        title="Store profile"
+        description="Review the public store identity, contact details, address, and readiness status for this store. Seller-owned fields update the storefront after save; admin-owned identity fields stay locked."
         actions={[
           <SellerWorkspaceBadge
             key="status"
@@ -460,8 +473,8 @@ export default function SellerStoreProfilePage() {
 
       <section className="grid gap-3.5 xl:grid-cols-3">
         <SellerWorkspaceSectionCard
-          title="Identity"
-          hint="Store-scoped seller snapshot"
+          title="Basic information"
+          hint="Core store identity and status"
           Icon={Store}
         >
           <div className="grid gap-3">
@@ -469,13 +482,13 @@ export default function SellerStoreProfilePage() {
             <SellerWorkspaceDetailItem
               label="Slug"
               value={profile.slug}
-              hint="Locked during the current bridge phase."
+              hint="Public store URL slug. This field is managed by admin."
             />
-            <SellerWorkspaceDetailItem
-              label="Store Status"
-              value={profile.statusMeta?.label || profile.status}
-              hint={profile.statusMeta?.description}
-            />
+              <SellerWorkspaceDetailItem
+                label="Store Status"
+                value={profile.statusMeta?.label || profile.status}
+                hint={sellerFriendlyText(profile.statusMeta?.description)}
+              />
           </div>
         </SellerWorkspaceSectionCard>
 
@@ -493,7 +506,7 @@ export default function SellerStoreProfilePage() {
 
         <SellerWorkspaceSectionCard
           title="Completeness"
-          hint="Readiness for profile clarity"
+          hint="Fields that help buyers understand this store"
           Icon={MapPin}
         >
           <p className="text-[1.9rem] font-semibold leading-none text-slate-900">{completeness.score || 0}%</p>
@@ -503,13 +516,13 @@ export default function SellerStoreProfilePage() {
           </p>
           <p className="mt-3 text-sm leading-6 text-slate-600">
             {completeness.description ||
-              "Use this summary to reduce ambiguity between seller operations and storefront-facing metadata."}
+              "Complete public-facing fields so buyers can understand and contact the store."}
           </p>
           <SellerWorkspaceNotice
             type={operationalReadiness.isReady ? "success" : "warning"}
             className="mt-4"
           >
-            {operationalReadiness.description}
+            {sellerFriendlyText(operationalReadiness.description)}
           </SellerWorkspaceNotice>
           {missingFields.length ? (
             <SellerWorkspaceNotice type="warning" className="mt-4">
@@ -540,16 +553,16 @@ export default function SellerStoreProfilePage() {
             }
             className="mt-4"
           >
-            {shippingSetupMeta.message || shippingSetupStatus.description}
+            {sellerFriendlyText(shippingSetupMeta.message || shippingSetupStatus.description)}
           </SellerWorkspaceNotice>
         </SellerWorkspaceSectionCard>
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
         <div className="space-y-5">
-          <SellerWorkspaceSectionCard
-            title="Media and Address Snapshot"
-            hint="These fields stay store-scoped and follow the current profile contract."
+        <SellerWorkspaceSectionCard
+            title="Public media and address"
+            hint="Logo, banner, and address details shown or reused by buyer-facing pages"
             Icon={ImageIcon}
           >
             {profile.logoUrl ? (
@@ -575,7 +588,7 @@ export default function SellerStoreProfilePage() {
 
           <SellerWorkspaceSectionCard
             title="Shipping Setup"
-            hint="Store-scoped origin defaults for shipment operations."
+            hint="Default pickup and shipment origin details for this store."
             Icon={MapPin}
           >
             <SellerWorkspaceNotice
@@ -587,19 +600,22 @@ export default function SellerStoreProfilePage() {
                     : "warning"
               }
             >
-              {shippingSetupStatus.description}
+              {sellerFriendlyText(shippingSetupStatus.description)}
             </SellerWorkspaceNotice>
 
             <div className="mt-4 grid gap-3">
               <SellerWorkspaceDetailItem
                 label="Status"
                 value={shippingSetupStatus.label}
-                hint={shippingSetupMeta.sourceOfTruth || "Backend shipping setup readiness remains canonical."}
+                hint={sellerFriendlyText(
+                  shippingSetupMeta.sourceOfTruth,
+                  "Shipment readiness is calculated from the saved store setup."
+                )}
               />
               <SellerWorkspaceDetailItem
                 label="Shipping Enabled"
                 value={shippingSetupSummary.shippingEnabled ? "Enabled" : "Disabled"}
-                hint="Seller can disable shipping setup here without changing payment or order truth."
+                hint="Turning shipping setup off does not change payment review or existing order status."
               />
               <SellerWorkspaceDetailItem
                 label="Origin Contact"
@@ -627,7 +643,7 @@ export default function SellerStoreProfilePage() {
 
             {shippingSetupMeta.usesStoreProfileFallback ? (
               <SellerWorkspaceNotice type="info" className="mt-4">
-                Shipping setup is currently reusing store profile fallback fields:{" "}
+                Shipping setup is currently reusing these store profile fields:{" "}
                 {shippingSetupMeta.fallbackFields.map((field) => field.label).join(", ") || "-"}.
               </SellerWorkspaceNotice>
             ) : null}
@@ -636,7 +652,7 @@ export default function SellerStoreProfilePage() {
               <SellerWorkspaceNotice type="info" className="mt-4">
                 <div className="space-y-2">
                   {shippingSetupMeta.hints.map((hint) => (
-                    <p key={hint}>{hint}</p>
+                    <p key={hint}>{sellerFriendlyText(hint)}</p>
                   ))}
                 </div>
               </SellerWorkspaceNotice>
@@ -645,7 +661,7 @@ export default function SellerStoreProfilePage() {
 
           <SellerWorkspaceSectionCard
             title="Public Storefront Preview"
-            hint="This preview follows the same seller store profile payload that public store identity uses."
+            hint="See which saved fields can appear on the public store page."
             Icon={Globe}
             actions={
               storefrontPreviewHref && operationalReadiness.isReady ? (
@@ -657,8 +673,8 @@ export default function SellerStoreProfilePage() {
           >
             <SellerWorkspaceNotice type={operationalReadiness.isReady ? "info" : "warning"}>
               {operationalReadiness.isReady
-                ? "Seller-managed public-safe fields sync to the store slug page and product seller card after save. Admin still owns the core store name, slug, and final store status."
-                : `Store slug and public identity may already exist, but this store should not be treated as live yet. ${operationalReadiness.description}`}
+                ? "Public-safe fields can appear on the store page and product seller card after save. Admin still manages the store name, slug, and final status."
+                : `Store slug and public identity may already exist, but this store should not be treated as live yet. ${sellerFriendlyText(operationalReadiness.description)}`}
             </SellerWorkspaceNotice>
 
             <div className="mt-4 grid gap-3">
@@ -670,12 +686,12 @@ export default function SellerStoreProfilePage() {
               <SellerWorkspaceDetailItem
                 label="Store Route"
                 value={storefrontPreviewHref || profile.slug || "-"}
-                hint="Slug route remains stable and is still read from backend store identity."
+                hint="The public route uses the saved store slug."
               />
               <SellerWorkspaceDetailItem
                 label="Bio / Short Description"
                 value={profile.description}
-                hint="Shown on store microsite header and used as fallback about content when rich-about customization is empty."
+                hint="Shown on public store surfaces when no richer custom content is available."
               />
               <SellerWorkspaceDetailItem
                 label="Logo / Cover"
@@ -685,7 +701,7 @@ export default function SellerStoreProfilePage() {
                     .filter(Boolean)
                     .join(" | ") || "-"
                 }
-                hint="Public store page keeps safe fallback artwork when these fields are empty."
+                hint="Public pages use safe default artwork when these fields are empty."
               />
               <SellerWorkspaceDetailItem
                 label="Public Contact"
@@ -706,13 +722,15 @@ export default function SellerStoreProfilePage() {
           </SellerWorkspaceSectionCard>
 
           <SellerWorkspaceSectionCard
-            title="Edit Governance"
-            hint="The backend remains the source of truth for editable versus read-only fields."
+            title="Editable fields"
+            hint="These labels explain what this seller role can change from this page."
             Icon={ShieldCheck}
           >
             <SellerWorkspaceNotice type="info">
-              {profile.governance?.note ||
-                "Only seller-safe identity and contact metadata can be updated from this page."}
+              {sellerFriendlyText(
+                profile.governance?.note,
+                "Only seller-safe identity and contact details can be updated from this page."
+              )}
             </SellerWorkspaceNotice>
 
             {contract.notes.length ? (
@@ -722,7 +740,7 @@ export default function SellerStoreProfilePage() {
                     Current Storefront Sync
                   </p>
                   {contract.notes.map((note) => (
-                    <p key={note}>{note}</p>
+                    <p key={note}>{sellerFriendlyText(note)}</p>
                   ))}
                 </div>
               </SellerWorkspaceNotice>
@@ -744,14 +762,14 @@ export default function SellerStoreProfilePage() {
                       />
                     ))
                   ) : (
-                    <span className="text-sm text-emerald-800">No editable fields exposed.</span>
+                  <span className="text-sm text-emerald-800">No editable fields exposed.</span>
                   )}
                 </div>
               </div>
 
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                  Read-only Snapshot
+                  Read-only Fields
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {readOnlyFields.length ? (
@@ -763,7 +781,7 @@ export default function SellerStoreProfilePage() {
                       />
                     ))
                   ) : (
-                    <span className="text-sm text-slate-500">No read-only fields noted.</span>
+                    <span className="text-sm text-slate-500">No read-only fields listed.</span>
                   )}
                 </div>
               </div>
@@ -792,7 +810,7 @@ export default function SellerStoreProfilePage() {
 
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3.5">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-900">
-                  Operational Client
+                  Public Operations
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {contract.categories?.operationalClientFields?.length ? (
@@ -805,14 +823,14 @@ export default function SellerStoreProfilePage() {
                       />
                     ))
                   ) : (
-                    <span className="text-sm text-amber-900">No operational client field noted.</span>
+                    <span className="text-sm text-amber-900">No public operations field noted.</span>
                   )}
                 </div>
               </div>
 
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                  Not Surfaced
+                  Not Shown Publicly
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {contract.categories?.notSurfacedFields?.length ? (
@@ -834,7 +852,7 @@ export default function SellerStoreProfilePage() {
 
         <SellerWorkspaceSectionCard
           title="Store Profile Form"
-          hint="Edit mode only opens when the backend confirms store edit permission."
+          hint="Edit mode opens only for seller roles allowed to update this store."
           Icon={ShieldCheck}
           actions={
             effectiveCanEdit ? (
@@ -891,8 +909,8 @@ export default function SellerStoreProfilePage() {
             {effectiveCanEdit
               ? isEditing
                 ? "Edit mode is open for seller-owned profile, contact, and address fields only. Core store name and status remain admin-governed."
-                : "Seller-owned profile, contact, and address fields can be updated here when edit mode is open. Backend governance still decides which keys can be submitted."
-              : "This actor can review the store profile but cannot submit updates. Editability stays controlled by backend seller permissions for the active store."}
+                : "Seller-owned profile, contact, and address fields can be updated here when edit mode is open."
+              : "Your current seller role can review the store profile but cannot submit updates."}
           </SellerWorkspaceNotice>
 
           <form id="seller-store-profile-form" onSubmit={handleSubmit} className="space-y-4">
@@ -932,11 +950,11 @@ export default function SellerStoreProfilePage() {
                 <div>
                   <h4 className="text-sm font-semibold text-slate-900">Profile Image</h4>
                   <p className="mt-1 text-xs leading-5 text-slate-500">
-                    This store logo feeds the seller header avatar and the public store identity lane.
+                    This logo appears in the seller header and can appear on public store surfaces.
                   </p>
                 </div>
                 <SellerWorkspaceBadge
-                  label={logoPreviewUrl ? "Logo ready" : "Fallback initials"}
+                  label={logoPreviewUrl ? "Logo ready" : "Default initials"}
                   tone={logoPreviewUrl ? "emerald" : "stone"}
                 />
               </div>
@@ -963,7 +981,7 @@ export default function SellerStoreProfilePage() {
                       setForm((current) => ({ ...current, logoUrl: "" }));
                       setStatus({
                         type: "success",
-                        message: "Store logo removed from the draft. Save changes to persist the fallback.",
+                        message: "Store logo removed from the draft. Save changes to keep the default initials.",
                       });
                     }}
                     disabled={!isEditing || mutation.isPending || isUploadingLogo || !form.logoUrl || !editableFieldSet.has("logoUrl")}
@@ -993,8 +1011,8 @@ export default function SellerStoreProfilePage() {
                       const fieldHint = fieldEditable
                         ? field.hint
                         : field.hint
-                          ? `${field.hint} Locked by current backend governance.`
-                          : "Locked by current backend governance.";
+                          ? `${field.hint} Locked for your current seller role.`
+                          : "Locked for your current seller role.";
                       return (
                         <div
                           key={field.key}
@@ -1049,12 +1067,12 @@ export default function SellerStoreProfilePage() {
                     <option value="disabled">Disabled</option>
                   </select>
                   <p className="mt-2 text-xs leading-5 text-slate-500">
-                    Seller shipping setup only prepares store-scoped origin defaults. It does not replace buyer shipping truth.
+                    Shipping setup prepares the pickup origin for this store. It does not change buyer addresses or existing orders.
                   </p>
                 </label>
                 <InputField
                   label="Origin Contact Name"
-                  hint="Defaults to store name when left empty in the backend summary."
+                  hint="Uses the store name when left empty."
                   value={form.originContactName}
                   onChange={handleChange("originContactName")}
                   readOnly={!isEditing || mutation.isPending}

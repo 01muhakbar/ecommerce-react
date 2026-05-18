@@ -40,41 +40,60 @@ import {
 import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
 import { useSellerWorkspaceRoute } from "../../utils/sellerWorkspaceRoute.js";
 
+function sellerFriendlyText(value, fallback = "") {
+  const text = String(value || "").trim();
+  if (!text) return fallback;
+  return text
+    .replace(/\bmutations\b/gi, "actions")
+    .replace(/\bmutation\b/gi, "action")
+    .replace(/\bbackend\b/gi, "system")
+    .replace(/\bmetadata\b/gi, "details")
+    .replace(/\blanes\b/gi, "workflows")
+    .replace(/\blane\b/gi, "workflow");
+}
+
 function getRemovedSourceHint(member) {
   if (member?.status !== "REMOVED") return null;
   if (member?.removedSource === "INVITE_DECLINE") {
     return "Closed because the invited user declined the store invitation.";
   }
   if (member?.removedSource === "OPERATIONAL_REMOVE") {
-    return "Closed by a store operator through the operational remove lane.";
+    return "Closed by a store operator.";
   }
-  return "Closed membership row. Check lifecycle history for the latest removal event.";
+  return "Closed membership. Check lifecycle history for the latest removal event.";
 }
 
 function getInvitationHint(member) {
   if (member?.status !== "INVITED") return null;
   return (
     member?.invitation?.description ||
-    "This membership is waiting for the invited user to respond from the account invitation lane."
+    "This membership is waiting for the invited user to respond."
   );
 }
 
 function getRoleMeaning(member) {
-  return (
-    member?.readModel?.primaryRole?.summary ||
-    member?.role?.description ||
-    "Seller role snapshot"
+  return sellerFriendlyText(
+    member?.readModel?.primaryRole?.summary || member?.role?.description,
+    "Seller role permissions"
   );
 }
 
 function getLifecycleMeaning(member) {
-  return (
+  return sellerFriendlyText(
     member?.readModel?.lifecycle?.summary ||
-    (member?.status === "REMOVED"
-      ? getRemovedSourceHint(member)
-      : getInvitationHint(member) || member?.statusMeta?.description) ||
+      (member?.status === "REMOVED"
+        ? getRemovedSourceHint(member)
+        : getInvitationHint(member) || member?.statusMeta?.description),
     "Operational team status"
   );
+}
+
+function formatPermissionLabel(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 export default function SellerTeamPage() {
@@ -415,7 +434,7 @@ export default function SellerTeamPage() {
     return (
       <SellerWorkspaceStatePanel
         title="Team workspace visibility is unavailable"
-        description="Your current seller access does not include the team workspace shell."
+        description="Your current seller access does not include team management."
         tone="error"
         Icon={Users}
       />
@@ -426,7 +445,7 @@ export default function SellerTeamPage() {
     return (
       <SellerWorkspaceStatePanel
         title="Loading seller team summary"
-        description="Fetching team membership, access, and governance data for the active store."
+        description="Fetching team members, roles, and access details for the active store."
         Icon={Users}
       />
     );
@@ -438,7 +457,7 @@ export default function SellerTeamPage() {
         title="Failed to load seller team summary"
         description={getSellerRequestErrorMessage(teamQuery.error, {
           permissionMessage:
-            "Your current seller access does not include the team workspace shell.",
+            "Your current seller access does not include team management.",
           fallbackMessage: "Failed to load seller team summary.",
         })}
         tone="error"
@@ -465,23 +484,23 @@ export default function SellerTeamPage() {
     <div className="space-y-5">
       <SellerWorkspaceSectionHeader
         eyebrow="Seller Team"
-        title="Seller team governance overview"
-        description="This page explains who owns the store, which memberships are active, how lifecycle states work, and which team actions are open for the current actor in this tenant-scoped store."
+        title="Team"
+        description="Manage who can access this store, see each member role, and invite or remove team members when your seller role allows it."
         actions={[
           <SellerWorkspaceBadge
             key="access-mode"
-            label={team?.currentAccess?.accessMode || "UNKNOWN"}
+            label={formatPermissionLabel(team?.currentAccess?.accessMode || "Access pending")}
             tone="amber"
           />,
           <SellerWorkspaceBadge
             key="role"
-            label={team?.currentAccess?.roleCode || "UNKNOWN"}
+            label={formatPermissionLabel(team?.currentAccess?.roleCode || "Role pending")}
             tone="emerald"
           />,
         ]}
       >
         <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">
-          Phase 1 status contract: {statusContract.active} / {statusContract.disabled}
+          Member states: {statusContract.active} / {statusContract.disabled}
         </p>
       </SellerWorkspaceSectionHeader>
 
@@ -494,33 +513,33 @@ export default function SellerTeamPage() {
         />
         <SellerWorkspaceStatCard
           label="Current Access"
-          value={team?.currentAccess?.membershipStatus || "-"}
+          value={formatPermissionLabel(team?.currentAccess?.membershipStatus || "-")}
           hint={
             team?.currentAccess?.readModel?.authority?.label ||
             (team?.summary?.hasVirtualOwnerBridge
-              ? "Owner bridge is still virtual for this store."
-              : "Resolved from active store membership.")
+              ? "Owner access is available while no member row is attached yet."
+              : "Based on the active store membership.")
           }
           Icon={ShieldCheck}
           tone="emerald"
         />
         <SellerWorkspaceStatCard
           label="Current Role"
-          value={
+          value={formatPermissionLabel(
             team?.currentAccess?.readModel?.primaryRole?.label ||
-            team?.currentAccess?.roleCode ||
-            "-"
-          }
+              team?.currentAccess?.roleCode ||
+              "-"
+          )}
           hint={
             team?.currentAccess?.readModel?.primaryRole?.summary ||
-            "Resolved by the backend seller access layer."
+            "This role controls which team actions are available."
           }
           Icon={UserRound}
         />
         <SellerWorkspaceStatCard
           label="System Roles"
           value={String(team?.summary?.systemRolesAvailable ?? 0)}
-          hint="Available seller roles seeded in the foundation."
+          hint="Available seller roles for this store."
           Icon={UserCog}
           tone="amber"
         />
@@ -535,7 +554,7 @@ export default function SellerTeamPage() {
             <div>
               <h3 className="text-base font-semibold text-slate-900">Current Access Summary</h3>
               <p className="text-sm text-slate-500">
-                Backend-resolved seller access for the current store context.
+                Your current role and permissions for this store.
               </p>
             </div>
           </div>
@@ -546,15 +565,19 @@ export default function SellerTeamPage() {
                 Membership Status
               </dt>
               <dd className="mt-2 text-base font-semibold text-slate-900">
-                {team?.currentAccess?.readModel?.authority?.label ||
-                  team?.currentAccess?.membershipStatus ||
-                  "-"}
+                {formatPermissionLabel(
+                  team?.currentAccess?.readModel?.authority?.label ||
+                    team?.currentAccess?.membershipStatus ||
+                    "-"
+                )}
               </dd>
               <p className="mt-2 text-xs text-slate-500">
-                {team?.currentAccess?.readModel?.authority?.description ||
-                  (teamCapabilities.canInviteMembers || teamCapabilities.canAttachMembers
-                    ? "This actor can open the current phase-1 member mutation lanes."
-                    : "This actor can observe the team shell, but mutation lanes stay closed.")}
+                {sellerFriendlyText(
+                  team?.currentAccess?.readModel?.authority?.description,
+                  teamCapabilities.canInviteMembers || teamCapabilities.canAttachMembers
+                    ? "You can invite or manage members from this page."
+                    : "You can view the team list, but cannot change members."
+                )}
               </p>
             </SellerWorkspaceInset>
             <SellerWorkspaceInset className="px-3.5 py-3.5">
@@ -565,7 +588,10 @@ export default function SellerTeamPage() {
                 {team?.currentAccess?.memberId ?? "Virtual owner"}
               </dd>
               <p className="mt-2 text-xs text-slate-500">
-                {team?.currentAccess?.readModel?.membershipBoundary || "Current access boundary."}
+                {sellerFriendlyText(
+                  team?.currentAccess?.readModel?.membershipBoundary,
+                  "Current access details."
+                )}
               </p>
             </SellerWorkspaceInset>
           </dl>
@@ -578,7 +604,7 @@ export default function SellerTeamPage() {
                   {group.items.map((permissionKey) => (
                     <SellerWorkspaceBadge
                       key={permissionKey}
-                      label={permissionKey}
+                      label={formatPermissionLabel(permissionKey)}
                       tone="emerald"
                     />
                   ))}
@@ -595,7 +621,7 @@ export default function SellerTeamPage() {
             </div>
             <div>
               <h3 className="text-base font-semibold text-slate-900">Team Actions</h3>
-              <p className="text-sm text-slate-500">Phase 1 subset only</p>
+              <p className="text-sm text-slate-500">Invite members or add an existing user.</p>
             </div>
           </div>
 
@@ -614,8 +640,8 @@ export default function SellerTeamPage() {
                 <SellerWorkspaceFilterBar className="border-amber-200 bg-amber-50 shadow-none">
                   <p className="text-sm font-semibold text-slate-900">Invite Existing User</p>
                   <p className="mt-1 text-sm leading-5 text-slate-600">
-                    This creates a pending membership with status <code>INVITED</code>. The target
-                    user must already have an account, and no email automation is sent yet.
+                    Send an invitation to a user who already has an account. Their status stays
+                    invited until they accept.
                   </p>
                   <div className="mt-3.5 grid gap-3">
                     <input
@@ -665,8 +691,7 @@ export default function SellerTeamPage() {
                 <SellerWorkspaceFilterBar className="shadow-none">
                   <p className="text-sm font-semibold text-slate-900">Attach Existing User</p>
                   <p className="mt-1 text-sm leading-5 text-slate-600">
-                    Use this lane only when the user should become active immediately. This keeps
-                    the existing phase 1 behavior.
+                    Add an existing user as an active member immediately.
                   </p>
                   <div className="mt-3.5 grid gap-3">
                     <input
@@ -714,8 +739,8 @@ export default function SellerTeamPage() {
             </div>
           ) : (
             <SellerWorkspaceNotice type="warning" className="mt-4">
-              Team mutations remain permission-gated. This actor can read the membership shell,
-              but cannot perform attach, role change, or status change operations.
+              Your current seller role can view team members, but cannot invite, change roles, or
+              remove members.
             </SellerWorkspaceNotice>
           )}
         </SellerWorkspacePanel>
@@ -726,17 +751,18 @@ export default function SellerTeamPage() {
           <div>
             <h3 className="text-base font-semibold text-slate-900">Store Members</h3>
             <p className="mt-1 text-sm text-slate-500">
-              Tenant-scoped rows from <code>store_members</code> with store role snapshots.
+              People who can access this store workspace.
             </p>
           </div>
           {team?.summary?.hasVirtualOwnerBridge ? (
-            <SellerWorkspaceBadge label="Virtual owner bridge active" tone="amber" />
+            <SellerWorkspaceBadge label="Owner access active" tone="amber" />
           ) : null}
         </div>
 
         {members.length > 0 ? (
           <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
-            <div className="grid grid-cols-[1.4fr_1.3fr_0.9fr_1fr_1.2fr] gap-3 border-b border-slate-200 bg-slate-50 px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+            <div className="min-w-0">
+            <div className="hidden grid-cols-[1.4fr_1.3fr_0.9fr_1fr_1.2fr] gap-3 border-b border-slate-200 bg-slate-50 px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500 md:grid">
               <span>Member</span>
               <span>Role</span>
               <span>Status</span>
@@ -755,16 +781,16 @@ export default function SellerTeamPage() {
                 return (
                 <div
                   key={member.id}
-                  className="grid grid-cols-[1.4fr_1.3fr_0.9fr_1fr_1.2fr] gap-3 px-3.5 py-3.5 text-sm text-slate-700"
+                  className="grid grid-cols-1 gap-3 px-3.5 py-3.5 text-sm text-slate-700 md:grid-cols-[1.4fr_1.3fr_0.9fr_1fr_1.2fr]"
                 >
                   <div>
                     <p className="font-semibold text-slate-900">{member.name || `User #${member.userId}`}</p>
                     <p className="mt-1 text-xs text-slate-500">{member.email || "-"}</p>
                     <p className="mt-2 text-xs text-slate-500">
                       {member.invitedAt ? `Invited ${formatDate(member.invitedAt)}` : "No invite timestamp"}
-                      {member.acceptedAt ? ` • Accepted ${formatDate(member.acceptedAt)}` : ""}
-                      {member.disabledAt ? ` • Disabled ${formatDate(member.disabledAt)}` : ""}
-                      {member.removedAt ? ` • Removed ${formatDate(member.removedAt)}` : ""}
+                      {member.acceptedAt ? ` - Accepted ${formatDate(member.acceptedAt)}` : ""}
+                      {member.disabledAt ? ` - Disabled ${formatDate(member.disabledAt)}` : ""}
+                      {member.removedAt ? ` - Removed ${formatDate(member.removedAt)}` : ""}
                     </p>
                   </div>
                   <div>
@@ -807,17 +833,19 @@ export default function SellerTeamPage() {
                       <>
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-medium text-slate-900">
-                            {member.readModel?.primaryRole?.label ||
-                              member.roleName ||
-                              member.roleCode ||
-                              "-"}
+                            {formatPermissionLabel(
+                              member.readModel?.primaryRole?.label ||
+                                member.roleName ||
+                                member.roleCode ||
+                                "-"
+                            )}
                           </p>
                           {member.roleCode ? (
-                            <SellerWorkspaceBadge label={member.roleCode} tone="stone" />
+                            <SellerWorkspaceBadge label={formatPermissionLabel(member.roleCode)} tone="stone" />
                           ) : null}
                           {member.readModel?.primaryRole?.category ? (
                             <SellerWorkspaceBadge
-                              label={member.readModel.primaryRole.category}
+                              label={formatPermissionLabel(member.readModel.primaryRole.category)}
                               tone={member.readModel.primaryRole.tone || "stone"}
                             />
                           ) : null}
@@ -907,13 +935,15 @@ export default function SellerTeamPage() {
                         </button>
                       ) : (
                         <span className="text-xs text-slate-400">
-                          {member.readModel?.authority?.label ||
-                            member.governance?.restrictionReason ||
-                            (member.status === "INVITED"
+                          {sellerFriendlyText(
+                            member.readModel?.authority?.label ||
+                              member.governance?.restrictionReason,
+                            member.status === "INVITED"
                               ? member.invitation?.state === "EXPIRED"
                                 ? "Invitation expired"
-                                : "Pending invitation in account lane"
-                              : "Protected")}
+                                : "Pending invitation"
+                              : "Protected"
+                          )}
                         </span>
                       )}
                     </div>
@@ -921,12 +951,13 @@ export default function SellerTeamPage() {
                 </div>
               )})}
             </div>
+            </div>
           </div>
         ) : (
           <div className="mt-5">
             <SellerWorkspaceEmptyState
               title="No store members yet"
-              description="The seller workspace can still operate through owner bridge access even when the membership table is empty. Team management will fill this area in a later phase."
+              description="Invite team members when you are ready to share store operations."
               icon={<Users className="h-5 w-5" />}
             />
           </div>
@@ -934,9 +965,9 @@ export default function SellerTeamPage() {
       </SellerWorkspacePanel>
 
       <SellerWorkspacePanel className="p-4">
-        <h3 className="text-base font-semibold text-slate-900">Seeded Seller Roles</h3>
+        <h3 className="text-base font-semibold text-slate-900">Available Seller Roles</h3>
         <p className="mt-1 text-sm text-slate-500">
-          System roles currently available from the seller foundation seed.
+          Roles currently available for seller team members.
         </p>
 
         <div className="mt-4 grid gap-3.5 lg:grid-cols-2">
@@ -945,7 +976,7 @@ export default function SellerTeamPage() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h4 className="text-sm font-semibold text-slate-900">{role.name}</h4>
-                  <p className="mt-1 text-xs text-slate-500">{role.code}</p>
+                  <p className="mt-1 text-xs text-slate-500">{formatPermissionLabel(role.code)}</p>
                 </div>
                 <SellerWorkspaceBadge
                   label={role.isActive ? "Active" : "Inactive"}

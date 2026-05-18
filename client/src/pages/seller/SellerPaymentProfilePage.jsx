@@ -38,6 +38,37 @@ const requiredFields = [
   { key: "qrisImageUrl", label: "QRIS image" },
 ];
 
+const editableFieldLabels = {
+  accountName: "Account name",
+  merchantName: "Merchant name",
+  merchantId: "Merchant ID",
+  qrisImageUrl: "QRIS image",
+  qrisPayload: "QRIS text",
+  instructionText: "Buyer instruction",
+  sellerNote: "Seller note",
+};
+
+const formatEditableFields = (fields = []) => {
+  if (!Array.isArray(fields) || fields.length === 0) return "-";
+  return fields.map((field) => editableFieldLabels[field] || field).join(", ");
+};
+
+const formatPaymentType = (value) => {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === "QRIS_STATIC") return "Static QRIS";
+  return normalized
+    ? normalized.replaceAll("_", " ").replace(/\b\w/g, (char) => char.toUpperCase())
+    : "QRIS";
+};
+
+const formatProvider = (value) => {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === "MANUAL_QRIS") return "Manual QRIS";
+  return normalized
+    ? normalized.replaceAll("_", " ").replace(/\b\w/g, (char) => char.toUpperCase())
+    : "Manual QRIS";
+};
+
 const createFormState = (profile) => ({
   accountName:
     profile?.pendingRequest?.accountName ||
@@ -149,9 +180,9 @@ const createFallbackProfile = (store, storeId, canEdit) => ({
       sellerWorkspaceMode:
         "Seller can edit only a separate request draft here. Admin remains the final reviewer and activation authority.",
       readinessVsPaymentHistory:
-        "Payment readiness is separate from buyer payment proof review, settlement, and payout lanes.",
+        "Payment readiness is separate from buyer payment proof review, settlement, and payout.",
       paymentHistoryLane:
-        "Buyer payment proofs stay in order and payment review lanes, not here.",
+        "Buyer payment proofs are reviewed from Payment Review and Orders, not here.",
     },
   },
   requestDraft: createFormState(null),
@@ -177,7 +208,7 @@ const createFallbackProfile = (store, storeId, canEdit) => ({
     ],
     note: canEdit
       ? "Seller can edit only separate store-scoped request fields. Admin keeps final approval and activation authority."
-      : "Seller workspace only exposes a read-only payment setup snapshot.",
+      : "This seller role can view payment setup, but cannot edit it.",
   },
   store: store
     ? {
@@ -279,6 +310,47 @@ export default function SellerPaymentProfilePage() {
   const governanceReviewStatus = governance.reviewStatus || reviewStatus;
   const governanceNextStep = governance.nextStep || readModel.nextStep || {};
   const busy = profileQuery.isLoading;
+  const activeVerificationCode = String(
+    activeSnapshot?.verificationStatus || activeSnapshot?.verificationMeta?.code || ""
+  )
+    .trim()
+    .toUpperCase();
+  const paymentSetupReady = Boolean(
+    activeSnapshot?.readiness?.isReady ||
+      (activeSnapshot?.isActive && activeVerificationCode === "ACTIVE")
+  );
+  const paymentSetupChecklist = [
+    {
+      label: "Active payment setup",
+      ready: Boolean(activeSnapshot?.isActive),
+      hint: activeSnapshot?.isActive
+        ? "Checkout has an active payment destination."
+        : "Checkout cannot accept payments until a setup is activated.",
+    },
+    {
+      label: "Admin verified",
+      ready: activeVerificationCode === "ACTIVE",
+      hint:
+        activeVerificationCode === "ACTIVE"
+          ? "The active setup has passed admin review."
+          : "Admin review is still required before this setup can be used.",
+    },
+    {
+      label: "QRIS image available",
+      ready: Boolean(activeSnapshot?.qrisImageUrl),
+      hint: activeSnapshot?.qrisImageUrl
+        ? "Buyers can see the QRIS image during payment."
+        : "Add a QRIS image in the request before submitting for review.",
+    },
+    {
+      label: "Required request fields",
+      ready: missingFields.length === 0,
+      hint:
+        missingFields.length === 0
+          ? "The current request has the required destination fields."
+          : `Complete ${missingFields.map((field) => field.label).join(", ")}.`,
+    },
+  ];
 
   const buildPayload = () => ({
     accountName: toRequiredText(form.accountName),
@@ -293,7 +365,10 @@ export default function SellerPaymentProfilePage() {
   const saveDraftMutation = useMutation({
     mutationFn: (payload) => saveSellerPaymentProfileDraft(storeId, payload),
     onSuccess: (data) => {
-      setStatus({ type: "success", message: "Seller payment setup draft saved separately from the active snapshot." });
+      setStatus({
+        type: "success",
+        message: "Payment setup draft saved. It will not affect checkout until admin approval.",
+      });
       queryClient.setQueryData(["seller", "payment-profile", storeId], data);
     },
     onError: (error) => setStatus({ type: "error", message: getErrorMessage(error) }),
@@ -305,7 +380,7 @@ export default function SellerPaymentProfilePage() {
       setStatus({
         type: "success",
         message:
-          "Payment setup request submitted. The current active snapshot stays unchanged until a later admin approval phase.",
+          "Payment setup request submitted. The current active setup stays unchanged until admin approval.",
       });
       queryClient.setQueryData(["seller", "payment-profile", storeId], data);
     },
@@ -318,7 +393,7 @@ export default function SellerPaymentProfilePage() {
       setStatus({
         type: "success",
         message:
-          "Pending QRIS image uploaded. Save draft or submit to keep it in the seller request lane.",
+          "Pending QRIS image uploaded. Save draft or submit to keep it in this request.",
       });
       setForm((current) => ({ ...current, qrisImageUrl: url }));
     },
@@ -355,7 +430,7 @@ export default function SellerPaymentProfilePage() {
     return (
       <SellerWorkspaceSectionCard
         title="Loading payment setup"
-        hint="Fetching the current active payment snapshot and open seller request."
+        hint="Fetching the current payment setup and open seller request."
         Icon={CreditCard}
       />
     );
@@ -378,8 +453,8 @@ export default function SellerPaymentProfilePage() {
     <div className="space-y-5">
       <SellerWorkspaceSectionHeader
         eyebrow="Finance Setup"
-        title="Seller payment setup"
-        description="Seller edits a separate payment setup request here. Checkout and storefront keep using only the current active approved snapshot until admin approval promotes a future revision."
+        title="Payment setup"
+        description="Set the payment destination buyers will use at checkout. Only the active, admin-verified setup is used publicly; drafts and submitted requests stay separate until approved."
         actions={[
           <SellerWorkspaceBadge
             key="request"
@@ -405,19 +480,54 @@ export default function SellerPaymentProfilePage() {
         </SellerWorkspaceNotice>
       ) : null}
 
+      <SellerWorkspaceNotice type={paymentSetupReady ? "success" : "warning"}>
+        {paymentSetupReady
+          ? "Payment setup is active and verified. This store has the payment readiness needed for public checkout."
+          : "Payment setup is not ready for public checkout yet. Complete the setup request and wait for admin verification before treating the store as ready to receive orders."}
+      </SellerWorkspaceNotice>
+
+      <SellerWorkspaceSectionCard
+        title="Payment readiness checklist"
+        hint="This checklist explains why checkout can or cannot use this store's payment setup."
+        Icon={BadgeCheck}
+      >
+        <div className="grid gap-2 md:grid-cols-2">
+          {paymentSetupChecklist.map((item) => (
+            <div
+              key={item.label}
+              className={`rounded-lg border px-3.5 py-3 ${
+                item.ready
+                  ? "border-emerald-200 bg-emerald-50"
+                  : "border-amber-200 bg-amber-50"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-slate-900">{item.label}</p>
+                <SellerWorkspaceBadge
+                  label={item.ready ? "Ready" : "Needs action"}
+                  tone={item.ready ? "emerald" : "amber"}
+                  className="bg-white"
+                />
+              </div>
+              <p className="mt-1.5 text-xs leading-5 text-slate-600">{item.hint}</p>
+            </div>
+          ))}
+        </div>
+      </SellerWorkspaceSectionCard>
+
       <section className="grid gap-3.5 lg:grid-cols-3">
         <SellerWorkspaceSectionCard
-          title="Current Active Snapshot"
-          hint="This snapshot is the only payment setup currently used by checkout and storefront."
+          title="Active payment setup"
+          hint="This is the payment setup buyers currently see at checkout."
           Icon={CreditCard}
         >
           <div className="grid gap-3">
             <SellerWorkspaceDetailItem
               label="Snapshot Status"
-              value={activeSnapshot?.activityMeta?.label || "No active snapshot"}
+              value={activeSnapshot?.activityMeta?.label || "No active setup"}
               hint={
                 activeSnapshot?.activityMeta?.description ||
-                "No active approved payment snapshot is available for this store yet."
+                "No active approved payment setup is available for this store yet."
               }
             />
             <SellerWorkspaceDetailItem
@@ -430,15 +540,15 @@ export default function SellerPaymentProfilePage() {
             />
             <SellerWorkspaceDetailItem
               label="Payment Type"
-              value={activeSnapshot?.paymentType || "QRIS_STATIC"}
-              hint={`Provider ${activeSnapshot?.providerCode || "MANUAL_QRIS"}`}
+              value={formatPaymentType(activeSnapshot?.paymentType)}
+              hint={`Provider ${formatProvider(activeSnapshot?.providerCode)}`}
             />
           </div>
         </SellerWorkspaceSectionCard>
 
         <SellerWorkspaceSectionCard
-          title="Merchant Snapshot"
-          hint="These are the fields currently persisted on the active payment snapshot."
+          title="Payment destination"
+          hint="These destination details come from the active approved setup."
           Icon={BadgeCheck}
         >
           <div className="grid gap-3">
@@ -449,8 +559,8 @@ export default function SellerPaymentProfilePage() {
         </SellerWorkspaceSectionCard>
 
         <SellerWorkspaceSectionCard
-          title="Store Scope"
-          hint="Payment setup request stays store-scoped and cannot switch store identity."
+          title="Store"
+          hint="Payment setup always belongs to this active seller store."
           Icon={ShieldAlert}
         >
           <div className="grid gap-3">
@@ -472,8 +582,8 @@ export default function SellerPaymentProfilePage() {
 
       <section className="grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
         <SellerWorkspaceSectionCard
-          title="Current QRIS Snapshot"
-          hint="This preview uses the active approved snapshot only. Pending seller requests do not affect checkout yet."
+          title="QRIS used at checkout"
+          hint="This preview shows only the active approved QRIS. Draft requests do not affect checkout."
           Icon={ImageIcon}
         >
           {activeSnapshot?.qrisImageUrl ? (
@@ -486,8 +596,8 @@ export default function SellerPaymentProfilePage() {
             </div>
           ) : (
             <SellerWorkspaceEmptyState
-              title="No active QRIS snapshot yet"
-              description="Checkout remains blocked until admin approves and activates a valid payment snapshot."
+              title="No active QRIS yet"
+              description="Checkout remains blocked until admin approves and activates a valid payment setup."
               icon={<ImageIcon className="h-5 w-5" />}
             />
           )}
@@ -499,7 +609,7 @@ export default function SellerPaymentProfilePage() {
             <SellerWorkspaceDetailItem
               label="QR Payload"
               value={activeSnapshot?.qrisPayload || "-"}
-              hint="Optional store-scoped payload or QR identifier on the active snapshot."
+              hint="Optional QR payload or QR identifier on the active setup."
             />
             <SellerWorkspaceDetailItem
               label="Reviewed"
@@ -508,15 +618,15 @@ export default function SellerPaymentProfilePage() {
           </div>
           <SellerWorkspaceNotice type="info" className="mt-4">
             {activeSnapshot?.isActive
-              ? "Checkout currently uses this active snapshot."
-              : "No active snapshot is available for checkout yet. Seller requests remain separate until admin approves a future promotion flow."}
+              ? "Checkout currently uses this active payment setup."
+              : "No active setup is available for checkout yet. Requests remain separate until admin approval."}
           </SellerWorkspaceNotice>
         </SellerWorkspaceSectionCard>
 
         <div className="space-y-5">
           <SellerWorkspaceSectionCard
-            title="Pending Request / Editable Draft"
-            hint="Seller edits only the separate request block below. Saving here does not overwrite the active snapshot."
+            title="Setup request"
+            hint="Edit the request here. Saving or submitting it will not overwrite the active setup."
             Icon={CreditCard}
           >
             {!permissionCanEdit ? (
@@ -545,19 +655,19 @@ export default function SellerPaymentProfilePage() {
                   onChange={handleQrisFileChange}
                 />
                 <div className="grid gap-3 md:grid-cols-2">
-                  <SellerWorkspaceDetailItem
-                    label="Open Request"
-                    value={pendingRequest ? requestStatus.label || pendingRequest.requestStatus : "No open request"}
-                    hint={
-                      pendingRequest
-                        ? `Editing request #${pendingRequest.id}. Save draft keeps it separate from the active snapshot.`
+                      <SellerWorkspaceDetailItem
+                        label="Open Request"
+                        value={pendingRequest ? requestStatus.label || pendingRequest.requestStatus : "No open request"}
+                        hint={
+                          pendingRequest
+                        ? `Editing request #${pendingRequest.id}. Saving keeps it separate from the active setup.`
                         : "Saving draft will create the first open seller request for this store."
                     }
                   />
                   <SellerWorkspaceDetailItem
-                    label="Based On Snapshot"
+                    label="Based on active setup"
                     value={pendingRequest?.basedOnProfileId ? `#${pendingRequest.basedOnProfileId}` : activeSnapshot?.id ? `#${activeSnapshot.id}` : "-"}
-                    hint="The request is anchored to the current active snapshot for safe revision flow."
+                    hint="The request starts from the current active setup when one exists."
                   />
                 </div>
                 <div className="grid gap-3 lg:grid-cols-[0.9fr_1.1fr]">
@@ -568,7 +678,7 @@ export default function SellerPaymentProfilePage() {
                           Pending QRIS Preview
                         </p>
                         <p className="mt-1 text-xs text-slate-500">
-                          This image belongs to the seller request only. Checkout still uses the active snapshot until admin approve/promote.
+                          This image belongs to the request only. Checkout still uses the active setup until admin approval.
                         </p>
                       </div>
                       <button
@@ -607,8 +717,8 @@ export default function SellerPaymentProfilePage() {
                       value={activeSnapshot?.qrisImageUrl ? "Available" : "Not available"}
                       hint={
                         activeSnapshot?.qrisImageUrl
-                          ? "The active QRIS image shown on the left snapshot card is still the one used by checkout."
-                          : "No active QRIS snapshot is available yet."
+                          ? "This is still the QRIS image used by checkout."
+                          : "No active QRIS image is available yet."
                       }
                     />
                     <SellerWorkspaceDetailItem
@@ -647,7 +757,7 @@ export default function SellerPaymentProfilePage() {
                   />
                   <Field
                     label="QRIS Image URL"
-                    hint="Required. Buyer checkout will still use the active snapshot until admin approves a later promotion flow."
+                    hint="Required. Buyer checkout will still use the active setup until admin approves a change."
                     disabled={disabled || busy || !canEdit}
                     value={form.qrisImageUrl}
                     onChange={(event) => setForm((current) => ({ ...current, qrisImageUrl: event.target.value }))}
@@ -655,7 +765,7 @@ export default function SellerPaymentProfilePage() {
                   <div className="md:col-span-2">
                     <Field
                       label="QRIS Payload"
-                      hint="Optional raw payload or QR identifier."
+                      hint="Optional QR code text or payment identifier."
                       multiline
                       rows={4}
                       disabled={disabled || busy || !canEdit}
@@ -666,7 +776,7 @@ export default function SellerPaymentProfilePage() {
                   <div className="md:col-span-2">
                     <Field
                       label="Instruction Text"
-                      hint="Optional buyer instruction text to be carried by a future approved snapshot."
+                      hint="Optional buyer instruction text to include after approval."
                       multiline
                       rows={4}
                       disabled={disabled || busy || !canEdit}
@@ -691,7 +801,7 @@ export default function SellerPaymentProfilePage() {
                 <div className="grid gap-3 md:grid-cols-2">
                   <SellerWorkspaceDetailItem
                     label="Editable Fields"
-                    value={effectiveProfile.governance?.editableFields?.join(", ") || "-"}
+                    value={formatEditableFields(effectiveProfile.governance?.editableFields)}
                     hint="Admin-governed fields stay locked."
                   />
                   <SellerWorkspaceDetailItem
@@ -755,7 +865,7 @@ export default function SellerPaymentProfilePage() {
 
           <SellerWorkspaceSectionCard
             title="Request Status and Review"
-            hint="Seller sees request lifecycle here, while checkout stays pinned to the current active snapshot."
+            hint="Track the request review status here while checkout keeps using the active setup."
             Icon={ShieldAlert}
           >
             <div className="grid gap-3 md:grid-cols-2">
@@ -772,7 +882,7 @@ export default function SellerPaymentProfilePage() {
               <SellerWorkspaceDetailItem
                 label="Request State"
                 value={requestStatus.label || "-"}
-                hint={requestStatus.description || "Seller request lifecycle is separate from the active snapshot."}
+                hint={requestStatus.description || "The request is separate from the active setup."}
               />
               <SellerWorkspaceDetailItem
                 label="Required Fields"
@@ -782,7 +892,7 @@ export default function SellerPaymentProfilePage() {
               <SellerWorkspaceDetailItem
                 label="Submitted"
                 value={formatDate(pendingRequest?.submittedAt)}
-                hint={pendingRequest?.submittedBy?.name || "No submit actor recorded yet."}
+                hint={pendingRequest?.submittedBy?.name || "No submitter recorded yet."}
               />
               <SellerWorkspaceDetailItem
                 label="Reviewed"
@@ -806,15 +916,15 @@ export default function SellerPaymentProfilePage() {
               </SellerWorkspaceNotice>
             ) : null}
             <SellerWorkspaceNotice type="info" className="mt-4">
-              Checkout and storefront still use the current active approved snapshot only. Saving or submitting this request does not switch the active payment setup.
+              Checkout and storefront use only the current active approved setup. Saving or submitting this request does not switch the public payment setup.
             </SellerWorkspaceNotice>
             <SellerWorkspaceNotice type="warning" className="mt-4">
               {readModel.boundaries?.readinessVsPaymentHistory ||
-                "Payment readiness is separate from buyer payment proof review, settlement, and payout lanes."}
+                "Payment setup readiness is separate from buyer payment proof review, settlement, and payout."}
             </SellerWorkspaceNotice>
             <SellerWorkspaceNotice type="info" className="mt-4">
               {readModel.boundaries?.paymentHistoryLane ||
-                "Buyer payment proofs stay in order and payment review lanes, not here."}
+                "Buyer payment proofs are reviewed from Payment Review and Orders, not here."}
             </SellerWorkspaceNotice>
           </SellerWorkspaceSectionCard>
         </div>

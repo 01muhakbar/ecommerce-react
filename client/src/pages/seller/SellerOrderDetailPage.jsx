@@ -99,6 +99,16 @@ const formatTransitionLabel = (status) =>
     .replaceAll("_", " ")
     .toLowerCase();
 
+const sellerFriendlyText = (value, fallback = "") => {
+  const text = String(value || "").trim();
+  if (!text) return fallback;
+  return text
+    .replace(/\bmutations\b/gi, "actions")
+    .replace(/\bmutation\b/gi, "action")
+    .replace(/\bbackend\b/gi, "system")
+    .replace(/\bmetadata\b/gi, "details");
+};
+
 function StatusChip({ value, label, map = PAYMENT_STATUS_TONE, tone }) {
   return (
     <SellerWorkspaceBadge
@@ -191,7 +201,7 @@ export default function SellerOrderDetailPage() {
           : code === "SUBORDER_PAYMENT_NOT_SETTLED"
             ? "This store split must be paid before seller fulfillment can move forward."
             : code === "SHIPMENT_MUTATION_DISABLED"
-              ? "Shipment mutation is disabled in the current rollout."
+              ? "Shipment changes are not available for this order yet."
               : code === "SHIPMENT_ACTION_REQUIRES_PERSISTED_SHIPMENT"
                 ? "This shipment exception requires persisted shipment truth."
               : code === "INVALID_SHIPMENT_TRANSITION"
@@ -268,17 +278,21 @@ export default function SellerOrderDetailPage() {
     ENABLE_MULTISTORE_SHIPMENT_MUTATION &&
     !operationalBridge.shipmentBlocked &&
     !operationalFinality.isFinalNegative;
-  const shipmentActionBlockedReason =
+  const rawShipmentActionBlockedReason =
     (operationalFinality.isFinalNegative
       ? sellerStatusMeta?.description ||
         "This store split is already closed in a final-negative state."
       : operationalBridge.shipmentBlockedReason) ||
     (!ENABLE_MULTISTORE_SHIPMENT_MUTATION
-      ? "Shipment mutation is disabled in the current rollout."
+      ? "Shipment changes are not available for this order yet."
       : shipmentActions.find((action) => action?.enabled === false && action?.reason)?.reason) ||
     primaryShipment?.shipmentStatusMeta?.description ||
     fulfillmentGovernance?.mutationBlockedReason ||
-    "Shipment mutation is currently unavailable.";
+    "Shipment changes are currently unavailable.";
+  const shipmentActionBlockedReason = sellerFriendlyText(
+    rawShipmentActionBlockedReason,
+    "Shipment changes are currently unavailable."
+  );
   const fulfillmentActions =
     getSplitOperationalSellerFulfillmentActions(detail).length > 0
       ? getSplitOperationalSellerFulfillmentActions(detail)
@@ -289,14 +303,18 @@ export default function SellerOrderDetailPage() {
     getSplitOperationalEnabledSellerFulfillmentActions(detail).length > 0
       ? getSplitOperationalEnabledSellerFulfillmentActions(detail)
       : fulfillmentActions.filter((action) => action?.enabled !== false);
-  const fulfillmentActionBlockedReason =
+  const rawFulfillmentActionBlockedReason =
     (operationalFinality.isFinalNegative
       ? sellerStatusMeta?.description ||
         "This store split is already closed in a final-negative state."
       : operationalBridge.shipmentBlockedReason) ||
     fulfillmentActions.find((action) => action?.enabled === false && action?.reason)?.reason ||
     fulfillmentGovernance?.mutationBlockedReason ||
-    "No fulfillment mutation is available for this suborder.";
+    "No fulfillment action is available for this order.";
+  const fulfillmentActionBlockedReason = sellerFriendlyText(
+    rawFulfillmentActionBlockedReason,
+    "No fulfillment action is available for this order."
+  );
 
   useEffect(() => {
     if (!primaryShipment) return;
@@ -329,7 +347,7 @@ export default function SellerOrderDetailPage() {
     return (
       <SellerWorkspaceSectionCard
         title="Seller order detail needs a valid suborder id"
-        hint="Open this page from the seller orders lane with a valid suborder row."
+        hint="Open this page from the seller orders list with a valid order row."
         Icon={Truck}
         actions={backButton}
       />
@@ -340,7 +358,7 @@ export default function SellerOrderDetailPage() {
     return (
       <SellerWorkspaceSectionCard
         title="Loading suborder detail"
-        hint="Fetching the seller-scoped operational snapshot for this suborder."
+        hint="Fetching the latest order detail for this store."
         Icon={Truck}
         actions={backButton}
       />
@@ -367,7 +385,7 @@ export default function SellerOrderDetailPage() {
     return (
       <SellerWorkspaceSectionCard
         title="Suborder detail is not available"
-        hint="This suborder snapshot is unavailable for the active seller store."
+        hint="This order detail is unavailable for the active seller store."
         Icon={Truck}
         actions={backButton}
       />
@@ -385,7 +403,7 @@ export default function SellerOrderDetailPage() {
       <SellerWorkspaceSectionHeader
         eyebrow="Seller Order Detail"
         title={detail.suborderNumber}
-        description={`Parent order ${detail.order?.orderNumber || "-"} · ${detail.scope?.relationLabel} · items and totals stay scoped to this store split.`}
+        description={`Parent order ${detail.order?.orderNumber || "-"} - ${detail.scope?.relationLabel} - items and totals stay scoped to this store split.`}
         actions={[
           backButton,
           <StatusChip
@@ -429,8 +447,8 @@ export default function SellerOrderDetailPage() {
         <p className="text-sm leading-5 text-slate-500">
           {operationalBridge.shipmentBlockedReason ||
             (fulfillmentGovernance?.actorHasManagePermission
-              ? "Seller shipment operations now follow persisted shipment truth for this store split. Parent order and payment lifecycle remain on separate governance lanes."
-              : "Seller shipment stays read-only here for this actor. Parent order and payment lifecycle remain on separate governance lanes.")}
+              ? "Seller shipment actions use saved shipment data for this store order. Parent order and payment status can move separately."
+              : "Seller shipment is read-only for this role. Parent order and payment status can move separately.")}
         </p>
       </SellerWorkspaceSectionHeader>
 
@@ -449,7 +467,7 @@ export default function SellerOrderDetailPage() {
       detail.shipments.length > 0 ? (
         <SellerWorkspaceSectionCard
           title="Shipment Summary"
-          hint="Persisted shipment truth for this store split. Seller actions only appear when backend actionability allows them."
+          hint="Saved shipment data for this store order. Seller actions appear only when the system allows them."
           Icon={PackageSearch}
         >
           <div className="grid gap-3">
@@ -488,7 +506,7 @@ export default function SellerOrderDetailPage() {
                 <div className="mt-3 grid gap-3 md:grid-cols-2">
                   <SellerWorkspaceDetailItem
                     label="Source"
-                    value={shipment.usedLegacyFallback ? "Legacy fallback" : "Persisted shipment"}
+                    value={shipment.usedLegacyFallback ? "Order status" : "Shipment record"}
                   />
                   <SellerWorkspaceDetailItem
                     label="Tracking"
@@ -509,11 +527,11 @@ export default function SellerOrderDetailPage() {
                 </div>
                 <p className="mt-3 text-sm leading-6 text-slate-500">
                   {shipment.shipmentStatusMeta?.description ||
-                    "Shipment truth is available for this store split."}
+                    "Shipment data is available for this store order."}
                 </p>
                 {shipment.compatibilityMatchesStorage === false ? (
                   <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-                    Shipment truth is ahead of compatibility storage for this suborder and should be audited.
+                    Shipment data is newer than the stored fulfillment status and should be reviewed.
                   </div>
                 ) : null}
                 {shipment.incompleteTrackingData ? (
@@ -523,7 +541,7 @@ export default function SellerOrderDetailPage() {
                 ) : null}
                 {!detail.isShippingReady && detail.shippingSetupSummary ? (
                   <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                    Seller shipping setup is not ready for this store. Review Store Profile before continuing shipment operations.
+                    Seller shipping setup is not ready for this store. Review Store Profile before continuing shipment work.
                   </div>
                 ) : null}
                 {Array.isArray(shipment.trackingEvents) && shipment.trackingEvents.length > 0 ? (
@@ -558,7 +576,7 @@ export default function SellerOrderDetailPage() {
       ) : null}
 
       <section className="grid gap-3.5 lg:grid-cols-3">
-        <SellerWorkspaceSectionCard title="Buyer" hint="Seller-scoped buyer snapshot" Icon={PackageSearch}>
+        <SellerWorkspaceSectionCard title="Buyer" hint="Buyer contact for this store order" Icon={PackageSearch}>
           <p className="text-base font-semibold text-slate-900">{detail.buyer?.name || "-"}</p>
           <p className="mt-1.5 text-sm text-slate-600">{detail.buyer?.email || "-"}</p>
           <p className="mt-1 text-sm text-slate-600">{detail.buyer?.phone || "-"}</p>
@@ -574,13 +592,13 @@ export default function SellerOrderDetailPage() {
             {sellerShipmentMeta?.description ||
               operationalBridge.shipmentBlockedReason ||
               sellerStatusMeta?.description ||
-              "Seller shipment snapshot."}
+              "Seller shipment status."}
           </p>
         </SellerWorkspaceSectionCard>
 
         <SellerWorkspaceSectionCard
           title="Payment"
-          hint="Latest payment snapshot"
+          hint="Latest payment status for this store order"
           Icon={CreditCard}
         >
           <p className="text-sm font-semibold text-slate-900">
@@ -616,7 +634,7 @@ export default function SellerOrderDetailPage() {
               }
               hint={
                 detail.paymentSummary?.statusMeta?.description ||
-                "No payment record is attached to this suborder yet."
+                "No payment record is attached to this store order yet."
               }
             />
           </div>
@@ -626,7 +644,7 @@ export default function SellerOrderDetailPage() {
       <section className="grid gap-5 xl:grid-cols-[1.08fr_0.92fr]">
         <SellerWorkspaceSectionCard
           title="Items"
-          hint="Suborder item snapshot"
+          hint="Items captured at checkout for this store order"
           Icon={PackageSearch}
         >
           <div className="space-y-3">
@@ -650,7 +668,7 @@ export default function SellerOrderDetailPage() {
                       ))}
                     </div>
                     <div className="text-sm text-slate-600">
-                      Qty {item.qty} · {formatMoney(item.price)}
+                      Qty {item.qty} - {formatMoney(item.price)}
                     </div>
                   </div>
                   <p className="mt-2.5 text-sm font-semibold text-slate-900">
@@ -667,7 +685,7 @@ export default function SellerOrderDetailPage() {
         <div className="space-y-5">
           <SellerWorkspaceSectionCard
             title="Totals and Status"
-            hint="Financial and lifecycle summary for this seller-scoped suborder."
+            hint="Financial and status summary for this store order."
             Icon={CreditCard}
           >
             <div className="grid gap-3">
@@ -677,7 +695,7 @@ export default function SellerOrderDetailPage() {
                 hint={
                   sellerStatusMeta?.description ||
                   operationalBridge.shipmentBlockedReason ||
-                  "Split payment and split shipment define the operational status for this store split."
+                  "Payment and fulfillment status define this store order's next step."
                 }
               />
               <SellerWorkspaceDetailItem
@@ -691,7 +709,7 @@ export default function SellerOrderDetailPage() {
                 hint={
                   sellerShipmentMeta?.description ||
                   operationalBridge.shipmentBlockedReason ||
-                  "Shipment stays blocked until split payment truth allows seller fulfillment."
+                  "Shipment stays blocked until this store order is paid."
                 }
               />
               <SellerWorkspaceDetailItem
@@ -699,7 +717,7 @@ export default function SellerOrderDetailPage() {
                 value={`${detail.readModel?.sellerScope?.itemCount || detail.items?.length || 0} item${(detail.readModel?.sellerScope?.itemCount || detail.items?.length || 0) === 1 ? "" : "s"}`}
                 hint={
                   detail.readModel?.sellerScope?.itemScopeLabel ||
-                  "Item counts and totals only include this store-owned suborder."
+                  "Item counts and totals only include this store order."
                 }
               />
             </div>
@@ -756,25 +774,27 @@ export default function SellerOrderDetailPage() {
             </div>
 
             <SellerWorkspaceNotice type="info" className="mt-4">
-              {sellerStatusMeta?.description ||
-                operationalBridge.shipmentBlockedReason ||
-                detail.readModel?.operationalNote ||
-                "Parent order lifecycle can move on a different lane from seller fulfillment. Use split payment and split shipment as the seller-scoped operational truth."}
+              {sellerFriendlyText(
+                sellerStatusMeta?.description ||
+                  operationalBridge.shipmentBlockedReason ||
+                  detail.readModel?.operationalNote,
+                "Parent order status can differ from this store order. Use the payment and fulfillment status shown here for seller operations."
+              )}
             </SellerWorkspaceNotice>
           </SellerWorkspaceSectionCard>
 
           <SellerWorkspaceSectionCard
-            title="Fulfillment Governance"
-            hint="Operational transition lane for the current seller actor."
+            title="Fulfillment Actions"
+            hint="Next fulfillment actions available for your seller role."
             Icon={Truck}
             actions={
               fulfillmentGovernance?.actorHasManagePermission ? (
                 <SellerWorkspaceBadge
-                  label={fulfillmentGovernance?.permissionKey || "ORDER_FULFILLMENT_MANAGE"}
+                  label="Can manage fulfillment"
                   tone="emerald"
                 />
               ) : (
-                <SellerWorkspaceBadge label="Read-only actor" tone="stone" />
+                <SellerWorkspaceBadge label="Read-only role" tone="stone" />
               )
             }
           >
@@ -783,8 +803,10 @@ export default function SellerOrderDetailPage() {
             >
               {hasPersistedShipment
                 ? shipmentActionBlockedReason
-                : fulfillmentGovernance?.mutationBlockedReason ||
-                  "Seller fulfillment mutations are still closed in the current workspace phase."}
+                : sellerFriendlyText(
+                    fulfillmentGovernance?.mutationBlockedReason,
+                    "Seller fulfillment actions are not available for this order yet."
+                  )}
             </SellerWorkspaceNotice>
 
             <div className="mt-3.5 flex flex-wrap gap-2">
@@ -805,16 +827,16 @@ export default function SellerOrderDetailPage() {
                 label="Scope"
                 value={
                   fulfillmentGovernance?.scopeLabel ||
-                  "Fulfillment actions must stay scoped to the active store suborder."
+                  "Fulfillment actions apply only to this store order."
                 }
               />
               <SellerWorkspaceDetailItem
-                label="Permission Lane"
-                value={fulfillmentGovernance?.permissionKey || "ORDER_FULFILLMENT_MANAGE"}
+                label="Required Permission"
+                value="Fulfillment management"
                 hint={
                   fulfillmentGovernance?.actorHasManagePermission
-                    ? "This actor can run phase-1 transitions."
-                    : "This actor is currently view-only."
+                    ? "Your seller role can run available fulfillment actions."
+                    : "Your seller role is currently view-only."
                 }
               />
             </div>
