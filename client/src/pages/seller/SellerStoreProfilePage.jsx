@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "react-router-dom";
-import { Globe, ImageIcon, MapPin, Save, ShieldCheck, Store } from "lucide-react";
+import { Globe, MapPin, Save, ShieldCheck, Store } from "lucide-react";
 import {
   getSellerStoreProfile,
   uploadSellerStoreProfileImage,
@@ -23,6 +23,7 @@ import {
 import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
 import { useSellerWorkspaceRoute } from "../../utils/sellerWorkspaceRoute.js";
 import { resolveAssetUrl } from "../../lib/assetUrl.js";
+import { getSellerStatusBadge, sellerStatusBadge } from "./sellerStatusPresentation.js";
 
 const emptyToNull = (value) => {
   const normalized = String(value || "").trim();
@@ -73,9 +74,9 @@ const sellerFriendlyText = (value, fallback = "") => {
     .replace(/\bbackend\b/gi, "system")
     .replace(/\bsource of truth\b/gi, "saved record")
     .replace(/\bserializer\b/gi, "display rules")
-    .replace(/\bclient\/storefront\b/gi, "buyer-facing store")
-    .replace(/\boperational client\b/gi, "public operations")
-    .replace(/\bnot surfaced\b/gi, "not shown publicly");
+    .replace(/\bclient\/storefront\b/gi, "storefront")
+    .replace(/\boperational client\b/gi, "checkout")
+    .replace(/\bnot surfaced\b/gi, "hidden");
 };
 
 const getProfileValidationMessage = (error) => {
@@ -114,6 +115,15 @@ const buildLocationLabel = (profile) =>
     .filter(Boolean)
     .join(", ");
 
+const EMPTY_FIELD_LABEL = "Not set";
+const compactSecondaryActionClass =
+  "inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60";
+
+const displayFieldValue = (value) => {
+  const text = String(value || "").trim();
+  return text || EMPTY_FIELD_LABEL;
+};
+
 function InputField({ label, hint, multiline = false, disabled = false, ...props }) {
   const inputClasses = multiline ? sellerTextareaClass : sellerFieldClass;
   return (
@@ -146,6 +156,7 @@ export default function SellerStoreProfilePage() {
   const {
     sellerContext,
     workspaceStoreId: storeId,
+    workspaceRoutes,
     refetchSellerContext,
   } = useSellerWorkspaceRoute();
   const permissionKeys = sellerContext?.access?.permissionKeys || [];
@@ -169,8 +180,14 @@ export default function SellerStoreProfilePage() {
     }
   }, [profileQuery.data]);
 
+  const effectiveCanEdit = Boolean(profileQuery.data?.governance?.canEdit ?? fallbackCanEdit);
+
   useEffect(() => {
-    if (location.hash !== "#shipping-setup") return;
+    if (location.hash !== "#shipping-setup") return undefined;
+    if (effectiveCanEdit && !isEditing) {
+      setIsEditing(true);
+      return undefined;
+    }
     const timer = window.setTimeout(() => {
       const section = document.getElementById("shipping-setup");
       if (section) {
@@ -178,9 +195,7 @@ export default function SellerStoreProfilePage() {
       }
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [location.hash, profileQuery.data]);
-
-  const effectiveCanEdit = Boolean(profileQuery.data?.governance?.canEdit ?? fallbackCanEdit);
+  }, [effectiveCanEdit, isEditing, location.hash, profileQuery.data]);
 
   useEffect(() => {
     if (!effectiveCanEdit && isEditing) {
@@ -211,38 +226,36 @@ export default function SellerStoreProfilePage() {
   const formSections = useMemo(
     () => [
       {
-        title: "Store Identity",
+        title: "Public details",
         fields: [
           {
             key: "name",
             label: "Store Name",
             type: "text",
-            hint:
-              "Store name is managed by admin. Use the editable fields below for seller-owned public details.",
+            hint: "Managed by admin.",
           },
           {
             key: "description",
             label: "Description",
             type: "textarea",
-            hint:
-              "Short public summary shown on store pages when richer custom content is not available.",
+            hint: "Short public store bio.",
           },
           {
             key: "logoUrl",
             label: "Logo URL",
             type: "text",
-            hint: "Accepts uploaded `/uploads/...` paths from Profile Image or an absolute image URL.",
+            hint: "Upload a logo or paste an image URL.",
           },
           {
             key: "bannerUrl",
             label: "Banner URL",
             type: "text",
-            hint: "Accepts uploaded `/uploads/...` paths or an absolute image URL.",
+            hint: "Optional cover image.",
           },
         ],
       },
       {
-        title: "Contact Channels",
+        title: "Contact",
         fields: [
           { key: "email", label: "Store Email", type: "email" },
           { key: "phone", label: "Phone", type: "text" },
@@ -366,25 +379,68 @@ export default function SellerStoreProfilePage() {
     missingFields: [],
   };
   const editableFields = profile?.governance?.editableFields || [];
-  const readOnlyFields = profile?.governance?.readOnlyFields || [];
   const missingFields = completeness.missingFields || [];
-  const contract = profile?.contract || {
-    notes: [],
-    categories: {
-      editableFields,
-      readOnlyFields,
-      publicStorefrontFields: [],
-      operationalClientFields: [],
-      notSurfacedFields: [],
-    },
-    fieldMatrix: [],
-  };
   const editableFieldSet = useMemo(() => new Set(editableFields), [editableFields]);
   const storefrontPreviewHref = profile?.slug
     ? `/store/${encodeURIComponent(profile.slug)}`
     : null;
   const storefrontLocationLabel = buildLocationLabel(profile);
   const logoPreviewUrl = resolveAssetUrl(form.logoUrl || "");
+  const publicContactLabel =
+    [profile?.phone, profile?.email, profile?.websiteUrl]
+      .map((entry) => String(entry || "").trim())
+      .filter(Boolean)
+      .join(" | ") || EMPTY_FIELD_LABEL;
+  const mediaLabel =
+    [profile?.logoUrl ? "Logo" : "", profile?.bannerUrl ? "Cover" : ""]
+      .filter(Boolean)
+      .join(" + ") || EMPTY_FIELD_LABEL;
+  const shippingPickupAddress =
+    shippingSetupSummary.originAddressLine ||
+    [
+      form.originAddressLine1,
+      form.originAddressLine2,
+      form.originDistrict,
+      form.originCity,
+      form.originProvince,
+      form.originPostalCode,
+      form.originCountry,
+    ]
+      .map((entry) => String(entry || "").trim())
+      .filter(Boolean)
+      .join(", ") ||
+    EMPTY_FIELD_LABEL;
+  const storeStatusBadge = getSellerStatusBadge(
+    profile?.statusMeta || profile?.status,
+    sellerStatusBadge.active
+  );
+  const profileCompletenessBadge = completeness.isComplete
+    ? sellerStatusBadge.ready
+    : sellerStatusBadge.incomplete;
+  const operationalBadge = operationalReadiness.isReady
+    ? sellerStatusBadge.ready
+    : getSellerStatusBadge(operationalReadiness, sellerStatusBadge.blocked);
+  const shippingBadge =
+    shippingSetupStatus.code === "READY"
+      ? sellerStatusBadge.ready
+      : shippingSetupStatus.code === "DISABLED"
+        ? sellerStatusBadge.blocked
+        : sellerStatusBadge.needsSetup;
+  const storeReadyReasons = [
+    operationalReadiness.isReady
+      ? null
+      : sellerFriendlyText(operationalReadiness.description || operationalReadiness.blockedBy),
+    shippingSetupStatus.code === "READY"
+      ? null
+      : sellerFriendlyText(shippingSetupMeta.message || shippingSetupStatus.description),
+  ].filter(Boolean);
+  const storefrontReady = operationalReadiness.isReady && shippingSetupStatus.code === "READY";
+  const mainReadinessBadge = storefrontReady
+    ? sellerStatusBadge.ready
+    : operationalBadge.label === sellerStatusBadge.blocked.label ||
+        shippingBadge.label === sellerStatusBadge.blocked.label
+      ? sellerStatusBadge.blocked
+      : sellerStatusBadge.incomplete;
 
   if (!canView) {
     return (
@@ -441,27 +497,17 @@ export default function SellerStoreProfilePage() {
       <SellerWorkspaceSectionHeader
         eyebrow="Store Profile"
         title="Store profile"
-        description="Review the public store identity, contact details, address, and readiness status for this store. Seller-owned fields update the storefront after save; admin-owned identity fields stay locked."
+        description="Manage what buyers see and where orders ship from."
         actions={[
           <SellerWorkspaceBadge
             key="status"
-            label={profile.statusMeta?.label || profile.status || "Active"}
-            tone={profile.statusMeta?.tone || "stone"}
+            label={storeStatusBadge.label}
+            tone={storeStatusBadge.tone}
           />,
           <SellerWorkspaceBadge
-            key="completeness"
-            label={completeness.label || "Profile needs attention"}
-            tone={completeness.isComplete ? "emerald" : "amber"}
-          />,
-          <SellerWorkspaceBadge
-            key="operational-readiness"
-            label={operationalReadiness.label}
-            tone={operationalReadiness.tone}
-          />,
-          <SellerWorkspaceBadge
-            key="shipping-setup"
-            label={shippingSetupStatus.label}
-            tone={shippingSetupStatus.tone}
+            key="readiness"
+            label={mainReadinessBadge.label}
+            tone={mainReadinessBadge.tone}
           />,
           <SellerWorkspaceBadge
             key="mode"
@@ -471,388 +517,317 @@ export default function SellerStoreProfilePage() {
         ]}
       />
 
-      <section className="grid gap-3.5 xl:grid-cols-3">
-        <SellerWorkspaceSectionCard
-          title="Basic information"
-          hint="Core store identity and status"
-          Icon={Store}
-        >
-          <div className="grid gap-3">
-            <SellerWorkspaceDetailItem label="Store Name" value={profile.name} />
-            <SellerWorkspaceDetailItem
-              label="Slug"
-              value={profile.slug}
-              hint="Public store URL slug. This field is managed by admin."
-            />
-              <SellerWorkspaceDetailItem
-                label="Store Status"
-                value={profile.statusMeta?.label || profile.status}
-                hint={sellerFriendlyText(profile.statusMeta?.description)}
-              />
+      {!operationalReadiness.isReady || shippingSetupStatus.code !== "READY" ? (
+        <SellerWorkspaceNotice type="warning">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold text-slate-900">Store not ready yet</p>
+              <p className="mt-1 leading-5">
+                Complete payment and shipping setup before going public.
+              </p>
+              {storeReadyReasons[0] ? (
+                <p className="mt-1 text-xs leading-5 text-amber-800">{storeReadyReasons[0]}</p>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link to={workspaceRoutes.paymentProfile()} className={sellerSecondaryButtonClass}>
+                Payment setup
+              </Link>
+              <Link to={workspaceRoutes.shippingSetup()} className={sellerPrimaryButtonClass}>
+                Fix shipping
+              </Link>
+            </div>
           </div>
-        </SellerWorkspaceSectionCard>
+        </SellerWorkspaceNotice>
+      ) : null}
 
-        <SellerWorkspaceSectionCard
-          title="Contact"
-          hint="Seller-managed touchpoints"
-          Icon={Globe}
-        >
-          <div className="grid gap-3">
-            <SellerWorkspaceDetailItem label="Email" value={profile.email} />
-            <SellerWorkspaceDetailItem label="Phone" value={profile.phone} />
-            <SellerWorkspaceDetailItem label="WhatsApp" value={profile.whatsapp} />
-          </div>
-        </SellerWorkspaceSectionCard>
-
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <SellerWorkspaceSectionCard
           title="Completeness"
-          hint="Fields that help buyers understand this store"
+          hint="Public profile."
           Icon={MapPin}
+          className="p-3"
+          actions={
+            <SellerWorkspaceBadge
+              label={profileCompletenessBadge.label}
+              tone={profileCompletenessBadge.tone}
+            />
+          }
         >
-          <p className="text-[1.9rem] font-semibold leading-none text-slate-900">{completeness.score || 0}%</p>
-          <p className="mt-2 text-sm text-slate-600">
-            {completeness.completedFields || 0} of {completeness.totalFields || 0} core fields are
-            filled.
+          <p className="text-[1.5rem] font-semibold leading-none text-slate-900">
+            {completeness.score || 0}%
           </p>
-          <p className="mt-3 text-sm leading-6 text-slate-600">
-            {completeness.description ||
-              "Complete public-facing fields so buyers can understand and contact the store."}
+          <p className="mt-1.5 text-sm leading-5 text-slate-600">
+            {completeness.completedFields || 0} of {completeness.totalFields || 0} fields complete.
           </p>
-          <SellerWorkspaceNotice
-            type={operationalReadiness.isReady ? "success" : "warning"}
-            className="mt-4"
-          >
-            {sellerFriendlyText(operationalReadiness.description)}
-          </SellerWorkspaceNotice>
           {missingFields.length ? (
-            <SellerWorkspaceNotice type="warning" className="mt-4">
-              <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em]">
-                  Missing Fields
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {missingFields.map((field) => (
-                    <SellerWorkspaceBadge
-                      key={field.key}
-                      label={field.label}
-                      tone="amber"
-                      className="bg-white"
-                    />
-                  ))}
-                </div>
-              </div>
-            </SellerWorkspaceNotice>
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
+              {missingFields.slice(0, 2).map((field) => (
+                <SellerWorkspaceBadge
+                  key={field.key}
+                  label={field.label}
+                  tone="amber"
+                  className="bg-white"
+                />
+              ))}
+              {missingFields.length > 2 ? (
+                <SellerWorkspaceBadge label={`+${missingFields.length - 2}`} tone="amber" />
+              ) : null}
+            </div>
           ) : null}
-          <SellerWorkspaceNotice
-            type={
-              shippingSetupStatus.code === "READY"
-                ? "success"
-                : shippingSetupStatus.code === "DISABLED"
-                  ? "info"
-                  : "warning"
+          {effectiveCanEdit && missingFields.length ? (
+            <button
+              type="button"
+              onClick={() => {
+                setStatus(null);
+                setIsEditing(true);
+              }}
+              className={`${compactSecondaryActionClass} mt-2.5`}
+            >
+              Fix missing fields
+            </button>
+          ) : null}
+        </SellerWorkspaceSectionCard>
+
+        <SellerWorkspaceSectionCard
+          title="Payment"
+          hint="Checkout."
+          Icon={ShieldCheck}
+          className="p-3"
+          actions={<SellerWorkspaceBadge label={operationalBadge.label} tone={operationalBadge.tone} />}
+        >
+          <p className="text-sm font-semibold leading-5 text-slate-900">
+            {
+              operationalReadiness.paymentProfileCode
+                ? formatFieldName(operationalReadiness.paymentProfileCode)
+                : operationalBadge.label
             }
-            className="mt-4"
-          >
-            {sellerFriendlyText(shippingSetupMeta.message || shippingSetupStatus.description)}
-          </SellerWorkspaceNotice>
+          </p>
+          {!operationalReadiness.isReady ? (
+            <p className="mt-1.5 text-sm leading-5 text-slate-600">Required before checkout.</p>
+          ) : null}
+        </SellerWorkspaceSectionCard>
+
+        <SellerWorkspaceSectionCard
+          title="Shipping"
+          hint="Pickup origin."
+          Icon={MapPin}
+          className="p-3"
+          actions={<SellerWorkspaceBadge label={shippingBadge.label} tone={shippingBadge.tone} />}
+        >
+          <p className="text-sm font-semibold leading-5 text-slate-900">
+            {
+              shippingSetupSummary.shippingEnabled
+                ? shippingSetupStatus.label || "Enabled"
+                : "Disabled"
+            }
+          </p>
+          {shippingMissingFields.length ? (
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
+              {shippingMissingFields.slice(0, 2).map((field) => (
+                <SellerWorkspaceBadge
+                  key={field.key}
+                  label={field.label}
+                  tone="amber"
+                  className="bg-white"
+                />
+              ))}
+              {shippingMissingFields.length > 2 ? (
+                <SellerWorkspaceBadge label={`+${shippingMissingFields.length - 2}`} tone="amber" />
+              ) : null}
+            </div>
+          ) : null}
+        </SellerWorkspaceSectionCard>
+
+        <SellerWorkspaceSectionCard
+          title="Storefront"
+          hint="Visibility."
+          Icon={Store}
+          className="p-3"
+          actions={
+            <SellerWorkspaceBadge
+              label={storefrontReady ? "Ready" : "Blocked"}
+              tone={storefrontReady ? "emerald" : "rose"}
+            />
+          }
+        >
+          <p className="text-sm leading-5 text-slate-600">
+            {storefrontReady ? "Buyers can open this store." : "Complete setup before going public."}
+          </p>
+          {storefrontReady && storefrontPreviewHref ? (
+            <Link to={storefrontPreviewHref} className={`${compactSecondaryActionClass} mt-2.5`}>
+              View storefront
+            </Link>
+          ) : null}
         </SellerWorkspaceSectionCard>
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
+      <section className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
         <div className="space-y-5">
-        <SellerWorkspaceSectionCard
-            title="Public media and address"
-            hint="Logo, banner, and address details shown or reused by buyer-facing pages"
-            Icon={ImageIcon}
+          <SellerWorkspaceSectionCard
+            title="Public profile"
+            hint="What buyers see."
+            Icon={Globe}
+            actions={
+              effectiveCanEdit ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStatus(null);
+                    setIsEditing(true);
+                  }}
+                  className={sellerSecondaryButtonClass}
+                >
+                  Edit profile
+                </button>
+              ) : null
+            }
           >
-            {profile.logoUrl ? (
-              <div className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                <img
-                  src={resolveAssetUrl(profile.logoUrl)}
-                  alt={profile.name || "Store logo"}
-                  className="mx-auto h-24 w-24 rounded-full object-cover"
-                />
-              </div>
-            ) : null}
-            <div className="grid gap-3">
-              <SellerWorkspaceDetailItem label="Logo URL" value={profile.logoUrl} />
-              <SellerWorkspaceDetailItem label="Banner URL" value={profile.bannerUrl} />
-              <SellerWorkspaceDetailItem label="Address Line 1" value={profile.addressLine1} />
-              <SellerWorkspaceDetailItem label="Address Line 2" value={profile.addressLine2} />
-              <SellerWorkspaceDetailItem label="City" value={profile.city} />
-              <SellerWorkspaceDetailItem label="Province" value={profile.province} />
-              <SellerWorkspaceDetailItem label="Postal Code" value={profile.postalCode} />
-              <SellerWorkspaceDetailItem label="Country" value={profile.country} />
+            <div className="grid gap-3 md:grid-cols-2">
+              <SellerWorkspaceDetailItem label="Store name" value={displayFieldValue(profile.name)} />
+              <SellerWorkspaceDetailItem
+                label="Store URL"
+                value={
+                  <span className="break-words">
+                    {displayFieldValue(storefrontPreviewHref || profile.slug)}
+                  </span>
+                }
+              />
+              <SellerWorkspaceDetailItem label="Description" value={displayFieldValue(profile.description)} />
+              <SellerWorkspaceDetailItem label="Logo / Cover" value={mediaLabel} />
+              <SellerWorkspaceDetailItem label="Contact" value={publicContactLabel} />
+              <SellerWorkspaceDetailItem label="Location" value={displayFieldValue(storefrontLocationLabel)} />
             </div>
           </SellerWorkspaceSectionCard>
 
           <SellerWorkspaceSectionCard
-            title="Shipping Setup"
-            hint="Default pickup and shipment origin details for this store."
+            title="Shipping setup"
+            hint="Pickup origin for seller orders."
             Icon={MapPin}
           >
-            <SellerWorkspaceNotice
-              type={
-                shippingSetupStatus.code === "READY"
-                  ? "success"
-                  : shippingSetupStatus.code === "DISABLED"
-                    ? "info"
-                    : "warning"
-              }
-            >
-              {sellerFriendlyText(shippingSetupStatus.description)}
-            </SellerWorkspaceNotice>
+            <p className="text-sm text-slate-600">Used as the pickup origin for seller orders.</p>
 
-            <div className="mt-4 grid gap-3">
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
               <SellerWorkspaceDetailItem
                 label="Status"
-                value={shippingSetupStatus.label}
-                hint={sellerFriendlyText(
-                  shippingSetupMeta.sourceOfTruth,
-                  "Shipment readiness is calculated from the saved store setup."
-                )}
+                value={shippingSetupSummary.shippingEnabled ? shippingSetupStatus.label : "Disabled"}
               />
               <SellerWorkspaceDetailItem
-                label="Shipping Enabled"
-                value={shippingSetupSummary.shippingEnabled ? "Enabled" : "Disabled"}
-                hint="Turning shipping setup off does not change payment review or existing order status."
+                label="Pickup contact"
+                value={displayFieldValue(shippingSetupSummary.originContactName)}
               />
               <SellerWorkspaceDetailItem
-                label="Origin Contact"
-                value={shippingSetupSummary.originContactName || "-"}
+                label="Pickup phone"
+                value={displayFieldValue(shippingSetupSummary.originPhone)}
               />
               <SellerWorkspaceDetailItem
-                label="Origin Phone"
-                value={shippingSetupSummary.originPhone || "-"}
-              />
-              <SellerWorkspaceDetailItem
-                label="Origin Address"
-                value={shippingSetupSummary.originAddressLine || "-"}
-              />
-              <SellerWorkspaceDetailItem
-                label="Pickup Notes"
-                value={shippingSetupSummary.pickupNotes || "-"}
+                label="Pickup address"
+                value={shippingPickupAddress}
+                className="md:col-span-2"
               />
             </div>
 
             {shippingMissingFields.length ? (
               <SellerWorkspaceNotice type="warning" className="mt-4">
-                Missing shipping fields: {shippingMissingFields.map((field) => field.label).join(", ")}
+                <div className="flex flex-col gap-3">
+                  <p className="font-semibold text-slate-900">Missing fields</p>
+                  <div className="flex flex-wrap gap-2">
+                    {shippingMissingFields.map((field) => (
+                      <SellerWorkspaceBadge
+                        key={field.key}
+                        label={field.label}
+                        tone="amber"
+                        className="bg-white"
+                      />
+                    ))}
+                  </div>
+                  <Link
+                    to={workspaceRoutes.shippingSetup()}
+                    className={`${compactSecondaryActionClass} self-start`}
+                  >
+                    Fix shipping
+                  </Link>
+                </div>
               </SellerWorkspaceNotice>
             ) : null}
 
             {shippingSetupMeta.usesStoreProfileFallback ? (
               <SellerWorkspaceNotice type="info" className="mt-4">
-                Shipping setup is currently reusing these store profile fields:{" "}
-                {shippingSetupMeta.fallbackFields.map((field) => field.label).join(", ") || "-"}.
+                Using store profile contact as fallback.
               </SellerWorkspaceNotice>
             ) : null}
-
-            {shippingSetupMeta.hints?.length ? (
-              <SellerWorkspaceNotice type="info" className="mt-4">
-                <div className="space-y-2">
-                  {shippingSetupMeta.hints.map((hint) => (
-                    <p key={hint}>{sellerFriendlyText(hint)}</p>
-                  ))}
-                </div>
-              </SellerWorkspaceNotice>
-            ) : null}
-          </SellerWorkspaceSectionCard>
-
-          <SellerWorkspaceSectionCard
-            title="Public Storefront Preview"
-            hint="See which saved fields can appear on the public store page."
-            Icon={Globe}
-            actions={
-              storefrontPreviewHref && operationalReadiness.isReady ? (
-                <Link to={storefrontPreviewHref} className={sellerSecondaryButtonClass}>
-                  Open /store/{profile.slug}
-                </Link>
-              ) : null
-            }
-          >
-            <SellerWorkspaceNotice type={operationalReadiness.isReady ? "info" : "warning"}>
-              {operationalReadiness.isReady
-                ? "Public-safe fields can appear on the store page and product seller card after save. Admin still manages the store name, slug, and final status."
-                : `Store slug and public identity may already exist, but this store should not be treated as live yet. ${sellerFriendlyText(operationalReadiness.description)}`}
-            </SellerWorkspaceNotice>
-
-            <div className="mt-4 grid gap-3">
-              <SellerWorkspaceDetailItem
-                label="Public Store Name"
-                value={profile.name}
-                hint="Admin-governed core identity used by storefront."
-              />
-              <SellerWorkspaceDetailItem
-                label="Store Route"
-                value={storefrontPreviewHref || profile.slug || "-"}
-                hint="The public route uses the saved store slug."
-              />
-              <SellerWorkspaceDetailItem
-                label="Bio / Short Description"
-                value={profile.description}
-                hint="Shown on public store surfaces when no richer custom content is available."
-              />
-              <SellerWorkspaceDetailItem
-                label="Logo / Cover"
-                value={
-                  [profile.logoUrl, profile.bannerUrl]
-                    .map((entry) => String(entry || "").trim())
-                    .filter(Boolean)
-                    .join(" | ") || "-"
-                }
-                hint="Public pages use safe default artwork when these fields are empty."
-              />
-              <SellerWorkspaceDetailItem
-                label="Public Contact"
-                value={
-                  [profile.phone, profile.email, profile.websiteUrl]
-                    .map((entry) => String(entry || "").trim())
-                    .filter(Boolean)
-                    .join(" | ") || "-"
-                }
-                hint="Public store contact actions only use storefront-safe contact channels."
-              />
-              <SellerWorkspaceDetailItem
-                label="Public Location"
-                value={storefrontLocationLabel}
-                hint="Location is rendered only from public-safe store address fields."
-              />
-            </div>
-          </SellerWorkspaceSectionCard>
-
-          <SellerWorkspaceSectionCard
-            title="Editable fields"
-            hint="These labels explain what this seller role can change from this page."
-            Icon={ShieldCheck}
-          >
-            <SellerWorkspaceNotice type="info">
-              {sellerFriendlyText(
-                profile.governance?.note,
-                "Only seller-safe identity and contact details can be updated from this page."
-              )}
-            </SellerWorkspaceNotice>
-
-            {contract.notes.length ? (
-              <SellerWorkspaceNotice type="warning" className="mt-4">
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em]">
-                    Current Storefront Sync
-                  </p>
-                  {contract.notes.map((note) => (
-                    <p key={note}>{sellerFriendlyText(note)}</p>
-                  ))}
-                </div>
-              </SellerWorkspaceNotice>
-            ) : null}
-
-            <div className="mt-4 grid gap-3.5 md:grid-cols-2">
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3.5">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-800">
-                  Editable Here
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {editableFields.length ? (
-                    editableFields.map((field) => (
-                      <SellerWorkspaceBadge
-                        key={field}
-                        label={formatFieldName(field)}
-                        tone="emerald"
-                        className="bg-white"
-                      />
-                    ))
-                  ) : (
-                  <span className="text-sm text-emerald-800">No editable fields exposed.</span>
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                  Read-only Fields
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {readOnlyFields.length ? (
-                    readOnlyFields.map((field) => (
-                      <SellerWorkspaceBadge
-                        key={field}
-                        label={formatFieldName(field)}
-                        tone="stone"
-                      />
-                    ))
-                  ) : (
-                    <span className="text-sm text-slate-500">No read-only fields listed.</span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 grid gap-3.5 md:grid-cols-3">
-              <div className="rounded-xl border border-sky-200 bg-sky-50 px-3.5 py-3.5">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-800">
-                  Public Storefront
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {contract.categories?.publicStorefrontFields?.length ? (
-                    contract.categories.publicStorefrontFields.map((field) => (
-                      <SellerWorkspaceBadge
-                        key={field}
-                        label={formatFieldName(field)}
-                        tone="sky"
-                        className="bg-white"
-                      />
-                    ))
-                  ) : (
-                    <span className="text-sm text-sky-900">No public storefront field noted.</span>
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3.5">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-900">
-                  Public Operations
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {contract.categories?.operationalClientFields?.length ? (
-                    contract.categories.operationalClientFields.map((field) => (
-                      <SellerWorkspaceBadge
-                        key={field}
-                        label={formatFieldName(field)}
-                        tone="amber"
-                        className="bg-white"
-                      />
-                    ))
-                  ) : (
-                    <span className="text-sm text-amber-900">No public operations field noted.</span>
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                  Not Shown Publicly
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {contract.categories?.notSurfacedFields?.length ? (
-                    contract.categories.notSurfacedFields.map((field) => (
-                      <SellerWorkspaceBadge
-                        key={field}
-                        label={formatFieldName(field)}
-                        tone="stone"
-                      />
-                    ))
-                  ) : (
-                    <span className="text-sm text-slate-500">All fields are already surfaced.</span>
-                  )}
-                </div>
-              </div>
-            </div>
           </SellerWorkspaceSectionCard>
         </div>
 
+        <div className="space-y-5">
+          <SellerWorkspaceSectionCard
+            title="What you can edit"
+            hint="Seller-owned fields only."
+            Icon={ShieldCheck}
+          >
+            <div className="space-y-1 text-sm text-slate-600">
+              <p>You can edit public details, contact, media, and address.</p>
+              <p>Store name, slug, and status are managed by admin.</p>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3.5">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-800">Editable</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {["Public details", "Contact", "Media", "Address"].map((label) => (
+                    <SellerWorkspaceBadge key={label} label={label} tone="emerald" className="bg-white" />
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Admin managed</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {["Name", "Slug", "Status"].map((label) => (
+                    <SellerWorkspaceBadge key={label} label={label} tone="stone" />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </SellerWorkspaceSectionCard>
+
+          <SellerWorkspaceSectionCard
+            title="Store readiness notes"
+            hint="Quick actions."
+            Icon={Store}
+          >
+            <SellerWorkspaceNotice type={storefrontReady ? "success" : "warning"}>
+            {storefrontReady
+              ? "Store setup looks ready."
+              : "Complete payment and shipping setup before going public."}
+            </SellerWorkspaceNotice>
+            {!operationalReadiness.isReady ||
+            shippingSetupStatus.code !== "READY" ||
+            (storefrontReady && storefrontPreviewHref) ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {!operationalReadiness.isReady ? (
+                  <Link to={workspaceRoutes.paymentProfile()} className={compactSecondaryActionClass}>
+                    Payment setup
+                  </Link>
+                ) : null}
+                {shippingSetupStatus.code !== "READY" ? (
+                  <Link to={workspaceRoutes.shippingSetup()} className={compactSecondaryActionClass}>
+                    Fix shipping
+                  </Link>
+                ) : null}
+                {storefrontReady && storefrontPreviewHref ? (
+                  <Link to={storefrontPreviewHref} className={compactSecondaryActionClass}>
+                    View storefront
+                  </Link>
+                ) : null}
+              </div>
+            ) : null}
+          </SellerWorkspaceSectionCard>
+        </div>
+      </section>
+
+      <div>
         <SellerWorkspaceSectionCard
-          title="Store Profile Form"
-          hint="Edit mode opens only for seller roles allowed to update this store."
+          title="Edit store details"
+          hint="Public details, contact, and shipping origin."
           Icon={ShieldCheck}
           actions={
             effectiveCanEdit ? (
@@ -873,7 +848,7 @@ export default function SellerStoreProfilePage() {
                     disabled={mutation.isPending}
                   >
                     <Save className="h-4 w-4" />
-                    {mutation.isPending ? "Saving..." : "Save Changes"}
+                    {mutation.isPending ? "Saving..." : "Save"}
                   </button>
                 </>
               ) : (
@@ -885,7 +860,7 @@ export default function SellerStoreProfilePage() {
                   }}
                   className={sellerPrimaryButtonClass}
                 >
-                  Edit Profile
+                  Edit profile
                 </button>
               )
             ) : (
@@ -907,252 +882,258 @@ export default function SellerStoreProfilePage() {
             className="mb-5"
           >
             {effectiveCanEdit
-              ? isEditing
-                ? "Edit mode is open for seller-owned profile, contact, and address fields only. Core store name and status remain admin-governed."
-                : "Seller-owned profile, contact, and address fields can be updated here when edit mode is open."
-              : "Your current seller role can review the store profile but cannot submit updates."}
+              ? "Store name, slug, and status are managed by admin."
+              : "Your role can view this page only."}
           </SellerWorkspaceNotice>
 
-          <form id="seller-store-profile-form" onSubmit={handleSubmit} className="space-y-4">
-            <input
-              ref={logoInputRef}
-              type="file"
-              accept="image/png,image/jpeg"
-              className="hidden"
-              onChange={async (event) => {
-                const file = event.target.files?.[0];
-                if (!file) return;
-                setStatus(null);
-                setIsUploadingLogo(true);
-                try {
-                  const url = await uploadSellerStoreProfileImage(file);
-                  setForm((current) => ({ ...current, logoUrl: url }));
-                  setStatus({
-                    type: "success",
-                    message: "Store logo uploaded. Save changes to persist it to the store profile.",
-                  });
-                } catch (error) {
-                  setStatus({
-                    type: "error",
-                    message:
-                      error?.response?.data?.message ||
-                      error?.message ||
-                      "Failed to upload seller store logo.",
-                  });
-                } finally {
-                  setIsUploadingLogo(false);
-                  event.target.value = "";
-                }
-              }}
-            />
-            <section className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h4 className="text-sm font-semibold text-slate-900">Profile Image</h4>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">
-                    This logo appears in the seller header and can appear on public store surfaces.
-                  </p>
-                </div>
-                <SellerWorkspaceBadge
-                  label={logoPreviewUrl ? "Logo ready" : "Default initials"}
-                  tone={logoPreviewUrl ? "emerald" : "stone"}
+          {!isEditing ? (
+            <div id="shipping-setup" className="space-y-4 scroll-mt-24">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <SellerWorkspaceDetailItem label="Public details" value={profile.description ? "Ready" : "Needs setup"} />
+                <SellerWorkspaceDetailItem label="Contact" value={publicContactLabel} />
+                <SellerWorkspaceDetailItem label="Address" value={displayFieldValue(storefrontLocationLabel)} />
+                <SellerWorkspaceDetailItem
+                  label="Shipping origin"
+                  value={shippingSetupSummary.shippingEnabled ? shippingSetupStatus.label : "Disabled"}
                 />
               </div>
-              <div className="mt-3 flex flex-wrap items-center gap-4">
-                <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white text-lg font-semibold text-slate-400">
-                  {logoPreviewUrl ? (
-                    <img src={logoPreviewUrl} alt={form.name || profile.name || "Store logo"} className="h-full w-full object-cover" />
-                  ) : (
-                    "ST"
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => logoInputRef.current?.click()}
-                    disabled={!isEditing || mutation.isPending || isUploadingLogo || !editableFieldSet.has("logoUrl")}
-                    className={sellerSecondaryButtonClass}
-                  >
-                    {isUploadingLogo ? "Uploading..." : logoPreviewUrl ? "Replace logo" : "Upload logo"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setForm((current) => ({ ...current, logoUrl: "" }));
-                      setStatus({
-                        type: "success",
-                        message: "Store logo removed from the draft. Save changes to keep the default initials.",
-                      });
-                    }}
-                    disabled={!isEditing || mutation.isPending || isUploadingLogo || !form.logoUrl || !editableFieldSet.has("logoUrl")}
-                    className={sellerSecondaryButtonClass}
-                  >
-                    Remove logo
-                  </button>
-                </div>
-              </div>
-            </section>
-            {formSections.map((section) => (
-              <section
-                key={section.title}
-                className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <h4 className="text-sm font-semibold text-slate-900">{section.title}</h4>
+            </div>
+          ) : (
+            <form id="seller-store-profile-form" onSubmit={handleSubmit} className="space-y-4">
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/png,image/jpeg"
+                className="hidden"
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  setStatus(null);
+                  setIsUploadingLogo(true);
+                  try {
+                    const url = await uploadSellerStoreProfileImage(file);
+                    setForm((current) => ({ ...current, logoUrl: url }));
+                    setStatus({
+                      type: "success",
+                      message: "Store logo uploaded. Save changes to persist it to the store profile.",
+                    });
+                  } catch (error) {
+                    setStatus({
+                      type: "error",
+                      message:
+                        error?.response?.data?.message ||
+                        error?.message ||
+                        "Failed to upload seller store logo.",
+                    });
+                  } finally {
+                    setIsUploadingLogo(false);
+                    event.target.value = "";
+                  }
+                }}
+              />
+              <section className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-900">Media</h4>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      Shown on seller and storefront surfaces.
+                    </p>
+                  </div>
                   <SellerWorkspaceBadge
-                    label={isEditing ? "Editable mode" : "Read-only preview"}
-                    tone={isEditing ? "sky" : "stone"}
+                    label={logoPreviewUrl ? "Logo ready" : "Default initials"}
+                    tone={logoPreviewUrl ? "emerald" : "stone"}
                   />
                 </div>
-                <div className="mt-3.5 grid gap-3.5 md:grid-cols-2">
-                  {section.fields.map((field) => (
-                    (() => {
-                      const fieldEditable = editableFieldSet.has(field.key);
-                      const fieldHint = fieldEditable
-                        ? field.hint
-                        : field.hint
-                          ? `${field.hint} Locked for your current seller role.`
-                          : "Locked for your current seller role.";
-                      return (
-                        <div
-                          key={field.key}
-                          className={field.type === "textarea" ? "md:col-span-2" : undefined}
-                        >
-                      <InputField
-                        label={field.label}
-                        hint={fieldHint}
-                        multiline={field.type === "textarea"}
-                        type={field.type === "textarea" ? undefined : field.type}
-                        value={form[field.key]}
-                        onChange={handleChange(field.key)}
-                        readOnly={!isEditing || mutation.isPending || !fieldEditable}
-                        disabled={!isEditing || mutation.isPending || !fieldEditable}
-                      />
-                        </div>
-                      );
-                    })()
-                  ))}
+                <div className="mt-3 flex flex-wrap items-center gap-4">
+                  <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white text-base font-semibold text-slate-400">
+                    {logoPreviewUrl ? (
+                      <img src={logoPreviewUrl} alt={form.name || profile.name || "Store logo"} className="h-full w-full object-cover" />
+                    ) : (
+                      "ST"
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => logoInputRef.current?.click()}
+                      disabled={mutation.isPending || isUploadingLogo || !editableFieldSet.has("logoUrl")}
+                      className={sellerSecondaryButtonClass}
+                    >
+                      {isUploadingLogo ? "Uploading..." : logoPreviewUrl ? "Replace logo" : "Upload logo"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForm((current) => ({ ...current, logoUrl: "" }));
+                        setStatus({
+                          type: "success",
+                          message: "Store logo removed from the draft. Save changes to keep the default initials.",
+                        });
+                      }}
+                      disabled={mutation.isPending || isUploadingLogo || !form.logoUrl || !editableFieldSet.has("logoUrl")}
+                      className={sellerSecondaryButtonClass}
+                    >
+                      Remove logo
+                    </button>
+                  </div>
                 </div>
               </section>
-            ))}
 
-            <section
-              id="shipping-setup"
-              className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5 scroll-mt-24"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <h4 className="text-sm font-semibold text-slate-900">Shipping Setup</h4>
-                <SellerWorkspaceBadge
-                  label={form.shippingEnabled ? "Enabled" : "Disabled"}
-                  tone={form.shippingEnabled ? "sky" : "stone"}
-                />
-              </div>
-              <div className="mt-3.5 grid gap-3.5 md:grid-cols-2">
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                    Shipping Mode
-                  </span>
-                  <select
-                    className={`${sellerFieldClass} mt-2 ${!isEditing || mutation.isPending ? sellerDisabledFieldClass : ""}`}
-                    value={form.shippingEnabled ? "enabled" : "disabled"}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        shippingEnabled: event.target.value === "enabled",
-                      }))
-                    }
-                    disabled={!isEditing || mutation.isPending}
+              <div className="grid gap-4 xl:grid-cols-3">
+                {formSections.map((section) => (
+                  <section
+                    key={section.title}
+                    className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5"
                   >
-                    <option value="enabled">Enabled</option>
-                    <option value="disabled">Disabled</option>
-                  </select>
-                  <p className="mt-2 text-xs leading-5 text-slate-500">
-                    Shipping setup prepares the pickup origin for this store. It does not change buyer addresses or existing orders.
-                  </p>
-                </label>
-                <InputField
-                  label="Origin Contact Name"
-                  hint="Uses the store name when left empty."
-                  value={form.originContactName}
-                  onChange={handleChange("originContactName")}
-                  readOnly={!isEditing || mutation.isPending}
-                  disabled={!isEditing || mutation.isPending}
-                />
-                <InputField
-                  label="Origin Phone"
-                  hint="Defaults to store phone or WhatsApp when available."
-                  value={form.originPhone}
-                  onChange={handleChange("originPhone")}
-                  readOnly={!isEditing || mutation.isPending}
-                  disabled={!isEditing || mutation.isPending}
-                />
-                <InputField
-                  label="Origin Address Line 1"
-                  hint="Primary pickup or sender origin address."
-                  value={form.originAddressLine1}
-                  onChange={handleChange("originAddressLine1")}
-                  readOnly={!isEditing || mutation.isPending}
-                  disabled={!isEditing || mutation.isPending}
-                />
-                <InputField
-                  label="Origin Address Line 2"
-                  value={form.originAddressLine2}
-                  onChange={handleChange("originAddressLine2")}
-                  readOnly={!isEditing || mutation.isPending}
-                  disabled={!isEditing || mutation.isPending}
-                />
-                <InputField
-                  label="Origin District"
-                  value={form.originDistrict}
-                  onChange={handleChange("originDistrict")}
-                  readOnly={!isEditing || mutation.isPending}
-                  disabled={!isEditing || mutation.isPending}
-                />
-                <InputField
-                  label="Origin City"
-                  value={form.originCity}
-                  onChange={handleChange("originCity")}
-                  readOnly={!isEditing || mutation.isPending}
-                  disabled={!isEditing || mutation.isPending}
-                />
-                <InputField
-                  label="Origin Province"
-                  value={form.originProvince}
-                  onChange={handleChange("originProvince")}
-                  readOnly={!isEditing || mutation.isPending}
-                  disabled={!isEditing || mutation.isPending}
-                />
-                <InputField
-                  label="Origin Postal Code"
-                  value={form.originPostalCode}
-                  onChange={handleChange("originPostalCode")}
-                  readOnly={!isEditing || mutation.isPending}
-                  disabled={!isEditing || mutation.isPending}
-                />
-                <InputField
-                  label="Origin Country"
-                  value={form.originCountry}
-                  onChange={handleChange("originCountry")}
-                  readOnly={!isEditing || mutation.isPending}
-                  disabled={!isEditing || mutation.isPending}
-                />
-                <div className="md:col-span-2">
-                  <InputField
-                    label="Pickup Notes"
-                    hint="Optional note for pickup instructions or landmark."
-                    multiline
-                    rows={3}
-                    value={form.pickupNotes}
-                    onChange={handleChange("pickupNotes")}
-                    readOnly={!isEditing || mutation.isPending}
-                    disabled={!isEditing || mutation.isPending}
+                    <div className="flex items-center justify-between gap-3">
+                      <h4 className="text-sm font-semibold text-slate-900">{section.title}</h4>
+                    </div>
+                    <div className="mt-3 grid gap-3">
+                      {section.fields.map((field) => (
+                        (() => {
+                          const fieldEditable = editableFieldSet.has(field.key);
+                          const fieldHint = fieldEditable
+                            ? field.hint
+                            : "Managed by admin.";
+                          return (
+                            <div key={field.key}>
+                              <InputField
+                                label={field.label}
+                                hint={fieldHint}
+                                multiline={field.type === "textarea"}
+                                type={field.type === "textarea" ? undefined : field.type}
+                                value={form[field.key]}
+                                onChange={handleChange(field.key)}
+                                readOnly={mutation.isPending || !fieldEditable}
+                                disabled={mutation.isPending || !fieldEditable}
+                                rows={field.type === "textarea" ? 2 : undefined}
+                              />
+                            </div>
+                          );
+                        })()
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+
+              <section
+                id="shipping-setup"
+                className="scroll-mt-24 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3.5"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-semibold text-slate-900">Shipping origin</h4>
+                  <SellerWorkspaceBadge
+                    label={form.shippingEnabled ? "Enabled" : "Disabled"}
+                    tone={form.shippingEnabled ? "sky" : "stone"}
                   />
                 </div>
-              </div>
-            </section>
-          </form>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <label className="block">
+                    <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                      Shipping mode
+                    </span>
+                    <select
+                      className={`${sellerFieldClass} mt-2 ${mutation.isPending ? sellerDisabledFieldClass : ""}`}
+                      value={form.shippingEnabled ? "enabled" : "disabled"}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          shippingEnabled: event.target.value === "enabled",
+                        }))
+                      }
+                      disabled={mutation.isPending}
+                    >
+                      <option value="enabled">Enabled</option>
+                      <option value="disabled">Disabled</option>
+                    </select>
+                    <p className="mt-2 text-xs leading-5 text-slate-500">Used for pickup.</p>
+                  </label>
+                  <InputField
+                    label="Origin Contact Name"
+                    hint="Fallback: store name."
+                    value={form.originContactName}
+                    onChange={handleChange("originContactName")}
+                    readOnly={mutation.isPending}
+                    disabled={mutation.isPending}
+                  />
+                  <InputField
+                    label="Origin Phone"
+                    hint="Fallback: store contact."
+                    value={form.originPhone}
+                    onChange={handleChange("originPhone")}
+                    readOnly={mutation.isPending}
+                    disabled={mutation.isPending}
+                  />
+                  <InputField
+                    label="Origin Address Line 1"
+                    hint="Used for pickup."
+                    value={form.originAddressLine1}
+                    onChange={handleChange("originAddressLine1")}
+                    readOnly={mutation.isPending}
+                    disabled={mutation.isPending}
+                  />
+                  <InputField
+                    label="Origin Address Line 2"
+                    hint="Optional."
+                    value={form.originAddressLine2}
+                    onChange={handleChange("originAddressLine2")}
+                    readOnly={mutation.isPending}
+                    disabled={mutation.isPending}
+                  />
+                  <InputField
+                    label="Origin District"
+                    value={form.originDistrict}
+                    onChange={handleChange("originDistrict")}
+                    readOnly={mutation.isPending}
+                    disabled={mutation.isPending}
+                  />
+                  <InputField
+                    label="Origin City"
+                    value={form.originCity}
+                    onChange={handleChange("originCity")}
+                    readOnly={mutation.isPending}
+                    disabled={mutation.isPending}
+                  />
+                  <InputField
+                    label="Origin Province"
+                    value={form.originProvince}
+                    onChange={handleChange("originProvince")}
+                    readOnly={mutation.isPending}
+                    disabled={mutation.isPending}
+                  />
+                  <InputField
+                    label="Origin Postal Code"
+                    value={form.originPostalCode}
+                    onChange={handleChange("originPostalCode")}
+                    readOnly={mutation.isPending}
+                    disabled={mutation.isPending}
+                  />
+                  <InputField
+                    label="Origin Country"
+                    value={form.originCountry}
+                    onChange={handleChange("originCountry")}
+                    readOnly={mutation.isPending}
+                    disabled={mutation.isPending}
+                  />
+                  <div className="md:col-span-2">
+                    <InputField
+                      label="Pickup Notes"
+                      hint="Optional."
+                      multiline
+                      rows={2}
+                      value={form.pickupNotes}
+                      onChange={handleChange("pickupNotes")}
+                      readOnly={mutation.isPending}
+                      disabled={mutation.isPending}
+                    />
+                  </div>
+                </div>
+              </section>
+            </form>
+          )}
         </SellerWorkspaceSectionCard>
-      </section>
+      </div>
     </div>
   );
 }

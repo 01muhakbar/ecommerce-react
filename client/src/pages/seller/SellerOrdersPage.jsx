@@ -19,15 +19,18 @@ import {
 import { normalizeSellerOrder } from "../../services/adapters/orderAdapter.js";
 import { getSellerRequestErrorMessage } from "./sellerAccessState.js";
 import { useSellerWorkspaceRoute } from "../../utils/sellerWorkspaceRoute.js";
+import { sellerStatusBadge } from "./sellerStatusPresentation.js";
 import {
   sellerFieldClass,
   sellerSecondaryButtonClass,
   sellerTableCellClass,
   sellerTableHeadCellClass,
   sellerTableWrapClass,
+  SellerWorkspaceBadge,
   SellerWorkspaceEmptyState,
   SellerWorkspaceNotice,
   SellerWorkspacePanel,
+  SellerWorkspaceSectionHeader,
   SellerWorkspaceStatePanel,
   SellerWorkspaceStatCard,
 } from "../../components/seller/SellerWorkspaceFoundation.jsx";
@@ -220,6 +223,13 @@ export default function SellerOrdersPage() {
   });
 
   const items = Array.isArray(ordersQuery.data?.items) ? ordersQuery.data.items : [];
+  const storeShippingSetup = ordersQuery.data?.storeShippingSetup || null;
+  const shippingReady = storeShippingSetup ? Boolean(storeShippingSetup.isShippingReady) : true;
+  const shippingReadinessBadge = shippingReady
+    ? sellerStatusBadge.ready
+    : storeShippingSetup?.shippingSetupStatus?.code === "DISABLED"
+      ? sellerStatusBadge.blocked
+      : sellerStatusBadge.needsSetup;
   const pagination = ordersQuery.data?.pagination ?? { page: 1, limit: 10, total: 0 };
   const totalPages = Math.max(
     1,
@@ -422,81 +432,107 @@ export default function SellerOrdersPage() {
 
   return (
     <div className="space-y-4">
-      <SellerWorkspacePanel className="px-4 py-3.5 sm:px-5">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="min-w-0 flex-1 pr-4 xl:max-w-[420px]">
-            <div className="space-y-1">
-              <h1 className="text-[1.85rem] font-semibold tracking-tight text-slate-900">
-                Orders
-              </h1>
-              <p className="text-sm text-slate-500">
-                Process paid store orders, review payment state, and continue fulfillment when the
-                system allows the next action.
+      <SellerWorkspaceSectionHeader
+        eyebrow="Seller Orders"
+        title="Orders"
+        description="Pack, ship, and track seller orders from one place."
+        actions={[
+          storeShippingSetup ? (
+            <SellerWorkspaceBadge
+              key="shipping"
+              label={shippingReadinessBadge.label}
+              tone={shippingReadinessBadge.tone}
+            />
+          ) : null,
+          <button
+            key="delete"
+            type="button"
+            className={
+              selectedCount > 0 &&
+              hasFulfillmentManagePermission &&
+              !deleteMutation.isPending
+                ? toolbarButtonOutline
+                : toolbarButtonDisabled
+            }
+            disabled={
+              selectedCount === 0 ||
+              !hasFulfillmentManagePermission ||
+              deleteMutation.isPending
+            }
+            onClick={onDeleteSelected}
+            title={
+              hasFulfillmentManagePermission
+                ? selectedCount > 0
+                  ? "Delete selected seller orders."
+                  : "Select one or more seller orders to delete."
+                : "Your current seller role cannot delete orders."
+            }
+          >
+            <Trash2 className="h-4 w-4" />
+            {deleteMutation.isPending
+              ? "Deleting..."
+              : selectedCount > 0
+                ? `Delete selected (${selectedCount})`
+                : "Select orders to delete"}
+          </button>,
+        ]}
+      />
+
+      {!ordersQuery.isLoading &&
+      !ordersQuery.isError &&
+      storeShippingSetup &&
+      !storeShippingSetup.isShippingReady ? (
+        <SellerWorkspaceNotice
+          type={storeShippingSetup.shippingSetupStatus?.code === "DISABLED" ? "info" : "warning"}
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold text-slate-900">
+                Store not ready yet
+              </p>
+              <p className="mt-1 leading-5">
+                {storeShippingSetup.shippingSetupMeta?.message ||
+                  "Complete payment and shipping setup before going public."}
               </p>
             </div>
+            <div className="flex flex-wrap gap-2">
+              <Link to={workspaceRoutes.paymentProfile()} className={sellerSecondaryButtonClass}>
+                Payment setup
+              </Link>
+              <Link to={workspaceRoutes.shippingSetup()} className={sellerPrimaryButtonClass}>
+                Review setup
+              </Link>
+            </div>
           </div>
-
-          <div className="flex w-full flex-wrap items-center gap-2 xl:max-w-[420px] xl:flex-none xl:justify-end">
-            <button
-              type="button"
-              className={
-                selectedCount > 0 &&
-                hasFulfillmentManagePermission &&
-                !deleteMutation.isPending
-                  ? toolbarButtonOutline
-                  : toolbarButtonDisabled
-              }
-              disabled={
-                selectedCount === 0 ||
-                !hasFulfillmentManagePermission ||
-                deleteMutation.isPending
-              }
-              onClick={onDeleteSelected}
-              title={
-                hasFulfillmentManagePermission
-                  ? selectedCount > 0
-                    ? "Delete selected seller orders."
-                    : "Select one or more seller orders to delete."
-                  : "Your current seller role cannot delete orders."
-              }
-            >
-              <Trash2 className="h-4 w-4" />
-              {deleteMutation.isPending
-                ? "Deleting..."
-                : selectedCount > 0
-                  ? `Delete selected (${selectedCount})`
-                  : "Select orders to delete"}
-            </button>
-          </div>
-        </div>
-      </SellerWorkspacePanel>
+        </SellerWorkspaceNotice>
+      ) : null}
 
       {!ordersQuery.isLoading && !ordersQuery.isError ? (
         <section className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-4">
           <SellerWorkspaceStatCard
             label="Pending Payment"
             value={String(visibleSummary.pendingPayment)}
-            hint="Visible orders still unpaid or waiting for proof review."
+            hint="Unpaid or awaiting proof."
             Icon={CreditCard}
             tone="amber"
           />
           <SellerWorkspaceStatCard
             label="Paid"
             value={String(visibleSummary.paid)}
-            hint="Visible orders with seller split payment marked paid."
+            hint="Ready for fulfillment."
             Icon={BadgeCheck}
             tone="emerald"
           />
           <SellerWorkspaceStatCard
             label="Need Fulfillment"
             value={String(visibleSummary.needFulfillment)}
-            hint="Paid visible orders still waiting to be packed or shipped."
+            hint="Pack or ship next."
             Icon={Truck}
           />
           <SellerWorkspaceStatCard
             label="Completed"
             value={String(visibleSummary.completed)}
-            hint="Visible orders already delivered."
+            hint="Delivered orders."
             Icon={ShoppingBag}
           />
         </section>
@@ -506,7 +542,7 @@ export default function SellerOrdersPage() {
         <div className="grid gap-3">
           <div className="grid gap-3 xl:grid-cols-[minmax(320px,1fr)]">
             <label className="grid gap-1.5">
-              <span className={subtleLabelClass}>Search by Customer Name</span>
+              <span className={subtleLabelClass}>Search orders</span>
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
@@ -602,8 +638,21 @@ export default function SellerOrdersPage() {
           title="No orders need processing yet"
           description={
             keyword || paymentStatus || fulfillmentStatus
-              ? "No orders match the current filters. Reset filters to see all store orders."
-              : "New store orders will appear here after buyers check out and the system creates seller suborders."
+              ? "No orders match this filter."
+              : shippingReady
+                ? "Orders will appear after checkout is completed."
+                : "Complete setup before going public."
+          }
+          action={
+            keyword || paymentStatus || fulfillmentStatus ? (
+              <button type="button" className={sellerSecondaryButtonClass} onClick={onResetFilters}>
+                Reset filters
+              </button>
+            ) : !shippingReady ? (
+              <Link to={workspaceRoutes.shippingSetup()} className={sellerPrimaryButtonClass}>
+                Review setup
+              </Link>
+            ) : null
           }
           icon={<ShoppingBag className="h-5 w-5" />}
         />

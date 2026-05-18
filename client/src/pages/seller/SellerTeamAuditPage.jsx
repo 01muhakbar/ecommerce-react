@@ -128,8 +128,8 @@ export default function SellerTeamAuditPage() {
   if (auditQuery.isLoading) {
     return (
       <SellerWorkspaceStatePanel
-        title="Loading seller team audit logs"
-        description="Fetching team activity history for the active store."
+        title="Loading team activity"
+        description="Fetching recent team changes."
         Icon={History}
       />
     );
@@ -155,7 +155,7 @@ export default function SellerTeamAuditPage() {
       <SellerWorkspaceSectionHeader
         eyebrow="Team Audit"
         title="Team activity"
-        description="Review who changed team access, what changed, and when it happened. This page is read-only."
+        description="Review team access changes in a read-only timeline."
         actions={[
           <SellerWorkspaceBadge
             key="role"
@@ -170,13 +170,13 @@ export default function SellerTeamAuditPage() {
         <SellerWorkspaceStatCard
           label="Audit Rows"
           value={String(pagination.total || 0)}
-          hint="Team activity records for the active store."
+          hint="Activity records."
           Icon={History}
         />
         <SellerWorkspaceStatCard
           label="Scope"
           value="This store"
-          hint="Only activity for this store is shown."
+          hint="Store-only history."
           Icon={ShieldCheck}
           tone="emerald"
         />
@@ -185,9 +185,9 @@ export default function SellerTeamAuditPage() {
       <SellerWorkspaceFilterBar>
         <div className="flex flex-col gap-3.5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h3 className="text-base font-semibold text-slate-900">Filters</h3>
+            <h3 className="text-base font-semibold text-slate-900">Filter</h3>
             <p className="mt-1 text-sm text-slate-500">
-              Narrow the activity trail to one team action if needed.
+              Show one action type.
             </p>
           </div>
 
@@ -195,20 +195,34 @@ export default function SellerTeamAuditPage() {
             <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
               Action
             </label>
-            <select
-              value={actionFilter}
-              onChange={(event) => {
-                setActionFilter(event.target.value);
-                setPage(1);
-              }}
-              className={`mt-2 ${sellerFieldClass}`}
-            >
-              {actionOptions.map((action) => (
-                <option key={action || "ALL"} value={action}>
-                  {action ? formatActionOption(action) : "All team actions"}
-                </option>
-              ))}
-            </select>
+            <div className="mt-2 flex gap-2">
+              <select
+                value={actionFilter}
+                onChange={(event) => {
+                  setActionFilter(event.target.value);
+                  setPage(1);
+                }}
+                className={sellerFieldClass}
+              >
+                {actionOptions.map((action) => (
+                  <option key={action || "ALL"} value={action}>
+                    {action ? formatActionOption(action) : "All team actions"}
+                  </option>
+                ))}
+              </select>
+              {actionFilter ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActionFilter("");
+                    setPage(1);
+                  }}
+                  className={sellerSecondaryButtonClass}
+                >
+                  Reset
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
       </SellerWorkspaceFilterBar>
@@ -216,9 +230,9 @@ export default function SellerTeamAuditPage() {
       <SellerWorkspacePanel className="p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-base font-semibold text-slate-900">Audit Timeline</h3>
+            <h3 className="text-base font-semibold text-slate-900">Timeline</h3>
             <p className="mt-1 text-sm text-slate-500">
-              Recent team changes in a readable timeline.
+              Recent team changes.
             </p>
           </div>
           <SellerWorkspaceBadge
@@ -300,12 +314,26 @@ export default function SellerTeamAuditPage() {
           <div className="mt-4">
             <SellerWorkspaceEmptyState
               title={
-                actionFilter ? "No team activity matches this filter" : "No team activity yet"
+                actionFilter ? "No activity for this filter" : "No team activity yet"
               }
               description={
                 actionFilter
-                  ? "Try widening the audit action filter for this store."
-                  : "Team activity will appear here after invites, role changes, disables, reactivations, or removals."
+                  ? "Reset the filter to see all activity."
+                  : "Invites and role changes will appear here."
+              }
+              action={
+                actionFilter ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActionFilter("");
+                      setPage(1);
+                    }}
+                    className={sellerSecondaryButtonClass}
+                  >
+                    Reset filter
+                  </button>
+                ) : null
               }
               icon={<History className="h-5 w-5" />}
             />

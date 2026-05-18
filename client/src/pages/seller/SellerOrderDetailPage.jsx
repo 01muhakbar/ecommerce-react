@@ -403,7 +403,7 @@ export default function SellerOrderDetailPage() {
       <SellerWorkspaceSectionHeader
         eyebrow="Seller Order Detail"
         title={detail.suborderNumber}
-        description={`Parent order ${detail.order?.orderNumber || "-"} - ${detail.scope?.relationLabel} - items and totals stay scoped to this store split.`}
+        description={`Parent ${detail.order?.orderNumber || "-"} - this view stays scoped to the active store split.`}
         actions={[
           backButton,
           <StatusChip
@@ -722,7 +722,7 @@ export default function SellerOrderDetailPage() {
               />
             </div>
 
-            <div className="grid gap-3">
+            <div className="mt-3.5 grid gap-3">
               <SellerWorkspaceDetailItem
                 label="Subtotal"
                 value={formatMoney(detail.totals?.subtotalAmount)}

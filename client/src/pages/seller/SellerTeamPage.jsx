@@ -149,6 +149,7 @@ export default function SellerTeamPage() {
     }
     return allRoles.filter((role) => manageableRoleCodes.includes(role.code));
   }, [teamQuery.data]);
+  const hasManageableRoleOptions = manageableRoleOptions.length > 0;
 
   const statusContract = teamQuery.data?.statusContract || {
     active: "ACTIVE",
@@ -485,7 +486,7 @@ export default function SellerTeamPage() {
       <SellerWorkspaceSectionHeader
         eyebrow="Seller Team"
         title="Team"
-        description="Manage who can access this store, see each member role, and invite or remove team members when your seller role allows it."
+        description="See who has access and invite the right people."
         actions={[
           <SellerWorkspaceBadge
             key="access-mode"
@@ -500,7 +501,7 @@ export default function SellerTeamPage() {
         ]}
       >
         <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">
-          Member states: {statusContract.active} / {statusContract.disabled}
+          Access: {statusContract.active} / {statusContract.disabled}
         </p>
       </SellerWorkspaceSectionHeader>
 
@@ -508,7 +509,7 @@ export default function SellerTeamPage() {
         <SellerWorkspaceStatCard
           label="Members"
           value={String(team?.summary?.totalMembers ?? 0)}
-          hint={`Active: ${team?.summary?.activeMembers ?? 0} | Invited: ${team?.summary?.invitedMembers ?? 0} | Disabled: ${team?.summary?.disabledMembers ?? 0} | Removed: ${team?.summary?.removedMembers ?? 0}`}
+          hint={`${team?.summary?.activeMembers ?? 0} active, ${team?.summary?.invitedMembers ?? 0} invited`}
           Icon={Users}
         />
         <SellerWorkspaceStatCard
@@ -517,8 +518,8 @@ export default function SellerTeamPage() {
           hint={
             team?.currentAccess?.readModel?.authority?.label ||
             (team?.summary?.hasVirtualOwnerBridge
-              ? "Owner access is available while no member row is attached yet."
-              : "Based on the active store membership.")
+              ? "Owner access active."
+              : "Based on your membership.")
           }
           Icon={ShieldCheck}
           tone="emerald"
@@ -532,14 +533,14 @@ export default function SellerTeamPage() {
           )}
           hint={
             team?.currentAccess?.readModel?.primaryRole?.summary ||
-            "This role controls which team actions are available."
+            "Controls available actions."
           }
           Icon={UserRound}
         />
         <SellerWorkspaceStatCard
-          label="System Roles"
+          label="Roles"
           value={String(team?.summary?.systemRolesAvailable ?? 0)}
-          hint="Available seller roles for this store."
+          hint="Can be assigned by role."
           Icon={UserCog}
           tone="amber"
         />
@@ -552,9 +553,9 @@ export default function SellerTeamPage() {
               <ShieldCheck className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-slate-900">Current Access Summary</h3>
+              <h3 className="text-base font-semibold text-slate-900">Your access</h3>
               <p className="text-sm text-slate-500">
-                Your current role and permissions for this store.
+                Your current role in this store.
               </p>
             </div>
           </div>
@@ -575,8 +576,8 @@ export default function SellerTeamPage() {
                 {sellerFriendlyText(
                   team?.currentAccess?.readModel?.authority?.description,
                   teamCapabilities.canInviteMembers || teamCapabilities.canAttachMembers
-                    ? "You can invite or manage members from this page."
-                    : "You can view the team list, but cannot change members."
+                    ? "You can invite or manage members."
+                    : "You can view members only."
                 )}
               </p>
             </SellerWorkspaceInset>
@@ -620,8 +621,8 @@ export default function SellerTeamPage() {
               <Lock className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-slate-900">Team Actions</h3>
-              <p className="text-sm text-slate-500">Invite members or add an existing user.</p>
+              <h3 className="text-base font-semibold text-slate-900">Invite member</h3>
+              <p className="text-sm text-slate-500">Add someone to this store.</p>
             </div>
           </div>
 
@@ -636,12 +637,17 @@ export default function SellerTeamPage() {
 
           {canManageMembers && canManageRoles ? (
             <div className="mt-4 space-y-3.5">
+              {!hasManageableRoleOptions ? (
+                <SellerWorkspaceNotice type="warning">
+                  Your role cannot invite members.
+                </SellerWorkspaceNotice>
+              ) : null}
+
               <form onSubmit={handleInviteSubmit}>
                 <SellerWorkspaceFilterBar className="border-amber-200 bg-amber-50 shadow-none">
-                  <p className="text-sm font-semibold text-slate-900">Invite Existing User</p>
+                  <p className="text-sm font-semibold text-slate-900">Invite user</p>
                   <p className="mt-1 text-sm leading-5 text-slate-600">
-                    Send an invitation to a user who already has an account. Their status stays
-                    invited until they accept.
+                    Send an invitation by email.
                   </p>
                   <div className="mt-3.5 grid gap-3">
                     <input
@@ -652,7 +658,7 @@ export default function SellerTeamPage() {
                       }
                       placeholder="member@example.com"
                       className={sellerFieldClass}
-                      disabled={inviteMemberMutation.isPending}
+                      disabled={inviteMemberMutation.isPending || !hasManageableRoleOptions}
                     />
                     <select
                       value={inviteForm.roleCode}
@@ -660,13 +666,17 @@ export default function SellerTeamPage() {
                         setInviteForm((current) => ({ ...current, roleCode: event.target.value }))
                       }
                       className={sellerFieldClass}
-                      disabled={inviteMemberMutation.isPending}
+                      disabled={inviteMemberMutation.isPending || !hasManageableRoleOptions}
                     >
-                      {manageableRoleOptions.map((role) => (
-                        <option key={role.id} value={role.code}>
-                          {role.name}
-                        </option>
-                      ))}
+                      {hasManageableRoleOptions ? (
+                        manageableRoleOptions.map((role) => (
+                          <option key={role.id} value={role.code}>
+                            {role.name}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="">No assignable roles</option>
+                      )}
                     </select>
                   </div>
                   <div className="mt-3.5 flex justify-end">
@@ -675,13 +685,14 @@ export default function SellerTeamPage() {
                       disabled={
                         inviteMemberMutation.isPending ||
                         busyActionKey === "invite" ||
+                        !hasManageableRoleOptions ||
                         !String(inviteForm.email || "").trim() ||
                         !String(inviteForm.roleCode || "").trim()
                       }
                       className={sellerWarningButtonClass}
                     >
                       <UserPlus className="h-4 w-4" />
-                      {inviteMemberMutation.isPending ? "Inviting..." : "Invite User"}
+                      {inviteMemberMutation.isPending ? "Inviting..." : "Invite"}
                     </button>
                   </div>
                 </SellerWorkspaceFilterBar>
@@ -689,9 +700,9 @@ export default function SellerTeamPage() {
 
               <form onSubmit={handleAttachSubmit}>
                 <SellerWorkspaceFilterBar className="shadow-none">
-                  <p className="text-sm font-semibold text-slate-900">Attach Existing User</p>
+                  <p className="text-sm font-semibold text-slate-900">Add user now</p>
                   <p className="mt-1 text-sm leading-5 text-slate-600">
-                    Add an existing user as an active member immediately.
+                    Add an existing user as active.
                   </p>
                   <div className="mt-3.5 grid gap-3">
                     <input
@@ -702,7 +713,7 @@ export default function SellerTeamPage() {
                       }
                       placeholder="member@example.com"
                       className={sellerFieldClass}
-                      disabled={createMemberMutation.isPending}
+                      disabled={createMemberMutation.isPending || !hasManageableRoleOptions}
                     />
                     <select
                       value={attachForm.roleCode}
@@ -710,13 +721,17 @@ export default function SellerTeamPage() {
                         setAttachForm((current) => ({ ...current, roleCode: event.target.value }))
                       }
                       className={sellerFieldClass}
-                      disabled={createMemberMutation.isPending}
+                      disabled={createMemberMutation.isPending || !hasManageableRoleOptions}
                     >
-                      {manageableRoleOptions.map((role) => (
-                        <option key={role.id} value={role.code}>
-                          {role.name}
-                        </option>
-                      ))}
+                      {hasManageableRoleOptions ? (
+                        manageableRoleOptions.map((role) => (
+                          <option key={role.id} value={role.code}>
+                            {role.name}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="">No assignable roles</option>
+                      )}
                     </select>
                   </div>
                   <div className="mt-3.5 flex justify-end">
@@ -725,13 +740,14 @@ export default function SellerTeamPage() {
                       disabled={
                         createMemberMutation.isPending ||
                         busyActionKey === "attach" ||
+                        !hasManageableRoleOptions ||
                         !String(attachForm.email || "").trim() ||
                         !String(attachForm.roleCode || "").trim()
                       }
                       className={sellerPrimaryButtonClass}
                     >
                       <UserPlus className="h-4 w-4" />
-                      {createMemberMutation.isPending ? "Attaching..." : "Attach Member"}
+                      {createMemberMutation.isPending ? "Adding..." : "Add member"}
                     </button>
                   </div>
                 </SellerWorkspaceFilterBar>
@@ -739,8 +755,7 @@ export default function SellerTeamPage() {
             </div>
           ) : (
             <SellerWorkspaceNotice type="warning" className="mt-4">
-              Your current seller role can view team members, but cannot invite, change roles, or
-              remove members.
+              Your role cannot invite members.
             </SellerWorkspaceNotice>
           )}
         </SellerWorkspacePanel>
@@ -749,9 +764,9 @@ export default function SellerTeamPage() {
       <SellerWorkspacePanel className="p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-base font-semibold text-slate-900">Store Members</h3>
+            <h3 className="text-base font-semibold text-slate-900">People with access</h3>
             <p className="mt-1 text-sm text-slate-500">
-              People who can access this store workspace.
+              Store workspace members.
             </p>
           </div>
           {team?.summary?.hasVirtualOwnerBridge ? (
@@ -957,7 +972,11 @@ export default function SellerTeamPage() {
           <div className="mt-5">
             <SellerWorkspaceEmptyState
               title="No store members yet"
-              description="Invite team members when you are ready to share store operations."
+              description={
+                hasManageableRoleOptions
+                  ? "Invite a member to share store work."
+                  : "Your role cannot invite members."
+              }
               icon={<Users className="h-5 w-5" />}
             />
           </div>
@@ -965,9 +984,9 @@ export default function SellerTeamPage() {
       </SellerWorkspacePanel>
 
       <SellerWorkspacePanel className="p-4">
-        <h3 className="text-base font-semibold text-slate-900">Available Seller Roles</h3>
+        <h3 className="text-base font-semibold text-slate-900">Roles you can use</h3>
         <p className="mt-1 text-sm text-slate-500">
-          Roles currently available for seller team members.
+          Pick one when inviting or adding a member.
         </p>
 
         <div className="mt-4 grid gap-3.5 lg:grid-cols-2">

@@ -33,6 +33,21 @@ const FILTERS = [
   { value: "REJECTED", label: "Rejected" },
 ];
 
+const EMPTY_COPY = {
+  PENDING_CONFIRMATION: {
+    title: "No proofs need review",
+    description: "New payment proofs will appear here.",
+  },
+  PAID: {
+    title: "No paid proofs yet",
+    description: "Approved payments will appear here.",
+  },
+  REJECTED: {
+    title: "No rejected proofs",
+    description: "Rejected payment proofs will appear here.",
+  },
+};
+
 const PAYMENT_TONES = {
   PAID: "emerald",
   PENDING_CONFIRMATION: "amber",
@@ -113,6 +128,7 @@ export default function SellerPaymentReviewPage() {
   const [activeFilter, setActiveFilter] = useState("PENDING_CONFIRMATION");
   const [notes, setNotes] = useState({});
   const [reviewFeedback, setReviewFeedback] = useState({});
+  const [globalFeedback, setGlobalFeedback] = useState(null);
   const hasViewPermission =
     sellerContext?.access?.permissionKeys?.includes("ORDER_VIEW") &&
     sellerContext?.access?.permissionKeys?.includes("PAYMENT_STATUS_VIEW");
@@ -144,10 +160,27 @@ export default function SellerPaymentReviewPage() {
         queryClient.invalidateQueries({ queryKey: ["payment", variables.paymentId] }),
       ]);
       setNotes((prev) => ({ ...prev, [variables.paymentId]: "" }));
+      setGlobalFeedback({
+        type: "success",
+        message:
+          variables.payload.action === "APPROVE"
+            ? "Payment proof approved. Orders and buyer payment state are refreshing."
+            : "Payment proof rejected. Buyer payment state is refreshing.",
+      });
+    },
+    onError: (error) => {
+      setGlobalFeedback({
+        type: "error",
+        message:
+          error?.response?.data?.message ||
+          error?.message ||
+          "Failed to review payment proof.",
+      });
     },
   });
 
   const handleReview = async (paymentId, action) => {
+    setGlobalFeedback(null);
     const note = String(notes[paymentId] || "").trim();
     if (action === "REJECT" && !note) {
       setReviewFeedback((current) => ({
@@ -161,13 +194,17 @@ export default function SellerPaymentReviewPage() {
       delete next[paymentId];
       return next;
     });
-    await reviewMutation.mutateAsync({
-      paymentId,
-      payload: {
-        action,
-        note: note || null,
-      },
-    });
+    try {
+      await reviewMutation.mutateAsync({
+        paymentId,
+        payload: {
+          action,
+          note: note || null,
+        },
+      });
+    } catch {
+      // The mutation onError state renders the seller-facing error message.
+    }
   };
 
   if (!hasViewPermission) {
@@ -213,7 +250,7 @@ export default function SellerPaymentReviewPage() {
       <SellerWorkspaceSectionHeader
         eyebrow="Finance"
         title="Payment review"
-        description="Review buyer payment proofs for this store. Approve only when the amount, sender details, and proof image match the order; reject with a clear reason when they do not."
+        description="Approve matching payment proofs or reject with a clear reason."
         actions={[
           <SellerWorkspaceBadge
             key="scope"
@@ -222,7 +259,7 @@ export default function SellerPaymentReviewPage() {
           />,
           <SellerWorkspaceBadge
             key="mode"
-            label={actorCanReview ? "Review enabled" : "Read-only"}
+            label={actorCanReview ? "Can review" : "Read-only"}
             tone={actorCanReview ? "emerald" : "amber"}
           />,
           governance?.roleCode ? (
@@ -237,26 +274,28 @@ export default function SellerPaymentReviewPage() {
         <p className="text-sm leading-6 text-slate-500">
           {sellerFriendlyText(
             governance?.note,
-            "Review actions follow the current store role and payment status."
+            actorCanReview ? "Only approve matching proofs." : "Your role can view proofs only."
           )}
         </p>
       </SellerWorkspaceSectionHeader>
+
+      {globalFeedback ? (
+        <SellerWorkspaceNotice type={globalFeedback.type === "success" ? "success" : "error"}>
+          {globalFeedback.message}
+        </SellerWorkspaceNotice>
+      ) : null}
 
       <section className="grid gap-3.5 md:grid-cols-3">
         <SellerWorkspaceStatCard
           label="Visible Records"
           value={String(reviewStats.total)}
-          hint={
-            reviewStats.exceptionCount > 0
-              ? `Rows in this filter for the active store. Exceptions: ${reviewStats.exceptionCount}.`
-              : "Rows in this filter for the active store."
-          }
+          hint="Current filter."
           Icon={CreditCard}
         />
         <SellerWorkspaceStatCard
           label="Awaiting Review"
           value={String(reviewStats.awaitingReview)}
-          hint="Proofs waiting for seller approval or rejection."
+          hint="Needs action."
           Icon={BadgeCheck}
           tone="amber"
         />
@@ -265,10 +304,10 @@ export default function SellerPaymentReviewPage() {
           value={String(reviewStats.settled)}
           hint={
             reviewStats.exceptionCount > 0
-              ? `Paid rows only. ${reviewStats.exceptionCount} rejected, failed, or expired row(s) stay outside this count.`
+              ? `${reviewStats.exceptionCount} exceptions hidden.`
               : actorCanReview
-                ? "Paid records in this filter and store."
-                : "Your role can observe outcomes only."
+                ? "Approved proofs."
+                : "View-only."
           }
           Icon={BadgeCheck}
           tone="emerald"
@@ -296,14 +335,14 @@ export default function SellerPaymentReviewPage() {
 
       {!actorCanReview ? (
         <SellerWorkspaceNotice type="warning">
-          Your seller role can inspect payment proof data for this store, but cannot approve or reject it. Store owners and store admins keep review authority.
+          Your role can view proofs, but cannot approve or reject them.
         </SellerWorkspaceNotice>
       ) : null}
 
       {items.length === 0 ? (
         <SellerWorkspaceEmptyState
-          title="No payment records match this filter"
-          description="Try another payment filter or wait until buyers submit payment proof for this store."
+          title={EMPTY_COPY[activeFilter]?.title || "No payment records"}
+          description={EMPTY_COPY[activeFilter]?.description || "Try another payment filter."}
           icon={<CreditCard className="h-5 w-5" />}
         />
       ) : null}
