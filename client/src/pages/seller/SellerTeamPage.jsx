@@ -96,6 +96,28 @@ function formatPermissionLabel(value) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function getInitials(name, email) {
+  const source = String(name || email || "?").trim();
+  if (!source) return "?";
+  const parts = source
+    .replace(/@.*/, "")
+    .split(/\s+|[._-]+/)
+    .filter(Boolean);
+  return (parts[0]?.[0] || "?").concat(parts[1]?.[0] || "").toUpperCase();
+}
+
+function getPermissionLevel(keys, manageKeys = [], viewKeys = []) {
+  if (manageKeys.some((key) => keys.includes(key))) return "Manage";
+  if (viewKeys.some((key) => keys.includes(key))) return "View";
+  return "No access";
+}
+
+function getPermissionTone(level) {
+  if (level === "Manage") return "emerald";
+  if (level === "View") return "sky";
+  return "stone";
+}
+
 export default function SellerTeamPage() {
   const {
     sellerContext,
@@ -114,6 +136,7 @@ export default function SellerTeamPage() {
   const [feedback, setFeedback] = useState(null);
   const [roleDrafts, setRoleDrafts] = useState({});
   const [busyActionKey, setBusyActionKey] = useState("");
+  const [showPermissionDetails, setShowPermissionDetails] = useState(false);
 
   const teamQuery = useQuery({
     queryKey: ["seller", "team", storeId],
@@ -140,6 +163,44 @@ export default function SellerTeamPage() {
     ].filter((group) => group.items.length > 0);
   }, [teamQuery.data]);
 
+  const accessSummaryGroups = useMemo(() => {
+    const keys = teamQuery.data?.currentAccess?.permissionKeys || [];
+    return [
+      {
+        title: "Store",
+        level: getPermissionLevel(
+          keys,
+          ["STORE_PROFILE_EDIT", "STORE_CUSTOMIZATION_MANAGE", "STORE_SETTINGS_MANAGE"],
+          ["STORE_PROFILE_VIEW", "STORE_CUSTOMIZATION_VIEW"]
+        ),
+      },
+      {
+        title: "Orders",
+        level: getPermissionLevel(
+          keys,
+          ["ORDER_FULFILLMENT_MANAGE", "ORDER_STATUS_MANAGE"],
+          ["ORDER_VIEW"]
+        ),
+      },
+      {
+        title: "Payments",
+        level: getPermissionLevel(
+          keys,
+          ["PAYMENT_PROFILE_EDIT", "PAYMENT_REVIEW_MANAGE"],
+          ["PAYMENT_PROFILE_VIEW", "PAYMENT_STATUS_VIEW"]
+        ),
+      },
+      {
+        title: "Team",
+        level: getPermissionLevel(
+          keys,
+          ["STORE_MEMBERS_MANAGE", "STORE_ROLES_MANAGE"],
+          ["AUDIT_LOG_VIEW"]
+        ),
+      },
+    ];
+  }, [teamQuery.data]);
+
   const manageableRoleOptions = useMemo(() => {
     const allRoles = teamQuery.data?.roles || [];
     const manageableRoleCodes =
@@ -150,12 +211,6 @@ export default function SellerTeamPage() {
     return allRoles.filter((role) => manageableRoleCodes.includes(role.code));
   }, [teamQuery.data]);
   const hasManageableRoleOptions = manageableRoleOptions.length > 0;
-
-  const statusContract = teamQuery.data?.statusContract || {
-    active: "ACTIVE",
-    disabled: "DISABLED",
-    persistenceDisabled: "INACTIVE",
-  };
 
   const createMemberMutation = useMutation({
     mutationFn: (payload) => createSellerStoreMember(storeId, payload),
@@ -470,6 +525,35 @@ export default function SellerTeamPage() {
   const team = teamQuery.data;
   const members = Array.isArray(team?.members) ? team.members : [];
   const teamCapabilities = team?.currentAccess?.capabilities || {};
+  const activeCount = Number(team?.summary?.activeMembers || 0);
+  const invitedCount = Number(team?.summary?.invitedMembers || 0);
+  const disabledCount = Number(team?.summary?.disabledMembers || 0);
+  const currentRoleLabel = formatPermissionLabel(
+    team?.currentAccess?.readModel?.primaryRole?.label ||
+      team?.currentAccess?.roleCode ||
+      "Role pending"
+  );
+  const hasTeamWorkflowAccess = Boolean(
+    teamCapabilities.canInviteMembers ||
+      teamCapabilities.canAttachMembers ||
+      teamCapabilities.canChangeRoles ||
+      teamCapabilities.canChangeStatus ||
+      teamCapabilities.canRemoveMembers ||
+      teamCapabilities.canReinviteMembers
+  );
+  const accessLevelLabel = hasTeamWorkflowAccess ? "Team operations enabled" : "View access";
+  const accessLevelHint = hasTeamWorkflowAccess
+    ? "You can manage team workflows for this store."
+    : "You can view team details for this store.";
+  const teamHeaderDescription = `${activeCount} active member${activeCount === 1 ? "" : "s"} - ${invitedCount} pending invite${invitedCount === 1 ? "" : "s"}`;
+  const headerBadges = [
+    team?.currentAccess?.roleCode === "STORE_OWNER" ? (
+      <SellerWorkspaceBadge key="owner" label="Store Owner" tone="emerald" />
+    ) : null,
+    team?.summary?.hasVirtualOwnerBridge ? (
+      <SellerWorkspaceBadge key="owner-bridge" label="Owner Bridge" tone="amber" />
+    ) : null,
+  ].filter(Boolean);
   const statusTone = (status) => {
     if (status === "ACTIVE") return "emerald";
     if (status === "INVITED") return "amber";
@@ -486,35 +570,39 @@ export default function SellerTeamPage() {
       <SellerWorkspaceSectionHeader
         eyebrow="Seller Team"
         title="Team"
-        description="See who has access and invite the right people."
+        description={teamHeaderDescription}
         actions={[
-          <SellerWorkspaceBadge
-            key="access-mode"
-            label={formatPermissionLabel(team?.currentAccess?.accessMode || "Access pending")}
-            tone="amber"
-          />,
-          <SellerWorkspaceBadge
-            key="role"
-            label={formatPermissionLabel(team?.currentAccess?.roleCode || "Role pending")}
-            tone="emerald"
-          />,
+          canManageMembers && canManageRoles ? (
+            <button
+              key="invite"
+              type="button"
+              onClick={() =>
+                document
+                  .getElementById("seller-team-invite")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" })
+              }
+              className={sellerPrimaryButtonClass}
+            >
+              <UserPlus className="h-4 w-4" />
+              Invite member
+            </button>
+          ) : null,
+          ...headerBadges,
         ]}
       >
-        <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">
-          Access: {statusContract.active} / {statusContract.disabled}
-        </p>
+        <p className="text-sm text-slate-500">Manage access for this store.</p>
       </SellerWorkspaceSectionHeader>
 
       <section className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-4">
         <SellerWorkspaceStatCard
           label="Members"
           value={String(team?.summary?.totalMembers ?? 0)}
-          hint={`${team?.summary?.activeMembers ?? 0} active, ${team?.summary?.invitedMembers ?? 0} invited`}
+          hint={`${activeCount} active, ${invitedCount} invited, ${disabledCount} disabled`}
           Icon={Users}
         />
         <SellerWorkspaceStatCard
-          label="Current Access"
-          value={formatPermissionLabel(team?.currentAccess?.membershipStatus || "-")}
+          label="Active"
+          value={team?.currentAccess?.membershipStatus ? "Has access" : "-"}
           hint={
             team?.currentAccess?.readModel?.authority?.label ||
             (team?.summary?.hasVirtualOwnerBridge
@@ -525,29 +613,22 @@ export default function SellerTeamPage() {
           tone="emerald"
         />
         <SellerWorkspaceStatCard
-          label="Current Role"
-          value={formatPermissionLabel(
-            team?.currentAccess?.readModel?.primaryRole?.label ||
-              team?.currentAccess?.roleCode ||
-              "-"
-          )}
-          hint={
-            team?.currentAccess?.readModel?.primaryRole?.summary ||
-            "Controls available actions."
-          }
+          label="Your role"
+          value={currentRoleLabel}
+          hint="Controls available actions."
           Icon={UserRound}
         />
         <SellerWorkspaceStatCard
-          label="Roles"
+          label="Available roles"
           value={String(team?.summary?.systemRolesAvailable ?? 0)}
-          hint="Can be assigned by role."
+          hint={`${manageableRoleOptions.length} assignable by you.`}
           Icon={UserCog}
           tone="amber"
         />
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1fr_0.95fr]">
-        <SellerWorkspacePanel className="p-4">
+        <SellerWorkspacePanel id="seller-team-invite" className="scroll-mt-24 p-4">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white">
               <ShieldCheck className="h-4 w-4" />
@@ -563,56 +644,87 @@ export default function SellerTeamPage() {
           <dl className="mt-4 grid gap-3.5 sm:grid-cols-2">
             <SellerWorkspaceInset className="px-3.5 py-3.5">
               <dt className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                Membership Status
+                Current role
               </dt>
               <dd className="mt-2 text-base font-semibold text-slate-900">
-                {formatPermissionLabel(
-                  team?.currentAccess?.readModel?.authority?.label ||
-                    team?.currentAccess?.membershipStatus ||
-                    "-"
-                )}
+                {currentRoleLabel}
               </dd>
               <p className="mt-2 text-xs text-slate-500">
                 {sellerFriendlyText(
-                  team?.currentAccess?.readModel?.authority?.description,
-                  teamCapabilities.canInviteMembers || teamCapabilities.canAttachMembers
-                    ? "You can invite or manage members."
-                    : "You can view members only."
+                  team?.currentAccess?.readModel?.primaryRole?.summary,
+                  "Your role controls available team actions."
                 )}
               </p>
             </SellerWorkspaceInset>
             <SellerWorkspaceInset className="px-3.5 py-3.5">
               <dt className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                Member Reference
+                Access level
               </dt>
               <dd className="mt-2 text-base font-semibold text-slate-900">
-                {team?.currentAccess?.memberId ?? "Virtual owner"}
+                {accessLevelLabel}
               </dd>
               <p className="mt-2 text-xs text-slate-500">
-                {sellerFriendlyText(
-                  team?.currentAccess?.readModel?.membershipBoundary,
-                  "Current access details."
-                )}
+                {accessLevelHint}
               </p>
             </SellerWorkspaceInset>
           </dl>
 
-          <div className="mt-4 grid gap-3.5 lg:grid-cols-2">
-            {accessGroups.map((group) => (
-              <SellerWorkspaceInset key={group.title} className="px-3.5 py-3.5">
-                <h4 className="text-sm font-semibold text-slate-900">{group.title}</h4>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {group.items.map((permissionKey) => (
+          <SellerWorkspaceInset className="mt-4 px-3.5 py-2">
+            <div className="divide-y divide-slate-200">
+              {accessSummaryGroups.map((group) => (
+                <div
+                  key={group.title}
+                  className="flex items-center justify-between gap-4 py-2.5"
+                >
+                  <p className="min-w-0 text-sm font-semibold text-slate-900">{group.title}</p>
+                  <div className="shrink-0">
                     <SellerWorkspaceBadge
-                      key={permissionKey}
-                      label={formatPermissionLabel(permissionKey)}
-                      tone="emerald"
+                      label={group.level}
+                      tone={getPermissionTone(group.level)}
                     />
-                  ))}
+                  </div>
                 </div>
-              </SellerWorkspaceInset>
-            ))}
+              ))}
+            </div>
+          </SellerWorkspaceInset>
+
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => setShowPermissionDetails((current) => !current)}
+              className="text-xs font-semibold text-slate-700 underline"
+            >
+              {showPermissionDetails ? "Hide details" : "View details"}
+            </button>
           </div>
+
+          {showPermissionDetails ? (
+            <div className="mt-3 grid gap-3.5 lg:grid-cols-2">
+              {accessGroups.map((group) => (
+                <SellerWorkspaceInset key={group.title} className="px-3.5 py-3.5">
+                  <h4 className="text-sm font-semibold text-slate-900">{group.title}</h4>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {group.items.map((permissionKey) => (
+                      <SellerWorkspaceBadge
+                        key={permissionKey}
+                        label={formatPermissionLabel(permissionKey)}
+                        tone="emerald"
+                      />
+                    ))}
+                  </div>
+                </SellerWorkspaceInset>
+              ))}
+            </div>
+          ) : null}
+
+          {team?.currentAccess?.readModel?.membershipBoundary ? (
+            <p className="mt-3 text-xs leading-5 text-slate-500">
+              {sellerFriendlyText(
+                team.currentAccess.readModel.membershipBoundary,
+                "Current access details."
+              )}
+            </p>
+          ) : null}
         </SellerWorkspacePanel>
 
         <SellerWorkspacePanel className="p-4">
@@ -622,7 +734,7 @@ export default function SellerTeamPage() {
             </div>
             <div>
               <h3 className="text-base font-semibold text-slate-900">Invite member</h3>
-              <p className="text-sm text-slate-500">Add someone to this store.</p>
+              <p className="text-sm text-slate-500">Invite or add existing users.</p>
             </div>
           </div>
 
@@ -636,7 +748,7 @@ export default function SellerTeamPage() {
           ) : null}
 
           {canManageMembers && canManageRoles ? (
-            <div className="mt-4 space-y-3.5">
+            <div className="mt-3 space-y-3">
               {!hasManageableRoleOptions ? (
                 <SellerWorkspaceNotice type="warning">
                   Your role cannot invite members.
@@ -644,12 +756,10 @@ export default function SellerTeamPage() {
               ) : null}
 
               <form onSubmit={handleInviteSubmit}>
-                <SellerWorkspaceFilterBar className="border-amber-200 bg-amber-50 shadow-none">
-                  <p className="text-sm font-semibold text-slate-900">Invite user</p>
-                  <p className="mt-1 text-sm leading-5 text-slate-600">
-                    Send an invitation by email.
-                  </p>
-                  <div className="mt-3.5 grid gap-3">
+                <SellerWorkspaceFilterBar className="border-emerald-200 bg-emerald-50 shadow-none">
+                  <p className="text-sm font-semibold text-slate-900">Invite by email</p>
+                  <p className="mt-1 text-sm leading-5 text-slate-600">Requires acceptance.</p>
+                  <div className="mt-3 grid gap-2.5">
                     <input
                       type="email"
                       value={inviteForm.email}
@@ -679,7 +789,7 @@ export default function SellerTeamPage() {
                       )}
                     </select>
                   </div>
-                  <div className="mt-3.5 flex justify-end">
+                  <div className="mt-3 flex justify-end">
                     <button
                       type="submit"
                       disabled={
@@ -689,7 +799,7 @@ export default function SellerTeamPage() {
                         !String(inviteForm.email || "").trim() ||
                         !String(inviteForm.roleCode || "").trim()
                       }
-                      className={sellerWarningButtonClass}
+                      className={sellerPrimaryButtonClass}
                     >
                       <UserPlus className="h-4 w-4" />
                       {inviteMemberMutation.isPending ? "Inviting..." : "Invite"}
@@ -700,11 +810,9 @@ export default function SellerTeamPage() {
 
               <form onSubmit={handleAttachSubmit}>
                 <SellerWorkspaceFilterBar className="shadow-none">
-                  <p className="text-sm font-semibold text-slate-900">Add user now</p>
-                  <p className="mt-1 text-sm leading-5 text-slate-600">
-                    Add an existing user as active.
-                  </p>
-                  <div className="mt-3.5 grid gap-3">
+                  <p className="text-sm font-semibold text-slate-900">Add existing user</p>
+                  <p className="mt-1 text-sm leading-5 text-slate-600">Immediate access.</p>
+                  <div className="mt-3 grid gap-2.5">
                     <input
                       type="email"
                       value={attachForm.email}
@@ -734,7 +842,7 @@ export default function SellerTeamPage() {
                       )}
                     </select>
                   </div>
-                  <div className="mt-3.5 flex justify-end">
+                  <div className="mt-3 flex justify-end">
                     <button
                       type="submit"
                       disabled={
@@ -777,7 +885,7 @@ export default function SellerTeamPage() {
         {members.length > 0 ? (
           <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
             <div className="min-w-0">
-            <div className="hidden grid-cols-[1.4fr_1.3fr_0.9fr_1fr_1.2fr] gap-3 border-b border-slate-200 bg-slate-50 px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500 md:grid">
+            <div className="hidden grid-cols-[1.5fr_1.1fr_0.8fr_0.8fr_1fr] gap-3 border-b border-slate-200 bg-slate-50 px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500 md:grid">
               <span>Member</span>
               <span>Role</span>
               <span>Status</span>
@@ -796,17 +904,25 @@ export default function SellerTeamPage() {
                 return (
                 <div
                   key={member.id}
-                  className="grid grid-cols-1 gap-3 px-3.5 py-3.5 text-sm text-slate-700 md:grid-cols-[1.4fr_1.3fr_0.9fr_1fr_1.2fr]"
+                  className="grid grid-cols-1 gap-3 px-3.5 py-3.5 text-sm text-slate-700 md:grid-cols-[1.5fr_1.1fr_0.8fr_0.8fr_1fr]"
                 >
-                  <div>
-                    <p className="font-semibold text-slate-900">{member.name || `User #${member.userId}`}</p>
-                    <p className="mt-1 text-xs text-slate-500">{member.email || "-"}</p>
-                    <p className="mt-2 text-xs text-slate-500">
-                      {member.invitedAt ? `Invited ${formatDate(member.invitedAt)}` : "No invite timestamp"}
-                      {member.acceptedAt ? ` - Accepted ${formatDate(member.acceptedAt)}` : ""}
-                      {member.disabledAt ? ` - Disabled ${formatDate(member.disabledAt)}` : ""}
-                      {member.removedAt ? ` - Removed ${formatDate(member.removedAt)}` : ""}
-                    </p>
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">
+                      {getInitials(member.name, member.email)}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-slate-900">
+                        {member.name || `User #${member.userId}`}
+                      </p>
+                      <p className="mt-1 truncate text-xs text-slate-500">{member.email || "-"}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {member.invitedAt
+                          ? `Invited ${formatDate(member.invitedAt)}`
+                          : member.acceptedAt
+                            ? `Accepted ${formatDate(member.acceptedAt)}`
+                            : "Added to store"}
+                      </p>
+                    </div>
                   </div>
                   <div>
                     {(editableRole || reinvitable) && canManageRoles ? (
@@ -841,7 +957,7 @@ export default function SellerTeamPage() {
                           className={sellerSecondaryButtonClass}
                         >
                           <Save className="h-3.5 w-3.5" />
-                          {roleBusy ? "Saving..." : "Save Role"}
+                          {roleBusy ? "Saving..." : "Save role"}
                         </button>
                       </div>
                     ) : (
@@ -856,16 +972,13 @@ export default function SellerTeamPage() {
                             )}
                           </p>
                           {member.roleCode ? (
-                            <SellerWorkspaceBadge label={formatPermissionLabel(member.roleCode)} tone="stone" />
-                          ) : null}
-                          {member.readModel?.primaryRole?.category ? (
                             <SellerWorkspaceBadge
-                              label={formatPermissionLabel(member.readModel.primaryRole.category)}
-                              tone={member.readModel.primaryRole.tone || "stone"}
+                              label={formatPermissionLabel(member.roleCode)}
+                              tone={member.readModel?.primaryRole?.tone || "stone"}
                             />
                           ) : null}
                         </div>
-                        <p className="mt-1 text-xs text-slate-500">
+                        <p className="mt-1 line-clamp-1 text-xs text-slate-500">
                           {getRoleMeaning(member)}
                         </p>
                       </>
@@ -876,11 +989,8 @@ export default function SellerTeamPage() {
                       label={member.statusMeta?.label || member.status}
                       tone={statusTone(member.status)}
                     />
-                    <p className="mt-2 text-xs text-slate-500">
-                      {getLifecycleMeaning(member)}
-                    </p>
                     {member.readModel?.lifecycle?.nextStep ? (
-                      <p className="mt-2 text-xs font-medium text-slate-500">
+                      <p className="mt-2 line-clamp-1 text-xs font-medium text-slate-500">
                         {member.readModel.lifecycle.nextStep}
                       </p>
                     ) : null}
@@ -906,7 +1016,7 @@ export default function SellerTeamPage() {
                     <div className="flex flex-col items-start gap-2">
                       <Link
                         to={workspaceRoutes.memberLifecycle(member.id)}
-                        className="text-xs font-semibold text-slate-700 underline"
+                        className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                       >
                         View lifecycle
                       </Link>
@@ -984,16 +1094,16 @@ export default function SellerTeamPage() {
       </SellerWorkspacePanel>
 
       <SellerWorkspacePanel className="p-4">
-        <h3 className="text-base font-semibold text-slate-900">Roles you can use</h3>
+        <h3 className="text-base font-semibold text-slate-900">Role summary</h3>
         <p className="mt-1 text-sm text-slate-500">
           Pick one when inviting or adding a member.
         </p>
 
-        <div className="mt-4 grid gap-3.5 lg:grid-cols-2">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {(team?.roles || []).map((role) => (
-            <SellerWorkspaceInset key={role.id} className="px-3.5 py-3.5">
+            <SellerWorkspaceInset key={role.id} className="flex min-h-[150px] flex-col px-3.5 py-3">
               <div className="flex items-center justify-between gap-3">
-                <div>
+                <div className="min-w-0">
                   <h4 className="text-sm font-semibold text-slate-900">{role.name}</h4>
                   <p className="mt-1 text-xs text-slate-500">{formatPermissionLabel(role.code)}</p>
                 </div>
@@ -1002,9 +1112,17 @@ export default function SellerTeamPage() {
                   tone={role.isActive ? "emerald" : "stone"}
                 />
               </div>
-              <p className="mt-3 text-sm leading-6 text-slate-600">
+              <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">
                 {role.description || "No description available."}
               </p>
+              <div className="mt-auto flex items-center justify-between gap-2 pt-3">
+                <p className="text-xs font-medium text-slate-500">
+                  {role.permissionKeys?.length || 0} permissions
+                </p>
+                {manageableRoleOptions.some((option) => option.code === role.code) ? (
+                  <SellerWorkspaceBadge label="Assignable" tone="sky" />
+                ) : null}
+              </div>
             </SellerWorkspaceInset>
           ))}
         </div>

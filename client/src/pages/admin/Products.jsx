@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  approveAdminProductReview,
   bulkAdminProducts,
   deleteAdminProduct,
   duplicateAdminProduct,
@@ -16,6 +17,7 @@ import { resolveAssetUrl } from "../../lib/assetUrl.js";
 import { getPrimaryProductImageUrl } from "../../utils/productDisplay.js";
 import {
   ChevronDown,
+  CheckCircle2,
   Copy,
   Download,
   Pencil,
@@ -235,19 +237,29 @@ function ProductPublishedBadge({ visibility, published, status, submissionStatus
 }
 
 function ProductSellerReviewBadge({ submission }) {
-  const status = submission?.status || "none";
+  const status = String(submission?.status || "none")
+    .trim()
+    .toLowerCase();
+  if (!status || status === "none") return null;
+
   const toneClass =
     status === "submitted"
       ? "border-sky-200 bg-sky-50 text-sky-700"
       : status === "needs_revision"
         ? "border-amber-200 bg-amber-50 text-amber-800"
         : "border-slate-200 bg-slate-50 text-slate-500";
+  const fallbackLabel =
+    status === "submitted"
+      ? "Submitted for review"
+      : status === "needs_revision"
+        ? "Needs revision"
+        : "Review active";
 
   return (
     <span
       className={`inline-flex min-h-6 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${toneClass}`}
     >
-      {submission?.label || "Not submitted"}
+      {submission?.label || fallbackLabel}
     </span>
   );
 }
@@ -442,6 +454,10 @@ export default function AdminProductsPage() {
     open: false,
     ids: [],
   });
+  const [approveConfirm, setApproveConfirm] = useState({
+    open: false,
+    product: null,
+  });
   const [drawerState, setDrawerState] = useState({
     open: false,
     mode: "create",
@@ -519,6 +535,10 @@ export default function AdminProductsPage() {
     mutationFn: ({ id, published }) => updateAdminProductPublished(id, published),
   });
 
+  const approveMutation = useMutation({
+    mutationFn: (id) => approveAdminProductReview(id),
+  });
+
   const bulkMutation = useMutation({
     mutationFn: ({ action, ids }) => bulkAdminProducts(action, ids),
   });
@@ -542,6 +562,7 @@ export default function AdminProductsPage() {
     isImporting ||
     bulkMutation.isPending ||
     deleteMutation.isPending ||
+    approveMutation.isPending ||
     duplicateMutation.isPending;
   const selectedCount = selectedIds.size;
   const activeFilterCount =
@@ -641,6 +662,7 @@ export default function AdminProductsPage() {
     setPage(1);
     setSelectedIds(new Set());
     setBulkConfirm({ open: false, ids: [] });
+    setApproveConfirm({ open: false, product: null });
     closeFloatingMenus();
   };
 
@@ -651,6 +673,7 @@ export default function AdminProductsPage() {
     setSelectedIds(new Set());
     setNotice(null);
     setBulkConfirm({ open: false, ids: [] });
+    setApproveConfirm({ open: false, product: null });
     closeFloatingMenus();
   };
 
@@ -972,6 +995,46 @@ export default function AdminProductsPage() {
           type: "error",
           title: "Delete failed",
           message: error?.response?.data?.message || "Delete failed. Please try again.",
+        });
+      },
+    });
+  };
+
+  const handleApproveProduct = (product) => {
+    const productId = Number(product?.id);
+    if (!productId || approveMutation.isPending) return;
+    closeFloatingMenus();
+    setApproveConfirm({ open: true, product });
+  };
+
+  const handleConfirmApproveProduct = () => {
+    const product = approveConfirm.product;
+    const productId = Number(product?.id);
+    if (!approveConfirm.open || !productId || approveMutation.isPending) return;
+
+    showNotice(null);
+    approveMutation.mutate(productId, {
+      onSuccess: async () => {
+        setApproveConfirm({ open: false, product: null });
+        showNotice({
+          type: "success",
+          title: "Product approved",
+          message:
+            "Seller submission cleared. Seller can publish this product when it is ready.",
+        });
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["admin-products"] }),
+          queryClient.invalidateQueries({ queryKey: ["admin-product", productId] }),
+          queryClient.invalidateQueries({ queryKey: ["admin-product-preview", productId] }),
+          queryClient.invalidateQueries({ queryKey: ["seller", "products"] }),
+        ]);
+      },
+      onError: (error) => {
+        showNotice({
+          type: "error",
+          title: "Approve failed",
+          message:
+            error?.response?.data?.message || "Failed to approve this product.",
         });
       },
     });
@@ -1694,6 +1757,19 @@ export default function AdminProductsPage() {
                   const inventoryMeta = getInventoryStatusMeta(product.stock);
                   const categoryContext = getProductCategoryContext(product);
                   const sellerSubmission = product?.sellerSubmission || null;
+                  const sellerSubmissionStatus = String(
+                    sellerSubmission?.status || product?.sellerSubmissionStatus || "none"
+                  )
+                    .trim()
+                    .toLowerCase();
+                  const reviewBadgeSubmission =
+                    sellerSubmissionStatus && sellerSubmissionStatus !== "none"
+                      ? {
+                          ...(sellerSubmission || {}),
+                          status: sellerSubmissionStatus,
+                        }
+                      : null;
+                  const canApproveProduct = sellerSubmissionStatus === "submitted";
                   const publishGate = sellerSubmission?.publishGate || null;
                   const publishToggleDisabled =
                     publishingIds.has(productId) ||
@@ -1737,6 +1813,11 @@ export default function AdminProductsPage() {
                               <p className="truncate text-[13px] font-semibold text-slate-900">
                                 {product.name || `#${product.id}`}
                               </p>
+                              {reviewBadgeSubmission ? (
+                                <div className="mt-1 flex flex-wrap items-center gap-1">
+                                  <ProductSellerReviewBadge submission={reviewBadgeSubmission} />
+                                </div>
+                              ) : null}
                             </div>
                           </div>
                         </td>
@@ -1836,6 +1917,17 @@ export default function AdminProductsPage() {
                               <Search className="h-3.5 w-3.5" />
                               View
                             </button>
+                            {canApproveProduct ? (
+                              <button
+                                type="button"
+                                onClick={() => handleApproveProduct(product)}
+                                disabled={approveMutation.isPending}
+                                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                Approve
+                              </button>
+                            ) : null}
                             <button
                               type="button"
                               onClick={() => handleDuplicateProduct(product)}
@@ -1954,6 +2046,51 @@ export default function AdminProductsPage() {
                   className="inline-flex h-10 items-center justify-center rounded-lg border border-rose-500 bg-rose-500 px-4 text-sm font-semibold text-white transition hover:bg-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {bulkMutation.isPending ? "Deleting..." : "Confirm"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      {approveConfirm.open ? (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              if (approveMutation.isPending) return;
+              setApproveConfirm({ open: false, product: null });
+            }}
+            className="fixed inset-0 z-[70] bg-slate-900/35"
+            aria-label="Close approve product confirmation"
+          />
+          <div className="fixed inset-0 z-[71] flex items-center justify-center p-4">
+            <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl">
+              <h3 className="text-lg font-semibold text-slate-900">Approve product?</h3>
+              <p className="mt-2 text-sm text-slate-500">
+                This product will be accepted for selling and seller restrictions will be updated.
+              </p>
+              {approveConfirm.product?.name ? (
+                <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
+                  {approveConfirm.product.name}
+                </p>
+              ) : null}
+              <div className="mt-5 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  disabled={approveMutation.isPending}
+                  onClick={() => setApproveConfirm({ open: false, product: null })}
+                  className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={approveMutation.isPending}
+                  onClick={handleConfirmApproveProduct}
+                  className="inline-flex h-10 items-center justify-center rounded-lg border border-emerald-600 bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {approveMutation.isPending ? "Approving..." : "Approve product"}
                 </button>
               </div>
             </div>

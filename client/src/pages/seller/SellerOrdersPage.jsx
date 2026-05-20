@@ -538,6 +538,23 @@ export default function SellerOrdersPage() {
         </section>
       ) : null}
 
+      {!ordersQuery.isLoading && !ordersQuery.isError && rows.length > 0 ? (
+        <SellerWorkspacePanel className="p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Operational queue</p>
+              <p className="mt-1 text-sm text-slate-500">
+                Review payment state, fulfillment status, and the next seller action.
+              </p>
+            </div>
+            <SellerWorkspaceBadge
+              label={`${visibleSummary.needFulfillment} need action`}
+              tone={visibleSummary.needFulfillment > 0 ? "amber" : "emerald"}
+            />
+          </div>
+        </SellerWorkspacePanel>
+      ) : null}
+
       <SellerWorkspacePanel className="p-4 shadow-sm sm:p-4">
         <div className="grid gap-3">
           <div className="grid gap-3 xl:grid-cols-[minmax(320px,1fr)]">
@@ -680,11 +697,11 @@ export default function SellerOrdersPage() {
                   <th className={`${sellerHeadCellClass} w-[19%]`}>Invoice No</th>
                   <th className={`${sellerHeadCellClass} w-[16%]`}>Order Time</th>
                   <th className={`${sellerHeadCellClass} w-[16%]`}>Customer Name</th>
-                  <th className={`${sellerHeadCellClass} w-[8%]`}>Payment</th>
+                  <th className={`${sellerHeadCellClass} w-[10%]`}>Payment</th>
                   <th className={`${sellerHeadCellClass} w-[10%] text-right`}>Amount</th>
                   <th className={`${sellerHeadCellClass} w-[11%]`}>Status</th>
                   <th className={`${sellerHeadCellClass} w-[7%]`}>Delivery</th>
-                  <th className={`${sellerHeadCellClass} w-[13%]`}>Action</th>
+                  <th className={`${sellerHeadCellClass} w-[13%]`}>Next action</th>
                   <th className={`${sellerHeadCellClass} w-[8%] text-center`}>Invoice</th>
                 </tr>
               </thead>
@@ -735,8 +752,17 @@ export default function SellerOrdersPage() {
                           ) : null}
                         </div>
                       </td>
-                      <td className={`${sellerBodyCellClass} font-medium text-slate-700`}>
-                        {view.method}
+                      <td className={sellerBodyCellClass}>
+                        <div className="space-y-1">
+                          <span
+                            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getStatusBadgeClass(
+                              raw.paymentStatusMeta?.label || raw.paymentStatus
+                            )}`}
+                          >
+                            {raw.paymentStatusMeta?.label || formatStatusLabel(raw.paymentStatus)}
+                          </span>
+                          <p className="text-[10px] leading-4 text-slate-500">{view.method}</p>
+                        </div>
                       </td>
                       <td
                         className={`${sellerBodyCellClass} whitespace-nowrap text-right font-semibold tabular-nums text-slate-900`}
@@ -768,7 +794,12 @@ export default function SellerOrdersPage() {
                               })
                             }
                             disabled={fulfillmentMutation.isPending}
-                            className={`${sellerSecondaryButtonClass} w-full px-2 text-[11px]`}
+                            className={`${
+                              rowAction.code === "MARK_PROCESSING" ||
+                              rowAction.code === "MARK_SHIPPED"
+                                ? sellerPrimaryButtonClass
+                                : sellerSecondaryButtonClass
+                            } w-full px-2 text-[11px]`}
                           >
                             {busyActionKey === actionKey ? "Saving..." : rowAction.label}
                           </button>

@@ -1351,6 +1351,45 @@ async function run() {
     "none",
     "admin approve review: seller submission state should be cleared"
   );
+
+  const sellerApprovedList = await sellerClient.request(
+    `/api/seller/stores/${activeStore.id}/products?keyword=${encodeURIComponent(
+      draftProduct.name
+    )}&limit=20`
+  );
+  assertStatus(sellerApprovedList, 200, "seller approved review list");
+  const sellerApprovedItems: any[] = Array.isArray(sellerApprovedList.body?.data?.items)
+    ? sellerApprovedList.body.data.items
+    : [];
+  const sellerApprovedItem = sellerApprovedItems.find(
+    (item: any) => String(item?.slug || "") === draftProduct.slug
+  );
+  assert.ok(sellerApprovedItem, "seller approved review list: approved product missing");
+  assert.notEqual(
+    String(sellerApprovedItem?.submission?.label || ""),
+    "Submitted for review",
+    "seller approved review list: submitted badge should be gone"
+  );
+  assert.equal(
+    String(sellerApprovedItem?.submission?.status || ""),
+    "none",
+    "seller approved review list: submission status should be none"
+  );
+  assert.equal(
+    String(sellerApprovedItem?.status || sellerApprovedItem?.statusMeta?.code || ""),
+    "active",
+    "seller approved review list: product status should be active"
+  );
+  assert.equal(
+    Boolean(sellerApprovedItem?.published),
+    false,
+    "seller approved review list: admin review approval should not publish"
+  );
+  assert.equal(
+    Boolean(sellerApprovedItem?.publishing?.canPublish),
+    true,
+    "seller approved review list: active approved product should be publishable"
+  );
   await assertHiddenEverywhere(draftProduct, "admin approved but seller unpublished");
 
   const sellerPublishApproved = await sellerClient.request(
@@ -1362,6 +1401,45 @@ async function run() {
   );
   assertStatus(sellerPublishApproved, 200, "seller publish approved product");
   await assertVisibleEverywhere(draftProduct, "seller published after admin approval");
+
+  const sellerPublishedList = await sellerClient.request(
+    `/api/seller/stores/${activeStore.id}/products?keyword=${encodeURIComponent(
+      draftProduct.name
+    )}&limit=20`
+  );
+  assertStatus(sellerPublishedList, 200, "seller published product list");
+  const sellerPublishedItems: any[] = Array.isArray(sellerPublishedList.body?.data?.items)
+    ? sellerPublishedList.body.data.items
+    : [];
+  const sellerPublishedItem = sellerPublishedItems.find(
+    (item: any) => String(item?.slug || "") === draftProduct.slug
+  );
+  assert.ok(sellerPublishedItem, "seller published product list: product missing");
+  assert.equal(
+    Boolean(sellerPublishedItem?.published),
+    true,
+    "seller published product list: product should be published"
+  );
+  assert.equal(
+    Boolean(sellerPublishedItem?.publishing?.canUnpublish),
+    true,
+    "seller published product list: seller should be able to unpublish independently"
+  );
+
+  const sellerUnpublishApproved = await sellerClient.request(
+    `/api/seller/stores/${activeStore.id}/products/${draftProduct.id}/published`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ published: false }),
+    }
+  );
+  assertStatus(sellerUnpublishApproved, 200, "seller unpublish approved product");
+  assert.equal(
+    Boolean(sellerUnpublishApproved.body?.data?.published),
+    false,
+    "seller unpublish approved product: product should be unpublished"
+  );
+  await assertHiddenEverywhere(draftProduct, "seller unpublished approved product");
   logPass("seller publish requires admin approval");
 
   logStep("checking admin unpublish removes visibility immediately");

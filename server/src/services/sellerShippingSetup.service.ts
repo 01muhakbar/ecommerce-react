@@ -80,9 +80,21 @@ export const sellerShippingSetupPatchSchema = z
   .strict();
 
 const normalizeStoredShippingSetup = (value: unknown) => {
+  let normalizedValue = value;
+  if (typeof normalizedValue === "string") {
+    const text = normalizedValue.trim();
+    if (text.startsWith("{") && text.endsWith("}")) {
+      try {
+        normalizedValue = JSON.parse(text);
+      } catch {
+        normalizedValue = {};
+      }
+    }
+  }
+
   const source =
-    value && typeof value === "object" && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
+    normalizedValue && typeof normalizedValue === "object" && !Array.isArray(normalizedValue)
+      ? (normalizedValue as Record<string, unknown>)
       : {};
 
   const shippingEnabledRaw = source.shippingEnabled;

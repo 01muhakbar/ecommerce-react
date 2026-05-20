@@ -1,0 +1,120 @@
+{
+  "runId": "p0-ui-audit-12-1779173601329",
+  "fixture": {
+    "userId": 2648,
+    "email": "p0-ui-audit-12-1779173601329@local.dev",
+    "storeId": 1273,
+    "storeSlug": "p0-ui-audit-12-1779173601329-store",
+    "productId": 1960,
+    "productName": "P0 UI Audit Product p0-ui-audit-12-1779173601329",
+    "productSlug": "p0-ui-audit-product-p0-ui-audit-12-1779173601329"
+  },
+  "checks": [
+    {
+      "area": "Seller",
+      "check": "Draft visible",
+      "result": "PASS",
+      "detail": {
+        "status": "draft",
+        "published": false,
+        "submission": "none",
+        "canPublish": false,
+        "canUnpublish": false
+      }
+    },
+    {
+      "area": "Seller",
+      "check": "Submitted locks edit/delete and publish",
+      "result": "PASS",
+      "detail": {
+        "status": "draft",
+        "published": false,
+        "submission": "submitted",
+        "canPublish": false,
+        "canUnpublish": false
+      }
+    },
+    {
+      "area": "Admin",
+      "check": "Submitted shows Approve",
+      "result": "PASS"
+    },
+    {
+      "area": "Admin",
+      "check": "Approve clears review and keeps unpublished",
+      "result": "PASS",
+      "detail": {
+        "status": "active",
+        "published": false,
+        "submission": "none",
+        "canPublish": false,
+        "canUnpublish": false
+      }
+    },
+    {
+      "area": "Seller",
+      "check": "Approved becomes Active and publishable",
+      "result": "PASS",
+      "detail": {
+        "status": "active",
+        "published": false,
+        "submission": "none",
+        "canPublish": true,
+        "canUnpublish": false
+      }
+    },
+    {
+      "area": "Client",
+      "check": "Approved but unpublished stays hidden",
+      "result": "PASS"
+    },
+    {
+      "area": "Seller",
+      "check": "Seller publish ON and unpublish available",
+      "result": "PASS",
+      "detail": {
+        "status": "active",
+        "published": true,
+        "submission": "none",
+        "canPublish": false,
+        "canUnpublish": true
+      }
+    },
+    {
+      "area": "Client",
+      "check": "Published appears in store/search/detail",
+      "result": "PASS"
+    },
+    {
+      "area": "Seller",
+      "check": "Seller unpublish OFF while staying Active",
+      "result": "PASS",
+      "detail": {
+        "status": "active",
+        "published": false,
+        "submission": "none",
+        "canPublish": true,
+        "canUnpublish": false
+      }
+    },
+    {
+      "area": "Client",
+      "check": "Unpublished hidden again",
+      "result": "PASS"
+    }
+  ],
+  "screenshots": {
+    "seller-draft": "C:\\Users\\AKBAR CAHAYA STUDIO\\Documents\\tp-preneurs-multivendor\\reports\\p0-ui-audit-12-1779173601329\\seller-draft.png",
+    "seller-submitted": "C:\\Users\\AKBAR CAHAYA STUDIO\\Documents\\tp-preneurs-multivendor\\reports\\p0-ui-audit-12-1779173601329\\seller-submitted.png",
+    "admin-approve-action": "C:\\Users\\AKBAR CAHAYA STUDIO\\Documents\\tp-preneurs-multivendor\\reports\\p0-ui-audit-12-1779173601329\\admin-approve-action.png",
+    "admin-after-approve": "C:\\Users\\AKBAR CAHAYA STUDIO\\Documents\\tp-preneurs-multivendor\\reports\\p0-ui-audit-12-1779173601329\\admin-after-approve.png",
+    "seller-active-after-approve": "C:\\Users\\AKBAR CAHAYA STUDIO\\Documents\\tp-preneurs-multivendor\\reports\\p0-ui-audit-12-1779173601329\\seller-active-after-approve.png",
+    "client-before-publish": "C:\\Users\\AKBAR CAHAYA STUDIO\\Documents\\tp-preneurs-multivendor\\reports\\p0-ui-audit-12-1779173601329\\client-before-publish.png",
+    "seller-published": "C:\\Users\\AKBAR CAHAYA STUDIO\\Documents\\tp-preneurs-multivendor\\reports\\p0-ui-audit-12-1779173601329\\seller-published.png",
+    "client-after-publish": "C:\\Users\\AKBAR CAHAYA STUDIO\\Documents\\tp-preneurs-multivendor\\reports\\p0-ui-audit-12-1779173601329\\client-after-publish.png",
+    "seller-unpublished": "C:\\Users\\AKBAR CAHAYA STUDIO\\Documents\\tp-preneurs-multivendor\\reports\\p0-ui-audit-12-1779173601329\\seller-unpublished.png",
+    "client-after-unpublish": "C:\\Users\\AKBAR CAHAYA STUDIO\\Documents\\tp-preneurs-multivendor\\reports\\p0-ui-audit-12-1779173601329\\client-after-unpublish.png"
+  },
+  "codeChanged": false,
+  "fixtureCleanup": "cleaned in finally"
+}

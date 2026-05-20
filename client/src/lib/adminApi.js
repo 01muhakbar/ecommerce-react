@@ -273,6 +273,13 @@ export const updateAdminProductPublished = async (id, published) => {
   return data;
 };
 
+export const approveAdminProductReview = async (id) => {
+  const { data } = await adminApi.patch(`/admin/products/${id}/published`, {
+    published: true,
+  });
+  return data;
+};
+
 export const duplicateAdminProduct = async (id) => {
   const { data } = await adminApi.post(`/admin/products/${id}/duplicate`);
   return data;

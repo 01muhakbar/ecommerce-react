@@ -1710,7 +1710,7 @@ const serializeProductPublishing = (
     permissions.canPublishProducts &&
     !isPublished &&
     status === "active" &&
-    readiness.isReady &&
+    submissionStatus === "none" &&
     !reviewBlocker &&
     !approvalBlocker;
   const canUnpublish =
@@ -3276,20 +3276,6 @@ router.patch(
             code: "SELLER_PRODUCT_REVIEW_APPROVAL_REQUIRED",
             message:
               "Admin approval is required before this product can be published to the storefront.",
-          });
-        }
-
-        const readiness = resolveSellerPublishReadiness(product);
-
-        if (!readiness.isReady) {
-          return res.status(409).json({
-            success: false,
-            code: "SELLER_PRODUCT_PUBLISH_NOT_READY",
-            message: readiness.blockers[0]?.message || "Product is not ready to publish.",
-            data: {
-              blockers: readiness.blockers,
-              requiredState: "active + published",
-            },
           });
         }
 

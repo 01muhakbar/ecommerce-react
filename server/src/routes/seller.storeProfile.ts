@@ -9,6 +9,7 @@ import {
   sellerStoreProfilePatchSchema,
   serializeStoreProfileSnapshot,
 } from "../services/sharedContracts/storeProfileGovernance.js";
+import { mergeSellerShippingSetupPatch } from "../services/sellerShippingSetup.service.js";
 import { buildPublicStoreOperationalReadiness } from "../services/sharedContracts/publicStoreIdentity.js";
 import { STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES } from "../services/sharedContracts/storePaymentProfileCompat.js";
 
@@ -132,10 +133,10 @@ const patchSellerStoreProfileResponse = async (req: any, res: any) => {
     );
 
     if (parsed.data.shippingSetup !== undefined) {
-      updatePayload.shippingSetup = {
-        ...(getStoreProfileAttr(store, "shippingSetup") || {}),
-        ...parsed.data.shippingSetup,
-      };
+      updatePayload.shippingSetup = mergeSellerShippingSetupPatch(
+        getStoreProfileAttr(store, "shippingSetup"),
+        parsed.data.shippingSetup
+      );
     }
 
     if (Object.keys(updatePayload).length === 0) {

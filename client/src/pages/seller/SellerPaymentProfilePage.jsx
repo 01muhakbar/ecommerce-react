@@ -313,51 +313,83 @@ export default function SellerPaymentProfilePage() {
     requestCode.includes("UNDER_REVIEW") ||
     requestCode.includes("PENDING_REVIEW") ||
     reviewCode.includes("PENDING");
+  const isNeedsRevision =
+    requestCode === "NEEDS_REVISION" ||
+    reviewCode === "NEEDS_REVISION" ||
+    requestCode.includes("REVISION") ||
+    reviewCode.includes("REVISION");
   const requiredCompleted = Number(completeness.completedFields || 0);
   const requiredTotal = Number(completeness.totalFields || requiredFields.length);
   const missingFieldLabels = missingFields.map((field) => field.label).filter(Boolean);
   const paymentSetupChecklist = [
     {
-      label: "Can receive payments",
-      ready: Boolean(activeSnapshot?.isActive),
-      hint: activeSnapshot?.isActive ? "Active setup ready." : "Needs active setup.",
+      label: "Account name",
+      state: hasText(form.accountName) ? "Complete" : "Missing",
+      tone: hasText(form.accountName) ? "emerald" : "amber",
+      hint: hasText(form.accountName) ? "Ready" : "Required",
     },
     {
-      label: "Admin approved",
-      ready: activeVerificationCode === "ACTIVE",
-      hint: activeVerificationCode === "ACTIVE" ? "Approved." : "Waiting for approval.",
+      label: "Merchant name",
+      state: hasText(form.merchantName) ? "Complete" : "Missing",
+      tone: hasText(form.merchantName) ? "emerald" : "amber",
+      hint: hasText(form.merchantName) ? "Ready" : "Required",
     },
     {
-      label: "QRIS uploaded",
-      ready: Boolean(activeSnapshot?.qrisImageUrl),
-      hint: activeSnapshot?.qrisImageUrl ? "QRIS ready." : "Upload QRIS.",
+      label: "QRIS image",
+      state: hasText(form.qrisImageUrl) ? "Complete" : "Missing",
+      tone: hasText(form.qrisImageUrl) ? "emerald" : "amber",
+      hint: hasText(form.qrisImageUrl) ? "Ready" : "Upload or paste URL",
     },
     {
-      label: "Required info",
-      ready: missingFields.length === 0,
-      hint:
-        missingFields.length === 0
-          ? `${requiredTotal} required fields.`
-          : `${requiredCompleted}/${requiredTotal} required fields.`,
+      label: "Admin approval",
+      state: paymentSetupReady ? "Approved" : isPendingReview ? "Pending" : "Missing",
+      tone: paymentSetupReady ? "emerald" : isPendingReview ? "amber" : "amber",
+      hint: paymentSetupReady
+        ? "Checkout ready"
+        : isPendingReview
+          ? "In review"
+          : "Submit for review",
     },
   ];
-  const statusBanner = paymentSetupReady
+  const setupStatusHeader = paymentSetupReady
     ? {
         type: "success",
-        title: "Payment setup ready",
-        message: "Checkout can receive buyer payments.",
+        title: "Ready for checkout",
+        message: "Checkout uses the approved setup.",
+        actionLabel: "View approved setup",
+        targetId: "approved-payment-setup",
       }
     : isPendingReview
       ? {
           type: "warning",
           title: "Waiting for admin review",
-          message: "Checkout keeps using the approved setup until this request is approved.",
+          message: "Changes need admin approval.",
+          actionLabel: "View request",
+          targetId: "payment-setup-request",
         }
-      : {
-          type: "warning",
-          title: "Payment setup not ready",
-          message: "Complete account name, merchant name, and QRIS before submitting.",
-        };
+      : isNeedsRevision
+        ? {
+            type: "error",
+            title: "Fix requested changes",
+            message: "Update the request and submit again.",
+            actionLabel: "Fix request",
+            targetId: "payment-setup-request",
+          }
+        : pendingRequest || requestCode === "DRAFT"
+          ? {
+              type: "warning",
+              title: "Complete required info",
+              message: "Save draft or submit when ready.",
+              actionLabel: "Complete setup",
+              targetId: "payment-setup-request",
+            }
+          : {
+              type: "warning",
+              title: "Set up payment method",
+              message: "Add account, merchant, and QRIS.",
+              actionLabel: "Start setup",
+              targetId: "payment-setup-request",
+            };
   const requestBadge = getSellerStatusBadge(requestStatus, sellerStatusBadge.needsSetup);
   const activeBadge = paymentSetupReady
     ? sellerStatusBadge.ready
@@ -375,7 +407,7 @@ export default function SellerPaymentProfilePage() {
       (badge, index, items) =>
         items.findIndex((item) => item.label === badge.label) === index
     )
-    .slice(0, 3);
+    .slice(0, 2);
 
   const buildPayload = () => ({
     accountName: toRequiredText(form.accountName),
@@ -432,6 +464,13 @@ export default function SellerPaymentProfilePage() {
   const submitReady = requiredFields.every((field) => hasText(form[field.key]));
   const disabled =
     saveDraftMutation.isPending || submitMutation.isPending || uploadImageMutation.isPending;
+  const submitDisabledReason = !submitReady
+    ? "Missing required info."
+    : isReviewLocked
+      ? "Waiting for admin review."
+      : !canEdit
+        ? "Read-only access."
+        : "Ready to submit.";
 
   const handleQrisFileChange = async (event) => {
     const file = event.target.files?.[0];
@@ -479,7 +518,7 @@ export default function SellerPaymentProfilePage() {
       <SellerWorkspaceSectionHeader
         eyebrow="Finance Setup"
         title="Payment setup"
-        description="Set where buyer payments should go."
+        description="Prepare QRIS checkout destination."
         actions={headerBadges.map((badge) => (
           <SellerWorkspaceBadge key={badge.label} label={badge.label} tone={badge.tone} />
         ))}
@@ -491,13 +530,13 @@ export default function SellerPaymentProfilePage() {
         </SellerWorkspaceNotice>
       ) : null}
 
-      <SellerWorkspaceNotice type={statusBanner.type}>
+      <SellerWorkspaceNotice type={setupStatusHeader.type}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="font-semibold text-slate-900">{statusBanner.title}</p>
-            <p className="mt-1 leading-5">{statusBanner.message}</p>
+            <p className="font-semibold text-slate-900">{setupStatusHeader.title}</p>
+            <p className="mt-1 leading-5">{setupStatusHeader.message}</p>
           </div>
-          {!paymentSetupReady && canEdit && permissionCanEdit ? (
+          {canEdit && permissionCanEdit ? (
             <div className="flex flex-wrap gap-2">
               {!form.qrisImageUrl ? (
                 <button
@@ -516,14 +555,18 @@ export default function SellerPaymentProfilePage() {
                 type="button"
                 onClick={() =>
                   document
-                    .getElementById("payment-setup-request")
+                    .getElementById(setupStatusHeader.targetId)
                     ?.scrollIntoView({ behavior: "smooth", block: "start" })
                 }
-                className={sellerSecondaryButtonClass}
+                className={
+                  !paymentSetupReady && !isPendingReview
+                    ? sellerPrimaryButtonClass
+                    : sellerSecondaryButtonClass
+                }
               >
-                Complete setup
+                {setupStatusHeader.actionLabel}
               </button>
-              {submitReady ? (
+              {submitReady && !paymentSetupReady && !isPendingReview ? (
                 <button
                   type="button"
                   onClick={() => {
@@ -542,8 +585,8 @@ export default function SellerPaymentProfilePage() {
       </SellerWorkspaceNotice>
 
       <SellerWorkspaceSectionCard
-        title="Readiness summary"
-        hint="Quick payment setup checks."
+        title="Required setup"
+        hint={`${requiredCompleted}/${requiredTotal} required fields complete.`}
         Icon={BadgeCheck}
       >
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -551,7 +594,7 @@ export default function SellerPaymentProfilePage() {
             <div
               key={item.label}
               className={`rounded-lg border px-3 py-2.5 ${
-                item.ready
+                item.tone === "emerald"
                   ? "border-emerald-200 bg-emerald-50"
                   : "border-amber-200 bg-amber-50"
               }`}
@@ -559,8 +602,8 @@ export default function SellerPaymentProfilePage() {
               <div className="flex items-start justify-between gap-3">
                 <p className="text-sm font-semibold text-slate-900">{item.label}</p>
                 <SellerWorkspaceBadge
-                  label={item.ready ? "Ready" : "Missing"}
-                  tone={item.ready ? "emerald" : "amber"}
+                  label={item.state}
+                  tone={item.tone}
                   className="bg-white"
                 />
               </div>
@@ -570,39 +613,41 @@ export default function SellerPaymentProfilePage() {
         </div>
       </SellerWorkspaceSectionCard>
 
-      <SellerWorkspaceSectionCard
-        title="Active payment setup"
-        hint="Current approved setup used by checkout."
-        Icon={CreditCard}
-      >
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <SellerWorkspaceDetailItem
-            label="Status"
-            value={activeSnapshot?.activityMeta?.label || "No active setup"}
-          />
-          <SellerWorkspaceDetailItem
-            label="Payment type"
-            value={formatPaymentType(activeSnapshot?.paymentType)}
-          />
-          <SellerWorkspaceDetailItem
-            label="Merchant"
-            value={displayValue(activeSnapshot?.merchantName)}
-          />
-          <SellerWorkspaceDetailItem
-            label="Account"
-            value={displayValue(activeSnapshot?.accountName)}
-          />
-          <SellerWorkspaceDetailItem
-            label="Store"
-            value={displayValue(effectiveProfile.store?.name || sellerContext?.store?.name)}
-          />
-        </div>
-      </SellerWorkspaceSectionCard>
+      <div id="approved-payment-setup" className="scroll-mt-24">
+        <SellerWorkspaceSectionCard
+          title="Checkout setup"
+          hint="Checkout uses the approved setup."
+          Icon={CreditCard}
+        >
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <SellerWorkspaceDetailItem
+              label="Status"
+              value={activeSnapshot?.activityMeta?.label || "No active setup"}
+            />
+            <SellerWorkspaceDetailItem
+              label="Payment type"
+              value={formatPaymentType(activeSnapshot?.paymentType)}
+            />
+            <SellerWorkspaceDetailItem
+              label="Merchant"
+              value={displayValue(activeSnapshot?.merchantName)}
+            />
+            <SellerWorkspaceDetailItem
+              label="Account"
+              value={displayValue(activeSnapshot?.accountName)}
+            />
+            <SellerWorkspaceDetailItem
+              label="Store"
+              value={displayValue(effectiveProfile.store?.name || sellerContext?.store?.name)}
+            />
+          </div>
+        </SellerWorkspaceSectionCard>
+      </div>
 
       <section className="grid gap-5">
         <SellerWorkspaceSectionCard
-          title="QRIS preview"
-          hint="Shown to buyers after admin approval."
+          title="Checkout QRIS"
+          hint="Approved QRIS used at checkout."
           Icon={ImageIcon}
         >
           {activeSnapshot?.qrisImageUrl ? (
@@ -615,9 +660,24 @@ export default function SellerPaymentProfilePage() {
             </div>
           ) : (
             <SellerWorkspaceEmptyState
-              title="No approved QRIS yet."
-              description="Upload QRIS in the setup request."
+              title="No approved QRIS yet"
+              description="Checkout waits for an approved setup."
               icon={<ImageIcon className="h-5 w-5" />}
+              action={
+                permissionCanEdit ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatus(null);
+                      fileInputRef.current?.click();
+                    }}
+                    disabled={disabled || busy || !canEdit}
+                    className={sellerSecondaryButtonClass}
+                  >
+                    Upload QRIS
+                  </button>
+                ) : null
+              }
             />
           )}
         </SellerWorkspaceSectionCard>
@@ -625,8 +685,8 @@ export default function SellerPaymentProfilePage() {
         <div className="space-y-5">
           <div id="payment-setup-request" className="scroll-mt-24">
             <SellerWorkspaceSectionCard
-              title="Setup request"
-              hint="Edit payment details, then submit for admin review."
+              title="Payment method editor"
+              hint="Required first, optional after."
               Icon={CreditCard}
             >
               {!permissionCanEdit ? (
@@ -636,7 +696,7 @@ export default function SellerPaymentProfilePage() {
               ) : (
                 <form className="space-y-5">
                   <SellerWorkspaceNotice type="info">
-                    Changes need admin approval before checkout uses them.
+                    Changes need admin approval. Payment proofs are reviewed in Payment Review.
                   </SellerWorkspaceNotice>
                   {isReviewLocked ? (
                     <SellerWorkspaceNotice type="warning">
@@ -661,7 +721,7 @@ export default function SellerPaymentProfilePage() {
                           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                             QRIS image
                           </p>
-                          <p className="mt-1 text-xs text-slate-500">Upload PNG or JPEG.</p>
+                          <p className="mt-1 text-xs text-slate-500">PNG or JPEG recommended.</p>
                         </div>
                         <button
                           type="button"
@@ -687,118 +747,156 @@ export default function SellerPaymentProfilePage() {
                       ) : (
                         <SellerWorkspaceEmptyState
                           title="No QRIS image yet"
-                          description="Upload QRIS before submitting."
+                          description="Upload QRIS before submit."
                           icon={<ImageIcon className="h-5 w-5" />}
+                          action={
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setStatus(null);
+                                fileInputRef.current?.click();
+                              }}
+                              disabled={disabled || busy || !canEdit}
+                              className={sellerSecondaryButtonClass}
+                            >
+                              Upload QRIS
+                            </button>
+                          }
                         />
                       )}
                     </div>
 
-                  <div className="grid content-start gap-3 md:grid-cols-2">
-                    <Field
-                      label="Account name"
-                      hint="Required."
-                      disabled={disabled || busy || !canEdit}
-                      value={form.accountName}
-                      onChange={(event) =>
-                        setForm((current) => ({ ...current, accountName: event.target.value }))
-                      }
-                    />
-                    <Field
-                      label="Merchant name"
-                      hint="Required."
-                      disabled={disabled || busy || !canEdit}
-                      value={form.merchantName}
-                      onChange={(event) =>
-                        setForm((current) => ({ ...current, merchantName: event.target.value }))
-                      }
-                    />
-                    <Field
-                      label="Merchant ID"
-                      hint="Optional."
-                      disabled={disabled || busy || !canEdit}
-                      value={form.merchantId}
-                      onChange={(event) =>
-                        setForm((current) => ({ ...current, merchantId: event.target.value }))
-                      }
-                    />
-                    <Field
-                      label="QRIS image URL"
-                      hint="Required."
-                      disabled={disabled || busy || !canEdit}
-                      value={form.qrisImageUrl}
-                      onChange={(event) =>
-                        setForm((current) => ({ ...current, qrisImageUrl: event.target.value }))
-                      }
-                    />
-                    <div className="md:col-span-2">
-                      <Field
-                        label="QRIS payload"
-                        hint="Optional."
-                        multiline
-                        rows={2}
-                        disabled={disabled || busy || !canEdit}
-                        value={form.qrisPayload}
-                        onChange={(event) =>
-                          setForm((current) => ({ ...current, qrisPayload: event.target.value }))
-                        }
-                      />
+                    <div className="space-y-4">
+                      <div className="rounded-xl border border-slate-200 bg-white p-3.5">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">Required info</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              Needed before admin review.
+                            </p>
+                          </div>
+                          <SellerWorkspaceBadge
+                            label={submitReady ? "Complete" : "Missing"}
+                            tone={submitReady ? "emerald" : "amber"}
+                          />
+                        </div>
+                        <div className="mt-3 grid gap-3 md:grid-cols-2">
+                          <Field
+                            label="Account name"
+                            disabled={disabled || busy || !canEdit}
+                            value={form.accountName}
+                            onChange={(event) =>
+                              setForm((current) => ({ ...current, accountName: event.target.value }))
+                            }
+                          />
+                          <Field
+                            label="Merchant name"
+                            disabled={disabled || busy || !canEdit}
+                            value={form.merchantName}
+                            onChange={(event) =>
+                              setForm((current) => ({ ...current, merchantName: event.target.value }))
+                            }
+                          />
+                          <div className="md:col-span-2">
+                            <Field
+                              label="QRIS image URL"
+                              disabled={disabled || busy || !canEdit}
+                              value={form.qrisImageUrl}
+                              onChange={(event) =>
+                                setForm((current) => ({ ...current, qrisImageUrl: event.target.value }))
+                              }
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
+                        <p className="text-sm font-semibold text-slate-900">Optional details</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Useful for audit and buyer instructions.
+                        </p>
+                        <div className="mt-3 grid gap-3 md:grid-cols-2">
+                          <Field
+                            label="Merchant ID"
+                            disabled={disabled || busy || !canEdit}
+                            value={form.merchantId}
+                            onChange={(event) =>
+                              setForm((current) => ({ ...current, merchantId: event.target.value }))
+                            }
+                          />
+                          <div className="md:col-span-2">
+                            <Field
+                              label="QRIS payload"
+                              multiline
+                              rows={2}
+                              disabled={disabled || busy || !canEdit}
+                              value={form.qrisPayload}
+                              onChange={(event) =>
+                                setForm((current) => ({ ...current, qrisPayload: event.target.value }))
+                              }
+                            />
+                          </div>
+                          <div className="md:col-span-2">
+                            <Field
+                              label="Instruction text"
+                              multiline
+                              rows={2}
+                              disabled={disabled || busy || !canEdit}
+                              value={form.instructionText}
+                              onChange={(event) =>
+                                setForm((current) => ({
+                                  ...current,
+                                  instructionText: event.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className="md:col-span-2">
+                            <Field
+                              label="Seller note"
+                              multiline
+                              rows={2}
+                              disabled={disabled || busy || !canEdit}
+                              value={form.sellerNote}
+                              onChange={(event) =>
+                                setForm((current) => ({ ...current, sellerNote: event.target.value }))
+                              }
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="md:col-span-2">
-                      <Field
-                        label="Instruction text"
-                        hint="Shown after approval."
-                        multiline
-                        rows={2}
-                        disabled={disabled || busy || !canEdit}
-                        value={form.instructionText}
-                        onChange={(event) =>
-                          setForm((current) => ({
-                            ...current,
-                            instructionText: event.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <Field
-                        label="Seller note"
-                        hint="Optional."
-                        multiline
-                        rows={2}
-                        disabled={disabled || busy || !canEdit}
-                        value={form.sellerNote}
-                        onChange={(event) =>
-                          setForm((current) => ({ ...current, sellerNote: event.target.value }))
-                        }
-                      />
-                    </div>
-                  </div>
                 </div>
-                <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStatus(null);
-                      saveDraftMutation.mutate(buildPayload());
-                    }}
-                    disabled={disabled || busy || !canEdit}
-                    className={sellerSecondaryButtonClass}
-                  >
-                    <Save className="h-4 w-4" />
-                    {saveDraftMutation.isPending ? "Saving..." : "Save Draft"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStatus(null);
-                      submitMutation.mutate(buildPayload());
-                    }}
-                    disabled={disabled || busy || !canEdit || !submitReady}
-                    className={sellerPrimaryButtonClass}
-                  >
-                    <SendHorizonal className="h-4 w-4" />
-                    {submitMutation.isPending ? "Submitting..." : "Submit for Review"}
-                  </button>
+                <div className="sticky bottom-2 z-10 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white/95 px-3 py-3 shadow-[0_8px_24px_rgba(15,23,42,0.10)] backdrop-blur">
+                  <p className="text-xs text-slate-500">
+                    {submitDisabledReason}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStatus(null);
+                        saveDraftMutation.mutate(buildPayload());
+                      }}
+                      disabled={disabled || busy || !canEdit}
+                      className={sellerSecondaryButtonClass}
+                    >
+                      <Save className="h-4 w-4" />
+                      {saveDraftMutation.isPending ? "Saving..." : "Save draft"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStatus(null);
+                        submitMutation.mutate(buildPayload());
+                      }}
+                      disabled={disabled || busy || !canEdit || !submitReady}
+                      className={sellerPrimaryButtonClass}
+                    >
+                      <SendHorizonal className="h-4 w-4" />
+                      {submitMutation.isPending ? "Submitting..." : "Submit for review"}
+                    </button>
+                  </div>
                 </div>
                 {!submitReady && canEdit ? (
                   <p className="text-xs text-slate-500">
@@ -817,8 +915,8 @@ export default function SellerPaymentProfilePage() {
           </div>
 
           <SellerWorkspaceSectionCard
-            title="Request status"
-            hint="Draft, submit, and review state."
+            title="Review status"
+            hint="Request history."
             Icon={ShieldAlert}
           >
             <div className="grid gap-3 md:grid-cols-2">

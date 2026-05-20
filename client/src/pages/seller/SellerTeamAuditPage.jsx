@@ -185,7 +185,7 @@ export default function SellerTeamAuditPage() {
       <SellerWorkspaceFilterBar>
         <div className="flex flex-col gap-3.5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h3 className="text-base font-semibold text-slate-900">Filter</h3>
+            <h3 className="text-base font-semibold text-slate-900">Filter activity</h3>
             <p className="mt-1 text-sm text-slate-500">
               Show one action type.
             </p>
@@ -242,21 +242,14 @@ export default function SellerTeamAuditPage() {
         </div>
 
         {items.length > 0 ? (
-          <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
-            <div className="min-w-0">
-            <div className="hidden grid-cols-[1.1fr_1fr_1fr_1.4fr_0.9fr] gap-3 border-b border-slate-200 bg-slate-50 px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500 md:grid">
-              <span>Action</span>
-              <span>Actor</span>
-              <span>Target</span>
-              <span>Change</span>
-              <span>Timestamp</span>
-            </div>
-            <div className="divide-y divide-slate-200 bg-white">
+          <div className="mt-4 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
+            <div className="space-y-1">
               {items.map((item) => (
                 <div
                   key={item.id}
-                  className="grid grid-cols-1 gap-3 px-3.5 py-3.5 text-sm text-slate-700 md:grid-cols-[1.1fr_1fr_1fr_1.4fr_0.9fr]"
+                  className="relative grid grid-cols-1 gap-3 border-l border-slate-200 py-3 pl-5 text-sm text-slate-700 md:grid-cols-[1.2fr_1fr_1fr_1.2fr]"
                 >
+                  <span className="absolute -left-[5px] top-5 h-2.5 w-2.5 rounded-full border border-white bg-slate-400" />
                   <div className="space-y-2">
                     <SellerWorkspaceBadge
                       label={
@@ -270,13 +263,26 @@ export default function SellerTeamAuditPage() {
                         actionTone(item.action)
                       }
                     />
-                    <p className="text-xs text-slate-500">Activity ID {item.id}</p>
+                    <p className="text-xs text-slate-500">
+                      {item.createdAt
+                        ? new Intl.DateTimeFormat("id-ID", {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          }).format(new Date(item.createdAt))
+                        : "-"}
+                    </p>
                   </div>
                   <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      Actor
+                    </p>
                     <p className="font-medium text-slate-900">{formatActor(item.actor)}</p>
                     <p className="mt-1 text-xs text-slate-500">{item.actor?.email || "-"}</p>
                   </div>
                   <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      Target
+                    </p>
                     <p className="font-medium text-slate-900">
                       {formatActor(item.target?.user)}
                     </p>
@@ -289,6 +295,9 @@ export default function SellerTeamAuditPage() {
                     </p>
                   </div>
                   <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      Change
+                    </p>
                     <p className="font-medium text-slate-900">
                       {summarizeDelta(item.beforeState, item.afterState)}
                     </p>
@@ -297,29 +306,20 @@ export default function SellerTeamAuditPage() {
                         "Team activity recorded for this store."}
                     </p>
                   </div>
-                  <div className="text-xs text-slate-500">
-                    {item.createdAt
-                      ? new Intl.DateTimeFormat("id-ID", {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        }).format(new Date(item.createdAt))
-                      : "-"}
-                  </div>
                 </div>
               ))}
-            </div>
             </div>
           </div>
         ) : (
           <div className="mt-4">
             <SellerWorkspaceEmptyState
               title={
-                actionFilter ? "No activity for this filter" : "No team activity yet"
+                actionFilter ? "No activity for this filter" : "No team changes yet"
               }
               description={
                 actionFilter
                   ? "Reset the filter to see all activity."
-                  : "Invites and role changes will appear here."
+                  : "Invites, role changes, and access updates will appear here."
               }
               action={
                 actionFilter ? (

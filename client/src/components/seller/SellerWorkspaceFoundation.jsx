@@ -42,12 +42,20 @@ export const sellerTableHeadCellClass =
 export const sellerTableCellClass =
   "px-3.5 py-2.5 align-top text-sm text-slate-700";
 
-export function SellerWorkspacePanel({ as: Element = "section", className = "", children }) {
-  return <Element className={joinClassNames(sellerShellPanelClass, className)}>{children}</Element>;
+export function SellerWorkspacePanel({ as: Element = "section", className = "", children, ...props }) {
+  return (
+    <Element className={joinClassNames(sellerShellPanelClass, className)} {...props}>
+      {children}
+    </Element>
+  );
 }
 
-export function SellerWorkspaceInset({ as: Element = "section", className = "", children }) {
-  return <Element className={joinClassNames(sellerShellInsetClass, className)}>{children}</Element>;
+export function SellerWorkspaceInset({ as: Element = "section", className = "", children, ...props }) {
+  return (
+    <Element className={joinClassNames(sellerShellInsetClass, className)} {...props}>
+      {children}
+    </Element>
+  );
 }
 
 export function SellerWorkspaceBadge({ label, tone = "slate", className = "" }) {

@@ -28,7 +28,7 @@ import {
 import { useSellerWorkspaceRoute } from "../../utils/sellerWorkspaceRoute.js";
 
 const FILTERS = [
-  { value: "PENDING_CONFIRMATION", label: "Awaiting review" },
+  { value: "PENDING_CONFIRMATION", label: "Awaiting" },
   { value: "PAID", label: "Paid" },
   { value: "REJECTED", label: "Rejected" },
 ];
@@ -36,7 +36,7 @@ const FILTERS = [
 const EMPTY_COPY = {
   PENDING_CONFIRMATION: {
     title: "No proofs need review",
-    description: "New payment proofs will appear here.",
+    description: "New proofs from checkout will appear here.",
   },
   PAID: {
     title: "No paid proofs yet",
@@ -285,9 +285,10 @@ export default function SellerPaymentReviewPage() {
         </SellerWorkspaceNotice>
       ) : null}
 
+      {reviewStats.total > 0 ? (
       <section className="grid gap-3.5 md:grid-cols-3">
         <SellerWorkspaceStatCard
-          label="Visible Records"
+          label="Queue"
           value={String(reviewStats.total)}
           hint="Current filter."
           Icon={CreditCard}
@@ -313,9 +314,17 @@ export default function SellerPaymentReviewPage() {
           tone="emerald"
         />
       </section>
+      ) : null}
 
       <SellerWorkspaceFilterBar>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Review queue</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Approve only matching proofs.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
           {FILTERS.map((filter) => (
             <button
               key={filter.value}
@@ -330,6 +339,7 @@ export default function SellerPaymentReviewPage() {
               {filter.label}
             </button>
           ))}
+          </div>
         </div>
       </SellerWorkspaceFilterBar>
 
@@ -368,7 +378,7 @@ export default function SellerPaymentReviewPage() {
                 <div className="space-y-4 xl:flex-1">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-                      Seller payment review
+                      Payment proof
                     </p>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <h3 className="text-lg font-semibold text-slate-900">
@@ -392,7 +402,8 @@ export default function SellerPaymentReviewPage() {
                       ) : null}
                     </div>
                     <p className="mt-2 text-sm text-slate-500">
-                      Parent order {entry.orderNumber} - Buyer {entry.buyer.name}
+                      {entry.buyer.name} - {formatCurrency(payment?.amount || entry.totalAmount)}
+                      {" "}submitted {formatDateTime(proof?.createdAt || payment?.createdAt || entry.createdAt)}
                     </p>
                     <p className="mt-2 text-sm text-slate-600">
                       {sellerFriendlyText(
