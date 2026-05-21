@@ -305,6 +305,19 @@ function StatusBadge({ status }) {
   );
 }
 
+function SummaryCard({ label, value, helper, tone = "slate" }) {
+  const toneClass = toneClassByCode[tone] || toneClassByCode.slate;
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${toneClass}`}>
+        {label}
+      </span>
+      <p className="mt-3 text-xl font-semibold text-slate-900">{value}</p>
+      {helper ? <p className="mt-1 text-xs leading-5 text-slate-500">{helper}</p> : null}
+    </div>
+  );
+}
+
 function StatusCard({ title, diagnostic, helper, extra }) {
   const status = diagnostic?.status || {};
   const details = []
@@ -375,6 +388,15 @@ export default function StoreSettingsPage() {
   )
     ? diagnostics.payments.checkout.availableMethods
     : [];
+  const enabledPaymentSettings = [
+    form.payments.cashOnDeliveryEnabled,
+    form.payments.stripeEnabled,
+    form.payments.razorPayEnabled,
+  ].filter(Boolean).length;
+  const enabledPublicTools = [
+    form.analytics.googleAnalyticsEnabled,
+    form.chat.tawkEnabled,
+  ].filter(Boolean).length;
   const isSubmitDisabled = isSaving || localFatalIssues.length > 0;
 
   const statusBoxClass = useMemo(() => {
@@ -447,7 +469,7 @@ export default function StoreSettingsPage() {
               Store Settings
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              Backend-driven settings for checkout, auth entry points, analytics, and chat.
+              Backend-driven checkout, login, analytics, and chat switches.
             </p>
           </div>
           <button
@@ -457,6 +479,33 @@ export default function StoreSettingsPage() {
           >
             {isSaving ? "Updating..." : "Update"}
           </button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          <SummaryCard
+            label="Checkout"
+            value={`${checkoutAvailableMethods.length} active`}
+            helper="Client receives only backend-approved methods."
+            tone={checkoutAvailableMethods.length > 0 ? "emerald" : "amber"}
+          />
+          <SummaryCard
+            label="Payment toggles"
+            value={`${enabledPaymentSettings}/3`}
+            helper="Invalid credentials stay hidden from checkout."
+            tone={enabledPaymentSettings > 0 ? "emerald" : "amber"}
+          />
+          <SummaryCard
+            label="Public tools"
+            value={`${enabledPublicTools}/2`}
+            helper="Analytics and chat require valid public-safe values."
+            tone={enabledPublicTools > 0 ? "blue" : "slate"}
+          />
+          <SummaryCard
+            label="Validation"
+            value={localFatalIssues.length === 0 ? "Clear" : `${localFatalIssues.length} issue`}
+            helper="Save is blocked while fatal issues exist."
+            tone={localFatalIssues.length === 0 ? "emerald" : "rose"}
+          />
         </div>
 
         {feedback ? <div className={statusBoxClass}>{feedback.message}</div> : null}
@@ -474,7 +523,7 @@ export default function StoreSettingsPage() {
 
         <Section
           title="Payment Methods"
-          description="Checkout reads available methods from backend settings. Unsupported runtimes stay honest and never appear as selectable in client checkout."
+          description="Checkout reads only active methods returned by backend diagnostics."
         >
           <StatusCard
             title="Checkout Availability"
@@ -498,7 +547,7 @@ export default function StoreSettingsPage() {
           <StatusCard
             title="Cash on Delivery"
             diagnostic={diagnostics?.payments?.cashOnDelivery}
-            helper="This is the only payment runtime currently wired into the store checkout flow."
+            helper="Available in checkout when enabled."
           />
           <ToggleField
             label="Cash On Delivery"
@@ -511,7 +560,7 @@ export default function StoreSettingsPage() {
           <StatusCard
             title="Stripe"
             diagnostic={diagnostics?.payments?.stripe}
-            helper="When valid and enabled, Stripe appears in single-store client checkout and redirects buyers to hosted Stripe Checkout."
+            helper="Appears only when enabled and credentials validate."
             extra={buildSecretHint(diagnostics?.payments?.stripe, "secret")}
           />
           <ToggleField
@@ -548,7 +597,7 @@ export default function StoreSettingsPage() {
           <StatusCard
             title="Stripe Webhook"
             diagnostic={diagnostics?.payments?.stripeWebhook}
-            helper="Webhook finalizes payment from Stripe events so order status does not depend on buyer returning to the success page."
+            helper="Keeps Stripe payment status synced from events."
             extra={buildSecretHint(diagnostics?.payments?.stripeWebhook, "secret")}
           />
           <Field
@@ -570,7 +619,7 @@ export default function StoreSettingsPage() {
           <StatusCard
             title="Razorpay"
             diagnostic={diagnostics?.payments?.razorpay}
-            helper="Configuration is stored and validated, but checkout runtime is not connected in this repo yet."
+            helper="Stored and validated; hidden until checkout runtime exists."
             extra={buildSecretHint(diagnostics?.payments?.razorpay, "secret")}
           />
           <ToggleField
@@ -609,7 +658,7 @@ export default function StoreSettingsPage() {
 
         <Section
           title="Social Login"
-          description="These providers now persist credentials and status honestly. Client buttons only appear if backend says the provider is truly usable."
+          description="Client buttons appear only when backend marks a provider usable."
         >
           <StatusCard
             title="Google Login"

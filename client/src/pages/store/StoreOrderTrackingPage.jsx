@@ -683,6 +683,12 @@ export default function StoreOrderTrackingPage() {
     getSplitAwareTrackingPresentation(splitAttentionStatus) || getTrackingPresentation(order);
   const statusLabel = splitAttentionStatus?.label || truthStatus.label;
   const statusTone = splitAttentionStatus?.tone || truthStatus.tone;
+  const shipmentSummaryLabel =
+    shipments.length > 0
+      ? `${shipments.length} shipment${shipments.length === 1 ? "" : "s"} tracked`
+      : storeSplits.length > 0
+        ? `${storeSplits.length} store split${storeSplits.length === 1 ? "" : "s"} pending shipment`
+        : "Not assigned yet";
   const trackingStepIndex = trackingPresentation.stepIndex;
   const trackingSummary = {
     title: trackingPresentation.title,
@@ -853,6 +859,20 @@ export default function StoreOrderTrackingPage() {
                 Payment Method
               </p>
               <p className="mt-1.5 text-sm font-semibold text-slate-900">{paymentMethod}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Payment Status
+              </p>
+              <p className="mt-1.5 text-sm font-semibold text-slate-900">{statusLabel}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Shipment Status
+              </p>
+              <p className="mt-1.5 text-sm font-semibold text-slate-900">
+                {shipmentSummaryLabel}
+              </p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">

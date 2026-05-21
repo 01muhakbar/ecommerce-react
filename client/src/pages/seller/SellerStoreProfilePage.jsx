@@ -561,6 +561,17 @@ export default function SellerStoreProfilePage() {
       : !operationalReadiness.isReady
         ? "Complete payment setup to unlock checkout."
         : "Complete the remaining public profile fields.";
+  const readinessSourceText = sellerFriendlyText(
+    profile?.boundaries?.readinessSourceOfTruth ||
+      operationalReadiness.sourceOfTruth ||
+      "Saved store status, active payment setup, and shipping origin decide public readiness."
+  );
+  const storefrontBoundaryText = sellerFriendlyText(
+    profile?.boundaries?.storefrontBoundary ||
+      (storefrontReady
+        ? "Buyer storefront can stay public-ready."
+        : "Buyer storefront and checkout stay gated until blockers are complete.")
+  );
   const hasShippingBlocker = shippingSetupStatus.code !== "READY";
   const hasPaymentBlocker = !operationalReadiness.isReady;
   const primaryCta =
@@ -756,6 +767,18 @@ export default function SellerStoreProfilePage() {
               </div>
             ))}
           </div>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <SellerWorkspaceDetailItem
+            label="Public gate"
+            value={storefrontReady ? "Unlocked" : "Locked"}
+            hint={storefrontBoundaryText}
+          />
+          <SellerWorkspaceDetailItem
+            label="Readiness source"
+            value="Backend saved state"
+            hint={readinessSourceText}
+          />
         </div>
       </section>
 

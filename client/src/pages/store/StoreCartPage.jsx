@@ -146,6 +146,8 @@ export function StoreCartDrawer({
   const shippingLabel = "Calculated at checkout";
   const taxLabel = "Calculated at checkout";
   const totalValue = subtotalValue;
+  const canProceedToCheckout =
+    hasItems && !hasCheckoutPreflightInvalidItems && !isCheckoutPreflightLoading;
   const errorMessage =
     resolveVariantCheckoutMessage(error, "") ||
     error?.response?.data?.message ||
@@ -229,18 +231,17 @@ export function StoreCartDrawer({
   );
 
   const handleProceedToCheckout = useCallback(() => {
+    if (!canProceedToCheckout) {
+      if (hasCheckoutPreflightInvalidItems) {
+        scrollToFirstCartInvalidItem('[data-cart-drawer-invalid-item="true"]');
+      }
+      return;
+    }
     if (typeof onClose === "function") {
       onClose();
     }
-    navigate("/checkout", {
-      state: hasCheckoutPreflightInvalidItems
-        ? {
-            cartPreflightWarning:
-              "Some cart lines need attention. Fix the highlighted items before placing the order.",
-          }
-        : undefined,
-    });
-  }, [hasCheckoutPreflightInvalidItems, navigate, onClose]);
+    navigate("/checkout");
+  }, [canProceedToCheckout, hasCheckoutPreflightInvalidItems, navigate, onClose]);
 
   const handleReviewIssues = useCallback(() => {
     scrollToFirstCartInvalidItem('[data-cart-drawer-invalid-item="true"]');
@@ -547,8 +548,7 @@ export function StoreCartDrawer({
               {hasCheckoutPreflightInvalidItems ? (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                   <p>
-                    Some items need attention before checkout. Fix the highlighted lines now, or
-                    continue to review them in checkout.
+                    Some items need attention before checkout. Fix the highlighted lines first.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
@@ -569,9 +569,10 @@ export function StoreCartDrawer({
                 <button
                   type="button"
                   onClick={handleProceedToCheckout}
-                  className="inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white shadow-[0_10px_18px_rgba(5,150,105,0.3)] transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+                  disabled={!canProceedToCheckout}
+                  className="inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white shadow-[0_10px_18px_rgba(5,150,105,0.3)] transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
                 >
-                  Proceed to Checkout
+                  {hasCheckoutPreflightInvalidItems ? "Fix Cart Issues" : "Proceed to Checkout"}
                 </button>
               ) : (
                 <button
@@ -644,6 +645,8 @@ export default function StoreCartPage() {
   const shippingLabel = "Calculated at checkout";
   const taxLabel = "Calculated at checkout";
   const totalValue = subtotalValue;
+  const canProceedToCheckout =
+    hasItems && !hasCheckoutPreflightInvalidItems && !isCheckoutPreflightLoading;
 
   useEffect(() => {
     const now = Date.now();
@@ -677,15 +680,14 @@ export default function StoreCartPage() {
   );
 
   const handleProceedToCheckout = useCallback(() => {
-    navigate("/checkout", {
-      state: hasCheckoutPreflightInvalidItems
-        ? {
-            cartPreflightWarning:
-              "Some cart lines need attention. Fix the highlighted items before placing the order.",
-          }
-        : undefined,
-    });
-  }, [hasCheckoutPreflightInvalidItems, navigate]);
+    if (!canProceedToCheckout) {
+      if (hasCheckoutPreflightInvalidItems) {
+        scrollToFirstCartInvalidItem('[data-cart-page-invalid-item="true"]');
+      }
+      return;
+    }
+    navigate("/checkout");
+  }, [canProceedToCheckout, hasCheckoutPreflightInvalidItems, navigate]);
 
   const handleReviewIssues = useCallback(() => {
     scrollToFirstCartInvalidItem('[data-cart-page-invalid-item="true"]');
@@ -775,8 +777,8 @@ export default function StoreCartPage() {
             {hasCheckoutPreflightInvalidItems ? (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                 <p>
-                  Some cart lines need attention before checkout. Use the recovery actions below,
-                  or continue to checkout to review the same blockers there.
+                  Some cart lines need attention before checkout. Use the recovery actions below
+                  before placing an order.
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
@@ -949,7 +951,7 @@ export default function StoreCartPage() {
             <div className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-[0_14px_34px_rgba(15,23,42,0.06)] sm:p-6">
               <div className="space-y-3">
                 <div className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-600">
-                  Ready to Checkout
+                  {hasCheckoutPreflightInvalidItems ? "Action Needed" : "Ready to Checkout"}
                 </div>
                 <div className="flex items-center justify-between gap-3">
                   <h2 className="text-lg font-semibold text-slate-900 sm:text-xl">
@@ -1005,7 +1007,7 @@ export default function StoreCartPage() {
               </div>
               <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
                 {hasCheckoutPreflightInvalidItems
-                  ? "Some cart lines need attention before checkout. Fix the highlighted items now, or continue and review them again in checkout."
+                  ? "Some cart lines need attention before checkout. Fix the highlighted items before continuing."
                   : hasVariantItems
                     ? "Variant selections are preserved through checkout and revalidated against the latest stock before the order is placed."
                     : "Proceed to checkout to confirm shipping, payment method, and the final order total."}
@@ -1013,9 +1015,10 @@ export default function StoreCartPage() {
               <button
                 type="button"
                 onClick={handleProceedToCheckout}
-                className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-5 text-sm font-semibold text-white shadow-[0_14px_26px_rgba(5,150,105,0.26)] transition hover:bg-emerald-700"
+                disabled={!canProceedToCheckout}
+                className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-full bg-emerald-600 px-5 text-sm font-semibold text-white shadow-[0_14px_26px_rgba(5,150,105,0.26)] transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
               >
-                Proceed to Checkout
+                {hasCheckoutPreflightInvalidItems ? "Fix Cart Issues" : "Proceed to Checkout"}
               </button>
               <Link
                 to="/"

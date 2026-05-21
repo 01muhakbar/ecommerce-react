@@ -173,6 +173,17 @@ export default function StoreCheckoutSuccessPage() {
           ? `${splitTruthSummary.finalNegativeCount} store split${splitTruthSummary.finalNegativeCount === 1 ? " is" : "s are"} already in a closed or failed state. Open tracking or My Orders for the latest per-split truth.`
           : orderStatusSummary?.description ||
             "Your order reference is ready. Continue with the latest backend-approved next step from your account.";
+  const successPaymentLabel = isStripeFlow
+    ? stripeStatusSummary?.label || "Payment Confirmed"
+    : nonStripeOperationalLabel;
+  const successShipmentLabel =
+    splitTruthSummary.shipmentLaneCount > 0
+      ? `${splitTruthSummary.shipmentLaneCount} shipment lane${splitTruthSummary.shipmentLaneCount === 1 ? "" : "s"} active`
+      : splitTruthSummary.awaitingPaymentCount > 0
+        ? "Waiting for payment"
+        : splitTruthSummary.underReviewCount > 0
+          ? "Waiting for review"
+          : "Pending seller update";
   const nonStripeOrderStatusError =
     orderSnapshotQuery.error?.response?.data?.message ||
     orderSnapshotQuery.error?.message ||
@@ -561,9 +572,7 @@ export default function StoreCheckoutSuccessPage() {
             <CheckCircle2 className="h-8 w-8 sm:h-10 sm:w-10" />
           </div>
           <p className="mt-5 text-sm font-semibold uppercase tracking-[0.14em] text-emerald-600">
-            {isStripeFlow
-              ? stripeStatusSummary?.label || "Payment Confirmed"
-              : nonStripeOperationalLabel}
+            {successPaymentLabel}
           </p>
           <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
             {isStripeFlow
@@ -588,6 +597,25 @@ export default function StoreCheckoutSuccessPage() {
             <p className="mt-2 break-all rounded-xl border border-emerald-200 bg-white px-3 py-2.5 font-mono text-lg font-bold text-slate-900 sm:text-2xl">
               {orderRef}
             </p>
+          </div>
+
+          <div className="mt-4 grid gap-3 text-left sm:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Payment Status
+              </p>
+              <p className="mt-1.5 text-sm font-semibold text-slate-900">
+                {successPaymentLabel}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Shipment Status
+              </p>
+              <p className="mt-1.5 text-sm font-semibold text-slate-900">
+                {successShipmentLabel}
+              </p>
+            </div>
           </div>
 
           <div className="mt-7 space-y-3 text-left">

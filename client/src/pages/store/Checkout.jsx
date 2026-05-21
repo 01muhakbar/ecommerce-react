@@ -1348,15 +1348,6 @@ export default function CheckoutPage() {
     () => normalizeCheckoutCopy(checkoutCustomizationQuery.data?.customization?.checkout),
     [checkoutCustomizationQuery.data]
   );
-  const paymentOptions = PAYMENT_OPTIONS;
-
-  useEffect(() => {
-    if (paymentOptions.length === 0) return;
-    const hasSelected = paymentOptions.some((option) => option.id === paymentOptionId);
-    if (hasSelected) return;
-    setPaymentOptionId(paymentOptions[0].id);
-  }, [paymentOptions, paymentOptionId]);
-
   useEffect(() => {
     if (!checkoutCustomizationQuery.isError) return;
     if (IS_CHECKOUT_PREVIEW_DEBUG_ENABLED) {
@@ -1681,6 +1672,27 @@ export default function CheckoutPage() {
     previewBlocksPricingActions ||
     (!checkoutPreviewQuery.isError &&
       (previewHasPaymentBlocker || checkoutPreviewInvalidItems.length > 0));
+  const paymentOptions = useMemo(() => {
+    const allStoresPaymentReady =
+      isCheckoutSummaryReady &&
+      checkoutPreviewGroups.length > 0 &&
+      checkoutPreviewGroups.every((group) => group?.paymentAvailable === true);
+    return allStoresPaymentReady ? PAYMENT_OPTIONS : [];
+  }, [checkoutPreviewGroups, isCheckoutSummaryReady]);
+  const paymentMethodNotice = previewHasPaymentBlocker
+    ? previewPaymentBlockerMessage ||
+      "Payment is unavailable until every store has an active approved payment setup."
+    : !isCheckoutSummaryReady
+      ? "Payment methods appear after the latest backend checkout preview is ready."
+      : "No active payment method is available for this cart.";
+
+  useEffect(() => {
+    if (paymentOptions.length === 0) return;
+    const hasSelected = paymentOptions.some((option) => option.id === paymentOptionId);
+    if (hasSelected) return;
+    setPaymentOptionId(paymentOptions[0].id);
+  }, [paymentOptions, paymentOptionId]);
+
   const checkoutPreviewDebugSnapshot = useMemo(
     () => ({
       previewLoading: checkoutPreviewQuery.isLoading || checkoutPreviewQuery.isFetching,
@@ -3300,7 +3312,46 @@ export default function CheckoutPage() {
                   number="04."
                   title="Payment After Order Placement"
                 />
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
+                <div
+                  data-testid="checkout-payment-methods"
+                  data-payment-method-ready={paymentOptions.length > 0 ? "true" : "false"}
+                  className={`space-y-3 rounded-2xl border p-4 ${
+                    paymentOptions.length > 0
+                      ? "border-emerald-200 bg-emerald-50/70"
+                      : "border-amber-200 bg-amber-50"
+                  }`}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p
+                        className={`text-xs font-semibold uppercase tracking-[0.14em] ${
+                          paymentOptions.length > 0 ? "text-emerald-700" : "text-amber-700"
+                        }`}
+                      >
+                        {paymentOptions.length > 0 ? "Payment ready" : "Payment unavailable"}
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-slate-700">
+                        {paymentOptions.length > 0
+                          ? "The backend checkout preview confirms payment is available for every store in this cart."
+                          : paymentMethodNotice}
+                      </p>
+                    </div>
+                    <span
+                      className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                        paymentOptions.length > 0
+                          ? "border-emerald-200 bg-white text-emerald-700"
+                          : "border-amber-200 bg-white text-amber-700"
+                      }`}
+                    >
+                      {paymentOptions.length > 0 ? "Selectable" : "Blocked"}
+                    </span>
+                  </div>
+                  {paymentOptions.length === 0 ? (
+                    <div className="rounded-2xl border border-amber-200 bg-white px-3 py-3 text-xs leading-5 text-amber-800">
+                      Payment choices stay hidden until the store payment profile is active and
+                      approved by admin.
+                    </div>
+                  ) : null}
                   {paymentOptions.map((option) => {
                     const selected = paymentOptionId === option.id;
                     const Icon = option.Icon;
@@ -3784,8 +3835,10 @@ export default function CheckoutPage() {
                 data-testid="checkout-submit-blocker-message"
                 className="mt-3 text-center text-xs leading-5 text-amber-600"
               >
-                {checkoutPreviewInvalidItems.length > 0 || previewHasPaymentBlocker
-                  ? "Resolve the blocked store groups or invalid items above before placing this order."
+                {previewHasPaymentBlocker
+                  ? "Payment is unavailable for one or more stores. Review the payment notice above before placing this order."
+                  : checkoutPreviewInvalidItems.length > 0
+                    ? "Resolve the blocked store groups or invalid items above before placing this order."
                   : "Checkout preview must finish syncing with the latest backend totals before you can place this order."}
               </p>
             ) : null}

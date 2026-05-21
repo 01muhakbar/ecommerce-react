@@ -72,6 +72,27 @@ const getUrlByTabKey = (tabKey) => {
   return `${path}?storeTab=${encodeURIComponent(storeTab)}`;
 };
 
+function SummaryCard({ label, value, helper, tone = "slate" }) {
+  const toneClass =
+    tone === "emerald"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : tone === "amber"
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+        : tone === "rose"
+          ? "border-rose-200 bg-rose-50 text-rose-700"
+          : "border-slate-200 bg-slate-50 text-slate-700";
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <div className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${toneClass}`}>
+        {label}
+      </div>
+      <p className="mt-3 text-xl font-semibold text-slate-900">{value}</p>
+      {helper ? <p className="mt-1 text-xs leading-5 text-slate-500">{helper}</p> : null}
+    </div>
+  );
+}
+
 const LANGUAGE_PRESETS = [
   { name: "English", displayName: "English", isoCode: "en", flag: "US" },
   { name: "Arabic", displayName: "Arabic", isoCode: "ar", flag: "SA" },
@@ -5445,6 +5466,14 @@ export default function StoreCustomizationPage() {
   const activeAboutUsMemberImageField = getAboutUsMemberImageFieldKey(
     activeAboutUsMemberIndex
   );
+  const activeTabMeta = TABS.find((tab) => tab.key === activeTab) || TABS[0];
+  const languageCount = Math.max(publishedLanguages.length, 1);
+  const currentLanguageLabel = String(lang || "en").toUpperCase();
+  const customizationStatus = showCustomizationError
+    ? "Needs retry"
+    : showFullCustomizationLoader || isLoadingHeader
+      ? "Loading"
+      : "Ready";
 
   return (
     <div className="mx-auto w-full max-w-[1200px] space-y-5 px-1 sm:px-2">
@@ -5454,7 +5483,7 @@ export default function StoreCustomizationPage() {
             Store Customizations
           </h1>
           <p className="text-sm text-slate-500">
-            Configure home page sections and menu labels per language.
+            Edit storefront sections, labels, and SEO per language.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -5494,6 +5523,26 @@ export default function StoreCustomizationPage() {
             {isSaving ? "Updating..." : "Update"}
           </button>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <SummaryCard
+          label="Active tab"
+          value={activeTabMeta.label}
+          helper="Saved into the selected backend customization segment."
+        />
+        <SummaryCard
+          label="Language"
+          value={currentLanguageLabel}
+          helper={`${languageCount} published language${languageCount === 1 ? "" : "s"} available.`}
+          tone="emerald"
+        />
+        <SummaryCard
+          label="State"
+          value={customizationStatus}
+          helper="Update writes only the active tab and language."
+          tone={showCustomizationError ? "rose" : customizationStatus === "Ready" ? "emerald" : "amber"}
+        />
       </div>
 
       {isLoadingHeader && customizationQuery.data ? (

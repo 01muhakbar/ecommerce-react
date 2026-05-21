@@ -41,6 +41,48 @@ function StatusMetaBadge({ label, tone, prefix = "" }) {
   );
 }
 
+function MetricCard({ label, value, tone = "slate", hint }) {
+  const className = getToneBadgeClass(tone)
+    .replace("bg-", "border-")
+    .replace("100", "200") + ` ${getToneBadgeClass(tone)}`;
+  return (
+    <div className={`rounded-xl border px-4 py-3 ${className}`}>
+      <p className="text-xs font-semibold uppercase tracking-wide opacity-80">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-slate-900">{value}</p>
+      {hint ? <p className="mt-1 text-xs leading-5 text-slate-600">{hint}</p> : null}
+    </div>
+  );
+}
+
+function SplitStatusBlock({ counts, helperLines }) {
+  const entries = [
+    ["Paid", counts?.paidSuborders || 0, "emerald"],
+    ["Review", counts?.pendingSuborders || 0, "amber"],
+    ["Not confirmed", counts?.unpaidSuborders || 0, "slate"],
+    ["Rejected", counts?.rejectedPayments || 0, "rose"],
+  ];
+
+  return (
+    <div className="min-w-[210px] space-y-2">
+      <div className="grid grid-cols-2 gap-2">
+        {entries.map(([label, value, tone]) => (
+          <div key={label} className={`rounded-lg px-2.5 py-2 ${getToneBadgeClass(tone)}`}>
+            <p className="text-[11px] font-semibold uppercase tracking-wide">{label}</p>
+            <p className="mt-0.5 text-base font-bold text-slate-900">{value}</p>
+          </div>
+        ))}
+      </div>
+      {helperLines.length > 0 ? (
+        <div className="space-y-1 text-[11px] text-slate-500">
+          {helperLines.map((line) => (
+            <div key={line}>{line}</div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 const NOT_CONFIRMED_HELPER =
   "Not confirmed includes unpaid, expired, failed, and cancelled store splits.";
 
@@ -93,24 +135,41 @@ export default function AdminPaymentAuditPage() {
 
   const items = Array.isArray(auditQuery.data?.items) ? auditQuery.data.items : [];
   const meta = auditQuery.data || { total: 0, page: 1, pageSize: 10, totalPages: 1 };
+  const visibleCounts = useMemo(
+    () =>
+      items.reduce(
+        (acc, entry) => {
+          const counts = getOperationalCounts(entry);
+          acc.paid += Number(counts?.paidSuborders || 0);
+          acc.review += Number(counts?.pendingSuborders || 0);
+          acc.blocked += Number(counts?.unpaidSuborders || 0);
+          return acc;
+        },
+        { paid: 0, review: 0, blocked: 0 }
+      ),
+    [items]
+  );
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
         <div>
           <h1 className="text-[22px] font-semibold text-slate-800">Payment Audit</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Parent order stays aggregate. Store split counters below prefer operational split
-            payment and shipment truth.
-          </p>
+          <p className="mt-1 text-sm text-slate-500">Parent order state plus store split payment truth.</p>
         </div>
         <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
           {meta.total || 0} order{meta.total === 1 ? "" : "s"}
         </div>
       </div>
 
+      <div className="grid gap-3 md:grid-cols-3">
+        <MetricCard label="Visible Paid Splits" value={visibleCounts.paid} tone="emerald" />
+        <MetricCard label="Under Review" value={visibleCounts.review} tone={visibleCounts.review ? "amber" : "slate"} />
+        <MetricCard label="Not Confirmed" value={visibleCounts.blocked} tone={visibleCounts.blocked ? "rose" : "slate"} hint={NOT_CONFIRMED_HELPER} />
+      </div>
+
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
-        <div className="grid gap-3 lg:grid-cols-[2fr_repeat(4,minmax(0,1fr))]">
+        <div className="grid gap-3 lg:grid-cols-[minmax(260px,2fr)_repeat(4,minmax(140px,1fr))]">
           <div>
             <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Search Order / Buyer
@@ -196,10 +255,6 @@ export default function AdminPaymentAuditPage() {
         </div>
       </section>
 
-      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-        {NOT_CONFIRMED_HELPER}
-      </div>
-
       {auditQuery.isLoading ? (
         <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
           Loading payment audit...
@@ -217,8 +272,11 @@ export default function AdminPaymentAuditPage() {
       {!auditQuery.isLoading && !auditQuery.isError ? (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
           {items.length === 0 ? (
-            <div className="p-6 text-sm text-slate-500">
-              No audit rows found for the selected filters.
+            <div className="p-8 text-center">
+              <p className="text-sm font-semibold text-slate-800">No payment audit rows</p>
+              <p className="mt-1 text-sm text-slate-500">
+                Try clearing filters or searching a different order or buyer.
+              </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -274,25 +332,15 @@ export default function AdminPaymentAuditPage() {
                             />
                             <div className="text-xs text-slate-500">
                               {entry.checkoutMode === "MULTI_STORE"
-                                ? "Parent badges stay aggregate. Split payment and shipment truth is audited separately."
+                                ? "Aggregate parent state."
                                 : entry.orderStatusMeta?.description ||
                                   entry.paymentStatusMeta?.description ||
                                   "-"}
                             </div>
                           </div>
                         </td>
-                        <td className="px-4 py-4 text-xs text-slate-600">
-                          <div>Paid: {counts?.paidSuborders || 0}</div>
-                          <div>Under Review: {counts?.pendingSuborders || 0}</div>
-                          <div>Not Confirmed: {counts?.unpaidSuborders || 0}</div>
-                          <div>Rejected Proofs: {counts?.rejectedPayments || 0}</div>
-                          {helperLines.length > 0 ? (
-                            <div className="mt-2 space-y-1 text-[11px] text-slate-500">
-                              {helperLines.map((line) => (
-                                <div key={`${entry.orderId}-${line}`}>{line}</div>
-                              ))}
-                            </div>
-                          ) : null}
+                        <td className="px-4 py-4">
+                          <SplitStatusBlock counts={counts} helperLines={helperLines} />
                         </td>
                         <td className="px-4 py-4 text-slate-600">
                           {formatDateTime(entry.createdAt)}

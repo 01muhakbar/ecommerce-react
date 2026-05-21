@@ -12,6 +12,7 @@ const CATEGORY_OPTIONS = [
   ["trackingDataIncomplete", "Tracking incomplete"],
   ["adminCorrectedRecent", "Admin corrected"],
 ];
+const CATEGORY_LABEL_BY_CODE = Object.fromEntries(CATEGORY_OPTIONS);
 
 const SHIPMENT_STATUS_OPTIONS = [
   "",
@@ -52,6 +53,16 @@ function StatusPill({ label, tone }) {
     <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${toneClass(tone)}`}>
       {label || "-"}
     </span>
+  );
+}
+
+function MetricCard({ label, value, hint, tone = "slate" }) {
+  return (
+    <div className={`rounded-xl border px-4 py-3 ${toneClass(tone).replace("bg-", "border-").replace("100", "200")} ${toneClass(tone)}`}>
+      <p className="text-xs font-semibold uppercase tracking-wide opacity-80">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-slate-900">{value}</p>
+      {hint ? <p className="mt-1 text-xs leading-5 text-slate-600">{hint}</p> : null}
+    </div>
   );
 }
 
@@ -97,6 +108,10 @@ export default function AdminShippingReconciliationPage() {
     scannedOrders: 0,
     categoryCounts: {},
   };
+  const categoryCounts = meta.categoryCounts || {};
+  const topCategories = Object.entries(categoryCounts)
+    .filter(([, count]) => Number(count || 0) > 0)
+    .slice(0, 4);
 
   return (
     <div className="space-y-5">
@@ -105,17 +120,36 @@ export default function AdminShippingReconciliationPage() {
           <h1 className="text-[22px] font-semibold text-slate-800">
             Shipping Reconciliation
           </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Read-only report for shipment exceptions, compatibility drift, mixed outcomes, and tracking anomalies.
-          </p>
+          <p className="mt-1 text-sm text-slate-500">Read-only shipment exception and tracking audit.</p>
         </div>
         <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
           {meta.total || 0} item{meta.total === 1 ? "" : "s"}
         </div>
       </div>
 
+      <div className="grid gap-3 md:grid-cols-3">
+        <MetricCard label="Scanned Orders" value={meta.scannedOrders || 0} hint={`Last ${meta.maxScanLimit || 500} order scan limit.`} tone="sky" />
+        <MetricCard label="Exception Items" value={meta.total || 0} hint="Rows matching current filters." tone={meta.total ? "amber" : "emerald"} />
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Top Categories</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {topCategories.length > 0 ? (
+              topCategories.map(([code, count]) => (
+                <StatusPill
+                  key={code}
+                  label={`${CATEGORY_LABEL_BY_CODE[code] || formatStatus(code)} ${count}`}
+                  tone={code.includes("Exception") ? "rose" : "slate"}
+                />
+              ))
+            ) : (
+              <span className="text-sm font-medium text-slate-600">No exception category detected.</span>
+            )}
+          </div>
+        </div>
+      </div>
+
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
-        <div className="grid gap-3 lg:grid-cols-[2fr_repeat(3,minmax(0,1fr))]">
+        <div className="grid gap-3 lg:grid-cols-[minmax(240px,2fr)_repeat(3,minmax(150px,1fr))]">
           <div>
             <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Search Invoice
@@ -185,10 +219,6 @@ export default function AdminShippingReconciliationPage() {
         </div>
       </section>
 
-      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-        Scanned {meta.scannedOrders || 0} recent order{meta.scannedOrders === 1 ? "" : "s"}. This report is read-only; use Order Detail for investigation and existing correction lane.
-      </div>
-
       {reportQuery.isLoading ? (
         <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
           Loading shipping reconciliation...
@@ -206,8 +236,11 @@ export default function AdminShippingReconciliationPage() {
       {!reportQuery.isLoading && !reportQuery.isError ? (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
           {items.length === 0 ? (
-            <div className="p-6 text-sm text-slate-500">
-              No reconciliation items found for the selected filters.
+            <div className="p-8 text-center">
+              <p className="text-sm font-semibold text-slate-800">No shipping exceptions found</p>
+              <p className="mt-1 text-sm text-slate-500">
+                {meta.scannedOrders || 0} order{meta.scannedOrders === 1 ? "" : "s"} scanned. Current filters look clean.
+              </p>
             </div>
           ) : (
             <div className="overflow-x-auto">

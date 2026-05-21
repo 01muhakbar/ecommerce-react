@@ -175,8 +175,8 @@ export default function AdminForgotPasswordPage() {
                     className="w-full rounded-2xl bg-teal-700 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-teal-500/70"
                   >
                     {isSubmitting
-                      ? "Recovering password..."
-                      : buildCooldownButtonLabel(cooldownSeconds, "Recover password")}
+                      ? "Sending reset link..."
+                      : buildCooldownButtonLabel(cooldownSeconds, "Send reset link")}
                   </button>
                 </form>
 

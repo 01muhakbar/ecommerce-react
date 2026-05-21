@@ -546,6 +546,11 @@ export default function SellerOrdersPage() {
               <p className="mt-1 text-sm text-slate-500">
                 Review payment state, fulfillment status, and the next seller action.
               </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <SellerWorkspaceBadge label="Active store only" tone="sky" className="bg-white" />
+                <SellerWorkspaceBadge label="Fulfill after paid" tone="stone" className="bg-white" />
+                <SellerWorkspaceBadge label="Admin audit aligned" tone="stone" className="bg-white" />
+              </div>
             </div>
             <SellerWorkspaceBadge
               label={`${visibleSummary.needFulfillment} need action`}
@@ -804,7 +809,7 @@ export default function SellerOrdersPage() {
                             {busyActionKey === actionKey ? "Saving..." : rowAction.label}
                           </button>
                         ) : (
-                          <div className="flex items-center">
+                          <div className="flex flex-col items-start gap-1">
                             <span
                               title={blockedReason}
                               className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getStatusBadgeClass(
@@ -813,6 +818,11 @@ export default function SellerOrdersPage() {
                             >
                               {formatStatusLabel(view.status)}
                             </span>
+                            {blockedReason ? (
+                              <p className="max-w-[140px] text-[10px] leading-4 text-slate-500">
+                                {blockedReason}
+                              </p>
+                            ) : null}
                           </div>
                         )}
                       </td>

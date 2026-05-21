@@ -38,32 +38,135 @@ function StatusPill({ label, status }) {
     STATUS_STYLES[String(status || "").toUpperCase()] ||
     "border-slate-200 bg-slate-100 text-slate-700";
   return (
-    <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${className}`}>
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${className}`}>
       {label}
     </span>
   );
 }
 
-function ImagePanel({ title, hint, imageUrl, alt }) {
+function MetricCard({ label, value, hint, tone = "slate" }) {
+  const toneClass =
+    {
+      emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
+      amber: "border-amber-200 bg-amber-50 text-amber-700",
+      rose: "border-rose-200 bg-rose-50 text-rose-700",
+      sky: "border-sky-200 bg-sky-50 text-sky-700",
+      slate: "border-slate-200 bg-slate-50 text-slate-700",
+    }[tone] || "border-slate-200 bg-slate-50 text-slate-700";
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
-      <p className="mt-1 text-xs text-slate-500">{hint}</p>
-      <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+    <div className={`rounded-xl border px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] ${toneClass}`}>
+      <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">{label}</p>
+      <p className="mt-1 text-3xl font-semibold leading-none text-slate-900">{value}</p>
+      {hint ? <p className="mt-2 truncate text-xs text-slate-600">{hint}</p> : null}
+    </div>
+  );
+}
+
+function ProgressBar({ value }) {
+  const normalized = Math.max(0, Math.min(100, Number(value || 0)));
+  return (
+    <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
+      <div className="h-full rounded-full bg-emerald-500" style={{ width: `${normalized}%` }} />
+    </div>
+  );
+}
+
+function ImagePanel({ title, hint, imageUrl, alt, statusLabel }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
+          <p className="mt-1 text-xs text-slate-500">{hint}</p>
+        </div>
+        <StatusPill
+          label={imageUrl ? statusLabel || "Available" : "Missing"}
+          status={imageUrl ? "SUCCESS" : "NEUTRAL"}
+        />
+      </div>
+      <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2">
         {imageUrl ? (
           <img
             src={imageUrl}
             alt={alt}
-            className="h-48 w-full rounded-lg bg-white object-contain"
+            className="h-40 w-full rounded-md bg-white object-contain"
           />
         ) : (
-          <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white text-sm text-slate-400">
-            No QRIS image
+          <div className="flex h-32 items-center justify-center rounded-md border border-dashed border-slate-200 bg-white text-sm font-medium text-slate-400">
+            No QRIS uploaded
           </div>
         )}
       </div>
     </div>
   );
+}
+
+function ReadinessPanel({ workspaceReadiness, readinessChecklist }) {
+  if (!workspaceReadiness) return null;
+
+  const visibleChecks = readinessChecklist.filter((item) => item.visible !== false);
+  const importantChecks = visibleChecks.slice(0, 4);
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Seller Readiness
+          </p>
+          <p className="mt-1 text-sm font-semibold text-slate-900">
+            {workspaceReadiness.completionPercent || 0}% complete
+          </p>
+        </div>
+        <StatusPill
+          label={workspaceReadiness.summary?.label || "In progress"}
+          status={workspaceReadiness.summary?.tone || "NEUTRAL"}
+        />
+      </div>
+      <div className="mt-3">
+        <ProgressBar value={workspaceReadiness.completionPercent || 0} />
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {importantChecks.map((item) => (
+          <div
+            key={item.key}
+            className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2"
+          >
+            <span className="min-w-0 truncate text-sm font-medium text-slate-700">
+              {item.label}
+            </span>
+            <StatusPill
+              label={item.status?.label || "Unknown"}
+              status={item.status?.tone || "NEUTRAL"}
+            />
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-xs font-medium text-slate-500">
+        Complete required items before checkout can go live.
+      </p>
+    </div>
+  );
+}
+
+function SnapshotField({ label, value }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        {label}
+      </p>
+      <p className="mt-1.5 truncate text-sm font-semibold text-slate-900">{value || "-"}</p>
+    </div>
+  );
+}
+
+function getShortWorkflowLabel(status, fallback = "Not ready") {
+  const label = String(status?.label || fallback).trim();
+  return label
+    .replace(/^Waiting for seller setup$/i, "Seller setup")
+    .replace(/^No open request$/i, "No request")
+    .replace(/^Not reviewed yet$/i, "Not reviewed")
+    .replace(/^Action required$/i, "Action needed");
 }
 
 export default function AdminStorePaymentProfilesPage() {
@@ -85,6 +188,14 @@ export default function AdminStorePaymentProfilesPage() {
     () => (Array.isArray(profilesQuery.data) ? profilesQuery.data : []),
     [profilesQuery.data]
   );
+  const summary = useMemo(() => {
+    const pending = items.filter((entry) => entry.pendingRequest).length;
+    const active = items.filter((entry) => entry.paymentProfile?.readiness?.isReady).length;
+    const needsAction = items.filter(
+      (entry) => entry.workflow?.governance?.canApprovePromotion || entry.workflow?.governance?.canRequestRevision
+    ).length;
+    return { pending, active, needsAction };
+  }, [items]);
 
   if (profilesQuery.isLoading) {
     return (
@@ -109,13 +220,17 @@ export default function AdminStorePaymentProfilesPage() {
       <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
         <div>
           <h1 className="text-[22px] font-semibold text-slate-800">Store Payment</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Review seller payment setup requests and promote approved QRIS revisions into a new active snapshot.
-          </p>
+          <p className="mt-1 text-sm text-slate-500">QRIS approval, active snapshots, and checkout readiness.</p>
         </div>
         <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
           {items.length} store{items.length === 1 ? "" : "s"}
         </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <MetricCard label="Active Ready" value={summary.active} hint="Can accept checkout" tone="emerald" />
+        <MetricCard label="Pending" value={summary.pending} hint="Waiting review" tone={summary.pending ? "amber" : "slate"} />
+        <MetricCard label="Action Needed" value={summary.needsAction} hint="Needs admin decision" tone={summary.needsAction ? "rose" : "slate"} />
       </div>
 
       {items.length === 0 ? (
@@ -131,9 +246,6 @@ export default function AdminStorePaymentProfilesPage() {
             const currentStatus = String(
               profile?.activityMeta?.code || profile?.verificationStatus || "NOT_CONFIGURED"
             ).toUpperCase();
-            const requestStatus = String(
-              workflow?.requestState?.code || pendingRequest?.requestStatus || ""
-            ).toUpperCase();
             const pendingStoreId = mutation.variables?.storeId;
             const isBusy =
               mutation.isPending && Number(pendingStoreId) === Number(entry.store.id);
@@ -148,42 +260,53 @@ export default function AdminStorePaymentProfilesPage() {
             const readinessChecklist = Array.isArray(workspaceReadiness?.checklist)
               ? workspaceReadiness.checklist
               : [];
+            const activeStatusLabel = profile
+              ? profile.isActive
+                ? "Active snapshot"
+                : "Inactive snapshot"
+              : "No snapshot";
+            const reviewStatusLabel = workflow?.reviewStatus?.label
+              ? `Review ${getShortWorkflowLabel(workflow.reviewStatus)}`
+              : "Review not reviewed";
+            const readinessStatusLabel = workspaceReadiness?.summary?.label
+              ? getShortWorkflowLabel(workspaceReadiness.summary, "In progress")
+              : "Readiness unknown";
+            const hasAdminAction =
+              canApprovePromotion || canRequestRevision || canToggleActiveSnapshot;
+            const actionHelper = pendingRequest
+              ? canApprovePromotion
+                ? "Only approved requests can be promoted."
+                : "Request is not eligible for promotion yet."
+              : profile
+                ? canToggleActiveSnapshot
+                  ? "Manual activation follows backend governance."
+                  : "Backend governance keeps this action locked."
+                : "No snapshot is available to activate.";
 
             return (
               <section
                 key={entry.store.id}
                 className="rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.05)]"
               >
-                <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-4">
                   <div>
                     <h2 className="text-lg font-semibold text-slate-900">{entry.store.name}</h2>
                     <p className="mt-1 text-sm text-slate-500">
                       Owner: {entry.owner?.name || "-"} ({entry.owner?.email || "-"})
                     </p>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex max-w-full flex-wrap justify-start gap-2 sm:justify-end">
                     <StatusPill
-                      label={
-                        workflow?.primaryStatus?.label ||
-                        (currentStatus === "NOT_CONFIGURED"
-                          ? "No Active Snapshot"
-                          : `Active ${currentStatus}`)
-                      }
-                      status={workflow?.primaryStatus?.tone || currentStatus}
+                      label={activeStatusLabel}
+                      status={profile?.activityMeta?.tone || currentStatus}
                     />
-                    {pendingRequest ? (
-                      <StatusPill
-                        label={`Request ${workflow?.requestState?.label || requestStatus}`}
-                        status={workflow?.requestState?.tone || requestStatus}
-                      />
-                    ) : null}
                     <StatusPill
-                      label={`Review ${workflow?.reviewStatus?.label || "Not reviewed yet"}`}
+                      label={reviewStatusLabel}
                       status={workflow?.reviewStatus?.tone || "NEUTRAL"}
                     />
                     {workspaceReadiness ? (
                       <StatusPill
-                        label={`Readiness ${workspaceReadiness.summary?.label || "In progress"}`}
+                        label={readinessStatusLabel}
                         status={workspaceReadiness.summary?.tone || "NEUTRAL"}
                       />
                     ) : null}
@@ -192,44 +315,43 @@ export default function AdminStorePaymentProfilesPage() {
 
                 <div className="mt-4 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
                   <div className="grid gap-4">
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Active Account Name
-                        </p>
-                        <p className="mt-2 text-sm text-slate-900">{profile?.accountName || "-"}</p>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">Active Snapshot</p>
+                          <p className="mt-1 text-xs text-slate-500">Used by checkout</p>
+                        </div>
+                        <StatusPill
+                          label={profile?.activityMeta?.label || activeStatusLabel}
+                          status={profile?.activityMeta?.tone || currentStatus}
+                        />
                       </div>
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Active Merchant Name
-                        </p>
-                        <p className="mt-2 text-sm text-slate-900">{profile?.merchantName || "-"}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Active Merchant ID
-                        </p>
-                        <p className="mt-2 text-sm text-slate-900">{profile?.merchantId || "-"}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Active Snapshot Version
-                        </p>
-                        <p className="mt-2 text-sm text-slate-900">
-                          {profile?.version ? `v${profile.version}` : "-"}
-                        </p>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        <SnapshotField label="Account" value={profile?.accountName} />
+                        <SnapshotField label="Merchant" value={profile?.merchantName} />
+                        <SnapshotField label="Merchant ID" value={profile?.merchantId} />
+                        <SnapshotField
+                          label="Version"
+                          value={profile?.version ? `v${profile.version}` : "-"}
+                        />
                       </div>
                     </div>
 
                     {pendingRequest ? (
-                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                        {workflow?.primaryStatus?.description ||
-                          "A seller payment setup request is waiting for admin action. Promoting it will create a new immutable active snapshot and switch the store pointer."}
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-amber-900">Pending admin review</p>
+                          <StatusPill
+                            label={getShortWorkflowLabel(workflow?.requestState, "Submitted")}
+                            status={workflow?.requestState?.tone || "WARNING"}
+                          />
+                        </div>
+                        <p className="mt-1 text-xs font-medium text-amber-800">Awaiting admin review</p>
                       </div>
                     ) : (
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                        {workflow?.nextStep?.description ||
-                          "No submitted payment setup request is waiting for review right now."}
+                      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                        <StatusPill label="No pending request" status="NEUTRAL" />
+                        <span>Admin approval required for activation</span>
                       </div>
                     )}
 
@@ -237,13 +359,13 @@ export default function AdminStorePaymentProfilesPage() {
                       <div className="grid gap-4 sm:grid-cols-2">
                         <div>
                           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            Pending Account Name
+                            Pending Account
                           </p>
                           <p className="mt-2 text-sm text-slate-900">{pendingRequest.accountName || "-"}</p>
                         </div>
                         <div>
                           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            Pending Merchant Name
+                            Pending Merchant
                           </p>
                           <p className="mt-2 text-sm text-slate-900">{pendingRequest.merchantName || "-"}</p>
                         </div>
@@ -263,9 +385,9 @@ export default function AdminStorePaymentProfilesPage() {
                         </div>
                         <div className="sm:col-span-2">
                           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            Pending Instruction Text
+                            Instruction
                           </p>
-                          <p className="mt-2 text-sm text-slate-700">
+                          <p className="mt-2 line-clamp-3 text-sm text-slate-700">
                             {pendingRequest.instructionText || "-"}
                           </p>
                         </div>
@@ -304,115 +426,97 @@ export default function AdminStorePaymentProfilesPage() {
                       </div>
                     ) : null}
                     {workflow?.governance?.note ? (
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                        {workflow.governance.note}
+                      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                        <StatusPill label="Admin authority" status="NEUTRAL" />
+                        <span>Approval required</span>
                       </div>
                     ) : null}
-                    {workspaceReadiness ? (
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            Seller Readiness
-                          </p>
-                          <span className="text-sm font-semibold text-slate-900">
-                            {workspaceReadiness.completionPercent || 0}% ({workspaceReadiness.completedItems || 0}/
-                            {workspaceReadiness.totalItems || 0})
-                          </span>
-                        </div>
-                        <p className="mt-2 text-sm text-slate-600">
-                          {workspaceReadiness.summary?.description ||
-                            "Seller readiness follows the current store, payment, and catalog state."}
-                        </p>
-                        <div className="mt-3 grid gap-2">
-                          {readinessChecklist
-                            .filter((item) => item.visible !== false)
-                            .map((item) => (
-                              <div
-                                key={item.key}
-                                className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3"
-                              >
-                                <div>
-                                  <p className="text-sm font-semibold text-slate-900">{item.label}</p>
-                                  <p className="mt-1 text-xs text-slate-500">
-                                    {item.status?.description || "-"}
-                                  </p>
-                                </div>
-                                <StatusPill
-                                  label={item.status?.label || "Unknown"}
-                                  status={item.status?.tone || "NEUTRAL"}
-                                />
-                              </div>
-                            ))}
-                        </div>
-                      </div>
-                    ) : null}
+                    <ReadinessPanel
+                      workspaceReadiness={workspaceReadiness}
+                      readinessChecklist={readinessChecklist}
+                    />
                   </div>
 
                   <div className="grid gap-4">
                     <ImagePanel
-                      title="Current Active QRIS"
-                      hint="Checkout keeps using this image until admin promotes a new snapshot."
+                      title="Active QRIS"
+                      hint="Used by checkout"
                       imageUrl={profile?.qrisImageUrl || null}
                       alt={`Active QRIS ${entry.store.name}`}
+                      statusLabel="Available"
                     />
                     <ImagePanel
-                      title="Pending Request QRIS"
-                      hint="This image stays in the request lane until admin approve/promote."
+                      title="Pending Request"
+                      hint="Awaiting admin review"
                       imageUrl={pendingRequest?.qrisImageUrl || null}
                       alt={`Pending QRIS ${entry.store.name}`}
+                      statusLabel="Submitted"
                     />
                   </div>
                 </div>
 
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {pendingRequest ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          mutation.mutate({
-                            storeId: entry.store.id,
-                            payload: { verificationStatus: "ACTIVE" },
-                          })
-                        }
-                        disabled={isBusy || !canApprovePromotion}
-                        className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {isBusy ? "Updating..." : "Approve & Promote"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          mutation.mutate({
-                            storeId: entry.store.id,
-                            payload: { verificationStatus: "REJECTED" },
-                          })
-                        }
-                        disabled={isBusy || !canRequestRevision}
-                        className="rounded-lg border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        Request Revision
-                      </button>
-                    </>
-                  ) : null}
+                <div className="mt-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">Admin action</p>
+                    <p className="mt-1 text-xs text-slate-500">{actionHelper}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {pendingRequest ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            mutation.mutate({
+                              storeId: entry.store.id,
+                              payload: { verificationStatus: "ACTIVE" },
+                            })
+                          }
+                          disabled={isBusy || !canApprovePromotion}
+                          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isBusy ? "Updating..." : "Approve & Promote"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            mutation.mutate({
+                              storeId: entry.store.id,
+                              payload: { verificationStatus: "REJECTED" },
+                            })
+                          }
+                          disabled={isBusy || !canRequestRevision}
+                          className="rounded-lg border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Request Revision
+                        </button>
+                      </>
+                    ) : null}
 
-                  {profile ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        mutation.mutate({
-                          storeId: entry.store.id,
-                          payload: {
-                            verificationStatus: profile.isActive ? "INACTIVE" : "ACTIVE",
-                          },
-                        })
-                      }
-                      disabled={isBusy || !canToggleActiveSnapshot}
-                      className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {profile.isActive ? "Deactivate Active Snapshot" : "Activate Current Snapshot"}
-                    </button>
-                  ) : null}
+                    {profile ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          mutation.mutate({
+                            storeId: entry.store.id,
+                            payload: {
+                              verificationStatus: profile.isActive ? "INACTIVE" : "ACTIVE",
+                            },
+                          })
+                        }
+                        disabled={isBusy || !canToggleActiveSnapshot}
+                        className={`rounded-lg px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                          !profile.isActive && canToggleActiveSnapshot
+                            ? "bg-slate-900 text-white hover:bg-slate-800"
+                            : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        {profile.isActive ? "Deactivate Snapshot" : "Activate Snapshot"}
+                      </button>
+                    ) : null}
+                    {!hasAdminAction ? (
+                      <StatusPill label="No action available" status="NEUTRAL" />
+                    ) : null}
+                  </div>
                 </div>
               </section>
             );

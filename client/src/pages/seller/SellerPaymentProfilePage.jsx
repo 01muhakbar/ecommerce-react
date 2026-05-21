@@ -408,6 +408,33 @@ export default function SellerPaymentProfilePage() {
         items.findIndex((item) => item.label === badge.label) === index
     )
     .slice(0, 2);
+  const checkoutAvailability = paymentSetupReady
+    ? {
+        label: "Checkout available",
+        tone: "emerald",
+        message: "Buyer checkout can use this active approved setup.",
+      }
+    : isPendingReview
+      ? {
+          label: "Waiting admin",
+          tone: "amber",
+          message: "Submitted requests do not affect checkout until admin approval.",
+        }
+      : isNeedsRevision
+        ? {
+            label: "Revision needed",
+            tone: "rose",
+            message: "Update the request. Checkout keeps using only an active approved setup.",
+          }
+        : {
+            label: "Checkout blocked",
+            tone: "amber",
+            message: "Complete setup and wait for admin approval before buyers can pay.",
+          };
+  const adminAuthorityText =
+    readModel.boundaries?.sellerWorkspaceMode ||
+    governance.note ||
+    "Seller can submit payment setup requests. Admin remains the final reviewer and activation authority.";
 
   const buildPayload = () => ({
     accountName: toRequiredText(form.accountName),
@@ -583,6 +610,41 @@ export default function SellerPaymentProfilePage() {
           ) : null}
         </div>
       </SellerWorkspaceNotice>
+
+      <SellerWorkspaceSectionCard
+        title="Checkout authority"
+        hint="Client checkout reads the active approved setup only."
+        Icon={ShieldAlert}
+      >
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-semibold text-slate-900">Buyer checkout</p>
+              <SellerWorkspaceBadge
+                label={checkoutAvailability.label}
+                tone={checkoutAvailability.tone}
+                className="bg-white"
+              />
+            </div>
+            <p className="mt-2 text-xs leading-5 text-slate-600">
+              {checkoutAvailability.message}
+            </p>
+          </div>
+          <SellerWorkspaceDetailItem
+            label="Active setup"
+            value={activeSnapshot?.activityMeta?.label || "No active setup"}
+            hint={paymentSetupReady ? "Approved by admin." : "Not available for checkout."}
+          />
+          <SellerWorkspaceDetailItem
+            label="Open request"
+            value={requestStatus?.label || "No request"}
+            hint={reviewStatus?.label || "Admin review status."}
+          />
+        </div>
+        <SellerWorkspaceNotice type="info" className="mt-3">
+          {adminAuthorityText}
+        </SellerWorkspaceNotice>
+      </SellerWorkspaceSectionCard>
 
       <SellerWorkspaceSectionCard
         title="Required setup"

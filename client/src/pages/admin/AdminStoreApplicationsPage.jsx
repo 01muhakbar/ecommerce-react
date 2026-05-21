@@ -36,6 +36,31 @@ function StatusPill({ label, tone = "stone" }) {
   );
 }
 
+function ProgressBar({ completed, total }) {
+  const percent = total > 0 ? Math.round((Number(completed || 0) / Number(total)) * 100) : 0;
+  return (
+    <div>
+      <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+        <div
+          className="h-full rounded-full bg-emerald-500"
+          style={{ width: `${Math.max(0, Math.min(100, percent))}%` }}
+        />
+      </div>
+      <p className="mt-1 text-xs text-slate-500">{percent}% complete</p>
+    </div>
+  );
+}
+
+function MetricCard({ label, value, tone = "stone" }) {
+  const toneClass = STATUS_CLASS[tone] || STATUS_CLASS.stone;
+  return (
+    <div className={`rounded-xl border px-4 py-3 ${toneClass}`}>
+      <p className="text-xs font-semibold uppercase tracking-wide opacity-80">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-slate-900">{value}</p>
+    </div>
+  );
+}
+
 export default function AdminStoreApplicationsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [statusInput, setStatusInput] = useState(searchParams.get("status") || "");
@@ -73,21 +98,41 @@ export default function AdminStoreApplicationsPage() {
     totalPages: 1,
     total: 0,
   };
+  const visibleSummary = useMemo(
+    () =>
+      items.reduce(
+        (acc, entry) => {
+          const status = String(entry.status || "").toLowerCase();
+          if (["submitted", "under_review"].includes(status)) acc.reviewable += 1;
+          if (entry.completeness?.isComplete) acc.complete += 1;
+          if (status === "revision_requested") acc.revision += 1;
+          return acc;
+        },
+        { reviewable: 0, complete: 0, revision: 0 }
+      ),
+    [items]
+  );
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
         <div>
           <h1 className="text-[22px] font-semibold text-slate-800">Store Applications</h1>
-          <p className="mt-1 text-sm text-slate-500">Review store applications and make the next decision.</p>
+          <p className="mt-1 text-sm text-slate-500">Review onboarding submissions and provisioning readiness.</p>
         </div>
         <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
           {meta.total || 0} application{meta.total === 1 ? "" : "s"}
         </div>
       </div>
 
+      <div className="grid gap-3 md:grid-cols-3">
+        <MetricCard label="Ready to Review" value={visibleSummary.reviewable} tone={visibleSummary.reviewable ? "amber" : "stone"} />
+        <MetricCard label="Complete Forms" value={visibleSummary.complete} tone="emerald" />
+        <MetricCard label="Needs Revision" value={visibleSummary.revision} tone={visibleSummary.revision ? "rose" : "stone"} />
+      </div>
+
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
-        <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto]">
+        <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_auto_auto]">
           <div>
             <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Status Filter
@@ -141,8 +186,11 @@ export default function AdminStoreApplicationsPage() {
       {!applicationsQuery.isLoading && !applicationsQuery.isError ? (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
           {items.length === 0 ? (
-            <div className="p-6 text-sm text-slate-500">
-              No store applications found for the selected filter.
+            <div className="p-8 text-center">
+              <p className="text-sm font-semibold text-slate-800">No applications match this view</p>
+              <p className="mt-1 text-sm text-slate-500">
+                Clear the filter to see all onboarding applications.
+              </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -190,16 +238,20 @@ export default function AdminStoreApplicationsPage() {
                             label={entry.statusMeta.label}
                             tone={entry.statusMeta.tone}
                           />
-                          <div className="text-xs text-slate-500">
-                            Step: {entry.currentStepMeta.label}
-                          </div>
+                          <StatusPill label={entry.currentStepMeta.label} tone="stone" />
                         </div>
                       </td>
                       <td className="px-4 py-4">
                         <div className="font-medium text-slate-900">
                           {entry.completeness.completedFields}/{entry.completeness.totalFields}
                         </div>
-                        <div className="mt-1 text-xs text-slate-500">
+                        <div className="mt-2">
+                          <ProgressBar
+                            completed={entry.completeness.completedFields}
+                            total={entry.completeness.totalFields}
+                          />
+                        </div>
+                        <div className="mt-2 text-xs text-slate-500">
                           {entry.completeness.label}
                         </div>
                       </td>
@@ -215,9 +267,9 @@ export default function AdminStoreApplicationsPage() {
                       <td className="px-4 py-4 text-right">
                         <Link
                           to={`/admin/store/applications/${entry.id}`}
-                          className="inline-flex rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                          className="inline-flex rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
                         >
-                          View Detail
+                          Review
                         </Link>
                       </td>
                     </tr>

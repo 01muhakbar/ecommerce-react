@@ -315,6 +315,27 @@ export default function SellerOrderDetailPage() {
     rawFulfillmentActionBlockedReason,
     "No fulfillment action is available for this order."
   );
+  const nextShipmentAction =
+    shipmentActions.find((action) => enabledShipmentActions.has(action?.code)) || null;
+  const nextFulfillmentAction = enabledFulfillmentActions[0] || null;
+  const nextSellerAction =
+    trackingMutationEnabled && nextShipmentAction ? nextShipmentAction : nextFulfillmentAction;
+  const nextSellerActionLabel =
+    nextSellerAction?.label ||
+    (operationalFinality.isFinalNegative ? "Order closed" : "No seller action");
+  const nextSellerActionMessage = sellerFriendlyText(
+    nextSellerAction?.description ||
+      nextSellerAction?.reason ||
+      (!trackingMutationEnabled && nextShipmentAction ? shipmentActionBlockedReason : "") ||
+      fulfillmentActionBlockedReason ||
+      shipmentActionBlockedReason,
+    "No seller action is available for this order."
+  );
+  const nextSellerActionTone = nextSellerAction
+    ? "sky"
+    : operationalFinality.isFinalNegative
+      ? "stone"
+      : "amber";
 
   useEffect(() => {
     if (!primaryShipment) return;
@@ -461,6 +482,42 @@ export default function SellerOrderDetailPage() {
             "Store shipping setup is not ready yet."}
         </SellerWorkspaceNotice>
       ) : null}
+
+      <SellerWorkspaceSectionCard
+        title="Seller action snapshot"
+        hint="Scoped to this store split."
+        Icon={Truck}
+        actions={[
+          <SellerWorkspaceBadge
+            key="next-action"
+            label={nextSellerActionLabel}
+            tone={nextSellerActionTone}
+          />,
+        ]}
+      >
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <SellerWorkspaceDetailItem
+            label="Next seller action"
+            value={nextSellerActionLabel}
+            hint={nextSellerActionMessage}
+          />
+          <SellerWorkspaceDetailItem
+            label="Store split payment"
+            value={sellerPaymentMeta?.label || operationalPayment.status || detail.paymentStatus}
+            hint={operationalPayment.description || "Payment status for this store order."}
+          />
+          <SellerWorkspaceDetailItem
+            label="Shipment"
+            value={sellerShipmentMeta?.label || operationalShipment.status || "Not assigned"}
+            hint={sellerShipmentMeta?.description || shipmentActionBlockedReason}
+          />
+          <SellerWorkspaceDetailItem
+            label="Parent order"
+            value={parentOrderMeta?.label || detail.order?.status || detail.order?.orderStatus || "-"}
+            hint={parentPaymentMeta?.label ? `Parent payment: ${parentPaymentMeta.label}` : "Parent state can move separately."}
+          />
+        </div>
+      </SellerWorkspaceSectionCard>
 
       {ENABLE_MULTISTORE_SHIPMENT_MVP &&
       Array.isArray(detail.shipments) &&

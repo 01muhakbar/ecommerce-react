@@ -302,6 +302,25 @@ function Section({ id, title, children }) {
   );
 }
 
+function SummaryCard({ label, value, helper, tone = "slate" }) {
+  const toneClass =
+    tone === "emerald"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : tone === "amber"
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+        : "border-slate-200 bg-slate-50 text-slate-700";
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <div className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${toneClass}`}>
+        {label}
+      </div>
+      <p className="mt-3 text-xl font-semibold text-slate-900">{value}</p>
+      {helper ? <p className="mt-1 text-xs leading-5 text-slate-500">{helper}</p> : null}
+    </div>
+  );
+}
+
 function BrandingCard({
   item,
   logoUrl,
@@ -319,8 +338,22 @@ function BrandingCard({
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
       <div className="flex flex-col gap-4">
-        <div>
-          <p className="text-sm font-semibold text-slate-800">{item.label}</p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-800">{item.label}</p>
+            {item.helper ? (
+              <p className="mt-1 text-xs leading-5 text-slate-500">{item.helper}</p>
+            ) : null}
+          </div>
+          <span
+            className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+              hasCustomLogo
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : "border-slate-200 bg-white text-slate-500"
+            }`}
+          >
+            {hasCustomLogo ? "Custom" : "Fallback"}
+          </span>
         </div>
 
         <div
@@ -464,6 +497,12 @@ export default function Settings() {
     () => normalizeBrandingSettings(brandingSettingsQuery.data),
     [brandingSettingsQuery.data]
   );
+  const customBrandingCount = useMemo(
+    () =>
+      BRANDING_ITEMS.filter((item) => hasCustomBrandingLogo(branding[item.field])).length,
+    [branding]
+  );
+  const smtpReady = normalizeBooleanString(form.smtpPasswordConfigured, "false") === "true";
 
   const onInputChange = (key, value) => {
     setForm((prev) => ({
@@ -610,9 +649,14 @@ export default function Settings() {
     <div className="mx-auto w-full max-w-[1120px] px-1 sm:px-2">
       <form className="space-y-5 pb-2" onSubmit={onSubmit}>
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)] sm:px-6 sm:py-5">
-          <h1 className="text-[22px] font-semibold leading-none text-slate-800">
-            Global Setting
-          </h1>
+          <div>
+            <h1 className="text-[22px] font-semibold leading-none text-slate-800">
+              Global Setting
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Brand, locale, receipt, and SMTP controls.
+            </p>
+          </div>
           <button
             type="submit"
             disabled={isSaving}
@@ -620,6 +664,26 @@ export default function Settings() {
           >
             {isSaving ? "Updating..." : "Update"}
           </button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <SummaryCard
+            label="Brand assets"
+            value={`${customBrandingCount}/${BRANDING_ITEMS.length}`}
+            helper="Custom logos and auth hero images."
+            tone={customBrandingCount === BRANDING_ITEMS.length ? "emerald" : "amber"}
+          />
+          <SummaryCard
+            label="Workspace"
+            value={branding.workspaceBrandName || DEFAULT_BRANDING_SETTINGS.workspaceBrandName}
+            helper="Visible in Admin and Seller shells."
+          />
+          <SummaryCard
+            label="SMTP"
+            value={smtpReady ? "Configured" : "Needs secret"}
+            helper="Used for OTP and operational email."
+            tone={smtpReady ? "emerald" : "amber"}
+          />
         </div>
 
         {feedback ? <div className={statusBoxClass}>{feedback.message}</div> : null}
@@ -662,9 +726,7 @@ export default function Settings() {
               </div>
             </div>
             <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              Upload gambar di bawah untuk mengganti logo workspace dan gambar besar di halaman
-              login admin. Perubahan akan langsung dipakai setelah upload berhasil. Gunakan file
-              PNG, JPG, atau WEBP dengan ukuran maksimal 1MB.
+              Upload PNG, JPG, atau WEBP maksimal 1MB. Preview dan status asset diperbarui setelah upload berhasil.
             </div>
             {brandingFeedback ? (
               <div className={`${brandingStatusBoxClass} mb-4`}>{brandingFeedback.message}</div>
@@ -781,9 +843,7 @@ export default function Settings() {
 
         <Section id="smtp-settings" title="Google SMTP Account">
           <div className="lg:col-span-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-            Konfigurasi ini dipakai backend untuk Email OTP dan email operasional lain. Password
-            tidak pernah ditampilkan kembali di form; biarkan kosong untuk mempertahankan secret
-            yang sudah tersimpan.
+            Backend memakai SMTP untuk OTP dan email operasional. Biarkan password kosong untuk mempertahankan secret tersimpan.
           </div>
 
           <Field label="Provider">

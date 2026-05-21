@@ -565,6 +565,11 @@ function SellerWorkspaceHomeContent() {
   const shippingSetupChecklist = readinessChecklist.find((item) => item.key === "shipping_setup");
   const paymentChecklist = readinessChecklist.find((item) => item.key === "payment_profile");
   const productChecklist = readinessChecklist.find((item) => item.key === "products");
+  const readinessBoundaryText =
+    readiness?.boundaries?.storefrontBoundary ||
+    readiness?.boundaries?.adminAuthority ||
+    readiness?.boundaries?.readinessSourceOfTruth ||
+    "";
   const paymentReadiness = summary?.paymentProfileReadiness;
   const paymentReviewCounts = summary?.paymentReviewCounts;
   const suborderSummary = summary?.suborderPaymentSummary;
@@ -1106,6 +1111,11 @@ function SellerWorkspaceHomeContent() {
               value={productChecklist?.status?.label || "-"}
             />
           </div>
+          {readinessBoundaryText ? (
+            <SellerWorkspaceNotice type="info" className="mt-4">
+              {readinessBoundaryText}
+            </SellerWorkspaceNotice>
+          ) : null}
         </SellerWorkspaceSectionCard>
 
         <SellerWorkspaceSectionCard

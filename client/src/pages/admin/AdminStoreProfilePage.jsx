@@ -41,6 +41,21 @@ function StatusPill({ label, tone = "NEUTRAL" }) {
   );
 }
 
+function SummaryCard({ label, value, helper, tone = "NEUTRAL" }) {
+  const className =
+    STATUS_STYLES[String(tone || "").toUpperCase()] || STATUS_STYLES.NEUTRAL;
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${className}`}>
+        {label}
+      </span>
+      <p className="mt-3 text-xl font-semibold text-slate-900">{value}</p>
+      {helper ? <p className="mt-1 text-xs leading-5 text-slate-500">{helper}</p> : null}
+    </div>
+  );
+}
+
 function GovernanceBlock({ title, toneClass, fields, snapshot }) {
   return (
     <div className={`rounded-xl border px-4 py-4 ${toneClass}`}>
@@ -99,6 +114,17 @@ export default function AdminStoreProfilePage() {
     () => (Array.isArray(profilesQuery.data) ? profilesQuery.data : []),
     [profilesQuery.data]
   );
+  const profileSummary = useMemo(() => {
+    const total = items.length;
+    const active = items.filter((entry) => entry?.store?.status === "ACTIVE").length;
+    const publicReady = items.filter(
+      (entry) => entry?.publicIdentity?.summary?.operationalReadiness?.isReady
+    ).length;
+    const complete = items.filter((entry) => entry?.store?.completeness?.isComplete).length;
+    const shippingReady = items.filter((entry) => entry?.store?.isShippingReady).length;
+    return { total, active, publicReady, complete, shippingReady };
+  }, [items]);
+  const hasStores = profileSummary.total > 0;
 
   const getDraft = (entry) => {
     const key = String(entry?.store?.id || "");
@@ -151,12 +177,39 @@ export default function AdminStoreProfilePage() {
         <div>
           <h1 className="text-[22px] font-semibold text-slate-800">Store Profile</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Govern the core store identity here. Store Profile stays separate from Store Customization and remains the source of truth for seller, admin, and storefront sync.
+            Admin-owned identity and storefront readiness for every seller store.
           </p>
         </div>
         <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
           {items.length} store{items.length === 1 ? "" : "s"}
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+        <SummaryCard
+          label="Active stores"
+          value={`${profileSummary.active}/${profileSummary.total}`}
+          helper="Admin status is the first public gate."
+          tone={hasStores && profileSummary.active === profileSummary.total ? "SUCCESS" : "WARNING"}
+        />
+        <SummaryCard
+          label="Public ready"
+          value={profileSummary.publicReady}
+          helper="Storefront opens only when readiness is true."
+          tone={hasStores && profileSummary.publicReady > 0 ? "SUCCESS" : "WARNING"}
+        />
+        <SummaryCard
+          label="Complete"
+          value={`${profileSummary.complete}/${profileSummary.total}`}
+          helper="Core profile fields filled."
+          tone={hasStores && profileSummary.complete === profileSummary.total ? "SUCCESS" : "WARNING"}
+        />
+        <SummaryCard
+          label="Shipping"
+          value={`${profileSummary.shippingReady}/${profileSummary.total}`}
+          helper="Origin setup for fulfillment."
+          tone={hasStores && profileSummary.shippingReady === profileSummary.total ? "SUCCESS" : "WARNING"}
+        />
       </div>
 
       {items.length === 0 ? (
@@ -194,7 +247,7 @@ export default function AdminStoreProfilePage() {
                   <div>
                     <h2 className="text-lg font-semibold text-slate-900">{store?.name || "Store"}</h2>
                     <p className="mt-1 text-sm text-slate-500">
-                      Owner: {owner?.name || "-"} ({owner?.email || "-"}) · Slug @{store?.slug || "-"}
+                      Owner: {owner?.name || "-"} ({owner?.email || "-"}) / Slug @{store?.slug || "-"}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
