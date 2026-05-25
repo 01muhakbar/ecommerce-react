@@ -4,6 +4,13 @@ import {
   fetchAdminStoreSettings,
   updateAdminStoreSettings,
 } from "../../lib/adminApi.js";
+import {
+  AdminOpsErrorState,
+  AdminOpsLoadingState,
+  AdminOpsMetricCard,
+  AdminOpsPageHeader,
+  AdminOpsStatusBadge,
+} from "../../components/admin/AdminOpsPrimitives.jsx";
 
 const STRIPE_PUBLISHABLE_KEY_REGEX = /^pk_(test|live)_[A-Za-z0-9]+$/;
 const STRIPE_SECRET_KEY_REGEX = /^sk_(test|live)_[A-Za-z0-9]+$/;
@@ -229,14 +236,6 @@ const buildFatalIssues = (form) => {
 const inputClass =
   "mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-50";
 
-const toneClassByCode = {
-  emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  slate: "border-slate-200 bg-slate-100 text-slate-600",
-  amber: "border-amber-200 bg-amber-50 text-amber-700",
-  blue: "border-sky-200 bg-sky-50 text-sky-700",
-  rose: "border-rose-200 bg-rose-50 text-rose-700",
-};
-
 function Field({ label, hint, children }) {
   return (
     <label className="block">
@@ -297,25 +296,8 @@ function Section({ title, description, children }) {
 }
 
 function StatusBadge({ status }) {
-  const tone = toneClassByCode[status?.tone] || toneClassByCode.slate;
-  return (
-    <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${tone}`}>
-      {status?.label || "Unknown"}
-    </span>
-  );
-}
-
-function SummaryCard({ label, value, helper, tone = "slate" }) {
-  const toneClass = toneClassByCode[tone] || toneClassByCode.slate;
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-      <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${toneClass}`}>
-        {label}
-      </span>
-      <p className="mt-3 text-xl font-semibold text-slate-900">{value}</p>
-      {helper ? <p className="mt-1 text-xs leading-5 text-slate-500">{helper}</p> : null}
-    </div>
-  );
+  const tone = status?.tone || "slate";
+  return <AdminOpsStatusBadge label={status?.label || "Unknown"} tone={tone} />;
 }
 
 function StatusCard({ title, diagnostic, helper, extra }) {
@@ -432,9 +414,7 @@ export default function StoreSettingsPage() {
   if (settingsQuery.isLoading) {
     return (
       <div className="mx-auto w-full max-w-[1120px] px-1 sm:px-2">
-        <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
-          Loading...
-        </div>
+        <AdminOpsLoadingState title="Loading store settings..." />
       </div>
     );
   }
@@ -446,16 +426,7 @@ export default function StoreSettingsPage() {
       "Failed to load store settings.";
     return (
       <div className="mx-auto w-full max-w-[1120px] px-1 sm:px-2">
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
-          <p className="text-sm text-rose-700">{message}</p>
-          <button
-            type="button"
-            onClick={() => settingsQuery.refetch()}
-            className="mt-4 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700"
-          >
-            Retry
-          </button>
-        </div>
+        <AdminOpsErrorState message={message} onRetry={() => settingsQuery.refetch()} />
       </div>
     );
   }
@@ -463,48 +434,60 @@ export default function StoreSettingsPage() {
   return (
     <div className="mx-auto w-full max-w-[1120px] px-1 sm:px-2">
       <form className="space-y-5 pb-2" onSubmit={onSubmit}>
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)] sm:px-6 sm:py-5">
-          <div>
-            <h1 className="text-[22px] font-semibold leading-none text-slate-800">
-              Store Settings
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Backend-driven checkout, login, analytics, and chat switches.
-            </p>
-          </div>
-          <button
-            type="submit"
-            disabled={isSubmitDisabled}
-            className="h-10 min-w-[110px] rounded-lg bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isSaving ? "Updating..." : "Update"}
-          </button>
-        </div>
+        <AdminOpsPageHeader
+          title="Store Settings"
+          description="Backend-driven checkout, login, analytics, and chat switches."
+          badges={
+            <>
+              <AdminOpsStatusBadge
+                label={checkoutAvailableMethods.length > 0 ? "Ready" : "Missing"}
+                tone={checkoutAvailableMethods.length > 0 ? "ready" : "missing"}
+              />
+              <AdminOpsStatusBadge
+                label={localFatalIssues.length === 0 ? "Verified" : "Needs attention"}
+                tone={localFatalIssues.length === 0 ? "verified" : "attention"}
+              />
+            </>
+          }
+          actions={
+            <button
+              type="submit"
+              disabled={isSubmitDisabled}
+              className="h-10 min-w-[110px] rounded-lg bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSaving ? "Updating..." : "Update"}
+            </button>
+          }
+        />
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-          <SummaryCard
-            label="Checkout"
-            value={`${checkoutAvailableMethods.length} active`}
-            helper="Client receives only backend-approved methods."
-            tone={checkoutAvailableMethods.length > 0 ? "emerald" : "amber"}
-          />
-          <SummaryCard
-            label="Payment toggles"
-            value={`${enabledPaymentSettings}/3`}
-            helper="Invalid credentials stay hidden from checkout."
-            tone={enabledPaymentSettings > 0 ? "emerald" : "amber"}
-          />
-          <SummaryCard
-            label="Public tools"
-            value={`${enabledPublicTools}/2`}
-            helper="Analytics and chat require valid public-safe values."
-            tone={enabledPublicTools > 0 ? "blue" : "slate"}
-          />
-          <SummaryCard
-            label="Validation"
-            value={localFatalIssues.length === 0 ? "Clear" : `${localFatalIssues.length} issue`}
-            helper="Save is blocked while fatal issues exist."
-            tone={localFatalIssues.length === 0 ? "emerald" : "rose"}
+        <AdminOpsMetricCard
+          label="Checkout"
+          badgeLabel={checkoutAvailableMethods.length > 0 ? "Ready" : "Missing"}
+          value={`${checkoutAvailableMethods.length} active`}
+          helper="Client receives only backend-approved methods."
+          tone={checkoutAvailableMethods.length > 0 ? "emerald" : "amber"}
+        />
+        <AdminOpsMetricCard
+          label="Payment toggles"
+          badgeLabel={enabledPaymentSettings > 0 ? "Ready" : "Missing"}
+          value={`${enabledPaymentSettings}/3`}
+          helper="Invalid credentials stay hidden from checkout."
+          tone={enabledPaymentSettings > 0 ? "emerald" : "amber"}
+        />
+        <AdminOpsMetricCard
+          label="Public tools"
+          badgeLabel={enabledPublicTools > 0 ? "Ready" : "Inactive"}
+          value={`${enabledPublicTools}/2`}
+          helper="Analytics and chat require valid public-safe values."
+          tone={enabledPublicTools > 0 ? "blue" : "slate"}
+        />
+        <AdminOpsMetricCard
+          label="Validation"
+          badgeLabel={localFatalIssues.length === 0 ? "Verified" : "Needs attention"}
+          value={localFatalIssues.length === 0 ? "Clear" : `${localFatalIssues.length} issue`}
+          helper="Save is blocked while fatal issues exist."
+          tone={localFatalIssues.length === 0 ? "emerald" : "rose"}
           />
         </div>
 

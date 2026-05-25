@@ -1,0 +1,190 @@
+{
+  "base": "http://localhost:3001",
+  "checkedAt": "2026-05-21T01:39:26.367Z",
+  "adminLoginStatus": 200,
+  "hasAdminCookie": true,
+  "firstStore": {
+    "id": 1293,
+    "slug": "e2e-truth-1779250491935-order-store",
+    "status": "ACTIVE",
+    "readiness": "PAYMENT_NOT_CONFIGURED"
+  },
+  "results": [
+    {
+      "name": "admin-store-profiles",
+      "route": "/api/admin/store/profiles",
+      "status": 200,
+      "success": true,
+      "count": 40,
+      "keys": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10",
+        "11"
+      ]
+    },
+    {
+      "name": "admin-store-payment-profiles",
+      "route": "/api/admin/stores/payment-profiles",
+      "status": 200,
+      "success": true,
+      "count": 40,
+      "keys": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10",
+        "11"
+      ]
+    },
+    {
+      "name": "admin-store-settings",
+      "route": "/api/admin/store/settings",
+      "status": 200,
+      "success": true,
+      "count": null,
+      "keys": [
+        "storeSettings",
+        "diagnostics"
+      ]
+    },
+    {
+      "name": "payment-audit",
+      "route": "/api/admin/payments/audit",
+      "status": 200,
+      "success": true,
+      "count": 10,
+      "keys": [
+        "items",
+        "total",
+        "page",
+        "pageSize",
+        "totalPages",
+        "filters"
+      ]
+    },
+    {
+      "name": "store-applications",
+      "route": "/api/admin/store-applications",
+      "status": 200,
+      "success": true,
+      "count": 4,
+      "keys": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "name": "public-store-settings",
+      "route": "/api/store/settings",
+      "status": 200,
+      "success": true,
+      "count": null,
+      "keys": [
+        "storeSettings"
+      ]
+    },
+    {
+      "name": "public-customization-home",
+      "route": "/api/store/customization?lang=en&include=home",
+      "status": 200,
+      "success": true,
+      "count": null,
+      "keys": [
+        "lang",
+        "customization"
+      ]
+    },
+    {
+      "name": "public-customization-header",
+      "route": "/api/store/customization/header?lang=en",
+      "status": 200,
+      "success": true,
+      "count": null,
+      "keys": [
+        "language",
+        "headerText",
+        "phoneNumber",
+        "whatsAppLink",
+        "headerLogoUrl",
+        "updatedAt",
+        "contract"
+      ]
+    },
+    {
+      "name": "public-store-identity",
+      "route": "/api/store/customization/identity",
+      "status": 200,
+      "success": true,
+      "count": null,
+      "keys": [
+        "name",
+        "slug",
+        "description",
+        "logoUrl",
+        "bannerUrl",
+        "email",
+        "phone",
+        "whatsapp",
+        "websiteUrl",
+        "instagramUrl",
+        "tiktokUrl",
+        "addressLine1"
+      ]
+    },
+    {
+      "name": "public-store-identity-by-first-admin-slug",
+      "route": "/api/store/customization/identity/e2e-truth-1779250491935-order-store",
+      "status": 200,
+      "success": true,
+      "count": null,
+      "keys": [
+        "name",
+        "slug",
+        "description",
+        "logoUrl",
+        "bannerUrl",
+        "email",
+        "phone",
+        "whatsapp",
+        "websiteUrl",
+        "instagramUrl",
+        "tiktokUrl",
+        "addressLine1"
+      ]
+    },
+    {
+      "name": "seller-store-profile-admin-session-boundary",
+      "route": "/api/seller/stores/1293/store-profile",
+      "status": 401,
+      "success": false,
+      "count": null,
+      "keys": []
+    },
+    {
+      "name": "seller-payment-profile-admin-session-boundary",
+      "route": "/api/seller/stores/1293/payment-profile",
+      "status": 401,
+      "success": false,
+      "count": null,
+      "keys": []
+    }
+  ]
+}

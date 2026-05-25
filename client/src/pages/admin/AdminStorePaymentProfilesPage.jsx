@@ -4,24 +4,14 @@ import {
   fetchAdminStorePaymentProfiles,
   reviewAdminStorePaymentProfile,
 } from "../../api/storePaymentProfiles.ts";
-
-const STATUS_STYLES = {
-  SUBMITTED: "border-amber-200 bg-amber-50 text-amber-700",
-  NEEDS_REVISION: "border-rose-200 bg-rose-50 text-rose-700",
-  PENDING: "border-amber-200 bg-amber-50 text-amber-700",
-  ACTIVE: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  REJECTED: "border-rose-200 bg-rose-50 text-rose-700",
-  INACTIVE: "border-slate-200 bg-slate-100 text-slate-700",
-  EMERALD: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  AMBER: "border-amber-200 bg-amber-50 text-amber-700",
-  ROSE: "border-rose-200 bg-rose-50 text-rose-700",
-  SKY: "border-sky-200 bg-sky-50 text-sky-700",
-  STONE: "border-slate-200 bg-slate-100 text-slate-700",
-  SUCCESS: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  WARNING: "border-amber-200 bg-amber-50 text-amber-700",
-  DANGER: "border-rose-200 bg-rose-50 text-rose-700",
-  NEUTRAL: "border-slate-200 bg-slate-100 text-slate-700",
-};
+import {
+  AdminOpsEmptyState,
+  AdminOpsErrorState,
+  AdminOpsLoadingState,
+  AdminOpsMetricCard,
+  AdminOpsPageHeader,
+  AdminOpsStatusBadge,
+} from "../../components/admin/AdminOpsPrimitives.jsx";
 
 const formatDate = (value) => {
   if (!value) return "-";
@@ -34,32 +24,7 @@ const formatDate = (value) => {
 };
 
 function StatusPill({ label, status }) {
-  const className =
-    STATUS_STYLES[String(status || "").toUpperCase()] ||
-    "border-slate-200 bg-slate-100 text-slate-700";
-  return (
-    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${className}`}>
-      {label}
-    </span>
-  );
-}
-
-function MetricCard({ label, value, hint, tone = "slate" }) {
-  const toneClass =
-    {
-      emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
-      amber: "border-amber-200 bg-amber-50 text-amber-700",
-      rose: "border-rose-200 bg-rose-50 text-rose-700",
-      sky: "border-sky-200 bg-sky-50 text-sky-700",
-      slate: "border-slate-200 bg-slate-50 text-slate-700",
-    }[tone] || "border-slate-200 bg-slate-50 text-slate-700";
-  return (
-    <div className={`rounded-xl border px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] ${toneClass}`}>
-      <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">{label}</p>
-      <p className="mt-1 text-3xl font-semibold leading-none text-slate-900">{value}</p>
-      {hint ? <p className="mt-2 truncate text-xs text-slate-600">{hint}</p> : null}
-    </div>
-  );
+  return <AdminOpsStatusBadge label={label} tone={status} />;
 }
 
 function ProgressBar({ value }) {
@@ -198,45 +163,71 @@ export default function AdminStorePaymentProfilesPage() {
   }, [items]);
 
   if (profilesQuery.isLoading) {
-    return (
-      <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
-        Loading store payment...
-      </div>
-    );
+    return <AdminOpsLoadingState title="Loading store payment profiles..." />;
   }
 
   if (profilesQuery.isError) {
     return (
-      <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
-        {profilesQuery.error?.response?.data?.message ||
+      <AdminOpsErrorState
+        message={
+          profilesQuery.error?.response?.data?.message ||
           profilesQuery.error?.message ||
-          "Failed to load store payment."}
-      </div>
+          "Failed to load store payment."
+        }
+        onRetry={() => profilesQuery.refetch()}
+      />
     );
   }
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
-        <div>
-          <h1 className="text-[22px] font-semibold text-slate-800">Store Payment</h1>
-          <p className="mt-1 text-sm text-slate-500">QRIS approval, active snapshots, and checkout readiness.</p>
-        </div>
-        <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-          {items.length} store{items.length === 1 ? "" : "s"}
-        </div>
-      </div>
+      <AdminOpsPageHeader
+        title="Store Payment"
+        description="QRIS approval, active snapshots, and checkout readiness."
+        meta={`${items.length} store${items.length === 1 ? "" : "s"}`}
+        badges={
+          <>
+            <AdminOpsStatusBadge
+              label={summary.needsAction ? "Action needed" : "Ready"}
+              tone={summary.needsAction ? "attention" : "ready"}
+            />
+            <AdminOpsStatusBadge
+              label={summary.active ? "Verified" : "Missing"}
+              tone={summary.active ? "verified" : "missing"}
+            />
+          </>
+        }
+      />
 
       <div className="grid gap-3 md:grid-cols-3">
-        <MetricCard label="Active Ready" value={summary.active} hint="Can accept checkout" tone="emerald" />
-        <MetricCard label="Pending" value={summary.pending} hint="Waiting review" tone={summary.pending ? "amber" : "slate"} />
-        <MetricCard label="Action Needed" value={summary.needsAction} hint="Needs admin decision" tone={summary.needsAction ? "rose" : "slate"} />
+        <AdminOpsMetricCard
+          label="Active Ready"
+          badgeLabel={summary.active ? "Ready" : "Missing"}
+          value={summary.active}
+          helper="Can accept checkout."
+          tone={summary.active ? "ready" : "missing"}
+        />
+        <AdminOpsMetricCard
+          label="Pending Review"
+          badgeLabel={summary.pending ? "Action needed" : "Ready"}
+          value={summary.pending}
+          helper="Seller requests awaiting admin review."
+          tone={summary.pending ? "attention" : "ready"}
+        />
+        <AdminOpsMetricCard
+          label="Admin Decisions"
+          badgeLabel={summary.needsAction ? "Action needed" : "Verified"}
+          value={summary.needsAction}
+          helper="Approval, revision, or activation available."
+          tone={summary.needsAction ? "rose" : "verified"}
+        />
       </div>
 
       {items.length === 0 ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
-          No store payment data found yet.
-        </div>
+        <AdminOpsEmptyState
+          title="No store payment data found"
+          description="Seller submissions and active snapshots will appear here."
+        />
       ) : (
         <div className="grid gap-4">
           {items.map((entry) => {

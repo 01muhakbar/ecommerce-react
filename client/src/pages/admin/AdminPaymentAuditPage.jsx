@@ -7,6 +7,14 @@ import {
   CheckoutModeBadge,
   PaymentStatusBadge,
 } from "../../components/payments/PaymentReadModelBadges.jsx";
+import {
+  AdminOpsEmptyState,
+  AdminOpsErrorState,
+  AdminOpsLoadingState,
+  AdminOpsMetricCard,
+  AdminOpsPageHeader,
+  AdminOpsStatusBadge,
+} from "../../components/admin/AdminOpsPrimitives.jsx";
 
 const PAYMENT_STATUS_OPTIONS = ["", "UNPAID", "PARTIALLY_PAID", "PAID"];
 const REVIEW_STATUS_OPTIONS = ["", "PENDING", "REJECTED", "APPROVED"];
@@ -38,19 +46,6 @@ function StatusMetaBadge({ label, tone, prefix = "" }) {
     >
       {prefix ? `${prefix} ${text}` : text}
     </span>
-  );
-}
-
-function MetricCard({ label, value, tone = "slate", hint }) {
-  const className = getToneBadgeClass(tone)
-    .replace("bg-", "border-")
-    .replace("100", "200") + ` ${getToneBadgeClass(tone)}`;
-  return (
-    <div className={`rounded-xl border px-4 py-3 ${className}`}>
-      <p className="text-xs font-semibold uppercase tracking-wide opacity-80">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-slate-900">{value}</p>
-      {hint ? <p className="mt-1 text-xs leading-5 text-slate-600">{hint}</p> : null}
-    </div>
   );
 }
 
@@ -152,20 +147,46 @@ export default function AdminPaymentAuditPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
-        <div>
-          <h1 className="text-[22px] font-semibold text-slate-800">Payment Audit</h1>
-          <p className="mt-1 text-sm text-slate-500">Parent order state plus store split payment truth.</p>
-        </div>
-        <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-          {meta.total || 0} order{meta.total === 1 ? "" : "s"}
-        </div>
-      </div>
+      <AdminOpsPageHeader
+        title="Payment Audit"
+        description="Parent order state and store split payment truth."
+        meta={`${meta.total || 0} order${meta.total === 1 ? "" : "s"}`}
+        badges={
+          <>
+            <AdminOpsStatusBadge
+              label={visibleCounts.review ? "Action needed" : "Ready"}
+              tone={visibleCounts.review ? "attention" : "ready"}
+            />
+            <AdminOpsStatusBadge
+              label={visibleCounts.blocked ? "Needs attention" : "Verified"}
+              tone={visibleCounts.blocked ? "rose" : "verified"}
+            />
+          </>
+        }
+      />
 
       <div className="grid gap-3 md:grid-cols-3">
-        <MetricCard label="Visible Paid Splits" value={visibleCounts.paid} tone="emerald" />
-        <MetricCard label="Under Review" value={visibleCounts.review} tone={visibleCounts.review ? "amber" : "slate"} />
-        <MetricCard label="Not Confirmed" value={visibleCounts.blocked} tone={visibleCounts.blocked ? "rose" : "slate"} hint={NOT_CONFIRMED_HELPER} />
+        <AdminOpsMetricCard
+          label="Paid Splits"
+          badgeLabel="Verified"
+          value={visibleCounts.paid}
+          helper="Visible rows confirmed as paid."
+          tone="verified"
+        />
+        <AdminOpsMetricCard
+          label="Under Review"
+          badgeLabel={visibleCounts.review ? "Action needed" : "Ready"}
+          value={visibleCounts.review}
+          helper="Proof review still pending."
+          tone={visibleCounts.review ? "attention" : "ready"}
+        />
+        <AdminOpsMetricCard
+          label="Not Confirmed"
+          badgeLabel={visibleCounts.blocked ? "Needs attention" : "Ready"}
+          value={visibleCounts.blocked}
+          helper={NOT_CONFIRMED_HELPER}
+          tone={visibleCounts.blocked ? "rose" : "ready"}
+        />
       </div>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
@@ -256,28 +277,27 @@ export default function AdminPaymentAuditPage() {
       </section>
 
       {auditQuery.isLoading ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
-          Loading payment audit...
-        </div>
+        <AdminOpsLoadingState title="Loading payment audit..." />
       ) : null}
 
       {auditQuery.isError ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
-          {auditQuery.error?.response?.data?.message ||
+        <AdminOpsErrorState
+          message={
+            auditQuery.error?.response?.data?.message ||
             auditQuery.error?.message ||
-            "Failed to load payment audit."}
-        </div>
+            "Failed to load payment audit."
+          }
+          onRetry={() => auditQuery.refetch()}
+        />
       ) : null}
 
       {!auditQuery.isLoading && !auditQuery.isError ? (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
           {items.length === 0 ? (
-            <div className="p-8 text-center">
-              <p className="text-sm font-semibold text-slate-800">No payment audit rows</p>
-              <p className="mt-1 text-sm text-slate-500">
-                Try clearing filters or searching a different order or buyer.
-              </p>
-            </div>
+            <AdminOpsEmptyState
+              title="No payment audit rows"
+              description="Try clearing filters or searching a different order or buyer."
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-slate-200 text-sm">

@@ -1,0 +1,49 @@
+{
+  "base": "http://localhost:5173",
+  "checkedAt": "2026-05-21T01:39:49.472Z",
+  "slug": "e2e-truth-1779250491935-order-store",
+  "results": [
+    {
+      "name": "client-home",
+      "path": "/",
+      "status": 200,
+      "finalPath": "/",
+      "title": "TP PRENEURS",
+      "h1": "Boost Your Online Business",
+      "bodyLength": 3217,
+      "hasStoreIdentityText": true,
+      "overflowX": false,
+      "consoleWarnings": [],
+      "pageErrors": [],
+      "screenshot": "reports\\p0-store-ops-smoke-sync-02-artifacts\\desktop-client-home.png"
+    },
+    {
+      "name": "client-store-microsite",
+      "path": "/store/e2e-truth-1779250491935-order-store",
+      "status": 200,
+      "finalPath": "/store/e2e-truth-1779250491935-order-store",
+      "title": "TP PRENEURS",
+      "h1": "e2e-truth-1779250491935-order-store",
+      "bodyLength": 1088,
+      "hasStoreIdentityText": true,
+      "overflowX": false,
+      "consoleWarnings": [],
+      "pageErrors": [],
+      "screenshot": "reports\\p0-store-ops-smoke-sync-02-artifacts\\desktop-client-store-microsite.png"
+    },
+    {
+      "name": "client-checkout",
+      "path": "/checkout",
+      "status": 200,
+      "finalPath": "/checkout",
+      "title": "TP PRENEURS",
+      "h1": "Checkout is blocked",
+      "bodyLength": 265,
+      "hasStoreIdentityText": true,
+      "overflowX": false,
+      "consoleWarnings": [],
+      "pageErrors": [],
+      "screenshot": "reports\\p0-store-ops-smoke-sync-02-artifacts\\desktop-client-checkout.png"
+    }
+  ]
+}

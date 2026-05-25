@@ -5,13 +5,15 @@ import {
   fetchAdminStoreProfiles,
   updateAdminStoreProfile,
 } from "../../api/adminStoreProfile.ts";
-
-const STATUS_STYLES = {
-  SUCCESS: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  WARNING: "border-amber-200 bg-amber-50 text-amber-700",
-  DANGER: "border-rose-200 bg-rose-50 text-rose-700",
-  NEUTRAL: "border-slate-200 bg-slate-100 text-slate-700",
-};
+import {
+  AdminOpsEmptyState,
+  AdminOpsErrorState,
+  AdminOpsLoadingState,
+  AdminOpsMetricCard,
+  AdminOpsPageHeader,
+  AdminOpsStatusBadge,
+  getReadinessBadge,
+} from "../../components/admin/AdminOpsPrimitives.jsx";
 
 const textOrFallback = (value, fallback = "-") => {
   const normalized = String(value ?? "").trim();
@@ -32,28 +34,7 @@ const buildPreviewValue = (snapshot, key) => {
 };
 
 function StatusPill({ label, tone = "NEUTRAL" }) {
-  const className =
-    STATUS_STYLES[String(tone || "").toUpperCase()] || STATUS_STYLES.NEUTRAL;
-  return (
-    <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${className}`}>
-      {label}
-    </span>
-  );
-}
-
-function SummaryCard({ label, value, helper, tone = "NEUTRAL" }) {
-  const className =
-    STATUS_STYLES[String(tone || "").toUpperCase()] || STATUS_STYLES.NEUTRAL;
-
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-      <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${className}`}>
-        {label}
-      </span>
-      <p className="mt-3 text-xl font-semibold text-slate-900">{value}</p>
-      {helper ? <p className="mt-1 text-xs leading-5 text-slate-500">{helper}</p> : null}
-    </div>
-  );
+  return <AdminOpsStatusBadge label={label} tone={tone} />;
 }
 
 function GovernanceBlock({ title, toneClass, fields, snapshot }) {
@@ -154,68 +135,88 @@ export default function AdminStoreProfilePage() {
     "Failed to update store profile.";
 
   if (profilesQuery.isLoading) {
-    return (
-      <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
-        Loading store profiles...
-      </div>
-    );
+    return <AdminOpsLoadingState title="Loading store profiles..." />;
   }
 
   if (profilesQuery.isError) {
     return (
-      <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
-        {profilesQuery.error?.response?.data?.message ||
+      <AdminOpsErrorState
+        message={
+          profilesQuery.error?.response?.data?.message ||
           profilesQuery.error?.message ||
-          "Failed to load store profiles."}
-      </div>
+          "Failed to load store profiles."
+        }
+        onRetry={() => profilesQuery.refetch()}
+      />
     );
   }
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
-        <div>
-          <h1 className="text-[22px] font-semibold text-slate-800">Store Profile</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Admin-owned identity and storefront readiness for every seller store.
-          </p>
-        </div>
-        <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-          {items.length} store{items.length === 1 ? "" : "s"}
-        </div>
-      </div>
+      <AdminOpsPageHeader
+        title="Store Profile"
+        description="Admin-owned identity and storefront readiness."
+        meta={`${items.length} store${items.length === 1 ? "" : "s"}`}
+        badges={
+          <>
+            <AdminOpsStatusBadge
+              {...getReadinessBadge(
+                hasStores && profileSummary.publicReady === profileSummary.total,
+                { missing: !hasStores }
+              )}
+            />
+            <AdminOpsStatusBadge
+              label={
+                hasStores && profileSummary.shippingReady === profileSummary.total
+                  ? "Verified"
+                  : "Needs attention"
+              }
+              tone={
+                hasStores && profileSummary.shippingReady === profileSummary.total
+                  ? "verified"
+                  : "attention"
+              }
+            />
+          </>
+        }
+      />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <SummaryCard
+        <AdminOpsMetricCard
           label="Active stores"
+          badgeLabel={hasStores && profileSummary.active === profileSummary.total ? "Ready" : "Inactive"}
           value={`${profileSummary.active}/${profileSummary.total}`}
           helper="Admin status is the first public gate."
-          tone={hasStores && profileSummary.active === profileSummary.total ? "SUCCESS" : "WARNING"}
+          tone={hasStores && profileSummary.active === profileSummary.total ? "ready" : "inactive"}
         />
-        <SummaryCard
+        <AdminOpsMetricCard
           label="Public ready"
+          badgeLabel={hasStores && profileSummary.publicReady > 0 ? "Ready" : "Missing"}
           value={profileSummary.publicReady}
           helper="Storefront opens only when readiness is true."
-          tone={hasStores && profileSummary.publicReady > 0 ? "SUCCESS" : "WARNING"}
+          tone={hasStores && profileSummary.publicReady > 0 ? "ready" : "missing"}
         />
-        <SummaryCard
+        <AdminOpsMetricCard
           label="Complete"
+          badgeLabel={hasStores && profileSummary.complete === profileSummary.total ? "Verified" : "Needs attention"}
           value={`${profileSummary.complete}/${profileSummary.total}`}
           helper="Core profile fields filled."
-          tone={hasStores && profileSummary.complete === profileSummary.total ? "SUCCESS" : "WARNING"}
+          tone={hasStores && profileSummary.complete === profileSummary.total ? "verified" : "attention"}
         />
-        <SummaryCard
+        <AdminOpsMetricCard
           label="Shipping"
+          badgeLabel={hasStores && profileSummary.shippingReady === profileSummary.total ? "Ready" : "Needs attention"}
           value={`${profileSummary.shippingReady}/${profileSummary.total}`}
           helper="Origin setup for fulfillment."
-          tone={hasStores && profileSummary.shippingReady === profileSummary.total ? "SUCCESS" : "WARNING"}
+          tone={hasStores && profileSummary.shippingReady === profileSummary.total ? "ready" : "attention"}
         />
       </div>
 
       {items.length === 0 ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
-          No stores found yet.
-        </div>
+        <AdminOpsEmptyState
+          title="No stores found"
+          description="Store profile rows will appear after sellers are provisioned."
+        />
       ) : (
         <div className="grid gap-4">
           {items.map((entry) => {

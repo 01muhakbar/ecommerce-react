@@ -14,6 +14,13 @@ import {
   fileToDataUrl,
   validateCustomizationLogoFile,
 } from "../../utils/fileToDataUrl.js";
+import {
+  AdminOpsErrorState,
+  AdminOpsLoadingState,
+  AdminOpsMetricCard,
+  AdminOpsPageHeader,
+  AdminOpsStatusBadge,
+} from "../../components/admin/AdminOpsPrimitives.jsx";
 
 const ADMIN_LANGUAGE_KEY = "adminLanguage";
 
@@ -71,27 +78,6 @@ const getUrlByTabKey = (tabKey) => {
   const path = getPathByTabKey(safeTabKey);
   return `${path}?storeTab=${encodeURIComponent(storeTab)}`;
 };
-
-function SummaryCard({ label, value, helper, tone = "slate" }) {
-  const toneClass =
-    tone === "emerald"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-      : tone === "amber"
-        ? "border-amber-200 bg-amber-50 text-amber-700"
-        : tone === "rose"
-          ? "border-rose-200 bg-rose-50 text-rose-700"
-          : "border-slate-200 bg-slate-50 text-slate-700";
-
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-      <div className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${toneClass}`}>
-        {label}
-      </div>
-      <p className="mt-3 text-xl font-semibold text-slate-900">{value}</p>
-      {helper ? <p className="mt-1 text-xs leading-5 text-slate-500">{helper}</p> : null}
-    </div>
-  );
-}
 
 const LANGUAGE_PRESETS = [
   { name: "English", displayName: "English", isoCode: "en", flag: "US" },
@@ -5477,71 +5463,83 @@ export default function StoreCustomizationPage() {
 
   return (
     <div className="mx-auto w-full max-w-[1200px] space-y-5 px-1 sm:px-2">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 className="text-[28px] font-semibold text-slate-900">
-            Store Customizations
-          </h1>
-          <p className="text-sm text-slate-500">
-            Edit storefront sections, labels, and SEO per language.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
-            <select
-              value={lang}
-              onChange={(event) => setLang(String(event.target.value).toLowerCase())}
-              disabled={isSaving}
-              className={`${inputBase} min-w-[178px] appearance-none pr-9`}
+      <AdminOpsPageHeader
+        title="Store Customizations"
+        description="Storefront sections, labels, and SEO per language."
+        badges={
+          <>
+            <AdminOpsStatusBadge
+              label={customizationStatus === "Ready" ? "Ready" : "Needs attention"}
+              tone={customizationStatus === "Ready" ? "ready" : "attention"}
+            />
+            <AdminOpsStatusBadge
+              label={publishedLanguages.length > 0 ? "Verified" : "Missing"}
+              tone={publishedLanguages.length > 0 ? "verified" : "missing"}
+            />
+          </>
+        }
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <select
+                value={lang}
+                onChange={(event) => setLang(String(event.target.value).toLowerCase())}
+                disabled={isSaving}
+                className={`${inputBase} min-w-[178px] appearance-none pr-9`}
+              >
+                {publishedLanguages.length === 0 ? (
+                  <option value="en">en</option>
+                ) : (
+                  publishedLanguages.map((item) => (
+                    <option key={item.id || item.isoCode} value={item.isoCode}>
+                      {item.isoCode}
+                    </option>
+                  ))
+                )}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            </div>
+            <button
+              type="button"
+              onClick={onOpenAddLanguage}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+              aria-label="Add language"
             >
-              {publishedLanguages.length === 0 ? (
-                <option value="en">en</option>
-              ) : (
-                publishedLanguages.map((item) => (
-                  <option key={item.id || item.isoCode} value={item.isoCode}>
-                    {item.isoCode}
-                  </option>
-                ))
-              )}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Plus className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={isSaving || isLoadingHeader || !lang}
+              className="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSaving ? "Updating..." : "Update"}
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onOpenAddLanguage}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:border-slate-300"
-            aria-label="Add language"
-          >
-            <Plus className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={isSaving || isLoadingHeader || !lang}
-            className="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isSaving ? "Updating..." : "Update"}
-          </button>
-        </div>
-      </div>
+        }
+      />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <SummaryCard
+        <AdminOpsMetricCard
           label="Active tab"
+          badgeLabel="Ready"
           value={activeTabMeta.label}
           helper="Saved into the selected backend customization segment."
+          tone="ready"
         />
-        <SummaryCard
+        <AdminOpsMetricCard
           label="Language"
+          badgeLabel={publishedLanguages.length > 0 ? "Verified" : "Missing"}
           value={currentLanguageLabel}
           helper={`${languageCount} published language${languageCount === 1 ? "" : "s"} available.`}
-          tone="emerald"
+          tone={publishedLanguages.length > 0 ? "verified" : "missing"}
         />
-        <SummaryCard
+        <AdminOpsMetricCard
           label="State"
+          badgeLabel={showCustomizationError ? "Needs attention" : customizationStatus === "Ready" ? "Ready" : "Action needed"}
           value={customizationStatus}
           helper="Update writes only the active tab and language."
-          tone={showCustomizationError ? "rose" : customizationStatus === "Ready" ? "emerald" : "amber"}
+          tone={showCustomizationError ? "rose" : customizationStatus === "Ready" ? "ready" : "attention"}
         />
       </div>
 
@@ -5589,13 +5587,16 @@ export default function StoreCustomizationPage() {
         className="focus:outline-none"
       >
         {showFullCustomizationLoader ? (
-          <div className={sectionCard}>Loading customization data...</div>
+          <AdminOpsLoadingState title="Loading customization data..." />
         ) : showCustomizationError ? (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
-            {customizationQuery.error?.response?.data?.message ||
+          <AdminOpsErrorState
+            message={
+              customizationQuery.error?.response?.data?.message ||
               customizationQuery.error?.message ||
-              "Failed to load customization data."}
-          </div>
+              "Failed to load customization data."
+            }
+            onRetry={() => customizationQuery.refetch()}
+          />
         ) : activeTab === "productSlugPage" ? (
           <div className="flex flex-col gap-5">
           <section className={sectionCard}>

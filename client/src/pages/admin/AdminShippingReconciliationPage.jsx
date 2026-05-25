@@ -2,6 +2,14 @@ import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchAdminShippingReconciliationReport } from "../../lib/adminApi.js";
+import {
+  AdminOpsEmptyState,
+  AdminOpsErrorState,
+  AdminOpsLoadingState,
+  AdminOpsMetricCard,
+  AdminOpsPageHeader,
+  AdminOpsStatusBadge,
+} from "../../components/admin/AdminOpsPrimitives.jsx";
 
 const CATEGORY_OPTIONS = [
   ["", "All"],
@@ -25,16 +33,6 @@ const SHIPMENT_STATUS_OPTIONS = [
   "READY_TO_FULFILL",
 ];
 
-const toneClass = (tone) => {
-  const value = String(tone || "").toLowerCase();
-  if (value === "rose") return "bg-rose-100 text-rose-700";
-  if (value === "amber") return "bg-amber-100 text-amber-700";
-  if (value === "emerald") return "bg-emerald-100 text-emerald-700";
-  if (value === "sky") return "bg-sky-100 text-sky-700";
-  if (value === "stone") return "bg-stone-100 text-stone-700";
-  return "bg-slate-100 text-slate-700";
-};
-
 const formatStatus = (value) =>
   String(value || "-")
     .replace(/_/g, " ")
@@ -49,21 +47,7 @@ const formatDateTime = (value) => {
 };
 
 function StatusPill({ label, tone }) {
-  return (
-    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${toneClass(tone)}`}>
-      {label || "-"}
-    </span>
-  );
-}
-
-function MetricCard({ label, value, hint, tone = "slate" }) {
-  return (
-    <div className={`rounded-xl border px-4 py-3 ${toneClass(tone).replace("bg-", "border-").replace("100", "200")} ${toneClass(tone)}`}>
-      <p className="text-xs font-semibold uppercase tracking-wide opacity-80">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-slate-900">{value}</p>
-      {hint ? <p className="mt-1 text-xs leading-5 text-slate-600">{hint}</p> : null}
-    </div>
-  );
+  return <AdminOpsStatusBadge label={label || "-"} tone={tone} />;
 }
 
 export default function AdminShippingReconciliationPage() {
@@ -115,21 +99,39 @@ export default function AdminShippingReconciliationPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
-        <div>
-          <h1 className="text-[22px] font-semibold text-slate-800">
-            Shipping Reconciliation
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">Read-only shipment exception and tracking audit.</p>
-        </div>
-        <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-          {meta.total || 0} item{meta.total === 1 ? "" : "s"}
-        </div>
-      </div>
+      <AdminOpsPageHeader
+        title="Shipping Reconciliation"
+        description="Read-only shipment exceptions and tracking audit."
+        meta={`${meta.total || 0} item${meta.total === 1 ? "" : "s"}`}
+        badges={
+          <>
+            <AdminOpsStatusBadge
+              label={meta.total ? "Needs attention" : "Ready"}
+              tone={meta.total ? "attention" : "ready"}
+            />
+            <AdminOpsStatusBadge
+              label={topCategories.length ? "Action needed" : "Verified"}
+              tone={topCategories.length ? "amber" : "verified"}
+            />
+          </>
+        }
+      />
 
       <div className="grid gap-3 md:grid-cols-3">
-        <MetricCard label="Scanned Orders" value={meta.scannedOrders || 0} hint={`Last ${meta.maxScanLimit || 500} order scan limit.`} tone="sky" />
-        <MetricCard label="Exception Items" value={meta.total || 0} hint="Rows matching current filters." tone={meta.total ? "amber" : "emerald"} />
+        <AdminOpsMetricCard
+          label="Scanned Orders"
+          badgeLabel="Ready"
+          value={meta.scannedOrders || 0}
+          helper={`Last ${meta.maxScanLimit || 500} order scan limit.`}
+          tone="info"
+        />
+        <AdminOpsMetricCard
+          label="Exception Items"
+          badgeLabel={meta.total ? "Needs attention" : "Ready"}
+          value={meta.total || 0}
+          helper="Rows matching current filters."
+          tone={meta.total ? "attention" : "ready"}
+        />
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Top Categories</p>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -220,28 +222,29 @@ export default function AdminShippingReconciliationPage() {
       </section>
 
       {reportQuery.isLoading ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
-          Loading shipping reconciliation...
-        </div>
+        <AdminOpsLoadingState title="Loading shipping reconciliation..." />
       ) : null}
 
       {reportQuery.isError ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
-          {reportQuery.error?.response?.data?.message ||
+        <AdminOpsErrorState
+          message={
+            reportQuery.error?.response?.data?.message ||
             reportQuery.error?.message ||
-            "Failed to load shipping reconciliation report."}
-        </div>
+            "Failed to load shipping reconciliation report."
+          }
+          onRetry={() => reportQuery.refetch()}
+        />
       ) : null}
 
       {!reportQuery.isLoading && !reportQuery.isError ? (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
           {items.length === 0 ? (
-            <div className="p-8 text-center">
-              <p className="text-sm font-semibold text-slate-800">No shipping exceptions found</p>
-              <p className="mt-1 text-sm text-slate-500">
-                {meta.scannedOrders || 0} order{meta.scannedOrders === 1 ? "" : "s"} scanned. Current filters look clean.
-              </p>
-            </div>
+            <AdminOpsEmptyState
+              title="No shipping exceptions found"
+              description={`${meta.scannedOrders || 0} order${
+                meta.scannedOrders === 1 ? "" : "s"
+              } scanned. Current filters look clean.`}
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-slate-200 text-sm">

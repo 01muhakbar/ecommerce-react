@@ -3,16 +3,16 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchAdminStoreApplications } from "../../api/adminStoreApplications.ts";
 import { STORE_APPLICATION_FILTER_OPTIONS } from "../../utils/storeOnboardingPresentation.ts";
+import {
+  AdminOpsEmptyState,
+  AdminOpsErrorState,
+  AdminOpsLoadingState,
+  AdminOpsMetricCard,
+  AdminOpsPageHeader,
+  AdminOpsStatusBadge,
+} from "../../components/admin/AdminOpsPrimitives.jsx";
 
 const STATUS_OPTIONS = STORE_APPLICATION_FILTER_OPTIONS;
-
-const STATUS_CLASS = {
-  stone: "border-slate-200 bg-slate-100 text-slate-700",
-  amber: "border-amber-200 bg-amber-50 text-amber-700",
-  sky: "border-sky-200 bg-sky-50 text-sky-700",
-  emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  rose: "border-rose-200 bg-rose-50 text-rose-700",
-};
 
 const formatDateTime = (value) => {
   if (!value) return "-";
@@ -25,15 +25,7 @@ const formatDateTime = (value) => {
 };
 
 function StatusPill({ label, tone = "stone" }) {
-  return (
-    <span
-      className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${
-        STATUS_CLASS[tone] || STATUS_CLASS.stone
-      }`}
-    >
-      {label}
-    </span>
-  );
+  return <AdminOpsStatusBadge label={label} tone={tone} />;
 }
 
 function ProgressBar({ completed, total }) {
@@ -47,16 +39,6 @@ function ProgressBar({ completed, total }) {
         />
       </div>
       <p className="mt-1 text-xs text-slate-500">{percent}% complete</p>
-    </div>
-  );
-}
-
-function MetricCard({ label, value, tone = "stone" }) {
-  const toneClass = STATUS_CLASS[tone] || STATUS_CLASS.stone;
-  return (
-    <div className={`rounded-xl border px-4 py-3 ${toneClass}`}>
-      <p className="text-xs font-semibold uppercase tracking-wide opacity-80">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-slate-900">{value}</p>
     </div>
   );
 }
@@ -115,20 +97,46 @@ export default function AdminStoreApplicationsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
-        <div>
-          <h1 className="text-[22px] font-semibold text-slate-800">Store Applications</h1>
-          <p className="mt-1 text-sm text-slate-500">Review onboarding submissions and provisioning readiness.</p>
-        </div>
-        <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-          {meta.total || 0} application{meta.total === 1 ? "" : "s"}
-        </div>
-      </div>
+      <AdminOpsPageHeader
+        title="Store Applications"
+        description="Onboarding queue, readiness, and review actions."
+        meta={`${meta.total || 0} application${meta.total === 1 ? "" : "s"}`}
+        badges={
+          <>
+            <AdminOpsStatusBadge
+              label={visibleSummary.reviewable ? "Action needed" : "Ready"}
+              tone={visibleSummary.reviewable ? "attention" : "ready"}
+            />
+            <AdminOpsStatusBadge
+              label={visibleSummary.revision ? "Needs attention" : "Verified"}
+              tone={visibleSummary.revision ? "rose" : "verified"}
+            />
+          </>
+        }
+      />
 
       <div className="grid gap-3 md:grid-cols-3">
-        <MetricCard label="Ready to Review" value={visibleSummary.reviewable} tone={visibleSummary.reviewable ? "amber" : "stone"} />
-        <MetricCard label="Complete Forms" value={visibleSummary.complete} tone="emerald" />
-        <MetricCard label="Needs Revision" value={visibleSummary.revision} tone={visibleSummary.revision ? "rose" : "stone"} />
+        <AdminOpsMetricCard
+          label="Review Queue"
+          badgeLabel={visibleSummary.reviewable ? "Action needed" : "Ready"}
+          value={visibleSummary.reviewable}
+          helper="Submitted or under review in this page."
+          tone={visibleSummary.reviewable ? "attention" : "ready"}
+        />
+        <AdminOpsMetricCard
+          label="Complete Forms"
+          badgeLabel="Verified"
+          value={visibleSummary.complete}
+          helper="All required application fields present."
+          tone="verified"
+        />
+        <AdminOpsMetricCard
+          label="Revision Queue"
+          badgeLabel={visibleSummary.revision ? "Needs attention" : "Ready"}
+          value={visibleSummary.revision}
+          helper="Waiting for applicant updates."
+          tone={visibleSummary.revision ? "rose" : "ready"}
+        />
       </div>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
@@ -170,28 +178,27 @@ export default function AdminStoreApplicationsPage() {
       </section>
 
       {applicationsQuery.isLoading ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
-          Loading store applications...
-        </div>
+        <AdminOpsLoadingState title="Loading store applications..." />
       ) : null}
 
       {applicationsQuery.isError ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
-          {applicationsQuery.error?.response?.data?.message ||
+        <AdminOpsErrorState
+          message={
+            applicationsQuery.error?.response?.data?.message ||
             applicationsQuery.error?.message ||
-            "Failed to load store applications."}
-        </div>
+            "Failed to load store applications."
+          }
+          onRetry={() => applicationsQuery.refetch()}
+        />
       ) : null}
 
       {!applicationsQuery.isLoading && !applicationsQuery.isError ? (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
           {items.length === 0 ? (
-            <div className="p-8 text-center">
-              <p className="text-sm font-semibold text-slate-800">No applications match this view</p>
-              <p className="mt-1 text-sm text-slate-500">
-                Clear the filter to see all onboarding applications.
-              </p>
-            </div>
+            <AdminOpsEmptyState
+              title="No applications match this view"
+              description="Clear the filter to see all onboarding applications."
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-slate-200 text-sm">
@@ -228,7 +235,7 @@ export default function AdminStoreApplicationsPage() {
                             : "No slug"}
                         </div>
                         <div className="mt-2 text-xs text-slate-500">
-                          {entry.storeInformation.storeCategory || "-"} •{" "}
+                          {entry.storeInformation.storeCategory || "-"} |{" "}
                           {entry.storeInformation.sellerType || "-"}
                         </div>
                       </td>

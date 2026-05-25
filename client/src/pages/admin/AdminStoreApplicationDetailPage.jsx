@@ -11,14 +11,13 @@ import {
   presentStoreApplicationStatus,
   presentStoreReadiness,
 } from "../../utils/storeOnboardingPresentation.ts";
-
-const STATUS_CLASS = {
-  stone: "border-slate-200 bg-slate-100 text-slate-700",
-  amber: "border-amber-200 bg-amber-50 text-amber-700",
-  sky: "border-sky-200 bg-sky-50 text-sky-700",
-  emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  rose: "border-rose-200 bg-rose-50 text-rose-700",
-};
+import {
+  AdminOpsErrorState,
+  AdminOpsLoadingState,
+  AdminOpsPageHeader,
+  AdminOpsStatusBadge,
+  getActionBadge,
+} from "../../components/admin/AdminOpsPrimitives.jsx";
 
 const formatDateTime = (value) => {
   if (!value) return "-";
@@ -33,15 +32,7 @@ const formatDateTime = (value) => {
 const yesNo = (value) => (value ? "Yes" : "No");
 
 function StatusPill({ label, tone = "stone" }) {
-  return (
-    <span
-      className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${
-        STATUS_CLASS[tone] || STATUS_CLASS.stone
-      }`}
-    >
-      {label}
-    </span>
-  );
+  return <AdminOpsStatusBadge label={label} tone={tone} />;
 }
 
 function SectionCard({ title, description, children }) {
@@ -167,11 +158,7 @@ export default function AdminStoreApplicationDetailPage() {
     approveMutation.isPending || revisionMutation.isPending || rejectMutation.isPending;
 
   if (detailQuery.isLoading) {
-    return (
-      <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
-        Loading store application detail...
-      </div>
-    );
+    return <AdminOpsLoadingState title="Loading store application detail..." />;
   }
 
   if (detailQuery.isError || !detail) {
@@ -183,38 +170,46 @@ export default function AdminStoreApplicationDetailPage() {
         >
           Back to Queue
         </Link>
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
-          {detailQuery.error?.response?.data?.message ||
+        <AdminOpsErrorState
+          message={
+            detailQuery.error?.response?.data?.message ||
             detailQuery.error?.message ||
-            "Failed to load store application detail."}
-        </div>
+            "Failed to load store application detail."
+          }
+          onRetry={() => detailQuery.refetch()}
+        />
       </div>
     );
   }
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
-        <div>
+      <AdminOpsPageHeader
+        title={`Store Application #${detail.id}`}
+        description="Review identity, readiness, and the next admin action."
+        meta={detail.currentStepMeta.label}
+        badges={
+          <>
+            <StatusPill label={applicationStatus.label} tone={applicationStatus.tone} />
+            <StatusPill label={readinessStatus.label} tone={readinessStatus.tone} />
+            <AdminOpsStatusBadge
+              {...getActionBadge(
+                actionGovernance.canApprove ||
+                  actionGovernance.canRequestRevision ||
+                  actionGovernance.canReject
+              )}
+            />
+          </>
+        }
+        actions={
           <Link
             to="/admin/store/applications"
-            className="text-sm font-semibold text-emerald-700 hover:text-emerald-800"
+            className="inline-flex h-9 items-center rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
           >
             Back to Queue
           </Link>
-          <h1 className="mt-2 text-[22px] font-semibold text-slate-800">
-            Store Application #{detail.id}
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Review the application details and decide the next step.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <StatusPill label={applicationStatus.label} tone={applicationStatus.tone} />
-          <StatusPill label={readinessStatus.label} tone={readinessStatus.tone} />
-          <StatusPill label={detail.currentStepMeta.label} tone="stone" />
-        </div>
-      </div>
+        }
+      />
 
       {flash ? <Notice tone={flash.type === "error" ? "error" : "info"}>{flash.message}</Notice> : null}
 
@@ -263,7 +258,7 @@ export default function AdminStoreApplicationDetailPage() {
                 : "-",
               hint:
                 workflow.activation?.storeStatus && workflow.activation?.storeId
-                  ? `Store #${workflow.activation.storeId} • ${workflow.activation.storeStatus}`
+                  ? `Store #${workflow.activation.storeId} | ${workflow.activation.storeStatus}`
                   : null,
             },
             {

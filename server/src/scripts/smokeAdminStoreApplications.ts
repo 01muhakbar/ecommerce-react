@@ -109,8 +109,14 @@ async function createFixtureUser(label: string, role: string): Promise<FixtureUs
   return { id, email, password };
 }
 
-async function login(client: CookieClient, email: string, password: string, label: string) {
-  const response = await client.request("/api/auth/login", {
+async function login(
+  client: CookieClient,
+  email: string,
+  password: string,
+  label: string,
+  authPath = "/api/auth/login"
+) {
+  const response = await client.request(authPath, {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
@@ -221,7 +227,7 @@ async function run() {
   const adminClient = new CookieClient();
   const outsiderClient = new CookieClient();
 
-  await login(adminClient, admin.email, admin.password, "admin login");
+  await login(adminClient, admin.email, admin.password, "admin login", "/api/auth/admin/login");
   await login(outsiderClient, outsider.email, outsider.password, "outsider login");
 
   logStep("admin list applications");
