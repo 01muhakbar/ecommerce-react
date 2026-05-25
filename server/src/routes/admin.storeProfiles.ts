@@ -7,6 +7,7 @@ import {
   serializeStoreProfileSnapshot,
 } from "../services/sharedContracts/storeProfileGovernance.js";
 import { serializePublicStoreIdentityPayload } from "../services/sharedContracts/publicStoreIdentity.js";
+import { STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES } from "../services/sharedContracts/storePaymentProfileCompat.js";
 
 const router = Router();
 
@@ -32,7 +33,19 @@ router.get("/store/profiles", async (_req, res) => {
   try {
     const stores = await Store.findAll({
       attributes: [...STORE_PROFILE_ATTRIBUTES],
-      include: [{ model: User, as: "owner", attributes: [...ownerAttributes], required: false }],
+      include: [
+        { model: User, as: "owner", attributes: [...ownerAttributes], required: false },
+        {
+          association: "paymentProfile",
+          attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+          required: false,
+        },
+        {
+          association: "activePaymentProfile",
+          attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+          required: false,
+        },
+      ],
       order: [
         ["updatedAt", "DESC"],
         ["id", "DESC"],
@@ -90,7 +103,19 @@ router.patch("/store/profiles/:storeId", async (req, res) => {
 
     const store = await Store.findByPk(storeId, {
       attributes: [...STORE_PROFILE_ATTRIBUTES],
-      include: [{ model: User, as: "owner", attributes: [...ownerAttributes], required: false }],
+      include: [
+        { model: User, as: "owner", attributes: [...ownerAttributes], required: false },
+        {
+          association: "paymentProfile",
+          attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+          required: false,
+        },
+        {
+          association: "activePaymentProfile",
+          attributes: [...STORE_PAYMENT_PROFILE_BASE_ATTRIBUTES],
+          required: false,
+        },
+      ],
     });
 
     if (!store) {

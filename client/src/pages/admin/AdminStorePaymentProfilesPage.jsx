@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   fetchAdminStorePaymentProfiles,
@@ -134,8 +134,73 @@ function getShortWorkflowLabel(status, fallback = "Not ready") {
     .replace(/^Action required$/i, "Action needed");
 }
 
+const PAYMENT_PROFILE_FILTERS = [
+  { value: "all", label: "All" },
+  { value: "action", label: "Action needed" },
+  { value: "active", label: "Checkout ready" },
+  { value: "pending", label: "Pending review" },
+  { value: "revision", label: "Revision" },
+  { value: "incomplete", label: "Incomplete" },
+];
+
+const derivePaymentProfileLane = (entry) => {
+  const profile = entry?.paymentProfile || null;
+  const pendingRequest = entry?.pendingRequest || null;
+  const workflow = entry?.workflow || {};
+  const workspaceReadiness = entry?.workspaceReadiness || null;
+  const requestStatus = String(pendingRequest?.requestStatus || workflow?.requestState?.code || "")
+    .trim()
+    .toUpperCase();
+  const readinessCode = String(profile?.readiness?.code || workspaceReadiness?.summary?.code || "")
+    .trim()
+    .toUpperCase();
+  const canApprovePromotion = Boolean(workflow?.governance?.canApprovePromotion);
+  const canRequestRevision = Boolean(workflow?.governance?.canRequestRevision);
+  const hasAction = canApprovePromotion || canRequestRevision;
+
+  if (profile?.readiness?.isReady) {
+    return {
+      key: "active",
+      label: "Checkout ready",
+      tone: "ready",
+      hasAction,
+    };
+  }
+  if (requestStatus === "SUBMITTED" || canApprovePromotion) {
+    return {
+      key: "pending",
+      label: "Pending review",
+      tone: "attention",
+      hasAction: true,
+    };
+  }
+  if (requestStatus === "NEEDS_REVISION") {
+    return {
+      key: "revision",
+      label: "Needs revision",
+      tone: "rose",
+      hasAction,
+    };
+  }
+  if (!profile || readinessCode === "INCOMPLETE" || readinessCode === "NOT_CONFIGURED") {
+    return {
+      key: "incomplete",
+      label: "Incomplete",
+      tone: "attention",
+      hasAction,
+    };
+  }
+  return {
+    key: "inactive",
+    label: profile?.readiness?.label || "Inactive",
+    tone: profile?.readiness?.tone || "neutral",
+    hasAction,
+  };
+};
+
 export default function AdminStorePaymentProfilesPage() {
   const queryClient = useQueryClient();
+  const [activeFilter, setActiveFilter] = useState("all");
 
   const profilesQuery = useQuery({
     queryKey: ["admin-store-payment-profiles"],
@@ -154,13 +219,29 @@ export default function AdminStorePaymentProfilesPage() {
     [profilesQuery.data]
   );
   const summary = useMemo(() => {
-    const pending = items.filter((entry) => entry.pendingRequest).length;
-    const active = items.filter((entry) => entry.paymentProfile?.readiness?.isReady).length;
+    const pending = items.filter(
+      (entry) => derivePaymentProfileLane(entry).key === "pending"
+    ).length;
+    const active = items.filter((entry) => derivePaymentProfileLane(entry).key === "active").length;
+    const revision = items.filter(
+      (entry) => derivePaymentProfileLane(entry).key === "revision"
+    ).length;
+    const incomplete = items.filter(
+      (entry) => derivePaymentProfileLane(entry).key === "incomplete"
+    ).length;
     const needsAction = items.filter(
       (entry) => entry.workflow?.governance?.canApprovePromotion || entry.workflow?.governance?.canRequestRevision
     ).length;
-    return { pending, active, needsAction };
+    return { pending, active, revision, incomplete, needsAction };
   }, [items]);
+  const filteredItems = useMemo(() => {
+    if (activeFilter === "all") return items;
+    if (activeFilter === "action") {
+      return items.filter((entry) => derivePaymentProfileLane(entry).hasAction);
+    }
+    return items.filter((entry) => derivePaymentProfileLane(entry).key === activeFilter);
+  }, [activeFilter, items]);
+  const firstActionable = items.find((entry) => derivePaymentProfileLane(entry).hasAction);
 
   if (profilesQuery.isLoading) {
     return <AdminOpsLoadingState title="Loading store payment profiles..." />;
@@ -197,9 +278,18 @@ export default function AdminStorePaymentProfilesPage() {
             />
           </>
         }
+        actions={
+          <button
+            type="button"
+            onClick={() => profilesQuery.refetch()}
+            className="inline-flex h-9 items-center justify-center rounded-full border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            Refresh
+          </button>
+        }
       />
 
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-4">
         <AdminOpsMetricCard
           label="Active Ready"
           badgeLabel={summary.active ? "Ready" : "Missing"}
@@ -215,13 +305,74 @@ export default function AdminStorePaymentProfilesPage() {
           tone={summary.pending ? "attention" : "ready"}
         />
         <AdminOpsMetricCard
-          label="Admin Decisions"
-          badgeLabel={summary.needsAction ? "Action needed" : "Verified"}
-          value={summary.needsAction}
-          helper="Approval, revision, or activation available."
-          tone={summary.needsAction ? "rose" : "verified"}
+          label="Needs Revision"
+          badgeLabel={summary.revision ? "Needs attention" : "Ready"}
+          value={summary.revision}
+          helper="Seller follow-up required."
+          tone={summary.revision ? "rose" : "ready"}
+        />
+        <AdminOpsMetricCard
+          label="Incomplete"
+          badgeLabel={summary.incomplete ? "Needs setup" : "Verified"}
+          value={summary.incomplete}
+          helper="No checkout-ready profile yet."
+          tone={summary.incomplete ? "attention" : "verified"}
         />
       </div>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Payment Readiness
+            </p>
+            <p className="mt-1 text-sm font-semibold text-slate-900">
+              {PAYMENT_PROFILE_FILTERS.find((filter) => filter.value === activeFilter)?.label ||
+                "All"}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {PAYMENT_PROFILE_FILTERS.map((filter) => {
+              const isActive = filter.value === activeFilter;
+              return (
+                <button
+                  key={filter.value}
+                  type="button"
+                  onClick={() => setActiveFilter(filter.value)}
+                  className={`inline-flex h-9 items-center rounded-full border px-3 text-xs font-semibold transition ${
+                    isActive
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">
+              {summary.needsAction ? `${summary.needsAction} admin decision${summary.needsAction === 1 ? "" : "s"}` : "No admin decisions waiting"}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Checkout uses only an active approved snapshot.
+            </p>
+          </div>
+          {firstActionable ? (
+            <button
+              type="button"
+              onClick={() => setActiveFilter("action")}
+              className="inline-flex h-9 items-center rounded-full bg-slate-900 px-3.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              Show Actions
+            </button>
+          ) : (
+            <AdminOpsStatusBadge label="Review queue clear" tone="ready" />
+          )}
+        </div>
+      </section>
 
       {items.length === 0 ? (
         <AdminOpsEmptyState
@@ -230,10 +381,17 @@ export default function AdminStorePaymentProfilesPage() {
         />
       ) : (
         <div className="grid gap-4">
-          {items.map((entry) => {
+          {filteredItems.length === 0 ? (
+            <AdminOpsEmptyState
+              title="No profiles match this filter"
+              description="Switch filters to review other payment readiness states."
+            />
+          ) : null}
+          {filteredItems.map((entry) => {
             const profile = entry.paymentProfile;
             const pendingRequest = entry.pendingRequest;
             const workflow = entry.workflow || {};
+            const paymentLane = derivePaymentProfileLane(entry);
             const currentStatus = String(
               profile?.activityMeta?.code || profile?.verificationStatus || "NOT_CONFIGURED"
             ).toUpperCase();
@@ -296,11 +454,15 @@ export default function AdminStorePaymentProfilesPage() {
                       status={workflow?.reviewStatus?.tone || "NEUTRAL"}
                     />
                     {workspaceReadiness ? (
-                      <StatusPill
-                        label={readinessStatusLabel}
-                        status={workspaceReadiness.summary?.tone || "NEUTRAL"}
-                      />
-                    ) : null}
+                    <StatusPill
+                      label={readinessStatusLabel}
+                      status={workspaceReadiness.summary?.tone || "NEUTRAL"}
+                    />
+                  ) : null}
+                    <StatusPill
+                      label={paymentLane.label}
+                      status={paymentLane.tone}
+                    />
                   </div>
                 </div>
 

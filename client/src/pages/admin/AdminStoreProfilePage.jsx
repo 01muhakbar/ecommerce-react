@@ -62,6 +62,23 @@ function GovernanceBlock({ title, toneClass, fields, snapshot }) {
   );
 }
 
+function SyncLane({ title, badge, helper, children }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+            {title}
+          </p>
+          {helper ? <p className="mt-2 text-sm leading-5 text-slate-600">{helper}</p> : null}
+        </div>
+        {badge}
+      </div>
+      {children ? <div className="mt-3 flex flex-wrap gap-2">{children}</div> : null}
+    </div>
+  );
+}
+
 export default function AdminStoreProfilePage() {
   const queryClient = useQueryClient();
   const [drafts, setDrafts] = useState({});
@@ -267,6 +284,74 @@ export default function AdminStoreProfilePage() {
                       tone={store?.completeness?.isComplete ? "SUCCESS" : "WARNING"}
                     />
                   </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                  <SyncLane
+                    title="Admin Core"
+                    helper="Name, slug, and status remain admin-governed."
+                    badge={
+                      <StatusPill
+                        label={store?.statusMeta?.label || store?.status || "Active"}
+                        tone={store?.statusMeta?.tone}
+                      />
+                    }
+                  >
+                    <AdminOpsStatusBadge label={`@${store?.slug || "-"}`} tone="stone" />
+                    <AdminOpsStatusBadge
+                      label={storefrontHref ? "Route mapped" : "Missing slug"}
+                      tone={storefrontHref ? "verified" : "missing"}
+                    />
+                  </SyncLane>
+                  <SyncLane
+                    title="Seller Profile"
+                    helper="Contact, media, address, and shipping stay seller-owned."
+                    badge={
+                      <StatusPill
+                        label={store?.completeness?.label || "Profile status"}
+                        tone={store?.completeness?.isComplete ? "SUCCESS" : "WARNING"}
+                      />
+                    }
+                  >
+                    <AdminOpsStatusBadge
+                      label={`${store?.completeness?.completedFields || 0}/${store?.completeness?.totalFields || 0} fields`}
+                      tone={store?.completeness?.isComplete ? "verified" : "attention"}
+                    />
+                    <AdminOpsStatusBadge
+                      label={store?.isShippingReady ? "Shipping ready" : "Shipping pending"}
+                      tone={store?.isShippingReady ? "ready" : "attention"}
+                    />
+                  </SyncLane>
+                  <SyncLane
+                    title="Client Gate"
+                    helper={
+                      publicOperationalReadiness?.description ||
+                      "Public routes follow backend readiness."
+                    }
+                    badge={
+                      publicOperationalReadiness ? (
+                        <StatusPill
+                          label={publicOperationalReadiness.label}
+                          tone={publicOperationalReadiness.tone}
+                        />
+                      ) : (
+                        <StatusPill label="Unavailable" tone="neutral" />
+                      )
+                    }
+                  >
+                    <AdminOpsStatusBadge
+                      label={canOpenStorefront ? "Storefront live" : "Storefront gated"}
+                      tone={canOpenStorefront ? "ready" : "attention"}
+                    />
+                    {canOpenStorefront ? (
+                      <Link
+                        to={storefrontHref}
+                        className="inline-flex h-7 items-center rounded-full border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        Open Storefront
+                      </Link>
+                    ) : null}
+                  </SyncLane>
                 </div>
 
                 <div className="mt-4 grid gap-4 xl:grid-cols-[0.88fr_1.12fr]">

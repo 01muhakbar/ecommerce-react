@@ -19,6 +19,14 @@ import {
 const PAYMENT_STATUS_OPTIONS = ["", "UNPAID", "PARTIALLY_PAID", "PAID"];
 const REVIEW_STATUS_OPTIONS = ["", "PENDING", "REJECTED", "APPROVED"];
 const CHECKOUT_MODE_OPTIONS = ["", "MULTI_STORE", "SINGLE_STORE", "LEGACY"];
+const RISK_FILTERS = [
+  { value: "all", label: "All" },
+  { value: "urgent", label: "Urgent" },
+  { value: "review", label: "Proof review" },
+  { value: "mismatch", label: "Mismatch" },
+  { value: "blocked", label: "Blocked" },
+  { value: "clear", label: "Clear" },
+];
 
 const formatDateTime = (value) => {
   if (!value) return "-";
@@ -48,6 +56,62 @@ function StatusMetaBadge({ label, tone, prefix = "" }) {
     </span>
   );
 }
+
+const getAuditRisk = (entry) => {
+  const counts = getOperationalCounts(entry) || {};
+  const paid = Number(counts?.paidSuborders || 0);
+  const review = Number(counts?.pendingSuborders || 0);
+  const blocked = Number(counts?.unpaidSuborders || 0);
+  const rejected = Number(counts?.rejectedPayments || 0);
+  const finalNegative = Number(counts?.finalNegativeSuborders || 0);
+  const paymentStatus = String(entry?.paymentStatus || "").trim().toUpperCase();
+  const parentPaidButSplitOpen = paymentStatus === "PAID" && (review > 0 || blocked > 0);
+  const splitPaidButParentOpen = paid > 0 && paymentStatus !== "PAID";
+
+  if (rejected > 0 || finalNegative > 0) {
+    return {
+      key: "urgent",
+      label: "Urgent",
+      tone: "rose",
+      helper: "Rejected or final-negative split found.",
+      rank: 4,
+    };
+  }
+  if (parentPaidButSplitOpen || splitPaidButParentOpen) {
+    return {
+      key: "mismatch",
+      label: "Mismatch",
+      tone: "attention",
+      helper: "Parent and store split states differ.",
+      rank: 3,
+    };
+  }
+  if (review > 0) {
+    return {
+      key: "review",
+      label: "Proof review",
+      tone: "attention",
+      helper: "At least one proof still needs review.",
+      rank: 2,
+    };
+  }
+  if (blocked > 0) {
+    return {
+      key: "blocked",
+      label: "Not confirmed",
+      tone: "stone",
+      helper: NOT_CONFIRMED_HELPER,
+      rank: 1,
+    };
+  }
+  return {
+    key: "clear",
+    label: "Clear",
+    tone: "ready",
+    helper: "No visible payment risk in this row.",
+    rank: 0,
+  };
+};
 
 function SplitStatusBlock({ counts, helperLines }) {
   const entries = [
@@ -97,6 +161,7 @@ const getStoreSplitHelperLines = (counts) => {
 export default function AdminPaymentAuditPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchInput, setSearchInput] = useState(searchParams.get("search") || "");
+  const [riskFilter, setRiskFilter] = useState("all");
 
   const params = useMemo(() => {
     const page = Number(searchParams.get("page") || 1);
@@ -135,13 +200,29 @@ export default function AdminPaymentAuditPage() {
       items.reduce(
         (acc, entry) => {
           const counts = getOperationalCounts(entry);
+          const risk = getAuditRisk(entry);
           acc.paid += Number(counts?.paidSuborders || 0);
           acc.review += Number(counts?.pendingSuborders || 0);
           acc.blocked += Number(counts?.unpaidSuborders || 0);
+          acc.rejected += Number(counts?.rejectedPayments || 0);
+          acc.finalNegative += Number(counts?.finalNegativeSuborders || 0);
+          if (risk.key === "urgent") acc.urgent += 1;
+          if (risk.key === "mismatch") acc.mismatch += 1;
           return acc;
         },
-        { paid: 0, review: 0, blocked: 0 }
+        { paid: 0, review: 0, blocked: 0, rejected: 0, finalNegative: 0, urgent: 0, mismatch: 0 }
       ),
+    [items]
+  );
+  const filteredItems = useMemo(() => {
+    if (riskFilter === "all") return items;
+    return items.filter((entry) => getAuditRisk(entry).key === riskFilter);
+  }, [items, riskFilter]);
+  const mostUrgent = useMemo(
+    () =>
+      [...items]
+        .map((entry) => ({ entry, risk: getAuditRisk(entry) }))
+        .sort((left, right) => right.risk.rank - left.risk.rank)[0] || null,
     [items]
   );
 
@@ -163,9 +244,25 @@ export default function AdminPaymentAuditPage() {
             />
           </>
         }
+        actions={
+          <button
+            type="button"
+            onClick={() => auditQuery.refetch()}
+            className="inline-flex h-9 items-center justify-center rounded-full border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            Refresh
+          </button>
+        }
       />
 
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-4">
+        <AdminOpsMetricCard
+          label="Urgent Rows"
+          badgeLabel={visibleCounts.urgent ? "Immediate" : "Ready"}
+          value={visibleCounts.urgent}
+          helper="Rejected or final-negative rows."
+          tone={visibleCounts.urgent ? "rose" : "ready"}
+        />
         <AdminOpsMetricCard
           label="Paid Splits"
           badgeLabel="Verified"
@@ -181,13 +278,67 @@ export default function AdminPaymentAuditPage() {
           tone={visibleCounts.review ? "attention" : "ready"}
         />
         <AdminOpsMetricCard
-          label="Not Confirmed"
-          badgeLabel={visibleCounts.blocked ? "Needs attention" : "Ready"}
-          value={visibleCounts.blocked}
-          helper={NOT_CONFIRMED_HELPER}
-          tone={visibleCounts.blocked ? "rose" : "ready"}
+          label="Mismatch Rows"
+          badgeLabel={visibleCounts.mismatch ? "Needs attention" : "Ready"}
+          value={visibleCounts.mismatch}
+          helper="Parent state differs from split state."
+          tone={visibleCounts.mismatch ? "attention" : "ready"}
         />
       </div>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Risk Queue
+            </p>
+            <p className="mt-1 text-sm font-semibold text-slate-900">
+              {RISK_FILTERS.find((filter) => filter.value === riskFilter)?.label || "All"}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {RISK_FILTERS.map((filter) => {
+              const isActive = filter.value === riskFilter;
+              return (
+                <button
+                  key={filter.value}
+                  type="button"
+                  onClick={() => setRiskFilter(filter.value)}
+                  className={`inline-flex h-9 items-center rounded-full border px-3 text-xs font-semibold transition ${
+                    isActive
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">
+              {mostUrgent?.risk?.rank > 0
+                ? `${mostUrgent.risk.label}: ${mostUrgent.entry.orderNumber}`
+                : "No visible risk in this view"}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              {mostUrgent?.risk?.helper || "Use filters to inspect payment lanes."}
+            </p>
+          </div>
+          {mostUrgent?.risk?.rank > 0 ? (
+            <Link
+              to={`/admin/online-store/payment-audit/${mostUrgent.entry.orderId}`}
+              className="inline-flex h-9 items-center rounded-full bg-slate-900 px-3.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              Open Urgent
+            </Link>
+          ) : (
+            <AdminOpsStatusBadge label="Audit clear" tone="ready" />
+          )}
+        </div>
+      </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
         <div className="grid gap-3 lg:grid-cols-[minmax(260px,2fr)_repeat(4,minmax(140px,1fr))]">
@@ -309,15 +460,27 @@ export default function AdminPaymentAuditPage() {
                     <th className="px-4 py-3">Stores</th>
                     <th className="px-4 py-3">Grand Total</th>
                     <th className="px-4 py-3">Parent State</th>
+                    <th className="px-4 py-3">Risk</th>
                     <th className="px-4 py-3">Store Split Status</th>
                     <th className="px-4 py-3">Created</th>
                     <th className="px-4 py-3 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {items.map((entry) => {
+                  {filteredItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="px-4 py-6">
+                        <AdminOpsEmptyState
+                          title="No audit rows match this risk filter"
+                          description="Switch filters or clear search criteria."
+                        />
+                      </td>
+                    </tr>
+                  ) : null}
+                  {filteredItems.map((entry) => {
                     const counts = getOperationalCounts(entry);
                     const helperLines = getStoreSplitHelperLines(counts);
+                    const risk = getAuditRisk(entry);
 
                     return (
                       <tr key={entry.orderId} className="align-top">
@@ -357,6 +520,14 @@ export default function AdminPaymentAuditPage() {
                                   entry.paymentStatusMeta?.description ||
                                   "-"}
                             </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="space-y-2">
+                            <AdminOpsStatusBadge label={risk.label} tone={risk.tone} />
+                            <p className="max-w-[180px] text-xs leading-5 text-slate-500">
+                              {risk.helper}
+                            </p>
                           </div>
                         </td>
                         <td className="px-4 py-4">

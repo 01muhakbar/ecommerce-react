@@ -94,6 +94,12 @@ export default function AdminStoreApplicationsPage() {
       ),
     [items]
   );
+  const activeStatus = params.status || "";
+  const activeStatusLabel =
+    STATUS_OPTIONS.find((option) => option.value === activeStatus)?.label || "All statuses";
+  const firstReviewable = items.find((entry) =>
+    ["submitted", "under_review"].includes(String(entry.status || "").toLowerCase())
+  );
 
   return (
     <div className="space-y-5">
@@ -111,6 +117,25 @@ export default function AdminStoreApplicationsPage() {
               label={visibleSummary.revision ? "Needs attention" : "Verified"}
               tone={visibleSummary.revision ? "rose" : "verified"}
             />
+          </>
+        }
+        actions={
+          <>
+            {firstReviewable ? (
+              <Link
+                to={`/admin/store/applications/${firstReviewable.id}`}
+                className="inline-flex h-9 items-center justify-center rounded-full bg-slate-900 px-3.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+              >
+                Review Next
+              </Link>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => applicationsQuery.refetch()}
+              className="inline-flex h-9 items-center justify-center rounded-full border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Refresh
+            </button>
           </>
         }
       />
@@ -140,7 +165,37 @@ export default function AdminStoreApplicationsPage() {
       </div>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
-        <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_auto_auto]">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Current Queue
+            </p>
+            <p className="mt-1 text-sm font-semibold text-slate-900">{activeStatusLabel}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {STATUS_OPTIONS.map((option) => {
+              const isActive = option.value === activeStatus;
+              return (
+                <button
+                  key={option.value || "all"}
+                  type="button"
+                  onClick={() => {
+                    setStatusInput(option.value);
+                    updateParams({ status: option.value, page: "1" });
+                  }}
+                  className={`inline-flex h-9 items-center rounded-full border px-3 text-xs font-semibold transition ${
+                    isActive
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(220px,1fr)_auto_auto]">
           <div>
             <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Status Filter
