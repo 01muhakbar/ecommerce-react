@@ -2,7 +2,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-hot-toast";
-import { ChevronDown, Plus, Settings, Upload, X } from "lucide-react";
+import {
+  ChevronDown,
+  Copy,
+  Eye,
+  MoreHorizontal,
+  Plus,
+  Settings,
+  Sparkles,
+  Upload,
+  Wand2,
+  X,
+} from "lucide-react";
 import {
   fetchAdminLanguages,
   fetchAdminCoupons,
@@ -17,7 +28,6 @@ import {
 import {
   AdminOpsErrorState,
   AdminOpsLoadingState,
-  AdminOpsMetricCard,
   AdminOpsPageHeader,
   AdminOpsStatusBadge,
 } from "../../components/admin/AdminOpsPrimitives.jsx";
@@ -181,6 +191,10 @@ const inputBase =
   "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 transition focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100";
 const sectionCard =
   "rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.05)]";
+const glassCard =
+  "rounded-3xl border border-white/70 bg-white/80 shadow-[0_16px_48px_rgba(15,23,42,0.08)] backdrop-blur-xl";
+const compactActionButton =
+  "inline-flex h-9 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:-translate-y-0.5 hover:border-emerald-200 hover:text-emerald-700 hover:shadow-sm";
 const textAreaBase =
   "mt-2 min-h-[92px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100";
 const ABOUT_US_MEMBER_TABS = Array.from({ length: ABOUT_US_MEMBER_LENGTH }, (_, index) => ({
@@ -2623,6 +2637,10 @@ export default function StoreCustomizationPage() {
   const [notice, setNotice] = useState(null);
   const [whatsAppLinkServerError, setWhatsAppLinkServerError] = useState("");
   const [whatsAppLinkHelperError, setWhatsAppLinkHelperError] = useState("");
+  const [reviewSectionKey, setReviewSectionKey] = useState(null);
+  const [quickActionSectionKey, setQuickActionSectionKey] = useState(null);
+  const [aiSuggestionSectionKey, setAiSuggestionSectionKey] = useState(null);
+  const [isAdvancedEditorOpen, setIsAdvancedEditorOpen] = useState(false);
   const [isMainSliderDropActive, setIsMainSliderDropActive] = useState(false);
   const [mainSliderImageErrors, setMainSliderImageErrors] = useState({});
   const [couponCodeInput, setCouponCodeInput] = useState("");
@@ -3544,10 +3562,57 @@ export default function StoreCustomizationPage() {
   const onSelectTab = (tabKey) => {
     const safeTabKey = STORE_TAB_BY_KEY[tabKey] ? tabKey : DEFAULT_TAB_KEY;
     if (safeTabKey === activeTab) return;
+    setReviewSectionKey(null);
+    setQuickActionSectionKey(null);
+    setAiSuggestionSectionKey(null);
+    setIsAdvancedEditorOpen(false);
     const canonicalUrl = getUrlByTabKey(safeTabKey);
     const currentUrl = `${location.pathname}${location.search}`;
     if (currentUrl === canonicalUrl) return;
     navigate(canonicalUrl, { replace: false });
+  };
+
+  const onReviewSection = (sectionKey) => {
+    setReviewSectionKey((current) => (current === sectionKey ? null : sectionKey));
+    setQuickActionSectionKey(null);
+    if (sectionKey === "mainSlider" && activeMainSliderTab === "options") {
+      setActiveMainSliderTab("slider-0");
+    }
+  };
+
+  const onCopySectionKey = async (sectionKey) => {
+    const value = String(sectionKey || "").trim();
+    if (!value) return;
+
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = value;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+      toast.success("Section key copied.");
+    } catch {
+      toast.error("Could not copy section key.");
+    } finally {
+      setQuickActionSectionKey(null);
+    }
+  };
+
+  const onShowAiSuggestion = (sectionKey) => {
+    setAiSuggestionSectionKey(sectionKey);
+    setReviewSectionKey(sectionKey);
+    if (sectionKey === "mainSlider") {
+      setActiveMainSliderTab("slider-0");
+    }
+    setQuickActionSectionKey(null);
   };
 
   const onGenerateWhatsAppLink = () => {
@@ -5453,19 +5518,113 @@ export default function StoreCustomizationPage() {
     activeAboutUsMemberIndex
   );
   const activeTabMeta = TABS.find((tab) => tab.key === activeTab) || TABS[0];
-  const languageCount = Math.max(publishedLanguages.length, 1);
   const currentLanguageLabel = String(lang || "en").toUpperCase();
   const customizationStatus = showCustomizationError
     ? "Needs retry"
     : showFullCustomizationLoader || isLoadingHeader
       ? "Loading"
       : "Ready";
+  const mainSliderSlides = Array.isArray(homeState.mainSlider?.sliders)
+    ? homeState.mainSlider.sliders
+    : [];
+  const activeSliderCount = mainSliderSlides.filter(
+    (item) => toText(item?.title) || toText(item?.imageDataUrl)
+  ).length;
+  const homeSectionCards = [
+    {
+      key: "mainSlider",
+      title: "Main Slider",
+      status: activeSliderCount > 0 ? "Ready" : "Needs review",
+      tone: activeSliderCount > 0 ? "ready" : "attention",
+      signal: `${activeSliderCount} slide${activeSliderCount === 1 ? "" : "s"} active`,
+    },
+    {
+      key: "header",
+      title: "Header",
+      status: homeState.header?.headerText ? "Ready" : "Needs review",
+      tone: homeState.header?.headerText ? "ready" : "attention",
+      signal: homeState.header?.phoneNumber ? "Contacts configured" : "Check contacts",
+    },
+    {
+      key: "featuredCategories",
+      title: "Featured Categories",
+      status: featuredCategories.enabled ? "Ready" : "Off",
+      tone: featuredCategories.enabled ? "ready" : "neutral",
+      signal: featuredCategories.title || "Homepage category rail",
+    },
+    {
+      key: "popularProducts",
+      title: "Popular Products",
+      status: popularProducts.enabled ? "Ready" : "Off",
+      tone: popularProducts.enabled ? "ready" : "neutral",
+      signal: popularProducts.title || "Product rail",
+    },
+    {
+      key: "promotionBanner",
+      title: "Promotion Banner",
+      status: promotionBanner.enabled ? "Ready" : "Off",
+      tone: promotionBanner.enabled ? "ready" : "neutral",
+      signal: promotionBanner.buttonName || "CTA block",
+    },
+    {
+      key: "footer",
+      title: "Footer",
+      status: footer.block4?.enabled ? "Ready" : "Needs review",
+      tone: footer.block4?.enabled ? "ready" : "attention",
+      signal: "Links and payment assets",
+    },
+  ];
+  const readyHomeSectionCount = homeSectionCards.filter(
+    (item) => item.status === "Ready"
+  ).length;
+  const selectedHomeSection =
+    homeSectionCards.find((item) => item.key === reviewSectionKey) || homeSectionCards[0];
+  const summaryCards = [
+    {
+      label: "Home Page",
+      value: activeTabMeta.label,
+      status: activeTab === "home" ? "Ready" : "Editing",
+      tone: "ready",
+    },
+    {
+      label: "Language",
+      value: currentLanguageLabel,
+      status: publishedLanguages.length > 0 ? "Verified" : "Missing",
+      tone: publishedLanguages.length > 0 ? "verified" : "missing",
+    },
+    {
+      label: "Sections",
+      value: `${readyHomeSectionCount}/${homeSectionCards.length}`,
+      status: readyHomeSectionCount === homeSectionCards.length ? "Ready" : "Review",
+      tone: readyHomeSectionCount === homeSectionCards.length ? "ready" : "attention",
+    },
+    {
+      label: "State",
+      value: customizationStatus,
+      status: showCustomizationError ? "Retry" : "Synced",
+      tone: showCustomizationError ? "rose" : "ready",
+    },
+  ];
+  const optimizationSuggestions = [
+    {
+      title: "Review hero slider copy",
+      detail: activeSliderCount > 0 ? "Keep CTA short." : "Add at least one active slide.",
+    },
+    {
+      title: "Check homepage sections",
+      detail: `${readyHomeSectionCount}/${homeSectionCards.length} ready.`,
+    },
+    {
+      title: "Validate SEO tab",
+      detail: "Meta title and image stay in the existing SEO section.",
+    },
+  ];
 
   return (
-    <div className="mx-auto w-full max-w-[1200px] space-y-5 px-1 sm:px-2">
+    <div className="mx-auto w-full max-w-[1280px] space-y-5 px-1 sm:px-2">
       <AdminOpsPageHeader
         title="Store Customizations"
-        description="Storefront sections, labels, and SEO per language."
+        description="Customize storefront sections, labels, and SEO."
         badges={
           <>
             <AdminOpsStatusBadge
@@ -5479,13 +5638,13 @@ export default function StoreCustomizationPage() {
           </>
         }
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+            <div className="relative min-w-0 flex-1 sm:flex-none">
               <select
                 value={lang}
                 onChange={(event) => setLang(String(event.target.value).toLowerCase())}
                 disabled={isSaving}
-                className={`${inputBase} min-w-[178px] appearance-none pr-9`}
+                className={`${inputBase} min-w-0 appearance-none pr-9 sm:min-w-[178px]`}
               >
                 {publishedLanguages.length === 0 ? (
                   <option value="en">en</option>
@@ -5511,7 +5670,7 @@ export default function StoreCustomizationPage() {
               type="button"
               onClick={onSave}
               disabled={isSaving || isLoadingHeader || !lang}
-              className="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-emerald-700 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
             >
               {isSaving ? "Updating..." : "Update"}
             </button>
@@ -5519,28 +5678,23 @@ export default function StoreCustomizationPage() {
         }
       />
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <AdminOpsMetricCard
-          label="Active tab"
-          badgeLabel="Ready"
-          value={activeTabMeta.label}
-          helper="Saved into the selected backend customization segment."
-          tone="ready"
-        />
-        <AdminOpsMetricCard
-          label="Language"
-          badgeLabel={publishedLanguages.length > 0 ? "Verified" : "Missing"}
-          value={currentLanguageLabel}
-          helper={`${languageCount} published language${languageCount === 1 ? "" : "s"} available.`}
-          tone={publishedLanguages.length > 0 ? "verified" : "missing"}
-        />
-        <AdminOpsMetricCard
-          label="State"
-          badgeLabel={showCustomizationError ? "Needs attention" : customizationStatus === "Ready" ? "Ready" : "Action needed"}
-          value={customizationStatus}
-          helper="Update writes only the active tab and language."
-          tone={showCustomizationError ? "rose" : customizationStatus === "Ready" ? "ready" : "attention"}
-        />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {summaryCards.map((card) => (
+          <div
+            key={card.label}
+            className={`${glassCard} group min-h-[112px] p-4 transition hover:-translate-y-0.5 hover:shadow-[0_20px_54px_rgba(15,23,42,0.11)]`}
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                {card.label}
+              </p>
+              <AdminOpsStatusBadge label={card.status} tone={card.tone} />
+            </div>
+            <p className="mt-3 truncate text-2xl font-bold text-slate-950" title={card.value}>
+              {card.value}
+            </p>
+          </div>
+        ))}
       </div>
 
       {isLoadingHeader && customizationQuery.data ? (
@@ -5561,17 +5715,17 @@ export default function StoreCustomizationPage() {
         </div>
       ) : null}
 
-      <div className={sectionCard}>
+      <div className={`${glassCard} p-3`}>
         <div className="flex flex-wrap gap-2">
           {TABS.map((tab) => (
             <button
               key={tab.key}
               type="button"
               onClick={() => onSelectTab(tab.key)}
-              className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+              className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
                 activeTab === tab.key
-                  ? "bg-emerald-600 text-white"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  ? "bg-slate-950 text-white shadow-sm"
+                  : "bg-white/80 text-slate-600 hover:-translate-y-0.5 hover:bg-emerald-50 hover:text-emerald-700"
               }`}
             >
               {tab.label}
@@ -8220,6 +8374,400 @@ export default function StoreCustomizationPage() {
         </div>
       ) : (
         <div className="flex flex-col gap-5">
+          <section className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className={`${glassCard} min-w-0 p-4 sm:p-5`}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-bold text-slate-950">Home Page</h2>
+                  <p className="mt-1 text-sm text-slate-500">Review sections before publishing.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+                    Minimalis & Bersih
+                  </span>
+                  <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700">
+                    Visual seperti Kaca
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
+                {homeSectionCards.map((section) => {
+                  const isSelected = reviewSectionKey === section.key;
+                  return (
+                    <div
+                      key={section.key}
+                      className={`relative rounded-2xl border p-4 transition ${
+                        isSelected
+                          ? "border-emerald-300 bg-emerald-50/70 shadow-sm"
+                          : "border-slate-200 bg-white/75 hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-sm"
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className="truncate text-sm font-bold text-slate-950" title={section.title}>
+                            {section.title}
+                          </h3>
+                          <p className="mt-1 truncate text-xs text-slate-500" title={section.signal}>
+                            {section.signal}
+                          </p>
+                        </div>
+                        <AdminOpsStatusBadge label={section.status} tone={section.tone} />
+                      </div>
+                      <div className="mt-4 flex flex-col items-stretch gap-2 min-[480px]:flex-row min-[480px]:items-center min-[480px]:justify-between">
+                        <button
+                          type="button"
+                          onClick={() => onReviewSection(section.key)}
+                          className="inline-flex h-9 items-center justify-center rounded-xl bg-slate-950 px-3 text-xs font-bold text-white transition hover:-translate-y-0.5 hover:bg-slate-800 hover:shadow-sm"
+                        >
+                          {isSelected ? "Close" : "Review"}
+                        </button>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setQuickActionSectionKey((current) =>
+                                current === section.key ? null : section.key
+                              )
+                            }
+                            className="inline-flex h-9 w-full items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-emerald-200 hover:text-emerald-700 min-[480px]:w-9"
+                            aria-label={`Open ${section.title} actions`}
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </button>
+                          {quickActionSectionKey === section.key ? (
+                            <div className="absolute right-0 z-20 mt-2 w-52 overflow-hidden rounded-2xl border border-white/70 bg-white/95 p-1.5 shadow-2xl backdrop-blur-xl">
+                              <button
+                                type="button"
+                                onClick={() => onReviewSection(section.key)}
+                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                Review
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  window.open("/", "_blank", "noopener,noreferrer");
+                                  setQuickActionSectionKey(null);
+                                }}
+                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                Open preview
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onShowAiSuggestion(section.key)}
+                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700"
+                              >
+                                <Sparkles className="h-3.5 w-3.5" />
+                                Generate plan
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onCopySectionKey(section.key)}
+                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                              >
+                                <Copy className="h-3.5 w-3.5" />
+                                Copy section key
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <aside className={`${glassCard} p-4 sm:p-5`}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-bold text-slate-950">Optimization Suggestions</h2>
+                  <p className="mt-1 text-xs text-slate-500">Data-based suggestions</p>
+                </div>
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                  Personalisasi & AI
+                </span>
+              </div>
+              <div className="mt-4 space-y-2">
+                {optimizationSuggestions.map((item, index) => (
+                  <div
+                    key={item.title}
+                    className="rounded-2xl border border-slate-200 bg-white/80 px-3 py-3"
+                  >
+                    <p className="text-xs font-bold text-slate-950">
+                      {index + 1}. {item.title}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">{item.detail}</p>
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => onShowAiSuggestion("mainSlider")}
+                className="mt-4 inline-flex h-9 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 text-xs font-bold text-white transition hover:-translate-y-0.5 hover:bg-emerald-700 hover:shadow-sm"
+              >
+                <Wand2 className="h-3.5 w-3.5" />
+                Generate plan
+              </button>
+            </aside>
+          </section>
+
+          {reviewSectionKey ? (
+            <section className={`${glassCard} overflow-hidden p-4 sm:p-5`}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
+                    Review Detail
+                  </p>
+                  <h2 className="mt-1 text-lg font-bold text-slate-950">
+                    {reviewSectionKey === "mainSlider"
+                      ? "Main Slider Detail"
+                      : selectedHomeSection.title}
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReviewSectionKey(null)}
+                  className={compactActionButton}
+                >
+                  Close
+                </button>
+              </div>
+
+              {reviewSectionKey === "mainSlider" ? (
+                <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                  <div className="space-y-3">
+                    <div className="rounded-2xl border border-slate-200 bg-white/80 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                          Slider Images
+                        </span>
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
+                          Recommended: 1600x650
+                        </span>
+                      </div>
+                      <input
+                        id={`main-slider-review-file-${activeMainSliderIndex}`}
+                        type="file"
+                        accept=".png,.jpeg,.jpg,.webp"
+                        onChange={(event) =>
+                          onMainSliderInputChange(activeMainSliderIndex, event)
+                        }
+                        className="hidden"
+                      />
+                      <label
+                        htmlFor={`main-slider-review-file-${activeMainSliderIndex}`}
+                        onDragOver={(event) => {
+                          event.preventDefault();
+                          setIsMainSliderDropActive(true);
+                        }}
+                        onDragLeave={() => setIsMainSliderDropActive(false)}
+                        onDrop={(event) => onDropMainSliderImage(activeMainSliderIndex, event)}
+                        className={`mt-3 flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-4 py-6 text-center transition ${
+                          isMainSliderDropActive
+                            ? "border-emerald-400 bg-emerald-50"
+                            : "border-slate-300 bg-slate-50/80 hover:border-emerald-300 hover:bg-emerald-50/40"
+                        }`}
+                      >
+                        <Upload className="h-5 w-5 text-slate-500" />
+                        <p className="mt-2 text-sm font-semibold text-slate-700">
+                          Drag your images here
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">PNG, JPG, WEBP</p>
+                      </label>
+                      {mainSliderImageErrors[activeMainSliderIndex] ? (
+                        <p className="mt-2 text-xs text-rose-600">
+                          {mainSliderImageErrors[activeMainSliderIndex]}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-white/80 p-3">
+                      <div className="relative h-36 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
+                        {activeMainSliderItem.imageDataUrl ? (
+                          <img
+                            src={activeMainSliderItem.imageDataUrl}
+                            alt={`Slider ${activeMainSliderIndex + 1} preview`}
+                            className={`h-full w-full object-cover ${getMainSliderImageFocusClass(
+                              activeMainSliderItem.imageFocus
+                            )}`}
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-slate-400">
+                            Preview appears after upload.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-1.5">
+                      {MAIN_SLIDER_TABS.filter((tab) => tab.key !== "options").map((tab) => (
+                        <button
+                          key={tab.key}
+                          type="button"
+                          onClick={() => setActiveMainSliderTab(tab.key)}
+                          className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${
+                            activeMainSliderTab === tab.key
+                              ? "bg-slate-950 text-white"
+                              : "bg-white text-slate-600 hover:bg-slate-100"
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <label className="block">
+                        <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                          Slider Title
+                        </span>
+                        <input
+                          type="text"
+                          value={activeMainSliderItem.title}
+                          onChange={(event) =>
+                            onChangeMainSliderField(
+                              activeMainSliderIndex,
+                              "title",
+                              event.target.value
+                            )
+                          }
+                          className={`${inputBase} mt-2`}
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                          Image Focus
+                        </span>
+                        <select
+                          value={normalizeMainSliderImageFocus(activeMainSliderItem.imageFocus)}
+                          onChange={(event) =>
+                            onChangeMainSliderField(
+                              activeMainSliderIndex,
+                              "imageFocus",
+                              normalizeMainSliderImageFocus(event.target.value)
+                            )
+                          }
+                          className={`${inputBase} mt-2`}
+                        >
+                          <option value="right">Right</option>
+                          <option value="center">Center</option>
+                          <option value="left">Left</option>
+                        </select>
+                      </label>
+                      <label className="block md:col-span-2">
+                        <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                          Slider Description
+                        </span>
+                        <textarea
+                          value={activeMainSliderItem.description}
+                          onChange={(event) =>
+                            onChangeMainSliderField(
+                              activeMainSliderIndex,
+                              "description",
+                              event.target.value
+                            )
+                          }
+                          rows={3}
+                          className={`${textAreaBase} min-h-[84px]`}
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                          CTA Label
+                        </span>
+                        <input
+                          type="text"
+                          value={activeMainSliderItem.buttonName}
+                          onChange={(event) =>
+                            onChangeMainSliderField(
+                              activeMainSliderIndex,
+                              "buttonName",
+                              event.target.value
+                            )
+                          }
+                          className={`${inputBase} mt-2`}
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                          CTA URL
+                        </span>
+                        <input
+                          type="text"
+                          value={activeMainSliderItem.buttonLink}
+                          onChange={(event) =>
+                            onChangeMainSliderField(
+                              activeMainSliderIndex,
+                              "buttonLink",
+                              event.target.value
+                            )
+                          }
+                          className={`${inputBase} mt-2`}
+                        />
+                      </label>
+                    </div>
+                    {aiSuggestionSectionKey === "mainSlider" ? (
+                      <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 px-3 py-3 text-xs text-emerald-800">
+                        AI Suggest: keep the hero title under 8 words and use one direct CTA.
+                      </div>
+                    ) : null}
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setAiSuggestionSectionKey("mainSlider")}
+                        className={compactActionButton}
+                      >
+                        <Sparkles className="mr-2 h-3.5 w-3.5" />
+                        Generate with AI
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onSave}
+                        disabled={isSaving || isLoadingHeader || !lang}
+                        className="inline-flex h-9 items-center justify-center rounded-xl bg-emerald-600 px-4 text-xs font-bold text-white transition hover:-translate-y-0.5 hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isSaving ? "Updating..." : "Save Section"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 rounded-2xl border border-slate-200 bg-white/80 p-4">
+                  <p className="text-sm font-semibold text-slate-900">
+                    {selectedHomeSection.signal}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Use Advanced section editor below for full field control.
+                  </p>
+                  {aiSuggestionSectionKey === reviewSectionKey ? (
+                    <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
+                      Suggested: keep this section active only when copy and storefront media are ready.
+                    </p>
+                  ) : null}
+                </div>
+              )}
+            </section>
+          ) : null}
+
+          <details
+            className={`${glassCard} overflow-hidden`}
+            open={isAdvancedEditorOpen}
+            onToggle={(event) => setIsAdvancedEditorOpen(event.currentTarget.open)}
+          >
+            <summary className="cursor-pointer list-none px-4 py-4 text-sm font-bold text-slate-900 transition hover:bg-white/70 sm:px-5">
+              Advanced section editor
+              <span className="ml-2 text-xs font-semibold text-slate-500">
+                Full field controls
+              </span>
+            </summary>
+            {isAdvancedEditorOpen ? (
+            <div className="flex flex-col gap-5 border-t border-slate-200/70 p-4 sm:p-5">
           <section className={`${sectionCard} order-1`}>
             <div className="flex items-center gap-2">
               <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
@@ -10077,6 +10625,9 @@ export default function StoreCustomizationPage() {
               </div>
             </div>
           </section>
+            </div>
+            ) : null}
+          </details>
           </div>
         )}
       </div>

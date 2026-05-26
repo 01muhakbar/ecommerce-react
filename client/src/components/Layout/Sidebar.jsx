@@ -136,6 +136,8 @@ export default function Sidebar({ collapsed = false }) {
                   } ${hasActiveChild ? "is-current" : ""}`}
                   onClick={canToggle ? () => toggleMenu(item.label) : undefined}
                   title={collapsed ? item.label : undefined}
+                  aria-expanded={canToggle ? isOpen : undefined}
+                  aria-current={hasActiveChild ? "page" : undefined}
                 >
                   <span className="sidebar__icon">
                     <item.icon className="sidebar__icon-svg" />
@@ -185,7 +187,9 @@ export default function Sidebar({ collapsed = false }) {
                           to={child.to}
                           title={collapsed ? child.label : undefined}
                           className={({ isActive }) =>
-                            `sidebar__sublink ${isActive ? "is-active" : ""}`
+                            `sidebar__sublink ${
+                              isActive || matchesRoute(child.to, pathname) ? "is-active" : ""
+                            }`
                           }
                         >
                           <span className="sidebar__subdot" aria-hidden="true" />

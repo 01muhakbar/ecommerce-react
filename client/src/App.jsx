@@ -731,6 +731,14 @@ export default function App() {
                 }
               />
               <Route
+                path="online-store/store-settings"
+                element={
+                  <RequirePerm perm="SETTINGS_MANAGE">
+                    <Navigate to="/admin/store/store-settings" replace />
+                  </RequirePerm>
+                }
+              />
+              <Route
                 path="store/payment-profiles"
                 element={
                   <RequirePerm perm="SETTINGS_MANAGE">
@@ -743,6 +751,14 @@ export default function App() {
                 element={
                   <RequirePerm perm="STORE_APPLICATIONS_REVIEW">
                     <AdminStoreApplicationsPage />
+                  </RequirePerm>
+                }
+              />
+              <Route
+                path="online-store/store-applications"
+                element={
+                  <RequirePerm perm="STORE_APPLICATIONS_REVIEW">
+                    <Navigate to="/admin/store/applications" replace />
                   </RequirePerm>
                 }
               />

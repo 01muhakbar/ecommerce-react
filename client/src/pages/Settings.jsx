@@ -12,6 +12,11 @@ import {
   getWorkspaceLogoUrl,
   hasCustomBrandingLogo,
 } from "../lib/branding.js";
+import {
+  AdminOpsErrorState,
+  AdminOpsLoadingState,
+  AdminOpsPageHeader,
+} from "../components/admin/AdminOpsPrimitives.jsx";
 import adminLoginHero from "../assets/admin-login-hero.jpg";
 
 const DEFAULT_SETTINGS = {
@@ -246,11 +251,12 @@ const inputClass =
 const textareaClass =
   "mt-2 min-h-[120px] w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100";
 
-function Field({ label, children }) {
+function Field({ label, hint, children }) {
   return (
     <label className="block">
       <span className="text-sm font-semibold text-slate-700">{label}</span>
       {children}
+      {hint ? <p className="mt-2 text-xs leading-5 text-slate-500">{hint}</p> : null}
     </label>
   );
 }
@@ -596,9 +602,7 @@ export default function Settings() {
   if (settingsQuery.isLoading) {
     return (
       <div className="mx-auto w-full max-w-[1120px] px-1 sm:px-2">
-        <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
-          Loading...
-        </div>
+        <AdminOpsLoadingState title="Loading global settings..." />
       </div>
     );
   }
@@ -610,16 +614,7 @@ export default function Settings() {
       "Failed to load settings.";
     return (
       <div className="mx-auto w-full max-w-[1120px] px-1 sm:px-2">
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
-          <p className="text-sm text-rose-700">{message}</p>
-          <button
-            type="button"
-            onClick={() => settingsQuery.refetch()}
-            className="mt-4 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700"
-          >
-            Retry
-          </button>
-        </div>
+        <AdminOpsErrorState message={message} onRetry={() => settingsQuery.refetch()} />
       </div>
     );
   }
@@ -631,16 +626,10 @@ export default function Settings() {
       "Failed to load branding settings.";
     return (
       <div className="mx-auto w-full max-w-[1120px] px-1 sm:px-2">
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
-          <p className="text-sm text-rose-700">{message}</p>
-          <button
-            type="button"
-            onClick={() => brandingSettingsQuery.refetch()}
-            className="mt-4 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700"
-          >
-            Retry
-          </button>
-        </div>
+        <AdminOpsErrorState
+          message={message}
+          onRetry={() => brandingSettingsQuery.refetch()}
+        />
       </div>
     );
   }
@@ -648,23 +637,19 @@ export default function Settings() {
   return (
     <div className="mx-auto w-full max-w-[1120px] px-1 sm:px-2">
       <form className="space-y-5 pb-2" onSubmit={onSubmit}>
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.05)] sm:px-6 sm:py-5">
-          <div>
-            <h1 className="text-[22px] font-semibold leading-none text-slate-800">
-              Global Setting
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Brand, locale, receipt, and SMTP controls.
-            </p>
-          </div>
-          <button
-            type="submit"
-            disabled={isSaving}
-            className="h-10 min-w-[110px] rounded-lg bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isSaving ? "Updating..." : "Update"}
-          </button>
-        </div>
+        <AdminOpsPageHeader
+          title="Global Settings"
+          description="Brand, locale, receipt, and SMTP controls."
+          actions={
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="h-10 min-w-[110px] rounded-lg bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSaving ? "Updating..." : "Update"}
+            </button>
+          }
+        />
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <SummaryCard
